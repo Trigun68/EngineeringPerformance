@@ -258,11 +258,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 var children = childrenByParent[row.WorkDirectionId].ToList();
                 bool hasChildren = children.Count > 0;
 
+                var indent = new string(' ', level * 4);
                 // Добавляем строку самого узла
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
                     Name = row.WorkDirectionName,
+                    DisplayName = indent + row.WorkDirectionName,
                     NormUnitName = row.NormUnitName ?? string.Empty,
                     FactPhysicalVolume = row.FactPhysicalVolume,
                     NormProductivity = row.NormProductivity,
@@ -271,7 +273,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PessimisticHours = ownPes,
                     IsTotal = false,
                     Level = level,
-                    IndentMargin = level * 20d,
                 });
 
                 if (!hasChildren)
@@ -296,6 +297,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 {
                     Id = row.WorkDirectionId,
                     Name = $"Итого: {row.WorkDirectionName}",
+                    DisplayName = indent + $"Итого: {row.WorkDirectionName}",
                     NormUnitName = row.NormUnitName ?? string.Empty,
                     FactPhysicalVolume = null,
                     NormProductivity = null,
@@ -304,7 +306,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PessimisticHours = aggPes > 0 ? aggPes : null,
                     IsTotal = true,
                     Level = level,
-                    IndentMargin = level * 20d,
                 });
 
                 return (aggBase, aggOpt, aggPes);
@@ -322,6 +323,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 {
                     Id = unallocated.WorkDirectionId,
                     Name = unallocated.WorkDirectionName,
+                    DisplayName = unallocated.WorkDirectionName,
                     NormUnitName = string.Empty,
                     FactPhysicalVolume = unallocated.FactPhysicalVolume,
                     NormProductivity = null,
@@ -330,7 +332,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PessimisticHours = up,
                     IsTotal = false,
                     Level = 0,
-                    IndentMargin = 0d,
                 });
             }
 
@@ -699,6 +700,7 @@ public sealed class ForecastPerformanceItem
 {
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
     public string NormUnitName { get; set; } = string.Empty;
     public decimal? FactPhysicalVolume { get; set; }
     public decimal? NormProductivity { get; set; }
@@ -707,7 +709,6 @@ public sealed class ForecastPerformanceItem
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
     public int Level { get; set; }
-    public double IndentMargin { get; set; }
 }
 
 public sealed class VersionCompareRow

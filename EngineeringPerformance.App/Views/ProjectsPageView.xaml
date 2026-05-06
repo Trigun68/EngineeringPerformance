@@ -143,16 +143,7 @@
                                 <dxg:GridControl Grid.Column="0" ItemsSource="{Binding ForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
-                                        <dxg:GridColumn FieldName="Name" Header="Наименование" Width="30*">
-                                            <dxg:GridColumn.CellTemplate>
-                                                <DataTemplate>
-                                                    <TextBlock Text="{Binding RowData.Row.Name}"
-                                                               Margin="{Binding RowData.Row.IndentMargin, Converter={StaticResource IndentToMarginConverter}}"
-                                                               FontStyle="{Binding RowData.Row.IsTotal, Converter={StaticResource BoolToFontStyle}}"
-                                                               FontWeight="{Binding RowData.Row.IsTotal, Converter={StaticResource BoolToFontWeightConverter}}" />
-                                                </DataTemplate>
-                                            </dxg:GridColumn.CellTemplate>
-                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="DisplayName" Header="Наименование" Width="30*" />
                                         <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="8*" />
                                         <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="12*">
                                             <dxg:GridColumn.EditSettings>
@@ -200,6 +191,15 @@
 
                         <!-- Вкладка: По объектам (заглушка) -->
                         <dx:DXTabItem Header="По объектам">
+                            <Border Background="#F8FAFC" Margin="0,8,0,0">
+                                <TextBlock Text="Раздел будет заполнен позднее"
+                                           Foreground="#94A3B8" FontSize="14"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </dx:DXTabItem>
+
+                        <!-- Вкладка: Детально (заглушка) -->
+                        <dx:DXTabItem Header="Детально">
                             <Border Background="#F8FAFC" Margin="0,8,0,0">
                                 <TextBlock Text="Раздел будет заполнен позднее"
                                            Foreground="#94A3B8" FontSize="14"
