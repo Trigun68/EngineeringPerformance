@@ -5,14 +5,18 @@ using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.App.Services;
 using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Services;
+using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class ProjectForecastReportViewModel : ObservableObject, ILoadableViewModel
 {
+    private readonly IPerformanceService _performanceService;
     private readonly IProjectVersionAnalysisService _analysisService;
     private readonly IProjectForecastExportService _exportService;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
     public int ProjectId { get; set; }
     public int VersionId { get; set; }
@@ -30,14 +34,20 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
-    private ProjectVersionAnalysisDto? _report;
+    private string _projectName = string.Empty;
+    private string _projectCode = string.Empty;
+    private string _versionName = string.Empty;
 
     public ProjectForecastReportViewModel(
+        IPerformanceService performanceService,
         IProjectVersionAnalysisService analysisService,
-        IProjectForecastExportService exportService)
+        IProjectForecastExportService exportService,
+        IDbContextFactory<AppDbContext> contextFactory)
     {
+        _performanceService = performanceService;
         _analysisService = analysisService;
         _exportService = exportService;
+        _contextFactory = contextFactory;
     }
 
     public async Task LoadAsync()
@@ -55,12 +65,11 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task ExportToExcelAsync()
     {
-        if (_report is null) return;
         var dlg = new SaveFileDialog
         {
             Title = "Сохранить прогноз как Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"Прогноз_{_report.ProjectCode}_{_report.VersionName}.xlsx",
+            FileName = $"Прогноз_{_projectCode}_{_versionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -68,7 +77,8 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            await _exportService.ExportToExcelAsync(_report, dlg.FileName);
+            var report = await _analysisService.GenerateReportAsync(ProjectId, VersionId);
+            await _exportService.ExportToExcelAsync(report, dlg.FileName);
         }
         catch (Exception ex)
         {
@@ -85,12 +95,11 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     [RelayCommand(CanExecute = nameof(CanExport))]
     private async Task ExportToPdfAsync()
     {
-        if (_report is null) return;
         var dlg = new SaveFileDialog
         {
             Title = "Сохранить прогноз как PDF",
             Filter = "PDF (*.pdf)|*.pdf",
-            FileName = $"Прогноз_{_report.ProjectCode}_{_report.VersionName}.pdf",
+            FileName = $"Прогноз_{_projectCode}_{_versionName}.pdf",
             DefaultExt = "pdf",
         };
         if (dlg.ShowDialog() != true) return;
@@ -98,7 +107,8 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            await _exportService.ExportToPdfAsync(_report, dlg.FileName);
+            var report = await _analysisService.GenerateReportAsync(ProjectId, VersionId);
+            await _exportService.ExportToPdfAsync(report, dlg.FileName);
         }
         catch (Exception ex)
         {
@@ -112,7 +122,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         }
     }
 
-    private bool CanExport() => _report is not null && !IsExporting;
+    private bool CanExport() => !string.IsNullOrEmpty(_versionName) && !IsExporting;
     partial void OnIsExportingChanged(bool value)
     {
         ExportToExcelCommand.NotifyCanExecuteChanged();
@@ -125,15 +135,86 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         ErrorMessage = null;
         try
         {
-            _report = await _analysisService.GenerateReportAsync(ProjectId, VersionId);
+            // Параллельно: лёгкий PerformanceService (кеш WorkDirections) + метаданные версии + физ. объёмы
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
 
-            ProjectNameWithVersion = string.IsNullOrWhiteSpace(_report.VersionName)
-                ? _report.ProjectName
-                : $"{_report.ProjectName} ({_report.VersionName})";
+            var versionTask = ctx.ProjectAnalysisVersions
+                .AsNoTracking()
+                .Include(v => v.Project)
+                .FirstOrDefaultAsync(v => v.Id == VersionId && v.ProjectId == ProjectId);
+
+            var perfTask = _performanceService.GetPerformanceDataAsync(ProjectId, VersionId);
+
+            await using var ctx2 = await _contextFactory.CreateDbContextAsync();
+            var pvTask = ctx2.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
+                .Where(pv => pv.ProjectId == ProjectId && pv.ProjectAnalysisVersionId == VersionId
+                             && pv.Quantity > 0)
+                .ToListAsync();
+
+            await Task.WhenAll(versionTask, perfTask, pvTask);
+
+            var version = versionTask.Result;
+            var performanceData = perfTask.Result;
+            var physicalVolumes = pvTask.Result;
+
+            if (version is not null)
+            {
+                _projectName = version.Project.Name;
+                _projectCode = version.Project.Code ?? string.Empty;
+                _versionName = version.VersionName;
+                ProjectNameWithVersion = string.IsNullOrWhiteSpace(_versionName)
+                    ? _projectName
+                    : $"{_projectName} ({_versionName})";
+            }
+
+            // Группировка физ. объёмов по направлению
+            var pvByDirection = physicalVolumes
+                .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.PhysicalVolume.IsAssessment == true)
+                .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+                .ToDictionary(g => g.Key, g => g.ToList());
 
             var items = new ObservableCollection<ForecastDirectionViewModel>();
-            foreach (var d in _report.Directions)
-                items.Add(new ForecastDirectionViewModel(d));
+            foreach (var row in performanceData.Where(r => r.WorkDirectionId >= 0))
+            {
+                pvByDirection.TryGetValue(row.WorkDirectionId, out var pvList);
+                var physVols = pvList?.Select(pv =>
+                {
+                    var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
+                    return new ProjectVersionPhysicalVolumeDto(
+                        Code: pv.PhysicalVolume?.Code ?? string.Empty,
+                        Name: pv.PhysicalVolume?.Name ?? string.Empty,
+                        UnitName: pv.PhysicalVolume?.Unit?.Name,
+                        Quantity: pv.Quantity,
+                        Coefficient: coeff,
+                        Total: pv.Quantity * coeff);
+                }).OrderBy(p => p.Code).ToList()
+                ?? new List<ProjectVersionPhysicalVolumeDto>();
+
+                var dto = new ProjectVersionDirectionDto(
+                    Id: row.WorkDirectionId,
+                    ParentId: row.ParentId,
+                    Level: row.Level,
+                    Code: row.WorkDirectionCode,
+                    Name: row.WorkDirectionName,
+                    UnitName: row.NormUnitName,
+                    FactPhysicalVolume: row.FactPhysicalVolume,
+                    FactLaborHours: row.FactLaborHours,
+                    FactProductivity: row.FactProductivity,
+                    FactEstimate: row.FactEstimate,
+                    NormProductivity: row.NormProductivity,
+                    NormEstimate: row.NormEstimate,
+                    NormStdDev: row.NormStdDev,
+                    ZScore: row.ZScore,
+                    Interpretation: row.Interpretation,
+                    PhysicalVolumes: physVols,
+                    DirectionLaborIntensities: Array.Empty<ProjectVersionDirectionLaborDto>());
+
+                items.Add(new ForecastDirectionViewModel(dto));
+            }
+
             Directions = items;
 
             var roots = items.Where(d => d.ParentId == null).ToList();
@@ -142,6 +223,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
             TotalPessimisticHours = roots.Sum(d => d.PessimisticHours);
 
             ExportToExcelCommand.NotifyCanExecuteChanged();
+            ExportToPdfCommand.NotifyCanExecuteChanged();
         }
         catch (Exception ex)
         {
