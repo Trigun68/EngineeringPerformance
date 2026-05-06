@@ -410,6 +410,8 @@ public partial class App : Application
 
         services.AddTransient<ProjectVersionAnalysisWindow>();
         services.AddTransient<ProjectVersionAnalysisViewModel>();
+        services.AddTransient<ProjectForecastReportWindow>();
+        services.AddTransient<ProjectForecastReportViewModel>();
 
         services.AddTransient<DataImportDialogViewModel>();
         services.AddTransient<DataImportDialog>();

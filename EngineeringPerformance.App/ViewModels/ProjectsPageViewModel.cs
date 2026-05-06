@@ -258,37 +258,26 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     }
 
     [RelayCommand]
-    private async Task OpenForecastReport()
+    private void OpenForecastReport()
     {
-        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid)
+        {
+            ErrorMessage = "Выберите версию плана для просмотра прогноза";
+            return;
+        }
 
-        var dlg = new SaveFileDialog
-        {
-            Title = "Экспорт прогноза в Excel",
-            Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"Прогноз_{SelectedProjectCode}_{PlanVersionName}.xlsx",
-            DefaultExt = "xlsx",
-        };
-        if (dlg.ShowDialog() != true) return;
+        var owner = GetOwner();
+        if (owner is null) return;
 
-        try
-        {
-            IsLoading = true;
-            ErrorMessage = null;
-            var report = await _forecastService.GenerateForecastAsync(pid, vid);
-            await _forecastExportService.ExportToExcelAsync(report, dlg.FileName);
-            ErrorMessage = null;
-            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
-                MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-        catch (Exception ex)
-        {
-            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
-        }
-        finally
-        {
-            IsLoading = false;
-        }
+        var window = _serviceProvider.GetRequiredService<Views.ProjectForecastReportWindow>();
+        var vm = _serviceProvider.GetRequiredService<ProjectForecastReportViewModel>();
+        vm.ProjectId = pid;
+        vm.VersionId = vid;
+        vm.OwnerWindow = window;
+        window.DataContext = vm;
+        window.Owner = owner;
+        _ = vm.LoadAsync();
+        window.ShowDialog();
     }
 
     // ─── Оценка факта ──────────────────────────────────────────────────────
