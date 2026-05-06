@@ -189,13 +189,62 @@
                             </Grid>
                         </dx:DXTabItem>
 
-                        <!-- Вкладка: По объектам (заглушка) -->
+                        <!-- Вкладка: По объектам -->
                         <dx:DXTabItem Header="По объектам">
-                            <Border Background="#F8FAFC" Margin="0,8,0,0">
-                                <TextBlock Text="Раздел будет заполнен позднее"
-                                           Foreground="#94A3B8" FontSize="14"
-                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FacilityForecastData}"
+                                                 AutoGenerateColumns="None">
+                                    <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="4*" MinWidth="150" />
+                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="2*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="1.5*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="1.5*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                    </dxg:GridControl.Columns>
+                                    <dxg:GridControl.View>
+                                        <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                                       NavigationStyle="Row"
+                                                       ShowIndicator="False"
+                                                       ShowVerticalLines="False" />
+                                    </dxg:GridControl.View>
+                                </dxg:GridControl>
+
+                                <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
+                                    <Button Command="{Binding ExportFacilityForecastToExcelCommand}"
+                                            IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,6" Width="160" Height="36" ToolTip="Экспорт в Excel">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт Excel" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding ExportFacilityForecastToPdfCommand}"
+                                            IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,0" Width="160" Height="36" ToolTip="Экспорт в PDF">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-pdf-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт PDF" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
                         </dx:DXTabItem>
 
                         <!-- Вкладка: Детально (заглушка) -->

@@ -49,6 +49,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _planVersionName = string.Empty;
     [ObservableProperty] private string _planVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<ForecastPerformanceItem> _forecastData = [];
+    [ObservableProperty] private ObservableCollection<FacilityForecastItem> _facilityForecastData = [];
 
     // Вкладка Оценка факта — выбранная версия (факт)
     [ObservableProperty] private int? _factVersionId;
@@ -145,6 +146,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         PlanVersionName = string.Empty;
         PlanVersionLabel = string.Empty;
         ForecastData = [];
+        FacilityForecastData = [];
 
         FactVersionId = null;
         FactVersionName = string.Empty;
@@ -221,13 +223,25 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var data = await Task.Run(() => _performanceService.GetPerformanceDataAsync(projectId, versionId));
 
-            // Строим плоский список с итоговыми строками для узлов, имеющих потомков.
-            // Алгоритм: рекурсивный обход дерева (pre-order узел + дети + post-order итог).
-            var rowById = data
-                .Where(r => r.WorkDirectionId >= 0)
-                .ToDictionary(r => r.WorkDirectionId);
+            var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            var pvTask = ctx.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .Include(pv => pv.PhysicalVolume)
+                .Where(pv => pv.ProjectId == projectId
+                             && pv.ProjectAnalysisVersionId == versionId
+                             && pv.PhysicalVolume!.IsAssessment == true
+                             && pv.PhysicalVolume.ClassifierId != null
+                             && pv.Quantity > 0)
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask);
+            var data = perfTask.Result;
+            var physicalVolumes = pvTask.Result;
+
+            // ── Вкладка «Итого»: иерархия направлений ──────────────────────
             var childrenByParent = data
                 .Where(r => r.WorkDirectionId >= 0 && r.ParentId.HasValue)
                 .ToLookup(r => r.ParentId!.Value);
@@ -237,7 +251,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var result = new List<ForecastPerformanceItem>();
 
-            (decimal? baseH, decimal? optH, decimal? pesH) CalcHours(PerformanceRowDto row)
+            (decimal? baseH, decimal? optH, decimal? pesH) CalcHoursFromRow(PerformanceRowDto row)
             {
                 var vol = row.FactPhysicalVolume ?? 0m;
                 if (vol <= 0 || !row.NormProductivity.HasValue)
@@ -251,15 +265,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 );
             }
 
-            // Возвращает агрегат поддерева (baseH, optH, pesH) включая собственные данные узла.
             (decimal baseH, decimal optH, decimal pesH) BuildSubtree(PerformanceRowDto row, int level)
             {
-                var (ownBase, ownOpt, ownPes) = CalcHours(row);
+                var (ownBase, ownOpt, ownPes) = CalcHoursFromRow(row);
                 var children = childrenByParent[row.WorkDirectionId].ToList();
                 bool hasChildren = children.Count > 0;
 
                 var indent = new string(' ', level * 4);
-                // Добавляем строку самого узла
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
@@ -278,7 +290,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 if (!hasChildren)
                     return (ownBase ?? 0m, ownOpt ?? 0m, ownPes ?? 0m);
 
-                // Рекурсивно обрабатываем детей
                 decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
                 foreach (var child in children)
                 {
@@ -288,10 +299,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     totalPes += cp;
                 }
 
-                // Итог = собственные данные узла + агрегат всех потомков
                 var aggBase = (ownBase ?? 0m) + totalBase;
-                var aggOpt = (ownOpt ?? 0m) + totalOpt;
-                var aggPes = (ownPes ?? 0m) + totalPes;
+                var aggOpt  = (ownOpt  ?? 0m) + totalOpt;
+                var aggPes  = (ownPes  ?? 0m) + totalPes;
 
                 result.Add(new ForecastPerformanceItem
                 {
@@ -314,11 +324,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             foreach (var root in roots)
                 BuildSubtree(root, 0);
 
-            // Строка «(пусто)» из PerformanceService — нераспределённые ФО
             var unallocated = data.FirstOrDefault(r => r.WorkDirectionId < 0);
             if (unallocated is not null)
             {
-                var (ub, uo, up) = CalcHours(unallocated);
+                var (ub, uo, up) = CalcHoursFromRow(unallocated);
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = unallocated.WorkDirectionId,
@@ -336,6 +345,51 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
 
             ForecastData = new ObservableCollection<ForecastPerformanceItem>(result);
+
+            // ── Вкладка «По объектам»: агрегат по FacilityCode ─────────────
+            // Словарь направление → нормы (только направления с нормами)
+            var normByDirection = data
+                .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
+                .ToDictionary(r => r.WorkDirectionId);
+
+            // Группируем ФО по объекту (FacilityCode + FacilityName)
+            var byFacility = physicalVolumes
+                .GroupBy(pv => (
+                    Code: pv.FacilityCode ?? string.Empty,
+                    Name: pv.FacilityName ?? string.Empty))
+                .OrderBy(g => g.Key.Code)
+                .ThenBy(g => g.Key.Name);
+
+            var facilityResult = new List<FacilityForecastItem>();
+            foreach (var facilityGroup in byFacility)
+            {
+                decimal baseH = 0m, optH = 0m, pesH = 0m;
+                foreach (var pv in facilityGroup)
+                {
+                    var dirId = pv.PhysicalVolume!.ClassifierId!.Value;
+                    if (!normByDirection.TryGetValue(dirId, out var norm))
+                        continue;
+
+                    var vol = pv.Quantity * (pv.PhysicalVolume.Coefficient);
+                    var p   = norm.NormProductivity!.Value;
+                    var std = norm.NormStdDev ?? 0m;
+
+                    baseH += vol * p;
+                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
+                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                }
+
+                facilityResult.Add(new FacilityForecastItem
+                {
+                    FacilityCode = facilityGroup.Key.Code,
+                    FacilityName = facilityGroup.Key.Name,
+                    BaseHours        = baseH > 0 ? Math.Round(baseH, 2) : null,
+                    OptimisticHours  = optH  > 0 ? Math.Round(optH,  2) : null,
+                    PessimisticHours = pesH  > 0 ? Math.Round(pesH,  2) : null,
+                });
+            }
+
+            FacilityForecastData = new ObservableCollection<FacilityForecastItem>(facilityResult);
         }
         catch (Exception ex)
         {
@@ -694,6 +748,76 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = false;
         }
     }
+
+    [RelayCommand]
+    private async Task ExportFacilityForecastToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт прогноза по объектам в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"ПрогнозПоОбъектам_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = FacilityForecastData
+                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportFacilityForecastToPdfAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт прогноза по объектам в PDF",
+            Filter = "PDF (*.pdf)|*.pdf",
+            FileName = $"ПрогнозПоОбъектам_{SelectedProjectCode}_{PlanVersionName}.pdf",
+            DefaultExt = "pdf",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = FacilityForecastData
+                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
 }
 
 public sealed class ForecastPerformanceItem
@@ -721,4 +845,13 @@ public sealed class VersionCompareRow
     public decimal? ZDelta { get; set; }
     public string InterpretationA { get; set; } = string.Empty;
     public string InterpretationB { get; set; } = string.Empty;
+}
+
+public sealed class FacilityForecastItem
+{
+    public string FacilityCode { get; set; } = string.Empty;
+    public string FacilityName { get; set; } = string.Empty;
+    public decimal? BaseHours { get; set; }
+    public decimal? OptimisticHours { get; set; }
+    public decimal? PessimisticHours { get; set; }
 }

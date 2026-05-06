@@ -15,6 +15,142 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportToPdfAsync(ProjectVersionAnalysisDto report, string filePath)
         => Task.Run(() => BuildPdf(report, filePath));
 
+    public Task ExportFacilityForecastToExcelAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildFacilityExcel(rows, projectCode, versionName, filePath));
+
+    public Task ExportFacilityForecastToPdfAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildFacilityPdf(rows, projectCode, versionName, filePath));
+
+    // ─── Excel по объектам ───────────────────────────────────────────────────
+
+    private static void BuildFacilityExcel(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("По объектам");
+
+        ws.Cell(1, 1).Value = $"Прогноз трудозатрат по объектам: {projectCode} ({versionName})";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Range(1, 1, 1, 5).Merge();
+
+        var headers = new[] { "Шифр объекта", "Наименование объекта", "Базовый, ч", "Оптимист., ч", "Пессимист., ч" };
+        WriteHeaderRow(ws, 2, headers);
+
+        var row = 3;
+        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
+        foreach (var r in rows)
+        {
+            ws.Cell(row, 1).Value = r.FacilityCode;
+            ws.Cell(row, 2).Value = r.FacilityName;
+            SetDecimal(ws.Cell(row, 3), r.BaseHours, "N2");
+            SetDecimal(ws.Cell(row, 4), r.OptimisticHours, "N2");
+            SetDecimal(ws.Cell(row, 5), r.PessimisticHours, "N2");
+            if (row % 2 == 0)
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+            totalBase += r.BaseHours ?? 0m;
+            totalOpt  += r.OptimisticHours ?? 0m;
+            totalPes  += r.PessimisticHours ?? 0m;
+            row++;
+        }
+
+        ws.Cell(row, 1).Value = "ИТОГО";
+        ws.Cell(row, 2).Value = string.Empty;
+        SetDecimal(ws.Cell(row, 3), totalBase, "N2");
+        SetDecimal(ws.Cell(row, 4), totalOpt, "N2");
+        SetDecimal(ws.Cell(row, 5), totalPes, "N2");
+        ws.Row(row).Style.Font.Bold = true;
+        ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        ws.Row(row).Style.Font.FontColor = XLColor.White;
+
+        var tableRange = ws.Range(2, 1, row, headers.Length);
+        tableRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tableRange.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+
+        ws.Column(1).Width = 18;
+        ws.Column(2).Width = 50;
+        for (var c = 3; c <= headers.Length; c++) ws.Column(c).AdjustToContents();
+        ws.SheetView.FreezeRows(2);
+
+        wb.SaveAs(filePath);
+    }
+
+    // ─── PDF по объектам ─────────────────────────────────────────────────────
+
+    private static void BuildFacilityPdf(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        if (GlobalFontSettings.FontResolver is null)
+            GlobalFontSettings.FontResolver = new ForecastWindowsFontResolver();
+
+        var doc = new PdfDocument();
+        doc.Info.Title = $"Прогноз по объектам: {projectCode}";
+
+        var page = doc.AddPage();
+        page.Orientation = PdfSharp.PageOrientation.Landscape;
+        var gfx = XGraphics.FromPdfPage(page);
+
+        var fontTitle  = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fontHeader = new XFont("Arial",  8, XFontStyleEx.Bold);
+        var fontBody   = new XFont("Arial",  7, XFontStyleEx.Regular);
+        var fontTotal  = new XFont("Arial",  8, XFontStyleEx.Bold);
+
+        var margin = 30.0;
+        var pageW  = page.Width.Point;
+        var y = margin;
+
+        gfx.DrawString($"Прогноз трудозатрат по объектам: {projectCode} ({versionName})",
+            fontTitle, XBrushes.Black, new XRect(margin, y, pageW - margin * 2, 20), XStringFormats.TopLeft);
+        y += 24;
+        gfx.DrawString($"Дата формирования: {DateTime.Now:dd.MM.yyyy HH:mm}",
+            fontBody, XBrushes.Gray, new XRect(margin, y, pageW - margin * 2, 14), XStringFormats.TopLeft);
+        y += 20;
+
+        double[] colW = [80, 360, 90, 90, 90];
+        string[] colH = ["Шифр объекта", "Наименование объекта", "Базовый, ч", "Оптимист., ч", "Пессимист., ч"];
+
+        var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
+        DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
+        y += 14;
+
+        var bgLight = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
+        var rowIdx = 0;
+
+        foreach (var r in rows)
+        {
+            if (y + 12 > page.Height.Point - margin) break;
+            totalBase += r.BaseHours ?? 0m;
+            totalOpt  += r.OptimisticHours ?? 0m;
+            totalPes  += r.PessimisticHours ?? 0m;
+
+            var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
+            string[] vals =
+            [
+                r.FacilityCode,
+                TruncatePdf(r.FacilityName, 58),
+                r.BaseHours.HasValue        ? r.BaseHours.Value.ToString("N1")        : "—",
+                r.OptimisticHours.HasValue  ? r.OptimisticHours.Value.ToString("N1")  : "—",
+                r.PessimisticHours.HasValue ? r.PessimisticHours.Value.ToString("N1") : "—",
+            ];
+            DrawPdfRow(gfx, margin, y, colW, vals, fontBody, XBrushes.Black, bg, 12);
+            y += 12;
+            rowIdx++;
+        }
+
+        var totalBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
+        string[] totalVals =
+        [
+            "ИТОГО", string.Empty,
+            totalBase > 0 ? totalBase.ToString("N1") : "—",
+            totalOpt  > 0 ? totalOpt.ToString("N1")  : "—",
+            totalPes  > 0 ? totalPes.ToString("N1")  : "—",
+        ];
+        DrawPdfRow(gfx, margin, y, colW, totalVals, fontTotal, XBrushes.White, totalBg, 14);
+
+        doc.Save(filePath);
+    }
+
+
+
     // ─── Вычисление прогнозных часов (та же формула, что в ForecastDirectionViewModel) ──
 
     private static (decimal Base, decimal Opt, decimal Pes) CalcHours(ProjectVersionDirectionDto d)
