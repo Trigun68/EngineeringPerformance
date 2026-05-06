@@ -212,11 +212,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 decimal? baseH = factVol > 0 && row.NormProductivity.HasValue
                     ? Math.Round(factVol * row.NormProductivity.Value, 2)
                     : null;
-                decimal? optH = factVol > 0 && row.NormEstimate.HasValue && row.NormStdDev.HasValue
-                    ? Math.Round(factVol * (decimal)Math.Exp((double)(row.NormEstimate.Value - 0.5m * row.NormStdDev.Value)), 2)
+                decimal? optH = factVol > 0 && row.NormProductivity.HasValue && row.NormStdDev.HasValue
+                    ? Math.Round(factVol * Math.Max(0m, row.NormProductivity.Value - 0.5m * row.NormStdDev.Value), 2)
                     : null;
-                decimal? pesH = factVol > 0 && row.NormEstimate.HasValue && row.NormStdDev.HasValue
-                    ? Math.Round(factVol * (decimal)Math.Exp((double)(row.NormEstimate.Value + 0.5m * row.NormStdDev.Value)), 2)
+                decimal? pesH = factVol > 0 && row.NormProductivity.HasValue && row.NormStdDev.HasValue
+                    ? Math.Round(factVol * (row.NormProductivity.Value + 0.5m * row.NormStdDev.Value), 2)
                     : null;
 
                 ForecastData.Add(new ForecastPerformanceItem
