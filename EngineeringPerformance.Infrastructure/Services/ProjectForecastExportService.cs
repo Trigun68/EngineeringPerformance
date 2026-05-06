@@ -9,168 +9,153 @@ namespace EngineeringPerformance.Infrastructure.Services;
 
 public sealed class ProjectForecastExportService : IProjectForecastExportService
 {
-    public Task ExportToExcelAsync(ProjectForecastReportDto report, string filePath)
+    public Task ExportToExcelAsync(ProjectVersionAnalysisDto report, string filePath)
+        => Task.Run(() => BuildExcel(report, filePath));
+
+    public Task ExportToPdfAsync(ProjectVersionAnalysisDto report, string filePath)
+        => Task.Run(() => BuildPdf(report, filePath));
+
+    // ─── Вычисление прогнозных часов (та же формула, что в ForecastDirectionViewModel) ──
+
+    private static (decimal Base, decimal Opt, decimal Pes) CalcHours(ProjectVersionDirectionDto d)
     {
-        return Task.Run(() => BuildExcel(report, filePath));
+        if (!d.FactPhysicalVolume.HasValue || !d.NormProductivity.HasValue || d.NormProductivity.Value <= 0)
+            return (0m, 0m, 0m);
+
+        var fo = d.FactPhysicalVolume.Value;
+        var p = d.NormProductivity.Value;
+        var baseH = Math.Round(fo * p, 2);
+
+        if (d.NormStdDev.HasValue && d.NormStdDev.Value > 0)
+        {
+            var std = d.NormStdDev.Value;
+            return (baseH,
+                Math.Round(fo * Math.Max(0m, p - 0.5m * std), 2),
+                Math.Round(fo * (p + 0.5m * std), 2));
+        }
+
+        return (baseH, baseH, baseH);
     }
 
-    public Task ExportToPdfAsync(ProjectForecastReportDto report, string filePath)
-    {
-        return Task.Run(() => BuildPdf(report, filePath));
-    }
+    // ─── Excel ───────────────────────────────────────────────────────────────
 
-    private static void BuildExcel(ProjectForecastReportDto report, string filePath)
+    private static void BuildExcel(ProjectVersionAnalysisDto report, string filePath)
     {
         using var wb = new XLWorkbook();
-
-        AddScenariosSheet(wb, report);
-        AddVolumesSheet(wb, report);
-        AddTop3Sheet(wb, report);
-
+        AddForecastSheet(wb, report);
+        AddPhysicalVolumesSheet(wb, report);
         wb.SaveAs(filePath);
     }
 
-    // ─── Лист 1: Сценарии трудозатрат ────────────────────────────────────────
-
-    private static void AddScenariosSheet(IXLWorkbook wb, ProjectForecastReportDto report)
+    private static void AddForecastSheet(IXLWorkbook wb, ProjectVersionAnalysisDto report)
     {
-        var ws = wb.Worksheets.Add("Сценарии");
+        var ws = wb.Worksheets.Add("Прогноз");
 
         ws.Cell(1, 1).Value = $"Прогноз трудозатрат: {report.ProjectName} ({report.VersionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
-        ws.Range(1, 1, 1, 5).Merge();
+        ws.Range(1, 1, 1, 9).Merge();
 
-        var headers = new[] { "Сценарий", "Z-оценка", "Трудозатраты, ч", "% от базового", "Интерпретация" };
+        var headers = new[] { "Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Норм СО", "Базовый, ч", "Оптимист., ч", "Пессимист., ч" };
         WriteHeaderRow(ws, 2, headers);
 
         var row = 3;
-        foreach (var s in report.Scenarios)
+        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
+
+        foreach (var d in report.Directions)
         {
-            ws.Cell(row, 1).Value = s.ScenarioName;
-            ws.Cell(row, 2).Value = s.ZScore;
-            ws.Cell(row, 2).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(row, 3).Value = s.TotalLaborHours;
-            ws.Cell(row, 3).Style.NumberFormat.Format = "#,##0.00";
-            row++;
-        }
+            var indent = new string(' ', Math.Max(0, d.Level) * 2);
+            var (baseH, optH, pesH) = CalcHours(d);
 
-        // Интерпретации
-        row++;
-        ws.Cell(row, 1).Value = "Интерпретация сценариев";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        ws.Range(row, 1, row, 5).Merge();
-        row++;
+            ws.Cell(row, 1).Value = d.Code;
+            ws.Cell(row, 2).Value = indent + d.Name;
+            ws.Cell(row, 3).Value = d.UnitName ?? string.Empty;
+            SetDecimal(ws.Cell(row, 4), d.FactPhysicalVolume, "N2");
+            SetDecimal(ws.Cell(row, 5), d.NormProductivity, "N4");
+            SetDecimal(ws.Cell(row, 6), d.NormStdDev, "N4");
+            SetDecimal(ws.Cell(row, 7), baseH > 0 ? baseH : null, "N2");
+            SetDecimal(ws.Cell(row, 8), optH > 0 ? optH : null, "N2");
+            SetDecimal(ws.Cell(row, 9), pesH > 0 ? pesH : null, "N2");
 
-        var intHeaders = new[] { "Сценарий", "Трудозатраты, ч", "% от базового", "Интерпретация" };
-        WriteHeaderRow(ws, row, intHeaders);
-        row++;
-
-        foreach (var i in report.Interpretations)
-        {
-            ws.Cell(row, 1).Value = i.ScenarioName;
-            ws.Cell(row, 2).Value = i.LaborHours;
-            ws.Cell(row, 2).Style.NumberFormat.Format = "#,##0.00";
-            ws.Cell(row, 3).Value = i.PercentOfBase;
-            ws.Cell(row, 3).Style.NumberFormat.Format = "0.0%";
-            ws.Cell(row, 4).Value = i.Interpretation;
-            row++;
-        }
-
-        ws.Column(1).Width = 22;
-        ws.Column(4).Width = 14;
-        ws.Column(5).Width = 40;
-        ws.Columns(2, 3).AdjustToContents();
-        ws.SheetView.FreezeRows(2);
-    }
-
-    // ─── Лист 2: Плановые объёмы ─────────────────────────────────────────────
-
-    private static void AddVolumesSheet(IXLWorkbook wb, ProjectForecastReportDto report)
-    {
-        var ws = wb.Worksheets.Add("Плановые объёмы");
-
-        ws.Cell(1, 1).Value = $"Плановые объёмы: {report.ProjectName} ({report.VersionName})";
-        ws.Cell(1, 1).Style.Font.Bold = true;
-        ws.Cell(1, 1).Style.Font.FontSize = 13;
-        ws.Range(1, 1, 1, 8).Merge();
-
-        var allRows = report.Scenarios.FirstOrDefault()?.Disciplines
-            ?? report.PlannedVolumes.Select(v => new ForecastIicVolumeRowDto(
-                v.WorkDirectionId, v.ParentId, v.Name, v.UnitName,
-                v.NormProductivity, v.NormEstimate, v.NormStandardDeviation,
-                v.PlannedVolume, v.OptimisticHours, v.BaseHours, v.PessimisticHours,
-                v.Range, v.HierarchyPath)).ToList();
-
-        var headers = new[] { "Направление ИИС", "Ед. изм.", "Норм. произв.", "Плановый объём", "Базовый, ч", "Оптимист., ч", "Пессимист., ч", "Диапазон" };
-        WriteHeaderRow(ws, 2, headers);
-
-        var idToLevel = BuildLevelMap(report.PlannedVolumes);
-        var row = 3;
-        foreach (var v in report.PlannedVolumes)
-        {
-            var level = idToLevel.TryGetValue(v.WorkDirectionId, out var l) ? l : 0;
-            var indent = new string(' ', level * 2);
-            ws.Cell(row, 1).Value = indent + v.Name;
-            ws.Cell(row, 2).Value = v.UnitName ?? string.Empty;
-            SetDecimal(ws.Cell(row, 3), v.NormProductivity, "N4");
-            SetDecimal(ws.Cell(row, 4), v.PlannedVolume > 0 ? v.PlannedVolume : null, "N2");
-            SetDecimal(ws.Cell(row, 5), v.BaseHours > 0 ? v.BaseHours : null, "N2");
-            SetDecimal(ws.Cell(row, 6), v.OptimisticHours > 0 ? v.OptimisticHours : null, "N2");
-            SetDecimal(ws.Cell(row, 7), v.PessimisticHours > 0 ? v.PessimisticHours : null, "N2");
-            ws.Cell(row, 8).Value = v.Range;
-
-            if (level == 0)
+            if (d.Level == 0)
+            {
                 ws.Row(row).Style.Font.Bold = true;
+                totalBase += baseH;
+                totalOpt += optH;
+                totalPes += pesH;
+            }
             else if (row % 2 == 0)
                 ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
 
             row++;
         }
 
-        var tableRange = ws.Range(2, 1, row - 1, headers.Length);
+        // Итого
+        ws.Cell(row, 1).Value = "ИТОГО";
+        ws.Cell(row, 2).Value = "По проекту";
+        SetDecimal(ws.Cell(row, 7), totalBase, "N2");
+        SetDecimal(ws.Cell(row, 8), totalOpt, "N2");
+        SetDecimal(ws.Cell(row, 9), totalPes, "N2");
+        ws.Row(row).Style.Font.Bold = true;
+        ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        ws.Row(row).Style.Font.FontColor = XLColor.White;
+
+        var tableRange = ws.Range(2, 1, row, headers.Length);
         tableRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         tableRange.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
 
-        ws.Column(1).Width = 45;
-        ws.Column(2).Width = 12;
-        ws.Column(8).Width = 18;
-        for (var c = 3; c <= 7; c++) ws.Column(c).AdjustToContents();
+        ws.Column(1).Width = 14;
+        ws.Column(2).Width = 45;
+        ws.Column(3).Width = 10;
+        for (var c = 4; c <= headers.Length; c++) ws.Column(c).AdjustToContents();
         ws.SheetView.FreezeRows(2);
     }
 
-    // ─── Лист 3: ТОП-3 дисциплин ─────────────────────────────────────────────
-
-    private static void AddTop3Sheet(IXLWorkbook wb, ProjectForecastReportDto report)
+    private static void AddPhysicalVolumesSheet(IXLWorkbook wb, ProjectVersionAnalysisDto report)
     {
-        var ws = wb.Worksheets.Add("ТОП дисциплин");
+        var ws = wb.Worksheets.Add("Физ. объёмы");
 
-        ws.Cell(1, 1).Value = "ТОП дисциплин по трудозатратам";
+        ws.Cell(1, 1).Value = "Физические объёмы по направлениям IIC";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
-        ws.Range(1, 1, 1, 3).Merge();
+        ws.Range(1, 1, 1, 7).Merge();
 
-        var headers = new[] { "Место", "Дисциплина", "Базовые трудозатраты, ч" };
+        var headers = new[] { "Направление", "Код", "Номенклатурная позиция", "Ед. изм.", "Кол-во", "Коэфф.", "Итого" };
         WriteHeaderRow(ws, 2, headers);
 
         var row = 3;
-        foreach (var t in report.Top3Disciplines)
+        foreach (var d in report.Directions.Where(d => d.PhysicalVolumes.Count > 0))
         {
-            ws.Cell(row, 1).Value = t.Rank;
-            ws.Cell(row, 2).Value = t.DisciplineName;
-            ws.Cell(row, 3).Value = t.BaseHours;
-            ws.Cell(row, 3).Style.NumberFormat.Format = "#,##0.00";
+            ws.Cell(row, 1).Value = $"[{d.Code}] {d.Name}";
+            ws.Range(row, 1, row, headers.Length).Merge();
+            ws.Row(row).Style.Font.Bold = true;
+            ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
             row++;
+
+            foreach (var pv in d.PhysicalVolumes)
+            {
+                ws.Cell(row, 2).Value = pv.Code;
+                ws.Cell(row, 3).Value = pv.Name;
+                ws.Cell(row, 4).Value = pv.UnitName ?? string.Empty;
+                ws.Cell(row, 5).Value = pv.Quantity;
+                ws.Cell(row, 5).Style.NumberFormat.Format = "#,##0.00##";
+                ws.Cell(row, 6).Value = pv.Coefficient;
+                ws.Cell(row, 6).Style.NumberFormat.Format = "#,##0.0000";
+                ws.Cell(row, 7).Value = pv.Total;
+                ws.Cell(row, 7).Style.NumberFormat.Format = "#,##0.00";
+                row++;
+            }
         }
 
-        ws.Column(1).Width = 8;
-        ws.Column(2).Width = 45;
-        ws.Column(3).AdjustToContents();
-        ws.Range(2, 1, row - 1, 3).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-        ws.Range(2, 1, row - 1, 3).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
-    }
+        ws.Column(1).Width = 4;
+        ws.Column(3).Width = 50;
+        for (var c = 2; c <= headers.Length; c++)
+            if (c != 3) ws.Column(c).AdjustToContents();
 
-    // ─── Вспомогательные ─────────────────────────────────────────────────────
+        ws.Range(2, 1, Math.Max(3, row - 1), headers.Length).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        ws.Range(2, 1, Math.Max(3, row - 1), headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+        ws.SheetView.FreezeRows(2);
+    }
 
     private static void WriteHeaderRow(IXLWorksheet ws, int row, string[] headers)
     {
@@ -194,31 +179,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
     }
 
-    private static Dictionary<int, int> BuildLevelMap(IReadOnlyList<ForecastIicVolumeRowDto> rows)
-    {
-        var parentMap = rows.ToDictionary(r => r.WorkDirectionId, r => r.ParentId);
-        var levels = new Dictionary<int, int>();
-
-        int GetLevel(int id)
-        {
-            if (levels.TryGetValue(id, out var cached)) return cached;
-            if (!parentMap.TryGetValue(id, out var pid) || pid is null)
-            {
-                levels[id] = 0;
-                return 0;
-            }
-            var level = GetLevel(pid.Value) + 1;
-            levels[id] = level;
-            return level;
-        }
-
-        foreach (var r in rows) GetLevel(r.WorkDirectionId);
-        return levels;
-    }
-
     // ─── PDF ─────────────────────────────────────────────────────────────────
 
-    private static void BuildPdf(ProjectForecastReportDto report, string filePath)
+    private static void BuildPdf(ProjectVersionAnalysisDto report, string filePath)
     {
         if (GlobalFontSettings.FontResolver is null)
             GlobalFontSettings.FontResolver = new ForecastWindowsFontResolver();
@@ -227,15 +190,15 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         doc.Info.Title = $"Прогноз трудозатрат: {report.ProjectName}";
         doc.Info.Author = "EngineeringPerformance";
 
-        AddForecastSummaryPage(doc, report);
+        AddPdfSummaryPage(doc, report);
 
-        foreach (var v in report.PlannedVolumes.Where(v => v.ParentId == null || v.PlannedVolume > 0))
-            AddForecastDirectionPage(doc, v, report);
+        foreach (var d in report.Directions.Where(d => d.PhysicalVolumes.Count > 0))
+            AddPdfDirectionPage(doc, d, report);
 
         doc.Save(filePath);
     }
 
-    private static void AddForecastSummaryPage(PdfDocument doc, ProjectForecastReportDto report)
+    private static void AddPdfSummaryPage(PdfDocument doc, ProjectVersionAnalysisDto report)
     {
         var page = doc.AddPage();
         page.Orientation = PdfSharp.PageOrientation.Landscape;
@@ -257,52 +220,53 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             fontBody, XBrushes.Gray, new XRect(margin, y, pageW - margin * 2, 14), XStringFormats.TopLeft);
         y += 20;
 
-        double[] colW = [50, 230, 60, 70, 80, 80, 80];
+        double[] colW = [50, 230, 55, 70, 80, 80, 80];
         string[] colH = ["Шифр", "Направление ИИС", "Ед.изм.", "Факт ФО", "Базовый, ч", "Оптим., ч", "Пессим., ч"];
 
         var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
         DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
         y += 14;
 
-        var idToLevel = BuildLevelMap(report.PlannedVolumes);
         var bgLight = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
         var rowIdx = 0;
 
-        foreach (var v in report.PlannedVolumes)
+        foreach (var d in report.Directions)
         {
             if (y + 13 > page.Height.Point - margin) break;
-            var level = idToLevel.TryGetValue(v.WorkDirectionId, out var l) ? l : 0;
-            var indent = new string(' ', level * 2);
+            var (baseH, optH, pesH) = CalcHours(d);
+            if (d.ParentId == null) { totalBase += baseH; totalOpt += optH; totalPes += pesH; }
+
+            var indent = new string(' ', Math.Max(0, d.Level) * 2);
             var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
             string[] vals =
             [
-                string.Empty,
-                indent + TruncatePdf(v.Name, 42),
-                v.UnitName ?? "—",
-                v.PlannedVolume > 0 ? v.PlannedVolume.ToString("N2") : "—",
-                v.BaseHours > 0 ? v.BaseHours.ToString("N1") : "—",
-                v.OptimisticHours > 0 ? v.OptimisticHours.ToString("N1") : "—",
-                v.PessimisticHours > 0 ? v.PessimisticHours.ToString("N1") : "—",
+                d.Code,
+                indent + TruncatePdf(d.Name, 40),
+                d.UnitName ?? "—",
+                d.FactPhysicalVolume.HasValue ? d.FactPhysicalVolume.Value.ToString("N2") : "—",
+                baseH > 0 ? baseH.ToString("N1") : "—",
+                optH > 0 ? optH.ToString("N1") : "—",
+                pesH > 0 ? pesH.ToString("N1") : "—",
             ];
             DrawPdfRow(gfx, margin, y, colW, vals, fontBody, XBrushes.Black, bg, 12);
             y += 12;
             rowIdx++;
         }
 
-        var roots = report.PlannedVolumes.Where(v => v.ParentId == null).ToList();
-        var totalBase = roots.Sum(v => v.BaseHours);
-        var totalOpt = roots.Sum(v => v.OptimisticHours);
-        var totalPes = roots.Sum(v => v.PessimisticHours);
         var totalBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
-        string[] totalVals = ["ИТОГО", "По проекту", "—", "—",
-            totalBase.ToString("N1"), totalOpt.ToString("N1"), totalPes.ToString("N1")];
+        string[] totalVals =
+        [
+            "ИТОГО", "По проекту", "—", "—",
+            totalBase > 0 ? totalBase.ToString("N1") : "—",
+            totalOpt > 0 ? totalOpt.ToString("N1") : "—",
+            totalPes > 0 ? totalPes.ToString("N1") : "—",
+        ];
         DrawPdfRow(gfx, margin, y, colW, totalVals, fontTotal, XBrushes.White, totalBg, 14);
     }
 
-    private static void AddForecastDirectionPage(PdfDocument doc, ForecastIicVolumeRowDto v, ProjectForecastReportDto report)
+    private static void AddPdfDirectionPage(PdfDocument doc, ProjectVersionDirectionDto d, ProjectVersionAnalysisDto report)
     {
-        if (v.PlannedVolume <= 0 && v.BaseHours <= 0) return;
-
         var page = doc.AddPage();
         page.Orientation = PdfSharp.PageOrientation.Landscape;
         var gfx = XGraphics.FromPdfPage(page);
@@ -315,47 +279,42 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         var pageW = page.Width.Point;
         var y = margin;
 
-        gfx.DrawString(v.Name, fontTitle, XBrushes.Black,
+        var (baseH, optH, pesH) = CalcHours(d);
+
+        gfx.DrawString($"[{d.Code}] {d.Name}", fontTitle, XBrushes.Black,
             new XRect(margin, y, pageW - margin * 2, 16), XStringFormats.TopLeft);
         y += 18;
 
         gfx.DrawString(
-            $"Факт ФО: {(v.PlannedVolume > 0 ? v.PlannedVolume.ToString("N2") : "—")}   " +
-            $"Базовый: {(v.BaseHours > 0 ? v.BaseHours.ToString("N1") : "—")} ч   " +
-            $"Оптимист.: {(v.OptimisticHours > 0 ? v.OptimisticHours.ToString("N1") : "—")} ч   " +
-            $"Пессимист.: {(v.PessimisticHours > 0 ? v.PessimisticHours.ToString("N1") : "—")} ч",
+            $"Факт ФО: {(d.FactPhysicalVolume.HasValue ? d.FactPhysicalVolume.Value.ToString("N2") : "—")}   " +
+            $"Норм. произв.: {(d.NormProductivity.HasValue ? d.NormProductivity.Value.ToString("N4") : "—")}   " +
+            $"Базовый: {(baseH > 0 ? baseH.ToString("N1") : "—")} ч   " +
+            $"Оптимист.: {(optH > 0 ? optH.ToString("N1") : "—")} ч   " +
+            $"Пессимист.: {(pesH > 0 ? pesH.ToString("N1") : "—")} ч",
             fontHeader, XBrushes.Black, new XRect(margin, y, pageW - margin * 2, 12), XStringFormats.TopLeft);
         y += 20;
 
-        // Дочерние направления
-        var children = report.PlannedVolumes.Where(r => r.ParentId == v.WorkDirectionId).ToList();
-        if (children.Count > 0)
+        if (d.PhysicalVolumes.Count > 0)
         {
-            gfx.DrawString("Детализация по дочерним направлениям", fontHeader, XBrushes.Black,
+            gfx.DrawString("Физические объёмы проекта", fontHeader, XBrushes.Black,
                 new XRect(margin, y, 300, 12), XStringFormats.TopLeft);
             y += 13;
 
-            double[] colW = [240, 60, 80, 80, 80];
-            string[] hdr = ["Направление", "Ед.изм.", "Базовый, ч", "Оптим., ч", "Пессим., ч"];
+            double[] pvColW = [50, 300, 55, 60, 55, 70];
+            string[] pvHdr = ["Код", "Номенклатурная позиция", "Ед. изм.", "Кол-во", "Коэфф.", "Итого"];
             var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
-            DrawPdfRow(gfx, margin, y, colW, hdr, fontHeader, XBrushes.White, hdrBg, 12);
+            DrawPdfRow(gfx, margin, y, pvColW, pvHdr, fontHeader, XBrushes.White, hdrBg, 12);
             y += 12;
 
             var bgLight = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
             var rowIdx = 0;
-            foreach (var c in children)
+            foreach (var pv in d.PhysicalVolumes)
             {
                 if (y + 11 > page.Height.Point - margin) break;
                 var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
-                string[] vals =
-                [
-                    TruncatePdf(c.Name, 40),
-                    c.UnitName ?? "—",
-                    c.BaseHours > 0 ? c.BaseHours.ToString("N1") : "—",
-                    c.OptimisticHours > 0 ? c.OptimisticHours.ToString("N1") : "—",
-                    c.PessimisticHours > 0 ? c.PessimisticHours.ToString("N1") : "—",
-                ];
-                DrawPdfRow(gfx, margin, y, colW, vals, fontBody, XBrushes.Black, bg, 11);
+                string[] vals = [pv.Code, TruncatePdf(pv.Name, 52), pv.UnitName ?? "—",
+                    pv.Quantity.ToString("N2"), pv.Coefficient.ToString("N4"), pv.Total.ToString("N2")];
+                DrawPdfRow(gfx, margin, y, pvColW, vals, fontBody, XBrushes.Black, bg, 11);
                 y += 11;
                 rowIdx++;
             }

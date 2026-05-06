@@ -592,7 +592,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var report = await _forecastService.GenerateForecastAsync(pid, vid);
+            var analysisSvc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
+            var report = await analysisSvc.GenerateReportAsync(pid, vid);
             await _forecastExportService.ExportToExcelAsync(report, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);

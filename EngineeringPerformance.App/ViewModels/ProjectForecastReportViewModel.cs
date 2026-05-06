@@ -12,7 +12,6 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class ProjectForecastReportViewModel : ObservableObject, ILoadableViewModel
 {
     private readonly IProjectVersionAnalysisService _analysisService;
-    private readonly IProjectForecastService _forecastService;
     private readonly IProjectForecastExportService _exportService;
 
     public int ProjectId { get; set; }
@@ -35,11 +34,9 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
 
     public ProjectForecastReportViewModel(
         IProjectVersionAnalysisService analysisService,
-        IProjectForecastService forecastService,
         IProjectForecastExportService exportService)
     {
         _analysisService = analysisService;
-        _forecastService = forecastService;
         _exportService = exportService;
     }
 
@@ -71,8 +68,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            var forecastReport = await _forecastService.GenerateForecastAsync(ProjectId, VersionId);
-            await _exportService.ExportToExcelAsync(forecastReport, dlg.FileName);
+            await _exportService.ExportToExcelAsync(_report, dlg.FileName);
         }
         catch (Exception ex)
         {
@@ -102,8 +98,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            var forecastReport = await _forecastService.GenerateForecastAsync(ProjectId, VersionId);
-            await _exportService.ExportToPdfAsync(forecastReport, dlg.FileName);
+            await _exportService.ExportToPdfAsync(_report, dlg.FileName);
         }
         catch (Exception ex)
         {
