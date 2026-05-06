@@ -1,0 +1,9 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.Forms.GroupAnalysisForm"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="16">
+        <TextBlock Text="Форма анализа группы проектов / направлений работ IIC" FontSize="18" FontWeight="SemiBold"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Foreground="#999" />
+    </Grid>
+</UserControl>

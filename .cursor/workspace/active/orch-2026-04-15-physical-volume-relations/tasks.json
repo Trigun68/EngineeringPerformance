@@ -1,0 +1,51 @@
+{
+  "DB-001": {
+    "id": "DB-001",
+    "name": "Add DocumentSet property to PhysicalVolume entity",
+    "status": "completed",
+    "completedAt": "2026-04-15T18:55:00Z",
+    "filesChanged": ["PhysicalVolume.cs", "PhysicalVolumeConfiguration.cs"]
+  },
+  "DB-002": {
+    "id": "DB-002",
+    "name": "Add navigation properties to PhysicalVolume entity",
+    "status": "completed",
+    "completedAt": "2026-04-15T18:56:00Z",
+    "filesChanged": ["PhysicalVolume.cs"]
+  },
+  "DB-003": {
+    "id": "DB-003",
+    "name": "Add navigation properties to ProjectLaborIntensity entity",
+    "status": "completed",
+    "completedAt": "2026-04-15T18:56:00Z",
+    "filesChanged": ["ProjectLaborIntensity.cs"]
+  },
+  "DB-004": {
+    "id": "DB-004",
+    "name": "Configure EF Core relationships in entity configurations",
+    "status": "completed",
+    "completedAt": "2026-04-15T18:58:00Z",
+    "filesChanged": ["PhysicalVolumeConfiguration.cs", "ProjectPhysicalVolumeConfiguration.cs", "ProjectLaborIntensityConfiguration.cs"]
+  },
+  "DB-005": {
+    "id": "DB-005",
+    "name": "Create and apply EF Core migration",
+    "status": "completed",
+    "completedAt": "2026-04-15T19:40:00Z",
+    "filesChanged": ["20260415193900_AddPhysicalVolumeRelationships.cs"]
+  },
+  "DTO-001": {
+    "id": "DTO-001",
+    "name": "Update PhysicalVolumeDto to include DocumentSet",
+    "status": "completed",
+    "completedAt": "2026-04-15T19:22:00Z",
+    "filesChanged": ["PhysicalVolumeDto.cs"]
+  },
+  "DOC-001": {
+    "id": "DOC-001",
+    "name": "Update documentation",
+    "status": "completed",
+    "completedAt": "2026-04-15T19:45:00Z",
+    "filesChanged": ["entity-relationships.md", "PhysicalVolume.md", "ProjectPhysicalVolume.md", "ProjectLaborIntensity.md", "CHANGELOG.md", "migration.md"]
+  }
+}

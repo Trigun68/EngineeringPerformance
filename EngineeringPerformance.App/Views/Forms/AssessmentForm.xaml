@@ -1,0 +1,667 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.Forms.AssessmentForm"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:dx="http://schemas.devexpress.com/winfx/2008/xaml/core"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+             xmlns:dxmvvm="http://schemas.devexpress.com/winfx/2008/xaml/mvvm"
+             xmlns:converters="clr-namespace:EngineeringPerformance.App.Converters"
+             mc:Ignorable="d"
+             d:DesignHeight="900" d:DesignWidth="1200">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <converters:InterpretationToBrushConverter x:Key="InterpretationToBrush" />
+
+        <Style x:Key="SectionBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Margin" Value="0,0,0,16" />
+        </Style>
+
+        <Style x:Key="SectionHeaderBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="#2C3E50" />
+            <Setter Property="Padding" Value="16,10" />
+        </Style>
+
+        <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#ECF0F1" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="SectionContentBorderStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
+        <Style x:Key="InfoLabelStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#7F8C8D" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="InfoValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#2C3E50" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="MetricValueStyle" TargetType="TextBlock" BasedOn="{StaticResource InfoValueStyle}">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="ActionButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#3498DB" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#2980B9" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <dxmvvm:Interaction.Behaviors>
+        <dxmvvm:DispatcherService />
+    </dxmvvm:Interaction.Behaviors>
+
+    <Grid Background="#F0F2F5">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Top Toolbar -->
+        <Border Grid.Row="0" Background="#FFFFFF" Padding="16,12" BorderBrush="#E8E8E8" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Выбрать проект"
+                            Command="{Binding SelectProjectCommand}"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Margin="0,0,8,0" />
+                    <Button Content="Обновить"
+                            Command="{Binding RefreshCommand}"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Margin="0,0,8,0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Scrollable Content -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16">
+            <StackPanel>
+
+                <!-- Loading Indicator -->
+                <Border Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}"
+                        Background="#FFFFFF" CornerRadius="6" Padding="24" Margin="0,0,0,16"
+                        BorderBrush="#E0E0E0" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <TextBlock Text="Загрузка данных..." FontSize="14" Foreground="#7F8C8D" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Error Message -->
+                <Border Visibility="{Binding HasError, Converter={StaticResource BoolToVisibility}}"
+                        Background="#FDEDEC" CornerRadius="6" Padding="16" Margin="0,0,0,16"
+                        BorderBrush="#E74C3C" BorderThickness="1">
+                    <TextBlock Text="{Binding ErrorMessage}" Foreground="#C0392B" FontSize="14" TextWrapping="Wrap" />
+                </Border>
+
+                <!-- Section 1: Project Info -->
+                <Border Style="{StaticResource SectionBorderStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SectionHeaderBorderStyle}">
+                            <TextBlock Text="Информация о проекте" Style="{StaticResource SectionHeaderTextStyle}" />
+                        </Border>
+
+                        <Border Grid.Row="1" Style="{StaticResource SectionContentBorderStyle}">
+                            <StackPanel>
+                                <!-- Top: Name + Disciplines count (как в карточке проекта) -->
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="32" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="Название проекта:" Style="{StaticResource InfoLabelStyle}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding ProjectNameWithVersion, Mode=OneWay}" Style="{StaticResource InfoValueStyle}" />
+
+                                    <TextBlock Grid.Column="4" Text="Количество дисциплин:" Style="{StaticResource InfoLabelStyle}" />
+                                    <TextBlock Grid.Column="6" Text="{Binding Report.Disciplines.Count, Mode=OneWay}" Style="{StaticResource MetricValueStyle}" />
+                                </Grid>
+
+                                <!-- Крупные плитки KPI: PEPM / Перцентиль / Общие трудозатраты -->
+                                <UniformGrid Columns="3" Margin="0,0,0,16">
+                                    <Border Background="#F8FAFC" CornerRadius="8" Padding="20,16" Margin="0,0,8,0"
+                                            BorderBrush="#E2E8F0" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="Проектный показатель PEPM"
+                                                       FontSize="12" Foreground="#64748B" FontWeight="SemiBold" Margin="0,0,0,10" />
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Ellipse Width="14" Height="14"
+                                                         Fill="{Binding Report.Interpretation, Mode=OneWay, Converter={StaticResource InterpretationToBrush}}"
+                                                         VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                <TextBlock Text="{Binding Report.PermIndicator, Mode=OneWay, StringFormat={}{0:N2}, TargetNullValue=—}"
+                                                           FontSize="36" FontWeight="Bold" Foreground="#2C3E50" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="#F8FAFC" CornerRadius="8" Padding="20,16" Margin="4,0,4,0"
+                                            BorderBrush="#E2E8F0" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="Перцентиль"
+                                                       FontSize="12" Foreground="#64748B" FontWeight="SemiBold" Margin="0,0,0,10" />
+                                            <TextBlock Text="{Binding Report.Percentile, Mode=OneWay, TargetNullValue=—}"
+                                                       FontSize="36" FontWeight="Bold" Foreground="#2C3E50" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Background="#F8FAFC" CornerRadius="8" Padding="20,16" Margin="8,0,0,0"
+                                            BorderBrush="#E2E8F0" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock Text="Общие трудозатраты"
+                                                       FontSize="12" Foreground="#64748B" FontWeight="SemiBold" Margin="0,0,0,10" />
+                                            <TextBlock FontSize="36" FontWeight="Bold" Foreground="#2C3E50">
+                                                <Run Text="{Binding Report.TotalLaborHours, Mode=OneWay, StringFormat={}{0:N0}, TargetNullValue=—}" />
+                                                <Run Text="ч" FontSize="20" FontWeight="Normal" Foreground="#64748B" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </UniformGrid>
+
+                                <!-- Низ: статус + интерпретация -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="32" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="16" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock Grid.Column="0" Text="Статус:" Style="{StaticResource InfoLabelStyle}" />
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Ellipse Width="10" Height="10"
+                                                 Fill="{Binding Report.Interpretation, Mode=OneWay, Converter={StaticResource InterpretationToBrush}}"
+                                                 Margin="0,0,6,0" />
+                                        <TextBlock Text="{Binding Report.Status, Mode=OneWay}" Style="{StaticResource InfoValueStyle}" />
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="4" Text="Интерпретация:" Style="{StaticResource InfoLabelStyle}" />
+                                    <TextBlock Grid.Column="6" Text="{Binding Report.Interpretation, Mode=OneWay}" Style="{StaticResource InfoValueStyle}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Section 2: Accuracy -->
+                <Border Style="{StaticResource SectionBorderStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SectionHeaderBorderStyle}">
+                            <TextBlock Text="Точность оценки" Style="{StaticResource SectionHeaderTextStyle}" />
+                        </Border>
+
+                        <Border Grid.Row="1" Style="{StaticResource SectionContentBorderStyle}">
+                            <StackPanel>
+                                <TextBlock Text="Общая точность"
+                                           FontSize="13"
+                                           Foreground="#7F8C8D"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,8" />
+
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,12">
+                                    <TextBlock FontSize="36"
+                                               FontWeight="Bold"
+                                               Foreground="#2C3E50"
+                                               VerticalAlignment="Center">
+                                        <Run Text="{Binding Report.AccuracyScore, Mode=OneWay, StringFormat={}{0:N1}, TargetNullValue=—}" />
+                                        <Run Text="%" FontSize="20" FontWeight="Normal" />
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <!-- Accuracy Interpretation with Visual Indicator -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                                    <Ellipse Width="14"
+                                             Height="14"
+                                             Fill="{Binding Report.AccuracyInterpretation, Mode=OneWay, Converter={StaticResource InterpretationToBrush}}"
+                                             Margin="0,0,8,0"
+                                             VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding Report.AccuracyInterpretation, Mode=OneWay}"
+                                               FontSize="14"
+                                               FontWeight="SemiBold"
+                                               Foreground="#2C3E50"
+                                               VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- Accuracy Description -->
+                                <TextBlock FontSize="13"
+                                           Foreground="#7F8C8D"
+                                           TextWrapping="Wrap"
+                                           LineHeight="18"
+                                           Margin="0,0,0,16">
+                                    <Run Text="Точность отражает степень соответствия проектных показателей фактическим данным. " />
+                                    <Run Text="Высокая точность означает надёжность выводов анализа." />
+                                </TextBlock>
+
+                                <!-- Characteristics that contributed to accuracy -->
+                                <TextBlock Text="Характеристики проекта"
+                                           FontSize="13"
+                                           Foreground="#7F8C8D"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,8" />
+
+                                <Border BorderBrush="#E0E4E8"
+                                        BorderThickness="1"
+                                        CornerRadius="4"
+                                        Padding="0">
+                                    <dxg:GridControl ItemsSource="{Binding AccuracyCharacteristics}"
+                                                     AutoGenerateColumns="None"
+                                                     MaxHeight="240">
+                                        <dxg:GridControl.Columns>
+                                            <dxg:GridColumn FieldName="CharacteristicName"
+                                                            Header="Характеристика"
+                                                            Width="*"
+                                                            MinWidth="220" />
+                                            <dxg:GridColumn FieldName="OptionName"
+                                                            Header="Выбранное значение"
+                                                            Width="*"
+                                                            MinWidth="220" />
+                                            <dxg:GridColumn FieldName="ValuePercent"
+                                                            Header="PD, %"
+                                                            Width="100">
+                                                <dxg:GridColumn.EditSettings>
+                                                    <dxe:TextEditSettings DisplayFormat="N2" />
+                                                </dxg:GridColumn.EditSettings>
+                                            </dxg:GridColumn>
+                                        </dxg:GridControl.Columns>
+                                        <dxg:GridControl.View>
+                                            <dxg:TableView NavigationStyle="Row"
+                                                           AllowEditing="False"
+                                                           ShowHorizontalLines="True"
+                                                           ShowVerticalLines="False"
+                                                           AutoWidth="True"
+                                                           ShowGroupPanel="False"
+                                                           ShowTotalSummary="True"
+                                                           TotalSummaryPosition="Bottom" />
+                                        </dxg:GridControl.View>
+                                        <dxg:GridControl.TotalSummary>
+                                            <dxg:GridSummaryItem FieldName="ValuePercent"
+                                                                 SummaryType="Average"
+                                                                 Alignment="Right"
+                                                                 DisplayFormat="Среднее: {0:N2}" />
+                                        </dxg:GridControl.TotalSummary>
+                                    </dxg:GridControl>
+                                </Border>
+
+                                <!-- Empty state for characteristics -->
+                                <TextBlock Text="Характеристики проекта не заданы"
+                                           FontSize="13"
+                                           Foreground="#95A5A6"
+                                           FontStyle="Italic"
+                                           Margin="0,8,0,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding AccuracyCharacteristics.Count, Mode=OneWay}" Value="0">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Section 3: Discipline Analysis -->
+                <Border Style="{StaticResource SectionBorderStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SectionHeaderBorderStyle}">
+                            <TextBlock Text="Анализ по дисциплинам" Style="{StaticResource SectionHeaderTextStyle}" />
+                        </Border>
+
+                        <Border Grid.Row="1" Style="{StaticResource SectionContentBorderStyle}">
+                            <dxg:GridControl ItemsSource="{Binding Disciplines}"
+                                             AutoGenerateColumns="None"
+                                             MaxHeight="400">
+                                <dxg:GridControl.Columns>
+                                    <dxg:GridColumn FieldName="DisciplineName"
+                                                    Header="Дисциплина (иерархия IIC)"
+                                                    Width="*"
+                                                    MinWidth="280" />
+                                    <dxg:GridColumn FieldName="LaborHours"
+                                                    Header="Трудозатраты"
+                                                    Width="120">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N0" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="PercentOfTotal"
+                                                    Header="% от общих"
+                                                    Width="100">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N0" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="ZScore"
+                                                    Header="z-score"
+                                                    Width="100">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Assessment"
+                                                    Header="Оценка"
+                                                    Width="150" />
+                                </dxg:GridControl.Columns>
+                                <dxg:GridControl.View>
+                                    <dxg:TreeListView Name="DisciplinesTableView"
+                                                   NavigationStyle="Row"
+                                                   AllowEditing="False"
+                                                   ShowHorizontalLines="True"
+                                                   ShowVerticalLines="False"
+                                                   AutoWidth="True"
+                                                   KeyFieldName="Id"
+                                                   ParentFieldName="ParentId"
+                                                   ShowTotalSummary="True"
+                                                   TotalSummaryPosition="Bottom">
+                                        <dxg:TreeListView.FormatConditions>
+                                            <!-- z < -1.0: Green — Excellent -->
+                                            <dxg:FormatCondition FieldName="ZScore"
+                                                                 ValueRule="Less"
+                                                                 Value1="-1.0">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#4CAF50" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <!-- -1.0 <= z < -0.5: Light green — Good -->
+                                            <dxg:FormatCondition FieldName="ZScore"
+                                                                 ValueRule="Between"
+                                                                 Value1="-1.0"
+                                                                 Value2="-0.5">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#8BC34A" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <!-- -0.5 <= z <= 0.5: Yellow — Satisfactory -->
+                                            <dxg:FormatCondition FieldName="ZScore"
+                                                                 ValueRule="Between"
+                                                                 Value1="-0.5"
+                                                                 Value2="0.5">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#FFC107" Foreground="#000000" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <!-- 0.5 < z <= 1.0: Orange — Needs Attention -->
+                                            <dxg:FormatCondition FieldName="ZScore"
+                                                                 ValueRule="Between"
+                                                                 Value1="0.5"
+                                                                 Value2="1.0">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#FF9800" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <!-- z > 1.0: Red — Critical -->
+                                            <dxg:FormatCondition FieldName="ZScore"
+                                                                 ValueRule="Greater"
+                                                                 Value1="1.0">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#F44336" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+
+                                            <!-- Assessment column conditional formatting -->
+                                            <dxg:FormatCondition FieldName="Assessment"
+                                                                 ValueRule="Equal"
+                                                                 Value1="Отличная производительность">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#4CAF50" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <dxg:FormatCondition FieldName="Assessment"
+                                                                 ValueRule="Equal"
+                                                                 Value1="Хорошая производительность">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#8BC34A" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <dxg:FormatCondition FieldName="Assessment"
+                                                                 ValueRule="Equal"
+                                                                 Value1="Удовлетворительная производительность">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#FFC107" Foreground="#000000" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <dxg:FormatCondition FieldName="Assessment"
+                                                                 ValueRule="Equal"
+                                                                 Value1="Требует внимания">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#FF9800" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                            <dxg:FormatCondition FieldName="Assessment"
+                                                                 ValueRule="Equal"
+                                                                 Value1="Критически низкая производительность">
+                                                <dxg:FormatCondition.Format>
+                                                    <dx:Format Background="#F44336" Foreground="#FFFFFF" />
+                                                </dxg:FormatCondition.Format>
+                                            </dxg:FormatCondition>
+                                        </dxg:TreeListView.FormatConditions>
+                                    </dxg:TreeListView>
+                                </dxg:GridControl.View>
+                                <dxg:GridControl.TotalSummary>
+                                    <dxg:GridSummaryItem FieldName="LaborHours"
+                                                         SummaryType="Sum"
+                                                         Alignment="Right"
+                                                         DisplayFormat="Итого: {0:N0}" />
+                                    <dxg:GridSummaryItem FieldName="PercentOfTotal"
+                                                         SummaryType="Sum"
+                                                         Alignment="Right"
+                                                         DisplayFormat="Итого: {0:N0}" />
+                                </dxg:GridControl.TotalSummary>
+                            </dxg:GridControl>
+                        </Border>
+                    </Grid>
+                </Border>
+
+                <!-- Section 4: Recommendations -->
+                <Border Style="{StaticResource SectionBorderStyle}">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Style="{StaticResource SectionHeaderBorderStyle}">
+                            <TextBlock Text="Рекомендации" Style="{StaticResource SectionHeaderTextStyle}" />
+                        </Border>
+
+                        <Border Grid.Row="1" Style="{StaticResource SectionContentBorderStyle}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Priority Actions -->
+                                <StackPanel Grid.Column="0">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <TextBlock Text="&#9888;"
+                                                   FontSize="16"
+                                                   Margin="0,0,6,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="Приоритетные действия"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C3E50"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <!-- PEPM-based dynamic recommendation -->
+                                    <Border Background="#FFF8E1"
+                                            CornerRadius="4"
+                                            Padding="12,10"
+                                            Margin="0,0,0,12"
+                                            BorderBrush="#FFC107"
+                                            BorderThickness="1">
+                                        <TextBlock Text="{Binding PermBasedRecommendation, Mode=OneWay}"
+                                                   FontSize="13"
+                                                   Foreground="#F57F17"
+                                                   TextWrapping="Wrap"
+                                                   FontWeight="SemiBold" />
+                                    </Border>
+
+                                    <!-- Recommendations list -->
+                                    <ItemsControl ItemsSource="{Binding Recommendations, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <TextBlock Text="&#9888;"
+                                                               Foreground="#E67E22"
+                                                               FontSize="14"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Top" />
+                                                    <TextBlock Text="{Binding Mode=OneWay}"
+                                                               FontSize="13"
+                                                               Foreground="#34495E"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Top" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Empty state -->
+                                    <TextBlock Text="Нет приоритетных действий"
+                                               FontSize="13"
+                                               Foreground="#95A5A6"
+                                               FontStyle="Italic"
+                                               Margin="0,8,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Recommendations.Count, Mode=OneWay}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+
+                                <!-- Key Disciplines -->
+                                <StackPanel Grid.Column="2">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                        <TextBlock Text="&#8505;"
+                                                   FontSize="16"
+                                                   Margin="0,0,6,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="Ключевые дисциплины для улучшения"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#2C3E50"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <ItemsControl ItemsSource="{Binding KeyDisciplines, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                                    <TextBlock Text="&#8505;"
+                                                               Foreground="#3498DB"
+                                                               FontSize="14"
+                                                               Margin="0,0,8,0"
+                                                               VerticalAlignment="Top" />
+                                                    <TextBlock Text="{Binding Mode=OneWay}"
+                                                               FontSize="13"
+                                                               Foreground="#34495E"
+                                                               TextWrapping="Wrap"
+                                                               VerticalAlignment="Top" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Empty state -->
+                                    <TextBlock Text="Нет ключевых дисциплин"
+                                               FontSize="13"
+                                               Foreground="#95A5A6"
+                                               FontStyle="Italic"
+                                               Margin="0,8,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding KeyDisciplines.Count, Mode=OneWay}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

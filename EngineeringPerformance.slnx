@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="EngineeringPerformance.App/EngineeringPerformance.App.csproj" />
+  <Project Path="EngineeringPerformance.Core/EngineeringPerformance.Core.csproj" />
+  <Project Path="EngineeringPerformance.Infrastructure/EngineeringPerformance.Infrastructure.csproj" />
+  <Project Path="EngineeringPerformance.Tests/EngineeringPerformance.Tests.csproj" />
+</Solution>

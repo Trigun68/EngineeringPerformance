@@ -1,0 +1,152 @@
+<Window x:Class="EngineeringPerformance.App.Views.ProjectSelectionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+        xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+        Title="Выбор проекта и версии анализа"
+        MinHeight="520"
+        Height="560"
+        Width="600"
+        MinWidth="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResize"
+        Icon="/Assets/logo.png">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#2C3E50" Padding="16,12">
+            <TextBlock Text="Выбор проекта и версии анализа" Foreground="#ECF0F1" FontSize="16" FontWeight="SemiBold" />
+        </Border>
+
+        <!-- Content: прокрутка только для средней части; кнопки всегда внизу окна -->
+        <Border Grid.Row="1" Background="#FFFFFF">
+            <Grid Margin="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="120" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <ScrollViewer Grid.Row="0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="Поиск проекта" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <Border Grid.Row="1"
+                                Height="34"
+                                Margin="0,0,0,8"
+                                VerticalAlignment="Top"
+                                BorderBrush="#D0D7DE"
+                                BorderThickness="1"
+                                CornerRadius="2"
+                                ClipToBounds="True">
+                            <dxe:TextEdit VerticalAlignment="Stretch"
+                                          VerticalContentAlignment="Center"
+                                          MinHeight="0"
+                                          MaxHeight="34"
+                                          BorderThickness="0"
+                                          ShowBorder="False"
+                                          EditValue="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                          NullText="Поиск по названию или коду..." />
+                        </Border>
+
+                        <TextBlock Grid.Row="2" Text="Проекты" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <dxg:GridControl Grid.Row="3"
+                                         ItemsSource="{Binding FilteredProjects}"
+                                         SelectedItem="{Binding SelectedProject}"
+                                         AutoGenerateColumns="None"
+                                         VerticalAlignment="Top"
+                                         MinHeight="160"
+                                         MaxHeight="280"
+                                         Margin="0,0,0,8">
+                            <dxg:GridControl.Columns>
+                                <dxg:GridColumn FieldName="Code" Header="Код" Width="*" />
+                                <dxg:GridColumn FieldName="Name" Header="Наименование" Width="4*" />
+                            </dxg:GridControl.Columns>
+                            <dxg:GridControl.View>
+                                <dxg:TableView AllowEditing="False"
+                                               NavigationStyle="Row"
+                                               ShowGroupPanel="False"
+                                               ShowHorizontalLines="True"
+                                               ShowVerticalLines="False"
+                                               AutoWidth="False" />
+                            </dxg:GridControl.View>
+                        </dxg:GridControl>
+
+                        <TextBlock Grid.Row="4" Text="Версия анализа" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <StackPanel Grid.Row="5" Margin="0,0,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <dxe:ComboBoxEdit Grid.Column="0"
+                                                  HorizontalAlignment="Stretch"
+                                                  MinHeight="32"
+                                                  ItemsSource="{Binding AvailableVersions}"
+                                                  EditValue="{Binding SelectedVersionId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  ValueMember="Id"
+                                                  DisplayMember="Name"
+                                                  NullText="Выберите версию..." />
+                                <Button Grid.Column="1"
+                                        Margin="8,0,0,0"
+                                        Padding="8,6"
+                                        MinWidth="40"
+                                        MinHeight="32"
+                                        VerticalAlignment="Center"
+                                        Command="{Binding CreateNewVersionCommand}"
+                                        ToolTip="Создать новую версию анализа (направление «План»)">
+                                    <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
+                                </Button>
+                            </Grid>
+                            <TextBlock Margin="0,8,0,0"
+                                       FontSize="12"
+                                       Foreground="#A04000"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding VersionSelectionHint}" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="6"
+                                   Text="{Binding ErrorMessage}"
+                                   Foreground="Red"
+                                   TextWrapping="Wrap"
+                                   Margin="0,8,0,0" />
+                    </Grid>
+                </ScrollViewer>
+
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,12,0,0">
+                    <Button Content="Выбрать"
+                            Command="{Binding SelectCommand}"
+                            MinWidth="100"
+                            MinHeight="32"
+                            Padding="12,8"
+                            Margin="0,0,8,0"
+                            IsDefault="True" />
+                    <Button Content="Отмена"
+                            Command="{Binding CancelCommand}"
+                            MinWidth="100"
+                            MinHeight="32"
+                            Padding="12,8"
+                            IsCancel="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,3 @@
+PLACEHOLDER: Replace this file with actual logo.png
+The logo should be a PNG image for the splash screen and login window.
+Recommended size: 400x400 or similar square aspect ratio.

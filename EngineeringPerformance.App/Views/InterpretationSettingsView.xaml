@@ -1,0 +1,287 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.InterpretationSettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="1000">
+    <UserControl.Resources>
+        <Style x:Key="H1Style" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#2C3E50" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+        <Style x:Key="H2Style" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#2C3E50" />
+            <Setter Property="Margin" Value="0,16,0,6" />
+        </Style>
+        <Style x:Key="BodyStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="#34495E" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="LineHeight" Value="20" />
+        </Style>
+        <Style x:Key="HintStyle" TargetType="TextBlock" BasedOn="{StaticResource BodyStyle}">
+            <Setter Property="Foreground" Value="#7F8C8D" />
+            <Setter Property="FontStyle" Value="Italic" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+        <Style x:Key="TableCellStyle" TargetType="Border">
+            <Setter Property="BorderBrush" Value="#E0E0E0" />
+            <Setter Property="BorderThickness" Value="0,0,1,1" />
+            <Setter Property="Padding" Value="8,5" />
+        </Style>
+        <Style x:Key="TableHeaderCellStyle" TargetType="Border" BasedOn="{StaticResource TableCellStyle}">
+            <Setter Property="Background" Value="#F5F7FA" />
+        </Style>
+        <Style x:Key="BulletIndicator" TargetType="Border">
+            <Setter Property="Width" Value="10" />
+            <Setter Property="Height" Value="10" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+        <StackPanel MaxWidth="1100" HorizontalAlignment="Left">
+
+            <TextBlock Text="Справка по показателям" Style="{StaticResource H1Style}" />
+            <TextBlock Style="{StaticResource BodyStyle}">
+                <Run Text="Справочная информация о шкалах и порогах, используемых в отчётах приложения. " />
+                <Run Text="Здесь собраны пороги интерпретаций Z-оценки, точности сравнения и сводная таблица PEPM." />
+            </TextBlock>
+
+            <!-- ════════════════ 1. Z-оценка ════════════════ -->
+            <TextBlock Text="1. Z-оценка по направлениям IIC" Style="{StaticResource H2Style}" />
+            <TextBlock Style="{StaticResource BodyStyle}">
+                <Run Text="Вычисляется для каждого направления: Z = (фактическая оценка − нормативная оценка) / нормативное стандартное отклонение. " />
+                <Run Text="Фактическая оценка — натуральный логарифм фактической производительности. Те же пороги применяются к PEPM." />
+            </TextBlock>
+            <TextBlock Style="{StaticResource HintStyle}" Margin="0,4,0,8"
+                       Text="Источник: PerformanceService.DetermineInterpretation" />
+
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="240" />
+                    <ColumnDefinition Width="120" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="1,1,1,1"><TextBlock Text="Диапазон Z" FontWeight="SemiBold" /></Border>
+                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Интерпретация" FontWeight="SemiBold" /></Border>
+                <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Статус" FontWeight="SemiBold" /></Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="&lt; −1,0" /></Border>
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#4CAF50" /><TextBlock Text="Отличная производительность" VerticalAlignment="Center" /></StackPanel></Border>
+                <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="В норме" /></Border>
+
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от −1,0 до −0,5" /></Border>
+                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#8BC34A" /><TextBlock Text="Хорошая производительность" VerticalAlignment="Center" /></StackPanel></Border>
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="В норме" /></Border>
+
+                <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от −0,5 до +0,5" /></Border>
+                <Border Grid.Row="3" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#FFC107" /><TextBlock Text="Удовлетворительная производительность" VerticalAlignment="Center" /></StackPanel></Border>
+                <Border Grid.Row="3" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Стабильный" /></Border>
+
+                <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от +0,5 до +1,0" /></Border>
+                <Border Grid.Row="4" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#FF9800" /><TextBlock Text="Требует внимания" VerticalAlignment="Center" /></StackPanel></Border>
+                <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Требует внимания" /></Border>
+
+                <Border Grid.Row="5" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="&gt; +1,0" /></Border>
+                <Border Grid.Row="5" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#F44336" /><TextBlock Text="Критически низкая производительность" VerticalAlignment="Center" /></StackPanel></Border>
+                <Border Grid.Row="5" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Критический" /></Border>
+            </Grid>
+
+            <!-- ════════════════ 2. Точность сравнения ════════════════ -->
+            <TextBlock Text="2. Точность сравнения (PD%)" Style="{StaticResource H2Style}" />
+            <TextBlock Style="{StaticResource BodyStyle}"
+                       Text="Средний показатель PD% по характеристикам проекта. Определяет качественную оценку точности анализа:" />
+            <TextBlock Style="{StaticResource HintStyle}" Margin="0,4,0,8"
+                       Text="Источник: EngineeringPerformance.Core.ComparisonAccuracy.FromValuePercent" />
+
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160" />
+                    <ColumnDefinition Width="200" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="1,1,1,1"><TextBlock Text="Диапазон PD%" FontWeight="SemiBold" /></Border>
+                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Оценка точности" FontWeight="SemiBold" /></Border>
+
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="&lt; 7%" /></Border>
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#4CAF50" /><TextBlock Text="Очень высокая" VerticalAlignment="Center" /></StackPanel></Border>
+
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от 7% до &lt; 9%" /></Border>
+                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#8BC34A" /><TextBlock Text="Высокая" VerticalAlignment="Center" /></StackPanel></Border>
+
+                <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от 9% до &lt; 11%" /></Border>
+                <Border Grid.Row="3" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#FFC107" /><TextBlock Text="Стандартная" VerticalAlignment="Center" /></StackPanel></Border>
+
+                <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="≥ 11%" /></Border>
+                <Border Grid.Row="4" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><StackPanel Orientation="Horizontal"><Border Style="{StaticResource BulletIndicator}" Background="#FF9800" /><TextBlock Text="Пониженная" VerticalAlignment="Center" /></StackPanel></Border>
+            </Grid>
+
+            <!-- ════════════════ 3. PEPM — сводная таблица ════════════════ -->
+            <TextBlock Text="3. PEPM — сводная таблица интерпретации" Style="{StaticResource H2Style}" />
+            <TextBlock Style="{StaticResource BodyStyle}">
+                <Run Text="PEPM — взвешенное среднее Z-оценок по направлениям IIC, где вес каждой дисциплины равен её фактической трудоёмкости. " />
+                <Run Text="Формула: PEPM = Σ(Zᵢ × Hᵢ) / ΣHᵢ. " />
+                <Run Text="Ниже приведена сводная таблица с детализированной интерпретацией, статусом и рекомендациями для каждого перцентильного диапазона." />
+            </TextBlock>
+            <TextBlock Style="{StaticResource HintStyle}" Margin="0,4,0,8"
+                       Text="Источник: ProjectAnalysisService.GetPercentile, AssessmentFormViewModel.GeneratePermRecommendation" />
+
+            <Grid Margin="0,4,0,20">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="90" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="220" />
+                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Заголовок -->
+                <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="1,1,1,1"><TextBlock Text="Диапазон PEPM" FontWeight="SemiBold" FontSize="12" /></Border>
+                <Border Grid.Row="0" Grid.Column="1" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Перцентиль" FontWeight="SemiBold" FontSize="12" /></Border>
+                <Border Grid.Row="0" Grid.Column="2" Grid.ColumnSpan="1" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,0,1" />
+                <Border Grid.Row="0" Grid.Column="3" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Интерпретация" FontWeight="SemiBold" FontSize="12" /></Border>
+                <Border Grid.Row="0" Grid.Column="4" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Статус" FontWeight="SemiBold" FontSize="12" /></Border>
+                <Border Grid.Row="0" Grid.Column="5" Style="{StaticResource TableHeaderCellStyle}" BorderThickness="0,1,1,1"><TextBlock Text="Рекомендации" FontWeight="SemiBold" FontSize="12" /></Border>
+
+                <!-- Строка: < −1,0 | 0-й -->
+                <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#F1F8E9"><TextBlock Text="&lt; −1,0" FontSize="12" /></Border>
+                <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="0-й" FontSize="12" /></Border>
+                <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#F1F8E9"><Border Style="{StaticResource BulletIndicator}" Background="#4CAF50" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="1" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Исключительная производительность — команда работает значительно выше отраслевой нормы" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="1" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Отлично" FontSize="12" FontWeight="SemiBold" Foreground="#2E7D32" /></Border>
+                <Border Grid.Row="1" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Зафиксируйте лучшие практики; используйте как эталон для других проектов" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: −1,0 до −0,8 | 0-10-й -->
+                <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#F1F8E9"><TextBlock Text="от −1,0 до −0,8" FontSize="12" /></Border>
+                <Border Grid.Row="2" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="0-10-й" FontSize="12" /></Border>
+                <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#F1F8E9"><Border Style="{StaticResource BulletIndicator}" Background="#4CAF50" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="2" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Отличная производительность — существенно выше норматива" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="2" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Отлично" FontSize="12" FontWeight="SemiBold" Foreground="#2E7D32" /></Border>
+                <Border Grid.Row="2" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F1F8E9"><TextBlock Text="Продолжайте в том же духе; проанализируйте и задокументируйте факторы успеха" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: −0,8 до −0,6 | 10-20-й -->
+                <Border Grid.Row="3" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#F9FBE7"><TextBlock Text="от −0,8 до −0,6" FontSize="12" /></Border>
+                <Border Grid.Row="3" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="10-20-й" FontSize="12" /></Border>
+                <Border Grid.Row="3" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#F9FBE7"><Border Style="{StaticResource BulletIndicator}" Background="#8BC34A" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="3" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Хорошая производительность — заметно выше среднего" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="3" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Хорошо" FontSize="12" FontWeight="SemiBold" Foreground="#558B2F" /></Border>
+                <Border Grid.Row="3" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Поддерживайте текущий уровень; документируйте процессы для тиражирования" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: −0,6 до −0,4 | 20-30-й -->
+                <Border Grid.Row="4" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#F9FBE7"><TextBlock Text="от −0,6 до −0,4" FontSize="12" /></Border>
+                <Border Grid.Row="4" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="20-30-й" FontSize="12" /></Border>
+                <Border Grid.Row="4" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#F9FBE7"><Border Style="{StaticResource BulletIndicator}" Background="#8BC34A" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="4" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Производительность выше среднего" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="4" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Хорошо" FontSize="12" FontWeight="SemiBold" Foreground="#558B2F" /></Border>
+                <Border Grid.Row="4" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#F9FBE7"><TextBlock Text="Выявите и тиражируйте ключевые практики наиболее эффективных дисциплин" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: −0,4 до −0,2 | 30-40-й -->
+                <Border Grid.Row="5" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от −0,4 до −0,2" FontSize="12" /></Border>
+                <Border Grid.Row="5" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="30-40-й" FontSize="12" /></Border>
+                <Border Grid.Row="5" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1"><Border Style="{StaticResource BulletIndicator}" Background="#FFC107" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="5" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Производительность незначительно выше среднего" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="5" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Стабильный" FontSize="12" Foreground="#F57F17" /></Border>
+                <Border Grid.Row="5" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Ищите возможности для оптимизации в отдельных дисциплинах" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: −0,2 до 0 | 40-50-й -->
+                <Border Grid.Row="6" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от −0,2 до 0" FontSize="12" /></Border>
+                <Border Grid.Row="6" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="40-50-й" FontSize="12" /></Border>
+                <Border Grid.Row="6" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1"><Border Style="{StaticResource BulletIndicator}" Background="#FFC107" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="6" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Производительность около среднего" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="6" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Стабильный" FontSize="12" Foreground="#F57F17" /></Border>
+                <Border Grid.Row="6" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Есть потенциал роста; проведите детальный анализ производительности по дисциплинам" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: 0 до +0,2 | 50-60-й -->
+                <Border Grid.Row="7" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1"><TextBlock Text="от 0 до +0,2" FontSize="12" /></Border>
+                <Border Grid.Row="7" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="50-60-й" FontSize="12" /></Border>
+                <Border Grid.Row="7" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1"><Border Style="{StaticResource BulletIndicator}" Background="#FFC107" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="7" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Производительность чуть ниже среднего" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="7" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Стабильный" FontSize="12" Foreground="#F57F17" /></Border>
+                <Border Grid.Row="7" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1"><TextBlock Text="Выявите отстающие дисциплины; рассмотрите перераспределение ресурсов" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: +0,2 до +0,4 | 60-70-й -->
+                <Border Grid.Row="8" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#FFF8E1"><TextBlock Text="от +0,2 до +0,4" FontSize="12" /></Border>
+                <Border Grid.Row="8" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="60-70-й" FontSize="12" /></Border>
+                <Border Grid.Row="8" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#FFF8E1"><Border Style="{StaticResource BulletIndicator}" Background="#FF9800" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="8" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Производительность ниже среднего — требует внимания" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="8" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Требует внимания" FontSize="12" FontWeight="SemiBold" Foreground="#E65100" /></Border>
+                <Border Grid.Row="8" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Проведите анализ причин; разработайте и начните реализацию плана улучшений" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: +0,4 до +0,6 | 70-80-й -->
+                <Border Grid.Row="9" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#FFF8E1"><TextBlock Text="от +0,4 до +0,6" FontSize="12" /></Border>
+                <Border Grid.Row="9" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="70-80-й" FontSize="12" /></Border>
+                <Border Grid.Row="9" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#FFF8E1"><Border Style="{StaticResource BulletIndicator}" Background="#FF9800" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="9" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Производительность заметно ниже нормы — требует оптимизации" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="9" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Требует внимания" FontSize="12" FontWeight="SemiBold" Foreground="#E65100" /></Border>
+                <Border Grid.Row="9" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FFF8E1"><TextBlock Text="Требуется оптимизация процессов; рассмотрите обучение и ротацию команды" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: +0,6 до +0,8 | 80-90-й -->
+                <Border Grid.Row="10" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#FBE9E7"><TextBlock Text="от +0,6 до +0,8" FontSize="12" /></Border>
+                <Border Grid.Row="10" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="80-90-й" FontSize="12" /></Border>
+                <Border Grid.Row="10" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#FBE9E7"><Border Style="{StaticResource BulletIndicator}" Background="#F44336" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="10" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Производительность значительно ниже нормы" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="10" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Критический" FontSize="12" FontWeight="SemiBold" Foreground="#B71C1C" /></Border>
+                <Border Grid.Row="10" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Необходимы корректирующие меры; пересмотрите методы и организацию работ" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: +0,8 до +1,0 | 90-100-й -->
+                <Border Grid.Row="11" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#FBE9E7"><TextBlock Text="от +0,8 до +1,0" FontSize="12" /></Border>
+                <Border Grid.Row="11" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="90-100-й" FontSize="12" /></Border>
+                <Border Grid.Row="11" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#FBE9E7"><Border Style="{StaticResource BulletIndicator}" Background="#F44336" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="11" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Критически низкая производительность" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="11" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Критический" FontSize="12" FontWeight="SemiBold" Foreground="#B71C1C" /></Border>
+                <Border Grid.Row="11" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Требуется немедленное вмешательство руководства; аудит процессов по всем дисциплинам" TextWrapping="Wrap" FontSize="12" /></Border>
+
+                <!-- Строка: > +1,0 | 100-й -->
+                <Border Grid.Row="12" Grid.Column="0" Style="{StaticResource TableCellStyle}" BorderThickness="1,0,1,1" Background="#FBE9E7"><TextBlock Text="&gt; +1,0" FontSize="12" /></Border>
+                <Border Grid.Row="12" Grid.Column="1" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="100-й" FontSize="12" /></Border>
+                <Border Grid.Row="12" Grid.Column="2" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,0,1" Background="#FBE9E7"><Border Style="{StaticResource BulletIndicator}" Background="#F44336" VerticalAlignment="Center" /></Border>
+                <Border Grid.Row="12" Grid.Column="3" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Критически низкая производительность — серьёзное отставание от отраслевой нормы" TextWrapping="Wrap" FontSize="12" /></Border>
+                <Border Grid.Row="12" Grid.Column="4" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Критический" FontSize="12" FontWeight="SemiBold" Foreground="#B71C1C" /></Border>
+                <Border Grid.Row="12" Grid.Column="5" Style="{StaticResource TableCellStyle}" BorderThickness="0,0,1,1" Background="#FBE9E7"><TextBlock Text="Требуются срочные меры: аудит процессов, пересмотр ресурсов, методологии и команды" TextWrapping="Wrap" FontSize="12" /></Border>
+            </Grid>
+
+            <TextBlock Style="{StaticResource HintStyle}" Margin="0,0,0,20"
+                       Text="Все пороги хранятся в коде приложения (ProjectAnalysisService, PerformanceService, ComparisonAccuracy) и применяются единообразно во всех отчётах." />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -1,0 +1,68 @@
+<Window x:Class="EngineeringPerformance.App.Views.IicWorkDirectionNormHistoryEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+        Title="{Binding WindowTitle}"
+        Height="400" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Icon="/Assets/logo.png">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#2C3E50" Padding="16,12">
+            <TextBlock Text="{Binding WindowTitle}" Foreground="#ECF0F1" FontSize="16" FontWeight="SemiBold" />
+        </Border>
+
+        <Border Grid.Row="1" Background="#FFFFFF">
+            <Grid Margin="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Группа" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding WorkDirectionName}" VerticalAlignment="Center" Margin="0,0,0,8" Foreground="#2C3E50" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Ед. измерения" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding UnitName}" VerticalAlignment="Center" Margin="0,0,0,8" Foreground="#2C3E50" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Производительность" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:TextEdit Grid.Row="2" Grid.Column="1" EditValue="{Binding Performance, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" NullText="Не задано" MaskType="Numeric" Mask="n4" />
+
+                <TextBlock Grid.Row="3" Grid.Column="0" Text="Оценка" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:TextEdit Grid.Row="3" Grid.Column="1" EditValue="{Binding Estimate, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" NullText="Не задано" MaskType="Numeric" Mask="n4" />
+
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Станд. отклонение" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:TextEdit Grid.Row="4" Grid.Column="1" EditValue="{Binding StandardDeviation, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" NullText="Не задано" MaskType="Numeric" Mask="n4" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Действует с" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:DateEdit Grid.Row="5" Grid.Column="1" EditValue="{Binding EffectiveFrom, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Действует по" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:DateEdit Grid.Row="6" Grid.Column="1" EditValue="{Binding EffectiveTo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" NullText="Бессрочно" />
+
+                <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                <StackPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="Сохранить" Command="{Binding SaveCommand}" Width="100" Margin="0,0,8,0" IsDefault="True" />
+                    <Button Content="Отмена" Command="{Binding CancelCommand}" Width="100" IsCancel="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

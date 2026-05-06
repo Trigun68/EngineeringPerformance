@@ -1,0 +1,52 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.PhysicalVolumeTypesWindow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
+                <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
+                <Image Source="/Assets/icons8-edit-90.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
+                <Image Source="/Assets/icons8-delete-96.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding ArchiveItemCommand}" Margin="0,0,4,0" ToolTip="В архив">
+                <Image Source="/Assets/icons8-pack-luggage-100.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding UnarchiveItemCommand}" Margin="0,0,4,0" ToolTip="Из архива">
+                <Image Source="/Assets/icons8-unpack-luggage-100.png" Width="20" Height="20" />
+            </Button>
+            <Separator Margin="4,0" />
+            <Button Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
+                <Image Source="/Assets/icons8-update-100.png" Width="20" Height="20" />
+            </Button>
+            <CheckBox Content="Показать архивные" IsChecked="{Binding ShowArchived}"
+                      VerticalAlignment="Center" Margin="0,0,8,0" />
+        </StackPanel>
+
+        <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
+                         SelectedItem="{Binding SelectedItem}"
+                         AutoGenerateColumns="None"
+                         MouseDoubleClick="GridControl_MouseDoubleClick">
+            <dxg:GridControl.Columns>
+                <dxg:GridColumn FieldName="Name" Header="Наименование" />
+                <dxg:GridColumn FieldName="Description" Header="Описание" />
+                <dxg:GridColumn FieldName="IsArchived" Header="Архив" Width="60" />
+            </dxg:GridControl.Columns>
+            <dxg:GridControl.View>
+                <dxg:TableView x:Name="TableView" AllowEditing="False" NavigationStyle="Row"
+                               AllowDragDrop="True"
+                               DropRecord="TableView_DropRecord"
+                               CompleteRecordDragDrop="TableView_CompleteRecordDragDrop" />
+            </dxg:GridControl.View>
+        </dxg:GridControl>
+    </Grid>
+</UserControl>

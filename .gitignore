@@ -1,0 +1,56 @@
+# Build outputs
+bin/
+obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+NuGet.Packages/
+
+# Rider
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Secrets / local config
+*.env
+secrets/
+appsettings.Local.json
+appsettings.Development.json
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Temp / work artifacts (session state, не код)
+tmp/
+_tmp/
+
+# DevExpress license
+*.key
+
+# Claude Code internal data (debug logs, conversation history, backups)
+.claude/backups/
+.claude/cache/
+.claude/debug/
+.claude/plans/
+.claude/plugins/
+.claude/projects/
+.claude/settings.json
+.claude/settings.local.json
+
+# Misc artifacts
+backups/
+(unspecified file_path)

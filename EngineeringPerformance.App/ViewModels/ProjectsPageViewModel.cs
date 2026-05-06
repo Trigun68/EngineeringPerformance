@@ -1,0 +1,372 @@
+using System.Collections.ObjectModel;
+using System.Windows;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
+using EngineeringPerformance.App.Views;
+using EngineeringPerformance.Core.Enums;
+using EngineeringPerformance.Core.Services;
+using EngineeringPerformance.Infrastructure.Data;
+using EngineeringPerformance.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace EngineeringPerformance.App.ViewModels;
+
+public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableViewModel
+{
+    private readonly IProjectSelectionDialogService _projectSelectionDialog;
+    private readonly IProjectEditDialogService _projectEditDialog;
+    private readonly IProjectCharacteristicsDialogService _characteristicsDialog;
+    private readonly IProjectParticipantEditDialogService _participantEditDialog;
+    private readonly IProjectAnalysisVersionQueryService _versionQueryService;
+    private readonly IPerformanceService _performanceService;
+    private readonly IDataImportDialogService _dataImportDialog;
+    private readonly IIterationDeleteDialogService _iterationDeleteDialog;
+    private readonly IProjectVersionAnalysisExportService _exportService;
+    private readonly ProjectCharacteristicSelectionService _characteristicSelectionService;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IServiceProvider _serviceProvider;
+
+    public Window? OwnerWindow { get; set; }
+
+    // Выбранный проект
+    [ObservableProperty] private int? _selectedProjectId;
+    [ObservableProperty] private string _selectedProjectCode = string.Empty;
+    [ObservableProperty] private string _selectedProjectName = string.Empty;
+    [ObservableProperty] private decimal? _projectDeviationPercent;
+    [ObservableProperty] private decimal? _accuracyScore;
+    [ObservableProperty] private bool _hasProject;
+
+    // Вкладка Прогнозирование — выбранная версия (план)
+    [ObservableProperty] private int? _planVersionId;
+    [ObservableProperty] private string _planVersionName = string.Empty;
+    [ObservableProperty] private ObservableCollection<ForecastPerformanceItem> _forecastData = [];
+
+    // Вкладка Оценка факта — выбранная версия (факт)
+    [ObservableProperty] private int? _factVersionId;
+    [ObservableProperty] private string _factVersionName = string.Empty;
+    [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
+
+    [ObservableProperty] private string? _errorMessage;
+    [ObservableProperty] private bool _isLoading;
+
+    public ProjectsPageViewModel(
+        IProjectSelectionDialogService projectSelectionDialog,
+        IProjectEditDialogService projectEditDialog,
+        IProjectCharacteristicsDialogService characteristicsDialog,
+        IProjectParticipantEditDialogService participantEditDialog,
+        IProjectAnalysisVersionQueryService versionQueryService,
+        IPerformanceService performanceService,
+        IDataImportDialogService dataImportDialog,
+        IIterationDeleteDialogService iterationDeleteDialog,
+        IProjectVersionAnalysisExportService exportService,
+        ProjectCharacteristicSelectionService characteristicSelectionService,
+        IDbContextFactory<AppDbContext> contextFactory,
+        IServiceProvider serviceProvider)
+    {
+        _projectSelectionDialog = projectSelectionDialog;
+        _projectEditDialog = projectEditDialog;
+        _characteristicsDialog = characteristicsDialog;
+        _participantEditDialog = participantEditDialog;
+        _versionQueryService = versionQueryService;
+        _performanceService = performanceService;
+        _dataImportDialog = dataImportDialog;
+        _iterationDeleteDialog = iterationDeleteDialog;
+        _exportService = exportService;
+        _characteristicSelectionService = characteristicSelectionService;
+        _contextFactory = contextFactory;
+        _serviceProvider = serviceProvider;
+    }
+
+    public Task LoadAsync() => Task.CompletedTask;
+
+    private Window? GetOwner() => OwnerWindow ?? Application.Current.MainWindow;
+
+    private void SetDialogOwners()
+    {
+        var owner = GetOwner();
+        if (owner is null) return;
+        _projectSelectionDialog.SetOwnerWindow(owner);
+        _projectEditDialog.SetOwnerWindow(owner);
+        _characteristicsDialog.SetOwnerWindow(owner);
+        _participantEditDialog.SetOwnerWindow(owner);
+        _dataImportDialog.SetOwnerWindow(owner);
+        _iterationDeleteDialog.SetOwnerWindow(owner);
+    }
+
+    [RelayCommand]
+    private async Task SelectProjectAsync()
+    {
+        SetDialogOwners();
+        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
+        if (result is not var (projectId, _)) return;
+        await LoadProjectAsync(projectId);
+    }
+
+    private async Task LoadProjectAsync(int projectId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var project = await context.Projects.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == projectId);
+        if (project is null) return;
+
+        SelectedProjectId = projectId;
+        SelectedProjectCode = project.Code;
+        SelectedProjectName = project.Name;
+        HasProject = true;
+
+        await LoadDeviationAsync(projectId);
+    }
+
+    private async Task LoadDeviationAsync(int projectId)
+    {
+        var rows = await _characteristicSelectionService.GetByProjectAsync(projectId);
+        var values = rows.Where(r => r.ValuePercent.HasValue).Select(r => r.ValuePercent!.Value).ToList();
+        ProjectDeviationPercent = values.Count == 0 ? null : Math.Round(values.Average(), 2, MidpointRounding.AwayFromZero);
+    }
+
+    [RelayCommand]
+    private async Task OpenProjectDataAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var project = await context.Projects.FindAsync(pid);
+        await _projectEditDialog.ShowEditDialogAsync(project);
+        await LoadProjectAsync(pid);
+    }
+
+    [RelayCommand]
+    private async Task OpenCharacteristicsAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        var saved = await _characteristicsDialog.ShowAsync(pid);
+        if (saved) await LoadDeviationAsync(pid);
+    }
+
+    [RelayCommand]
+    private async Task OpenParticipantsAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        await _participantEditDialog.ShowEditDialogAsync(pid);
+    }
+
+    // ─── Прогнозирование ───────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task SelectPlanVersionAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Plan);
+        if (result is not var (_, versionId)) return;
+
+        PlanVersionId = versionId;
+        var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
+        var ver = versions.FirstOrDefault(v => v.Id == versionId);
+        PlanVersionName = ver?.VersionName ?? string.Empty;
+
+        await LoadForecastDataAsync(pid, versionId);
+    }
+
+    private async Task LoadForecastDataAsync(int projectId, int versionId)
+    {
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var data = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
+            ForecastData.Clear();
+            foreach (var row in data)
+            {
+                var factVol = row.FactPhysicalVolume ?? 0m;
+                decimal? baseH = factVol > 0 && row.NormProductivity.HasValue
+                    ? Math.Round(factVol * row.NormProductivity.Value, 2)
+                    : null;
+                decimal? optH = factVol > 0 && row.NormEstimate.HasValue && row.NormStdDev.HasValue
+                    ? Math.Round(factVol * (decimal)Math.Exp((double)(row.NormEstimate.Value - 0.5m * row.NormStdDev.Value)), 2)
+                    : null;
+                decimal? pesH = factVol > 0 && row.NormEstimate.HasValue && row.NormStdDev.HasValue
+                    ? Math.Round(factVol * (decimal)Math.Exp((double)(row.NormEstimate.Value + 0.5m * row.NormStdDev.Value)), 2)
+                    : null;
+
+                ForecastData.Add(new ForecastPerformanceItem
+                {
+                    Id = row.WorkDirectionId,
+                    ParentId = row.ParentId,
+                    Name = row.WorkDirectionName,
+                    NormUnitName = row.NormUnitName ?? string.Empty,
+                    FactPhysicalVolume = row.FactPhysicalVolume,
+                    NormProductivity = row.NormProductivity,
+                    BaseHours = baseH,
+                    OptimisticHours = optH,
+                    PessimisticHours = pesH,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка загрузки данных прогноза: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportPlanPhysicalVolumesAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result is { Success: true }) await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task DeletePlanPhysicalVolumesAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result) await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private void OpenForecastReport()
+    {
+        ErrorMessage = "Экспорт прогноза будет реализован в Фазе 3";
+    }
+
+    // ─── Оценка факта ──────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task SelectFactVersionAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
+        if (result is not var (_, versionId)) return;
+
+        FactVersionId = versionId;
+        var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
+        var ver = versions.FirstOrDefault(v => v.Id == versionId);
+        FactVersionName = ver?.VersionName ?? string.Empty;
+
+        await LoadFactDataAsync(pid, versionId);
+    }
+
+    private async Task LoadFactDataAsync(int projectId, int versionId)
+    {
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var data = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
+            FactPerformanceData.Clear();
+            foreach (var row in data)
+            {
+                FactPerformanceData.Add(new PerformanceItem
+                {
+                    Id = row.WorkDirectionId,
+                    ParentId = row.ParentId,
+                    Name = row.WorkDirectionName,
+                    NormUnitName = row.NormUnitName ?? string.Empty,
+                    FactPhysicalVolume = row.FactPhysicalVolume,
+                    FactLaborHours = row.FactLaborHours,
+                    FactProductivity = row.FactProductivity,
+                    FactEstimate = row.FactEstimate,
+                    NormProductivity = row.NormProductivity,
+                    NormEstimate = row.NormEstimate,
+                    NormStdDev = row.NormStdDev,
+                    ZScore = row.ZScore,
+                    Interpretation = row.Interpretation?.ToRussian() ?? string.Empty,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка загрузки данных оценки: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportFactPhysicalVolumesAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result is { Success: true }) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task DeleteFactPhysicalVolumesAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task ImportLaborIntensitiesAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.LaborIntensity);
+        if (result is { Success: true }) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task DeleteLaborIntensitiesAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.LaborIntensity);
+        if (result) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private void OpenVersionAnalysis()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid)
+        {
+            ErrorMessage = "Выберите версию для отчёта";
+            return;
+        }
+
+        var owner = GetOwner();
+        if (owner is null) return;
+
+        var window = _serviceProvider.GetRequiredService<ProjectVersionAnalysisWindow>();
+        var vm = _serviceProvider.GetRequiredService<ProjectVersionAnalysisViewModel>();
+        vm.ProjectId = pid;
+        vm.VersionId = vid;
+        vm.OwnerWindow = window;
+        window.DataContext = vm;
+        window.Owner = owner;
+        _ = vm.LoadAsync();
+        window.ShowDialog();
+    }
+}
+
+public sealed class ForecastPerformanceItem
+{
+    public int Id { get; set; }
+    public int? ParentId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string NormUnitName { get; set; } = string.Empty;
+    public decimal? FactPhysicalVolume { get; set; }
+    public decimal? NormProductivity { get; set; }
+    public decimal? BaseHours { get; set; }
+    public decimal? OptimisticHours { get; set; }
+    public decimal? PessimisticHours { get; set; }
+}

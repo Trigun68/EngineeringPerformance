@@ -1,0 +1,46 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.ProjectDashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Главная" FontSize="22" FontWeight="SemiBold"
+                   Foreground="#2C3E50" Margin="0,0,0,20" />
+
+        <!-- Сетка плиток-индикаторов. Сегодня одна — активные проекты. -->
+        <UniformGrid Grid.Row="1" Columns="3" VerticalAlignment="Top">
+            <Border Background="#FFFFFF" CornerRadius="12" Padding="28,24" Margin="0,0,16,16"
+                    BorderBrush="#E2E8F0" BorderThickness="1">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.08" />
+                </Border.Effect>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                        <Border Width="44" Height="44" CornerRadius="10" Background="#E8F4FD" Margin="0,0,12,0">
+                            <TextBlock Text="📁" FontSize="22"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="Активные проекты" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="#64748B" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Text="{Binding ActiveProjectsCount}"
+                               FontSize="64" FontWeight="Bold" Foreground="#2980B9"
+                               Margin="0,16,0,0" />
+
+                    <TextBlock Grid.Row="2" Text="Проекты в работе"
+                               FontSize="13" Foreground="#94A3B8" Margin="0,4,0,0" />
+                </Grid>
+            </Border>
+        </UniformGrid>
+    </Grid>
+</UserControl>

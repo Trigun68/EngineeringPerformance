@@ -1,0 +1,58 @@
+{
+  "SVC-001": {
+    "id": "SVC-001",
+    "name": "Create ProjectAnalysisService for aggregated report data",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:35:00Z",
+    "filesChanged": ["DisciplineAnalysisDto.cs", "ProjectAnalysisReportDto.cs", "IProjectAnalysisService.cs", "ProjectAnalysisService.cs", "App.xaml.cs"]
+  },
+  "UI-001": {
+    "id": "UI-001",
+    "name": "Create ProjectSelectionDialog with filtering",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:35:00Z",
+    "filesChanged": ["ProjectSelectionDialogViewModel.cs", "ProjectSelectionDialog.xaml", "ProjectSelectionDialog.xaml.cs", "ProjectSelectionDialogService.cs", "App.xaml.cs"]
+  },
+  "UI-002": {
+    "id": "UI-002",
+    "name": "Create AssessmentForm XAML layout",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:40:00Z",
+    "filesChanged": ["AssessmentForm.xaml"]
+  },
+  "VM-001": {
+    "id": "VM-001",
+    "name": "Create AssessmentFormViewModel",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:40:00Z",
+    "filesChanged": ["AssessmentFormViewModel.cs", "App.xaml.cs"]
+  },
+  "UI-003": {
+    "id": "UI-003",
+    "name": "Implement Discipline Analysis grid with conditional formatting",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:45:00Z",
+    "filesChanged": ["AssessmentForm.xaml"]
+  },
+  "UI-004": {
+    "id": "UI-004",
+    "name": "Implement Project Info and Accuracy sections",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:45:00Z",
+    "filesChanged": ["AssessmentForm.xaml"]
+  },
+  "UI-005": {
+    "id": "UI-005",
+    "name": "Implement Recommendations section",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:45:00Z",
+    "filesChanged": ["AssessmentForm.xaml", "AssessmentFormViewModel.cs"]
+  },
+  "TEST-001": {
+    "id": "TEST-001",
+    "name": "Build, verify, and integration test",
+    "status": "completed",
+    "completedAt": "2026-04-15T22:50:00Z",
+    "buildResult": "Success (0 errors)"
+  }
+}

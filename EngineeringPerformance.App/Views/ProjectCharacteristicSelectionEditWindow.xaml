@@ -1,0 +1,64 @@
+<Window x:Class="EngineeringPerformance.App.Views.ProjectCharacteristicSelectionEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+        Title="{Binding WindowTitle}"
+        Height="240" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Icon="/Assets/logo.png">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#2C3E50" Padding="16,12">
+            <TextBlock Text="{Binding WindowTitle}" Foreground="#ECF0F1" FontSize="16" FontWeight="SemiBold" />
+        </Border>
+
+        <Border Grid.Row="1" Background="#FFFFFF">
+            <Grid Margin="16">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Характеристика" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:ComboBoxEdit Grid.Row="0" Grid.Column="1"
+                                  ItemsSource="{Binding Characteristics}"
+                                  EditValue="{Binding SelectedCharacteristicId}"
+                                  ValueMember="Id"
+                                  DisplayMember="Name"
+                                  IsTextEditable="False"
+                                  Margin="0,0,0,8"
+                                  NullText="(не выбрано)" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Вариант" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:ComboBoxEdit Grid.Row="1" Grid.Column="1"
+                                  ItemsSource="{Binding Options}"
+                                  EditValue="{Binding SelectedOptionId}"
+                                  ValueMember="Id"
+                                  DisplayMember="Name"
+                                  IsTextEditable="False"
+                                  IsEnabled="{Binding IsOptionsAvailable}"
+                                  Margin="0,0,0,8"
+                                  NullText="(не выбрано)" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                    <Button Content="Сохранить" Command="{Binding SaveCommand}" Width="100" Margin="0,0,8,0" IsDefault="True" />
+                    <Button Content="Отмена" Command="{Binding CancelCommand}" Width="100" IsCancel="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

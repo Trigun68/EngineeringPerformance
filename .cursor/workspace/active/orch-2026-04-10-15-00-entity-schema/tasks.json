@@ -1,0 +1,74 @@
+{
+  "tasks": {
+    "AUTH-001": {
+      "id": "AUTH-001",
+      "name": "Role Entity & User Role FK Migration",
+      "status": "pending",
+      "priority": "Critical",
+      "dependencies": []
+    },
+    "PROJ-001": {
+      "id": "PROJ-001",
+      "name": "Project Entity Field Expansion",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": []
+    },
+    "PV-001": {
+      "id": "PV-001",
+      "name": "PhysicalVolumeType & PhysicalVolume Enhancements",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": []
+    },
+    "UNIT-001": {
+      "id": "UNIT-001",
+      "name": "UnitOfMeasurement Entity & IicWorkDirection/IicWorkDirectionNorm Updates",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": []
+    },
+    "DATA-001": {
+      "id": "DATA-001",
+      "name": "ProjectPhysicalVolume & ProjectLaborIntensity Schema Updates",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": ["PROJ-001"]
+    },
+    "MIG-001": {
+      "id": "MIG-001",
+      "name": "EF Core Migrations",
+      "status": "pending",
+      "priority": "Critical",
+      "dependencies": ["AUTH-001", "PROJ-001", "PV-001", "UNIT-001", "DATA-001"]
+    },
+    "SVC-001": {
+      "id": "SVC-001",
+      "name": "ProjectVisibilityService & Service Layer Updates",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": ["AUTH-001", "PROJ-001"]
+    },
+    "IMPORT-001": {
+      "id": "IMPORT-001",
+      "name": "Excel Import Service",
+      "status": "pending",
+      "priority": "Medium",
+      "dependencies": ["MIG-001"]
+    },
+    "UI-001": {
+      "id": "UI-001",
+      "name": "Project Dashboard Enhancement",
+      "status": "pending",
+      "priority": "High",
+      "dependencies": ["PROJ-001", "SVC-001"]
+    },
+    "SEED-001": {
+      "id": "SEED-001",
+      "name": "Database Seeder Updates & Integration Verification",
+      "status": "pending",
+      "priority": "Medium",
+      "dependencies": ["MIG-001"]
+    }
+  }
+}

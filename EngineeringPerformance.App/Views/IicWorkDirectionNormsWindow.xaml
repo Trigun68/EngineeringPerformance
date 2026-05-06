@@ -1,0 +1,55 @@
+<UserControl x:Class="EngineeringPerformance.App.Views.IicWorkDirectionNormsWindow"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+            <Button Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
+                <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
+                <Image Source="/Assets/icons8-edit-90.png" Width="20" Height="20" />
+            </Button>
+            <Button Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
+                <Image Source="/Assets/icons8-delete-96.png" Width="20" Height="20" />
+            </Button>
+            <Separator Margin="4,0" />
+            <Button Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
+                <Image Source="/Assets/icons8-update-100.png" Width="20" Height="20" />
+            </Button>
+            <TextBlock Text="Дата:" VerticalAlignment="Center" Margin="8,0,4,0" />
+            <dxe:DateEdit EditValue="{Binding SelectedDate, UpdateSourceTrigger=PropertyChanged}"
+                          Width="150"
+                          VerticalAlignment="Center" />
+        </StackPanel>
+
+        <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
+                         SelectedItem="{Binding SelectedItem}"
+                         AutoGenerateColumns="None"
+                         MouseDoubleClick="GridControl_MouseDoubleClick">
+            <dxg:GridControl.Columns>
+                <dxg:GridColumn FieldName="Code" Header="Код" Width="100" />
+                <dxg:GridColumn FieldName="Name" Header="Группа" Width="250" />
+                <dxg:GridColumn FieldName="Performance" Header="Производительность" Width="140" />
+                <dxg:GridColumn FieldName="Estimate" Header="Оценка" Width="100" />
+                <dxg:GridColumn FieldName="StandardDeviation" Header="Станд. отклонение" Width="140" />
+                <dxg:GridColumn FieldName="UnitName" Header="Ед. изм." Width="120" />
+                <dxg:GridColumn FieldName="EffectiveFrom" Header="Действует с" Width="120" />
+                <dxg:GridColumn FieldName="EffectiveTo" Header="Действует по" Width="120" />
+            </dxg:GridControl.Columns>
+            <dxg:GridControl.View>
+                <dxg:TreeListView KeyFieldName="Id"
+                                  ParentFieldName="ParentId"
+                                  AllowEditing="False"
+                                  NavigationStyle="Row"
+                                  AutoExpandAllNodes="False" />
+            </dxg:GridControl.View>
+        </dxg:GridControl>
+    </Grid>
+</UserControl>

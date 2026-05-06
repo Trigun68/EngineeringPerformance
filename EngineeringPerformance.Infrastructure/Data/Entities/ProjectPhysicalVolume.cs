@@ -1,0 +1,50 @@
+using EngineeringPerformance.Core.Models;
+
+namespace EngineeringPerformance.Infrastructure.Data;
+
+public sealed class ProjectPhysicalVolume : DataTableRecord
+{
+    public int ProjectId { get; set; }
+
+    public int PhysicalVolumeId { get; set; }
+
+    public decimal Quantity { get; set; }
+
+    public string? FacilityCode { get; set; }
+
+    public string? FacilityName { get; set; }
+
+    public string? BindingType { get; set; }
+
+    public string? DocumentSet { get; set; }
+
+    public string? CatalogId { get; set; }
+
+    public string? Tag { get; set; }
+
+    public string? WorkId { get; set; }
+
+    public string? WorkName { get; set; }
+
+    public string? WorkComment { get; set; }
+
+    public string? EstimationBasis { get; set; }
+
+    public string? CatalogCode { get; set; }
+
+    public string? CatalogName { get; set; }
+
+    public decimal? LaborHoursPerUnit { get; set; }
+
+    public decimal? MachineHoursPerUnit { get; set; }
+
+    public decimal? TotalMachineHours { get; set; }
+
+    public string? Status { get; set; }
+
+    public Project Project { get; set; } = null!;
+
+    public ProjectAnalysisVersion ProjectAnalysisVersion { get; set; } = null!;
+
+    public PhysicalVolume PhysicalVolume { get; set; } = null!;
+}

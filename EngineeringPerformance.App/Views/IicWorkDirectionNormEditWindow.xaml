@@ -1,0 +1,101 @@
+<Window x:Class="EngineeringPerformance.App.Views.IicWorkDirectionNormEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
+        Title="{Binding WindowTitle}"
+        Height="700" Width="800"
+        WindowStartupLocation="CenterOwner"
+        Icon="/Assets/logo.png">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#2C3E50" Padding="16,12">
+            <TextBlock Text="{Binding WindowTitle}" Foreground="#ECF0F1" FontSize="16" FontWeight="SemiBold" />
+        </Border>
+
+        <!-- Content -->
+        <Border Grid.Row="1" Background="#FFFFFF">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <Grid Margin="16">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="140" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Группа" VerticalAlignment="Center" Margin="0,0,8,8" />
+                    <dxe:ComboBoxEdit Grid.Row="0" Grid.Column="1"
+                                      ItemsSource="{Binding WorkDirectionItems}"
+                                      EditValue="{Binding SelectedWorkDirectionId}"
+                                      ValueMember="Id"
+                                      DisplayMember="DisplayText"
+                                      IsTextEditable="False"
+                                      IsEnabled="{Binding AreLookupsReady}"
+                                      Margin="0,0,0,8" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Ед. измерения" VerticalAlignment="Center" Margin="0,0,8,8"
+                               ToolTip="Берётся из справочника «Группы физ. объёмов (IIC)»: ед. изм. у родительской группы в дереве или у корневой группы." />
+                    <TextBlock Grid.Row="1" Grid.Column="1"
+                               Text="{Binding InheritedUnitName}"
+                               VerticalAlignment="Center"
+                               Margin="0,0,0,8"
+                               Foreground="#2C3E50" />
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Text="История изменений" FontWeight="SemiBold" Margin="0,8,0,8" />
+
+                    <Border Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2" BorderBrush="#BDC3C7" BorderThickness="1" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="200" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="4" Background="#ECF0F1">
+                                <Button Command="{Binding AddHistoryItemCommand}" Margin="2" ToolTip="Добавить" Width="28" Height="28" Padding="0">
+                                    <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
+                                </Button>
+                                <Button Command="{Binding EditHistoryItemCommand}" Margin="2" ToolTip="Редактировать" Width="28" Height="28" Padding="0">
+                                    <Image Source="/Assets/icons8-edit-90.png" Width="20" Height="20" />
+                                </Button>
+                                <Button Command="{Binding DeleteHistoryItemCommand}" Margin="2" ToolTip="Удалить" Width="28" Height="28" Padding="0">
+                                    <Image Source="/Assets/icons8-delete-96.png" Width="20" Height="20" />
+                                </Button>
+                            </StackPanel>
+
+                            <DataGrid Grid.Row="1" ItemsSource="{Binding HistoryItems}" SelectedItem="{Binding SelectedHistoryItem}"
+                                      AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+                                      HeadersVisibility="Column" GridLinesVisibility="All"
+                                      MouseDoubleClick="DataGrid_MouseDoubleClick">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Действует с" Binding="{Binding EffectiveFrom, StringFormat=dd.MM.yyyy}" Width="100" />
+                                    <DataGridTextColumn Header="Действует по" Binding="{Binding EffectiveTo, StringFormat=dd.MM.yyyy}" Width="100" />
+                                    <DataGridTextColumn Header="Производительность" Binding="{Binding Performance}" Width="*" />
+                                    <DataGridTextColumn Header="Оценка" Binding="{Binding Estimate}" Width="*" />
+                                    <DataGridTextColumn Header="Станд. откл." Binding="{Binding StandardDeviation}" Width="*" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button Content="Закрыть" Command="{Binding CancelCommand}" Width="100" IsCancel="True" />
+                    </StackPanel>
+                </Grid>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>
