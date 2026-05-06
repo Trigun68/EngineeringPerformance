@@ -143,18 +143,18 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         PlanVersionId = null;
         PlanVersionName = string.Empty;
         PlanVersionLabel = string.Empty;
-        ForecastData.Clear();
+        ForecastData = [];
 
         FactVersionId = null;
         FactVersionName = string.Empty;
         FactVersionLabel = string.Empty;
-        FactPerformanceData.Clear();
+        FactPerformanceData = [];
 
         CompareVersionAId = null;
         CompareVersionAName = string.Empty;
         CompareVersionBId = null;
         CompareVersionBName = string.Empty;
-        CompareRows.Clear();
+        CompareRows = [];
 
         await LoadDeviationAsync(projectId);
     }
@@ -220,8 +220,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var data = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
-            ForecastData.Clear();
+            var data = await Task.Run(() => _performanceService.GetPerformanceDataAsync(projectId, versionId));
+            var items = new ObservableCollection<ForecastPerformanceItem>();
             foreach (var row in data)
             {
                 var factVol = row.FactPhysicalVolume ?? 0m;
@@ -235,7 +235,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     ? Math.Round(factVol * (row.NormProductivity.Value + 0.5m * row.NormStdDev.Value), 2)
                     : null;
 
-                ForecastData.Add(new ForecastPerformanceItem
+                items.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
                     ParentId = row.ParentId,
@@ -248,6 +248,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PessimisticHours = pesH,
                 });
             }
+            ForecastData = items;
         }
         catch (Exception ex)
         {
@@ -334,11 +335,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var data = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
-            FactPerformanceData.Clear();
+            var data = await Task.Run(() => _performanceService.GetPerformanceDataAsync(projectId, versionId));
+            var items = new ObservableCollection<PerformanceItem>();
             foreach (var row in data)
             {
-                FactPerformanceData.Add(new PerformanceItem
+                items.Add(new PerformanceItem
                 {
                     Id = row.WorkDirectionId,
                     ParentId = row.ParentId,
@@ -355,6 +356,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     Interpretation = row.Interpretation?.ToRussian() ?? string.Empty,
                 });
             }
+            FactPerformanceData = items;
         }
         catch (Exception ex)
         {
@@ -464,21 +466,21 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var dataA = await _performanceService.GetPerformanceDataAsync(pid, vidA);
-            var dataB = await _performanceService.GetPerformanceDataAsync(pid, vidB);
+            var dataA = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidA));
+            var dataB = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidB));
 
             var dictA = dataA.ToDictionary(r => r.WorkDirectionId);
             var dictB = dataB.ToDictionary(r => r.WorkDirectionId);
             var allIds = dictA.Keys.Union(dictB.Keys).ToList();
 
-            CompareRows.Clear();
+            var items = new ObservableCollection<VersionCompareRow>();
             foreach (var id in allIds)
             {
                 dictA.TryGetValue(id, out var a);
                 dictB.TryGetValue(id, out var b);
                 var row = a ?? b!;
                 var zDelta = (b?.ZScore ?? a?.ZScore) - (a?.ZScore ?? b?.ZScore);
-                CompareRows.Add(new VersionCompareRow
+                items.Add(new VersionCompareRow
                 {
                     Id = row.WorkDirectionId,
                     ParentId = row.ParentId,
@@ -490,6 +492,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     InterpretationB = b?.Interpretation?.ToRussian() ?? "—",
                 });
             }
+            CompareRows = items;
         }
         catch (Exception ex)
         {
