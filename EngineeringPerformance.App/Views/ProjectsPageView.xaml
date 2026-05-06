@@ -57,7 +57,7 @@
                 <!-- Строка 2: Кнопки действий -->
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,0">
                     <Button Content="Выбрать проект" Command="{Binding SelectProjectCommand}"
-                            Background="#3498DB" Foreground="White" BorderThickness="0"
+                            Background="#3498DB" Foreground="Black" BorderThickness="0"
                             Padding="12,7" Margin="0,0,8,0" FontWeight="SemiBold" Cursor="Hand"
                             IsEnabled="True" />
                     <Button Content="Основные данные" Command="{Binding OpenProjectDataCommand}"
@@ -94,7 +94,7 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal">
                         <Button Content="📋 Версия (план)" Command="{Binding SelectPlanVersionCommand}"
                                 IsEnabled="{Binding HasProject}"
-                                Background="#2980B9" Foreground="White" BorderThickness="0"
+                                Background="#2980B9" Foreground="Black" BorderThickness="0"
                                 Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
                         <Border Visibility="{Binding PlanVersionId, Converter={StaticResource NullToCollapsed}}"
                                 Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
@@ -199,7 +199,7 @@
                     <StackPanel Grid.Row="0" Orientation="Horizontal">
                         <Button Content="📋 Версия (факт)" Command="{Binding SelectFactVersionCommand}"
                                 IsEnabled="{Binding HasProject}"
-                                Background="#2980B9" Foreground="White" BorderThickness="0"
+                                Background="#2980B9" Foreground="Black" BorderThickness="0"
                                 Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
                         <Border Visibility="{Binding FactVersionId, Converter={StaticResource NullToCollapsed}}"
                                 Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
@@ -293,7 +293,7 @@
                             </Button>
                             <Button Content="📊 Анализ версии" Command="{Binding OpenVersionAnalysisCommand}"
                                     IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Background="#3498DB" Foreground="White" BorderThickness="0"
+                                    Background="#3498DB" Foreground="Black" BorderThickness="0"
                                     Width="160" Height="36" Cursor="Hand" />
                         </StackPanel>
                     </Grid>
@@ -321,7 +321,7 @@
                         <StackPanel Grid.Column="0" Orientation="Horizontal">
                             <Button Content="📋 Версия А" Command="{Binding SelectCompareVersionACommand}"
                                     IsEnabled="{Binding HasProject}"
-                                    Background="#2980B9" Foreground="White" BorderThickness="0"
+                                    Background="#2980B9" Foreground="Black" BorderThickness="0"
                                     Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
                             <Border Visibility="{Binding CompareVersionAId, Converter={StaticResource NullToCollapsed}}"
                                     Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
@@ -334,7 +334,7 @@
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
                             <Button Content="📋 Версия Б" Command="{Binding SelectCompareVersionBCommand}"
                                     IsEnabled="{Binding HasProject}"
-                                    Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                    Background="#8E44AD" Foreground="Black" BorderThickness="0"
                                     Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
                             <Border Visibility="{Binding CompareVersionBId, Converter={StaticResource NullToCollapsed}}"
                                     Background="#F5EEF8" BorderBrush="#D7BDE2" BorderThickness="1"
