@@ -46,11 +46,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     // Вкладка Прогнозирование — выбранная версия (план)
     [ObservableProperty] private int? _planVersionId;
     [ObservableProperty] private string _planVersionName = string.Empty;
+    [ObservableProperty] private string _planVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<ForecastPerformanceItem> _forecastData = [];
 
     // Вкладка Оценка факта — выбранная версия (факт)
     [ObservableProperty] private int? _factVersionId;
     [ObservableProperty] private string _factVersionName = string.Empty;
+    [ObservableProperty] private string _factVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
 
     // Вкладка Сравнение версий
@@ -190,7 +192,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         PlanVersionId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        PlanVersionName = versions.FirstOrDefault(v => v.Id == vid)?.VersionName ?? string.Empty;
+        var ver = versions.FirstOrDefault(v => v.Id == vid);
+        PlanVersionName = ver?.VersionName ?? string.Empty;
+        PlanVersionLabel = BuildVersionLabel(ver);
         await LoadForecastDataAsync(pid, vid);
     }
 
@@ -292,8 +296,20 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         FactVersionId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        FactVersionName = versions.FirstOrDefault(v => v.Id == vid)?.VersionName ?? string.Empty;
+        var ver = versions.FirstOrDefault(v => v.Id == vid);
+        FactVersionName = ver?.VersionName ?? string.Empty;
+        FactVersionLabel = BuildVersionLabel(ver);
         await LoadFactDataAsync(pid, vid);
+    }
+
+    private static string BuildVersionLabel(ProjectAnalysisVersion? ver)
+    {
+        if (ver is null) return string.Empty;
+        var date = ver.CreatedAt.ToString("dd.MM.yyyy");
+        var label = $"({date}) {ver.VersionName}";
+        if (!string.IsNullOrWhiteSpace(ver.Description))
+            label += $" — {ver.Description}";
+        return label;
     }
 
     private async Task LoadFactDataAsync(int projectId, int versionId)

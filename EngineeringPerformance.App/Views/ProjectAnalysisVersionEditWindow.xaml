@@ -69,11 +69,13 @@
                 <dxe:DateEdit Grid.Row="4" Grid.Column="1" EditValue="{Binding CreatedAt, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
 
                 <TextBlock Grid.Row="5" Grid.Column="0" Text="Описание" VerticalAlignment="Top" Margin="0,4,8,8" />
-                <dxe:MemoEdit Grid.Row="5" Grid.Column="1"
-                              EditValue="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
-                              MinHeight="80" MaxHeight="120"
-                              ShowIcon="False"
-                              Margin="0,0,0,8" />
+                <TextBox Grid.Row="5" Grid.Column="1"
+                         Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                         MinHeight="80" MaxHeight="160"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto"
+                         Margin="0,0,0,8" />
 
                 <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
 

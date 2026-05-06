@@ -99,7 +99,7 @@
                         <Border Visibility="{Binding PlanVersionId, Converter={StaticResource NullToCollapsed}}"
                                 Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
                                 CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding PlanVersionName}" Foreground="#1A5276" FontSize="12" />
+                            <TextBlock Text="{Binding PlanVersionLabel}" Foreground="#1A5276" FontSize="12" />
                         </Border>
                     </StackPanel>
 
@@ -204,7 +204,7 @@
                         <Border Visibility="{Binding FactVersionId, Converter={StaticResource NullToCollapsed}}"
                                 Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
                                 CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding FactVersionName}" Foreground="#1A5276" FontSize="12" />
+                            <TextBlock Text="{Binding FactVersionLabel}" Foreground="#1A5276" FontSize="12" />
                         </Border>
                     </StackPanel>
 
