@@ -55,6 +55,7 @@
                                  MouseDoubleClick="Grid_MouseDoubleClick">
                     <dxg:GridControl.Columns>
                         <dxg:GridColumn FieldName="VersionName" Header="Наименование версии" Width="*" />
+                        <dxg:GridColumn FieldName="Description" Header="Описание" Width="2*" />
                         <dxg:GridColumn FieldName="CreatedAt" Header="Дата создания" Width="140">
                             <dxg:GridColumn.EditSettings>
                                 <dxe:TextEditSettings DisplayFormat="dd.MM.yyyy HH:mm" />

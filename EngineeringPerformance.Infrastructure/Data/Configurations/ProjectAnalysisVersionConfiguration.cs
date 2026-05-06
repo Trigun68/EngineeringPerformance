@@ -15,6 +15,9 @@ public sealed class ProjectAnalysisVersionConfiguration : IEntityTypeConfigurati
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(v => v.Description)
+            .HasMaxLength(2000);
+
         builder.Property(v => v.Direction)
             .HasConversion<int>();
 

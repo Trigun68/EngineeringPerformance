@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
         Title="{Binding WindowTitle}"
-        Height="460" Width="520"
+        Height="560" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Icon="/Assets/logo.png">
@@ -68,7 +68,14 @@
                 <TextBlock Grid.Row="4" Grid.Column="0" Text="Дата создания" VerticalAlignment="Center" Margin="0,0,8,8" />
                 <dxe:DateEdit Grid.Row="4" Grid.Column="1" EditValue="{Binding CreatedAt, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Описание" VerticalAlignment="Top" Margin="0,4,8,8" />
+                <dxe:MemoEdit Grid.Row="5" Grid.Column="1"
+                              EditValue="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                              MinHeight="80" MaxHeight="120"
+                              ShowIcon="False"
+                              Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
 
                 <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                     <Button Content="Сохранить" Command="{Binding SaveCommand}" Width="100" Margin="0,0,8,0" IsDefault="True" IsEnabled="{Binding AreLookupsReady}" />

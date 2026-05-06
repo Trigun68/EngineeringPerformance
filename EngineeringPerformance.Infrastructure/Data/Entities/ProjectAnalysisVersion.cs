@@ -9,6 +9,8 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
 
     public string VersionName { get; set; } = string.Empty;
 
+    public string? Description { get; set; }
+
     public AnalysisDirection Direction { get; set; }
 
     public string DirectionName => Direction switch

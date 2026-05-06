@@ -22,6 +22,9 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
     private string _versionName = string.Empty;
 
     [ObservableProperty]
+    private string? _description;
+
+    [ObservableProperty]
     private AnalysisDirection _selectedDirection = AnalysisDirection.Plan;
 
     [ObservableProperty]
@@ -92,6 +95,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
             WindowTitle = "Редактирование версии анализа проекта";
             EntityId = entity.Id;
             VersionName = entity.VersionName;
+            Description = entity.Description;
             SelectedDirection = entity.Direction;
             SelectedPhysicalVolumeTypeId = entity.PhysicalVolumeTypeId;
             CreatedAt = entity.CreatedAt.Date;
@@ -105,6 +109,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
             SelectedDirection = AnalysisDirection.Plan;
             SelectedPhysicalVolumeTypeId = null;
             VersionName = string.Empty;
+            Description = null;
         }
     }
 
@@ -152,6 +157,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
                 if (existing is not null)
                 {
                     existing.VersionName = VersionName.Trim();
+                    existing.Description = Description?.Trim();
                     existing.Direction = SelectedDirection;
                     existing.PhysicalVolumeTypeId = SelectedPhysicalVolumeTypeId;
                     existing.ModifiedAt = DateTime.UtcNow;
@@ -162,8 +168,6 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
             {
                 if (_preselectedProjectId is not int projectId || projectId <= 0)
                 {
-                    // Раньше ProjectId = _preselectedProjectId ?? 0 → FK_ProjectAnalysisVersions_Projects_ProjectId.
-                    // Падало как generic «Ошибка сохранения: SqlException», без понятной причины.
                     ErrorMessage = "Не выбран проект для создания версии анализа";
                     return;
                 }
@@ -171,6 +175,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
                 var entity = new ProjectAnalysisVersion
                 {
                     VersionName = VersionName.Trim(),
+                    Description = Description?.Trim(),
                     ProjectId = projectId,
                     Direction = SelectedDirection,
                     PhysicalVolumeTypeId = SelectedPhysicalVolumeTypeId,

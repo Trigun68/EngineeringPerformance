@@ -148,6 +148,7 @@
                                              MouseDoubleClick="AnalysisVersionsGrid_MouseDoubleClick">
                                 <dxg:GridControl.Columns>
                                     <dxg:GridColumn FieldName="VersionName" Header="Имя" Width="*" />
+                                    <dxg:GridColumn FieldName="Description" Header="Описание" Width="2*" />
                                     <dxg:GridColumn FieldName="CreatedAt" Header="Дата создания" Width="*">
                                         <dxg:GridColumn.EditSettings>
                                             <dxe:TextEditSettings DisplayFormat="dd.MM.yyyy HH:mm" />
