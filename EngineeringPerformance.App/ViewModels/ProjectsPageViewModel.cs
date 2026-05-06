@@ -390,6 +390,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
 
             FacilityForecastData = new ObservableCollection<FacilityForecastItem>(facilityResult);
+
+            if (facilityResult.Count > 0)
+            {
+                FacilityForecastData.Add(new FacilityForecastItem
+                {
+                    FacilityCode = string.Empty,
+                    FacilityName = "ИТОГО",
+                    BaseHours        = facilityResult.Sum(r => r.BaseHours ?? 0m),
+                    OptimisticHours  = facilityResult.Sum(r => r.OptimisticHours ?? 0m),
+                    PessimisticHours = facilityResult.Sum(r => r.PessimisticHours ?? 0m),
+                    IsTotal = true,
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -854,4 +867,5 @@ public sealed class FacilityForecastItem
     public decimal? BaseHours { get; set; }
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
+    public bool IsTotal { get; set; }
 }

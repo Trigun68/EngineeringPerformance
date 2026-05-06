@@ -26,6 +26,17 @@
             </Style.Triggers>
         </Style>
 
+        <!-- Стиль строки итога в таблице по объектам -->
+        <Style x:Key="FacilityForecastRowStyle" TargetType="dxg:RowControl">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Row.IsTotal}" Value="True">
+                    <Setter Property="Background" Value="#1E3A5F" />
+                    <Setter Property="FontWeight" Value="Bold" />
+                    <Setter Property="Foreground" Value="White" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!-- Стиль вкладки: плоская кнопка, активная — синяя, иконка + текст -->
         <Style x:Key="PageTabItemStyle" TargetType="TabItem">
             <Setter Property="Template">

@@ -222,7 +222,8 @@
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
-                                                       ShowVerticalLines="False" />
+                                                       ShowVerticalLines="False"
+                                                       RowStyle="{StaticResource FacilityForecastRowStyle}" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 
