@@ -27,36 +27,39 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
 
     public async Task<ProjectVersionAnalysisDto> GenerateReportAsync(int projectId, int versionId)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var ctx1 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx2 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx3 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx4 = await _contextFactory.CreateDbContextAsync();
 
-        var version = await context.ProjectAnalysisVersions
+        var versionTask = ctx1.ProjectAnalysisVersions
             .AsNoTracking()
             .Include(v => v.Project)
-            .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId)
-            ?? throw new InvalidOperationException($"Version {versionId} not found for project {projectId}");
+            .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId);
 
-        // Запускаем PerformanceData и запросы к БД параллельно
-        var performanceTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
-
-        var pvTask = context.ProjectPhysicalVolumes
+        var pvTask = ctx2.ProjectPhysicalVolumes
             .AsNoTracking()
             .AsSplitQuery()
             .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        var laborTask = context.ProjectLaborIntensities
+        var laborTask = ctx3.ProjectLaborIntensities
             .AsNoTracking()
             .Include(li => li.WorkDirection)
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .OrderBy(li => li.DocumentationCode)
             .ToListAsync();
 
-        await Task.WhenAll(performanceTask, pvTask, laborTask);
+        var performanceTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
 
-        var performanceData = performanceTask.Result;
+        await Task.WhenAll(versionTask, pvTask, laborTask, performanceTask);
+
+        var version = versionTask.Result
+            ?? throw new InvalidOperationException($"Version {versionId} not found for project {projectId}");
         var projectPhysicalVolumes = pvTask.Result;
         var laborIntensities = laborTask.Result;
+        var performanceData = performanceTask.Result;
 
         // Группировка ненулевых физ. объёмов по направлению (ClassifierId).
         var pvByDirection = projectPhysicalVolumes
