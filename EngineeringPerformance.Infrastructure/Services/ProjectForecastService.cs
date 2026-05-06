@@ -319,7 +319,7 @@ public sealed class ProjectForecastService : IProjectForecastService
             {
                 if (norm?.Estimate is { } estimate)
                 {
-                    return Math.Round(plannedVolume * (decimal)Math.Exp((double)estimate), 2);
+                    return Math.Round(plannedVolume * SafeExpDecimal((double)estimate), 2);
                 }
                 if (norm?.Performance is { } p && p > 0)
                 {
@@ -345,8 +345,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             if (norm?.StandardDeviation is { } std && std > 0)
             {
                 var s = (double)std;
-                var opt = Math.Round(baseHours * (decimal)Math.Exp((double)OptimisticZ * s), 2);
-                var pes = Math.Round(baseHours * (decimal)Math.Exp((double)PessimisticZ * s), 2);
+                var opt = Math.Round(baseHours * SafeExpDecimal((double)OptimisticZ * s), 2);
+                var pes = Math.Round(baseHours * SafeExpDecimal((double)PessimisticZ * s), 2);
                 return (opt, pes, $"{opt:F2} - {pes:F2}");
             }
 
@@ -483,5 +483,19 @@ public sealed class ProjectForecastService : IProjectForecastService
             characteristics["ГИП"] = project.Gip;
 
         return characteristics;
+    }
+
+    /// <summary>
+    /// Безопасное экспоненцирование double → decimal: клампирует результат
+    /// в диапазон decimal, чтобы не получить OverflowException.
+    /// </summary>
+    private static decimal SafeExpDecimal(double x)
+    {
+        var result = Math.Exp(x);
+        if (double.IsNaN(result) || double.IsInfinity(result) || result > (double)decimal.MaxValue)
+            return decimal.MaxValue;
+        if (result < (double)decimal.MinValue)
+            return decimal.MinValue;
+        return (decimal)result;
     }
 }
