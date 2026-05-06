@@ -21,6 +21,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private readonly IProjectCharacteristicsDialogService _characteristicsDialog;
     private readonly IProjectParticipantsDialogService _participantsDialog;
     private readonly IProjectSelectionDialogService _projectSelectionDialog;
+    private readonly IProjectVersionPickerDialogService _versionPickerDialog;
     private readonly IProjectAnalysisVersionQueryService _versionQueryService;
     private readonly IPerformanceService _performanceService;
     private readonly IDataImportDialogService _dataImportDialog;
@@ -68,6 +69,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IProjectCharacteristicsDialogService characteristicsDialog,
         IProjectParticipantsDialogService participantsDialog,
         IProjectSelectionDialogService projectSelectionDialog,
+        IProjectVersionPickerDialogService versionPickerDialog,
         IProjectAnalysisVersionQueryService versionQueryService,
         IPerformanceService performanceService,
         IProjectForecastService forecastService,
@@ -84,6 +86,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _characteristicsDialog = characteristicsDialog;
         _participantsDialog = participantsDialog;
         _projectSelectionDialog = projectSelectionDialog;
+        _versionPickerDialog = versionPickerDialog;
         _versionQueryService = versionQueryService;
         _performanceService = performanceService;
         _forecastService = forecastService;
@@ -109,6 +112,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _characteristicsDialog.SetOwnerWindow(owner);
         _participantsDialog.SetOwnerWindow(owner);
         _projectSelectionDialog.SetOwnerWindow(owner);
+        _versionPickerDialog.SetOwnerWindow(owner);
         _dataImportDialog.SetOwnerWindow(owner);
         _iterationDeleteDialog.SetOwnerWindow(owner);
     }
@@ -181,15 +185,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
-        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Plan);
-        if (result is not var (_, versionId)) return;
+        var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName, AnalysisDirection.Plan);
+        if (versionId is not int vid) return;
 
-        PlanVersionId = versionId;
+        PlanVersionId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        var ver = versions.FirstOrDefault(v => v.Id == versionId);
-        PlanVersionName = ver?.VersionName ?? string.Empty;
-
-        await LoadForecastDataAsync(pid, versionId);
+        PlanVersionName = versions.FirstOrDefault(v => v.Id == vid)?.VersionName ?? string.Empty;
+        await LoadForecastDataAsync(pid, vid);
     }
 
     private async Task LoadForecastDataAsync(int projectId, int versionId)
@@ -296,15 +298,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
-        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
-        if (result is not var (_, versionId)) return;
+        var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName, AnalysisDirection.Fact);
+        if (versionId is not int vid) return;
 
-        FactVersionId = versionId;
+        FactVersionId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        var ver = versions.FirstOrDefault(v => v.Id == versionId);
-        FactVersionName = ver?.VersionName ?? string.Empty;
-
-        await LoadFactDataAsync(pid, versionId);
+        FactVersionName = versions.FirstOrDefault(v => v.Id == vid)?.VersionName ?? string.Empty;
+        await LoadFactDataAsync(pid, vid);
     }
 
     private async Task LoadFactDataAsync(int projectId, int versionId)

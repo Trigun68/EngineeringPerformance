@@ -362,6 +362,9 @@ public partial class App : Application
         services.AddTransient<ProjectSelectionDialogViewModel>();
         services.AddTransient<ProjectSelectionDialog>();
         services.AddSingleton<IProjectSelectionDialogService, ProjectSelectionDialogService>();
+        services.AddTransient<ProjectVersionPickerDialogViewModel>();
+        services.AddTransient<ProjectVersionPickerDialog>();
+        services.AddSingleton<IProjectVersionPickerDialogService, ProjectVersionPickerDialogService>();
         services.AddSingleton<IicWorkDirectionNormsViewModel>();
         services.AddTransient<IicWorkDirectionNormsWindow>();
         services.AddTransient<IicWorkDirectionNormEditViewModel>();
