@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -233,8 +234,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId
                              && pv.PhysicalVolume!.IsAssessment == true
-                             && pv.PhysicalVolume.ClassifierId != null
-                             && pv.Quantity > 0)
+                             && pv.PhysicalVolume.ClassifierId != null)
                 .ToListAsync();
 
             await Task.WhenAll(perfTask, pvTask);
@@ -370,7 +370,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     if (!normByDirection.TryGetValue(dirId, out var norm))
                         continue;
 
-                    var vol = pv.Quantity * (pv.PhysicalVolume.Coefficient);
+                    var vol = pv.Quantity * pv.PhysicalVolume.Coefficient;
                     var p   = norm.NormProductivity!.Value;
                     var std = norm.NormStdDev ?? 0m;
 
