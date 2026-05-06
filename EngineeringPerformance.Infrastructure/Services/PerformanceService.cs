@@ -18,39 +18,56 @@ public sealed class PerformanceService : IPerformanceService
 
     public async Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        // Запускаем независимые запросы параллельно через отдельные контексты
+        await using var ctx1 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx2 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx3 = await _contextFactory.CreateDbContextAsync();
+        await using var ctx4 = await _contextFactory.CreateDbContextAsync();
 
-        var versionExists = await context.ProjectAnalysisVersions
+        var versionExistsTask = ctx1.ProjectAnalysisVersions
             .AsNoTracking()
             .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId);
 
-        var workDirections = await context.IicWorkDirections
+        var workDirectionsTask = ctx2.IicWorkDirections
             .AsNoTracking()
             .Include(d => d.Unit)
             .Where(d => !d.IsArchived)
             .ToListAsync();
 
-        var physicalVolumes = await context.ProjectPhysicalVolumes
+        var physicalVolumesTask = ctx3.ProjectPhysicalVolumes
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(pv => pv.PhysicalVolume)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        var laborIntensities = await context.ProjectLaborIntensities
+        var laborIntensitiesTask = ctx4.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        // V2-B.1: нормы берутся из снимка версии, а не runtime-фильтром по EffectiveFrom/EffectiveTo.
-        // Это фиксирует Z-score-отчёт: правки справочника норм после создания версии больше не «плывут» по истории.
-        var snapshotNorms = versionExists
-            ? await context.AnalysisVersionSnapshots
+        await Task.WhenAll(versionExistsTask, workDirectionsTask, physicalVolumesTask, laborIntensitiesTask);
+
+        var versionExists = versionExistsTask.Result;
+        var workDirections = workDirectionsTask.Result;
+        var physicalVolumes = physicalVolumesTask.Result;
+        var laborIntensities = laborIntensitiesTask.Result;
+
+        List<IicWorkDirectionNorm> snapshotNorms;
+        if (versionExists)
+        {
+            await using var ctx5 = await _contextFactory.CreateDbContextAsync();
+            snapshotNorms = await ctx5.AnalysisVersionSnapshots
                 .AsNoTracking()
                 .Where(s => s.ProjectAnalysisVersionId == versionId)
                 .Include(s => s.Norm)
                 .Select(s => s.Norm)
-                .ToListAsync()
-            : new List<IicWorkDirectionNorm>();
+                .ToListAsync();
+        }
+        else
+        {
+            snapshotNorms = new List<IicWorkDirectionNorm>();
+        }
 
         var directionById = workDirections.ToDictionary(d => d.Id);
         var parentIdLookup = workDirections.Where(d => d.ParentId.HasValue).ToLookup(d => d.ParentId!.Value);

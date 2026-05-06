@@ -27,8 +27,6 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
 
     public async Task<ProjectVersionAnalysisDto> GenerateReportAsync(int projectId, int versionId)
     {
-        var performanceData = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
-
         await using var context = await _contextFactory.CreateDbContextAsync();
 
         var version = await context.ProjectAnalysisVersions
@@ -37,20 +35,28 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
             .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId)
             ?? throw new InvalidOperationException($"Version {versionId} not found for project {projectId}");
 
-        // Физ. объёмы проекта — для группировки по направлению IIC.
-        var projectPhysicalVolumes = await context.ProjectPhysicalVolumes
+        // Запускаем PerformanceData и запросы к БД параллельно
+        var performanceTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
+
+        var pvTask = context.ProjectPhysicalVolumes
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        // Трудоёмкость проекта — для группировки по направлению IIC.
-        var laborIntensities = await context.ProjectLaborIntensities
+        var laborTask = context.ProjectLaborIntensities
             .AsNoTracking()
             .Include(li => li.WorkDirection)
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .OrderBy(li => li.DocumentationCode)
             .ToListAsync();
+
+        await Task.WhenAll(performanceTask, pvTask, laborTask);
+
+        var performanceData = performanceTask.Result;
+        var projectPhysicalVolumes = pvTask.Result;
+        var laborIntensities = laborTask.Result;
 
         // Группировка ненулевых физ. объёмов по направлению (ClassifierId).
         var pvByDirection = projectPhysicalVolumes
