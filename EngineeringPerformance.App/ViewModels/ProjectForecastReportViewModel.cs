@@ -86,8 +86,43 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanExport))]
+    private async Task ExportToPdfAsync()
+    {
+        if (_report is null) return;
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сохранить прогноз как PDF",
+            Filter = "PDF (*.pdf)|*.pdf",
+            FileName = $"Прогноз_{_report.ProjectCode}_{_report.VersionName}.pdf",
+            DefaultExt = "pdf",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        IsExporting = true;
+        try
+        {
+            var forecastReport = await _forecastService.GenerateForecastAsync(ProjectId, VersionId);
+            await _exportService.ExportToPdfAsync(forecastReport, dlg.FileName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsExporting = false;
+            ExportToPdfCommand.NotifyCanExecuteChanged();
+        }
+    }
+
     private bool CanExport() => _report is not null && !IsExporting;
-    partial void OnIsExportingChanged(bool value) => ExportToExcelCommand.NotifyCanExecuteChanged();
+    partial void OnIsExportingChanged(bool value)
+    {
+        ExportToExcelCommand.NotifyCanExecuteChanged();
+        ExportToPdfCommand.NotifyCanExecuteChanged();
+    }
 
     private async Task LoadReportAsync()
     {

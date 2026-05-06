@@ -206,6 +206,10 @@
                             Style="{StaticResource ActionButtonStyle}"
                             Background="#27AE60" Margin="0,0,8,0"
                             ToolTip="Экспортировать прогноз в Excel (.xlsx)" />
+                    <Button Content="PDF" Command="{Binding ExportToPdfCommand}"
+                            Style="{StaticResource ActionButtonStyle}"
+                            Background="#E74C3C" Margin="0,0,8,0"
+                            ToolTip="Экспортировать прогноз в PDF" />
                     <Button Content="Обновить" Command="{Binding RefreshCommand}"
                             Style="{StaticResource ActionButtonStyle}" Margin="0,0,8,0" />
                     <Button Content="Закрыть" Command="{Binding CloseCommand}"
