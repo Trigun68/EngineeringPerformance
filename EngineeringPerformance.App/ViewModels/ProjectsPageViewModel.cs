@@ -344,15 +344,33 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
+            // Итоговая строка вкладки «Итого» — сумма корневых итогов
+            var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
+            if (rootTotals.Count > 0)
+            {
+                result.Add(new ForecastPerformanceItem
+                {
+                    Id = int.MinValue,
+                    Name = "ИТОГО",
+                    DisplayName = "ИТОГО",
+                    NormUnitName = string.Empty,
+                    FactPhysicalVolume = null,
+                    NormProductivity = null,
+                    BaseHours        = rootTotals.Sum(r => r.BaseHours ?? 0m),
+                    OptimisticHours  = rootTotals.Sum(r => r.OptimisticHours ?? 0m),
+                    PessimisticHours = rootTotals.Sum(r => r.PessimisticHours ?? 0m),
+                    IsTotal = true,
+                    Level = -1,
+                });
+            }
+
             ForecastData = new ObservableCollection<ForecastPerformanceItem>(result);
 
             // ── Вкладка «По объектам»: агрегат по FacilityCode ─────────────
-            // Словарь направление → нормы (только направления с нормами)
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
 
-            // Группируем ФО по объекту (FacilityCode + FacilityName)
             var byFacility = physicalVolumes
                 .GroupBy(pv => (
                     Code: pv.FacilityCode ?? string.Empty,
