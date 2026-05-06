@@ -140,6 +140,22 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         SelectedProjectName = project.Name;
         HasProject = true;
 
+        PlanVersionId = null;
+        PlanVersionName = string.Empty;
+        PlanVersionLabel = string.Empty;
+        ForecastData.Clear();
+
+        FactVersionId = null;
+        FactVersionName = string.Empty;
+        FactVersionLabel = string.Empty;
+        FactPerformanceData.Clear();
+
+        CompareVersionAId = null;
+        CompareVersionAName = string.Empty;
+        CompareVersionBId = null;
+        CompareVersionBName = string.Empty;
+        CompareRows.Clear();
+
         await LoadDeviationAsync(projectId);
     }
 
