@@ -21,6 +21,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportFacilityForecastToPdfAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildFacilityPdf(rows, projectCode, versionName, filePath));
 
+    public Task ExportDetailForecastToExcelAsync(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildDetailExcel(rows, projectCode, versionName, filePath));
+
     // ─── Excel по объектам ───────────────────────────────────────────────────
 
     private static void BuildFacilityExcel(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
@@ -291,6 +294,106 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         ws.Range(2, 1, Math.Max(3, row - 1), headers.Length).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
         ws.Range(2, 1, Math.Max(3, row - 1), headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
         ws.SheetView.FreezeRows(2);
+    }
+
+    private static void BuildDetailExcel(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Детально");
+
+        ws.Cell(1, 1).Value = $"Детальный прогноз трудозатрат: {projectCode} ({versionName})";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Range(1, 1, 1, 22).Merge();
+
+        var headers = new[]
+        {
+            "Шифр объекта", "Наименование объекта",
+            "Тип привязки", "Комплект документов", "ID по каталогу", "TAG",
+            "ID работы", "Наименование работы", "Комментарий", "Описательная часть",
+            "Код ФО", "Наименование ФО", "Оценка", "Коэффициент",
+            "Группа ФО IIC", "Ед. изм.",
+            "Производительность", "СО",
+            "Кол-во",
+            "Базовый, ч", "Оптимист., ч", "Пессимист., ч"
+        };
+        WriteHeaderRow(ws, 2, headers);
+
+        var row = 3;
+        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
+        string? lastFacility = null;
+
+        foreach (var r in rows)
+        {
+            var facKey = r.FacilityCode + "|" + r.FacilityName;
+            if (facKey != lastFacility)
+            {
+                var hdr = string.IsNullOrEmpty(r.FacilityCode)
+                    ? r.FacilityName
+                    : $"{r.FacilityCode} — {r.FacilityName}";
+                ws.Cell(row, 1).Value = hdr;
+                ws.Range(row, 1, row, headers.Length).Merge();
+                ws.Row(row).Style.Font.Bold = true;
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
+                row++;
+                lastFacility = facKey;
+            }
+
+            ws.Cell(row, 1).Value = r.FacilityCode;
+            ws.Cell(row, 2).Value = r.FacilityName;
+            ws.Cell(row, 3).Value = r.BindingType;
+            ws.Cell(row, 4).Value = r.DocumentSet;
+            ws.Cell(row, 5).Value = r.CatalogId;
+            ws.Cell(row, 6).Value = r.Tag;
+            ws.Cell(row, 7).Value = r.WorkId;
+            ws.Cell(row, 8).Value = r.WorkName;
+            ws.Cell(row, 9).Value = r.WorkComment;
+            ws.Cell(row, 10).Value = r.EstimationBasis;
+            ws.Cell(row, 11).Value = r.PvCode;
+            ws.Cell(row, 12).Value = r.PvName;
+            ws.Cell(row, 13).Value = r.IsAssessment;
+            SetDecimal(ws.Cell(row, 14), r.Coefficient, "N4");
+            ws.Cell(row, 15).Value = r.IicGroupName;
+            ws.Cell(row, 16).Value = r.IicUnitName;
+            SetDecimal(ws.Cell(row, 17), r.NormProductivity, "N4");
+            SetDecimal(ws.Cell(row, 18), r.NormStdDev, "N4");
+            ws.Cell(row, 19).Value = r.Quantity;
+            ws.Cell(row, 19).Style.NumberFormat.Format = "#,##0.00##";
+            ws.Cell(row, 19).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            SetDecimal(ws.Cell(row, 20), r.BaseHours, "N2");
+            SetDecimal(ws.Cell(row, 21), r.OptimisticHours, "N2");
+            SetDecimal(ws.Cell(row, 22), r.PessimisticHours, "N2");
+
+            if (row % 2 == 0)
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+
+            totalBase += r.BaseHours ?? 0m;
+            totalOpt  += r.OptimisticHours ?? 0m;
+            totalPes  += r.PessimisticHours ?? 0m;
+            row++;
+        }
+
+        ws.Cell(row, 1).Value = "ИТОГО";
+        ws.Range(row, 1, row, 19).Merge();
+        SetDecimal(ws.Cell(row, 20), totalBase, "N2");
+        SetDecimal(ws.Cell(row, 21), totalOpt, "N2");
+        SetDecimal(ws.Cell(row, 22), totalPes, "N2");
+        ws.Row(row).Style.Font.Bold = true;
+        ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        ws.Row(row).Style.Font.FontColor = XLColor.White;
+
+        ws.Range(2, 1, row, headers.Length).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        ws.Range(2, 1, row, headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+
+        ws.Column(2).Width = 35;
+        ws.Column(8).Width = 30;
+        ws.Column(12).Width = 30;
+        ws.Column(15).Width = 25;
+        for (var c = 1; c <= headers.Length; c++)
+            if (c != 2 && c != 8 && c != 12 && c != 15) ws.Column(c).AdjustToContents();
+        ws.SheetView.FreezeRows(2);
+
+        wb.SaveAs(filePath);
     }
 
     private static void WriteHeaderRow(IXLWorksheet ws, int row, string[] headers)

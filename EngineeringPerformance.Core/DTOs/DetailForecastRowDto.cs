@@ -1,0 +1,25 @@
+namespace EngineeringPerformance.Core.DTOs;
+
+public sealed record DetailForecastRowDto(
+    string FacilityCode,
+    string FacilityName,
+    string BindingType,
+    string DocumentSet,
+    string CatalogId,
+    string Tag,
+    string WorkId,
+    string WorkName,
+    string WorkComment,
+    string EstimationBasis,
+    string PvCode,
+    string PvName,
+    string IsAssessment,
+    decimal? Coefficient,
+    string IicGroupName,
+    string IicUnitName,
+    decimal? NormProductivity,
+    decimal? NormStdDev,
+    decimal Quantity,
+    decimal? BaseHours,
+    decimal? OptimisticHours,
+    decimal? PessimisticHours);

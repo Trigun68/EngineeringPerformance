@@ -51,6 +51,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _planVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<ForecastPerformanceItem> _forecastData = [];
     [ObservableProperty] private ObservableCollection<FacilityForecastItem> _facilityForecastData = [];
+    [ObservableProperty] private ObservableCollection<DetailForecastItem> _detailForecastData = [];
 
     // Вкладка Оценка факта — выбранная версия (факт)
     [ObservableProperty] private int? _factVersionId;
@@ -148,6 +149,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         PlanVersionLabel = string.Empty;
         ForecastData = [];
         FacilityForecastData = [];
+        DetailForecastData = [];
 
         FactVersionId = null;
         FactVersionName = string.Empty;
@@ -421,6 +423,71 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     IsTotal = true,
                 });
             }
+
+            // ── Вкладка «Детально»: одна строка БД → одна строка таблицы ──
+            var allPv = physicalVolumes
+                .OrderBy(pv => pv.FacilityCode ?? string.Empty)
+                .ThenBy(pv => pv.FacilityName ?? string.Empty)
+                .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+
+            var detailRows = new List<DetailForecastItem>();
+            foreach (var pv in allPv)
+            {
+                var dirId = pv.PhysicalVolume?.ClassifierId;
+                PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
+
+                var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+                decimal? baseH = null, optH = null, pesH = null;
+                if (norm?.NormProductivity is decimal p && vol != 0)
+                {
+                    var std = norm.NormStdDev ?? 0m;
+                    baseH = Math.Round(vol * p, 2);
+                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
+                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                }
+
+                detailRows.Add(new DetailForecastItem
+                {
+                    FacilityCode      = pv.FacilityCode ?? string.Empty,
+                    FacilityName      = pv.FacilityName ?? string.Empty,
+                    BindingType       = pv.BindingType ?? string.Empty,
+                    DocumentSet       = pv.DocumentSet ?? string.Empty,
+                    CatalogId         = pv.CatalogId ?? string.Empty,
+                    Tag               = pv.Tag ?? string.Empty,
+                    WorkId            = pv.WorkId ?? string.Empty,
+                    WorkName          = pv.WorkName ?? string.Empty,
+                    WorkComment       = pv.WorkComment ?? string.Empty,
+                    EstimationBasis   = pv.EstimationBasis ?? string.Empty,
+                    PvCode            = pv.PhysicalVolume?.Code ?? string.Empty,
+                    PvName            = pv.PhysicalVolume?.Name ?? string.Empty,
+                    IsAssessment      = pv.PhysicalVolume?.IsAssessment == true ? "Да" : "Нет",
+                    Coefficient       = pv.PhysicalVolume?.Coefficient,
+                    IicGroupName      = pv.PhysicalVolume?.Classifier?.Name ?? string.Empty,
+                    IicUnitName       = norm?.NormUnitName ?? string.Empty,
+                    NormProductivity  = norm?.NormProductivity,
+                    NormStdDev        = norm?.NormStdDev,
+                    Quantity          = pv.Quantity,
+                    BaseHours         = baseH,
+                    OptimisticHours   = optH,
+                    PessimisticHours  = pesH,
+                });
+            }
+
+            // Итоговая строка
+            if (detailRows.Count > 0)
+            {
+                detailRows.Add(new DetailForecastItem
+                {
+                    FacilityCode     = string.Empty,
+                    FacilityName     = "ИТОГО",
+                    BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m),
+                    OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m),
+                    PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m),
+                    IsTotal          = true,
+                });
+            }
+
+            DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
         }
         catch (Exception ex)
         {
@@ -849,6 +916,49 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = false;
         }
     }
+
+    [RelayCommand]
+    private async Task ExportDetailForecastToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт детального прогноза в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"ПрогнозДетально_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = DetailForecastData
+                .Where(r => !r.IsTotal)
+                .Select(r => new DetailForecastRowDto(
+                    r.FacilityCode, r.FacilityName, r.BindingType, r.DocumentSet,
+                    r.CatalogId, r.Tag, r.WorkId, r.WorkName, r.WorkComment,
+                    r.EstimationBasis, r.PvCode, r.PvName, r.IsAssessment,
+                    r.Coefficient, r.IicGroupName, r.IicUnitName,
+                    r.NormProductivity, r.NormStdDev, r.Quantity,
+                    r.BaseHours, r.OptimisticHours, r.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportDetailForecastToExcelAsync(
+                rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
 }
 
 public sealed class ForecastPerformanceItem
@@ -882,6 +992,33 @@ public sealed class FacilityForecastItem
 {
     public string FacilityCode { get; set; } = string.Empty;
     public string FacilityName { get; set; } = string.Empty;
+    public decimal? BaseHours { get; set; }
+    public decimal? OptimisticHours { get; set; }
+    public decimal? PessimisticHours { get; set; }
+    public bool IsTotal { get; set; }
+}
+
+public sealed class DetailForecastItem
+{
+    public string FacilityCode { get; set; } = string.Empty;
+    public string FacilityName { get; set; } = string.Empty;
+    public string BindingType { get; set; } = string.Empty;
+    public string DocumentSet { get; set; } = string.Empty;
+    public string CatalogId { get; set; } = string.Empty;
+    public string Tag { get; set; } = string.Empty;
+    public string WorkId { get; set; } = string.Empty;
+    public string WorkName { get; set; } = string.Empty;
+    public string WorkComment { get; set; } = string.Empty;
+    public string EstimationBasis { get; set; } = string.Empty;
+    public string PvCode { get; set; } = string.Empty;
+    public string PvName { get; set; } = string.Empty;
+    public string IsAssessment { get; set; } = string.Empty;
+    public decimal? Coefficient { get; set; }
+    public string IicGroupName { get; set; } = string.Empty;
+    public string IicUnitName { get; set; } = string.Empty;
+    public decimal? NormProductivity { get; set; }
+    public decimal? NormStdDev { get; set; }
+    public decimal Quantity { get; set; }
     public decimal? BaseHours { get; set; }
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
