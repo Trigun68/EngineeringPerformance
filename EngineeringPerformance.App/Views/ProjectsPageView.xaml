@@ -172,7 +172,15 @@
                             <Button Content="📊 Прогноз" Command="{Binding OpenForecastReportCommand}"
                                 IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
                                 Background="#27AE60" Foreground="White" BorderThickness="0"
-                                Width="160" Height="36" Cursor="Hand" />
+                                Width="160" Height="36" Cursor="Hand" Margin="0,0,0,6" />
+                            <Button Command="{Binding ExportForecastToExcelCommand}"
+                                    IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                    Width="160" Height="36" ToolTip="Экспорт прогноза в Excel">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="Экспорт в Excel" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Grid>
