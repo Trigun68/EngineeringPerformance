@@ -11,6 +11,7 @@ namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class ProjectForecastReportViewModel : ObservableObject, ILoadableViewModel
 {
+    private readonly IProjectVersionAnalysisService _analysisService;
     private readonly IProjectForecastService _forecastService;
     private readonly IProjectForecastExportService _exportService;
 
@@ -22,7 +23,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     [ObservableProperty] private bool _isExporting;
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private string _projectNameWithVersion = string.Empty;
-    [ObservableProperty] private ObservableCollection<ForecastRowViewModel> _rows = [];
+    [ObservableProperty] private ObservableCollection<ForecastDirectionViewModel> _directions = [];
     [ObservableProperty] private decimal _totalBaseHours;
     [ObservableProperty] private decimal _totalOptimisticHours;
     [ObservableProperty] private decimal _totalPessimisticHours;
@@ -30,12 +31,14 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
-    private ProjectForecastReportDto? _report;
+    private ProjectVersionAnalysisDto? _report;
 
     public ProjectForecastReportViewModel(
+        IProjectVersionAnalysisService analysisService,
         IProjectForecastService forecastService,
         IProjectForecastExportService exportService)
     {
+        _analysisService = analysisService;
         _forecastService = forecastService;
         _exportService = exportService;
     }
@@ -68,7 +71,8 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            await _exportService.ExportToExcelAsync(_report, dlg.FileName);
+            var forecastReport = await _forecastService.GenerateForecastAsync(ProjectId, VersionId);
+            await _exportService.ExportToExcelAsync(forecastReport, dlg.FileName);
         }
         catch (Exception ex)
         {
@@ -83,7 +87,6 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     }
 
     private bool CanExport() => _report is not null && !IsExporting;
-
     partial void OnIsExportingChanged(bool value) => ExportToExcelCommand.NotifyCanExecuteChanged();
 
     private async Task LoadReportAsync()
@@ -92,21 +95,21 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         ErrorMessage = null;
         try
         {
-            _report = await _forecastService.GenerateForecastAsync(ProjectId, VersionId);
+            _report = await _analysisService.GenerateReportAsync(ProjectId, VersionId);
 
             ProjectNameWithVersion = string.IsNullOrWhiteSpace(_report.VersionName)
                 ? _report.ProjectName
                 : $"{_report.ProjectName} ({_report.VersionName})";
 
-            Rows.Clear();
-            foreach (var v in _report.PlannedVolumes)
-                Rows.Add(new ForecastRowViewModel(v));
+            var items = new ObservableCollection<ForecastDirectionViewModel>();
+            foreach (var d in _report.Directions)
+                items.Add(new ForecastDirectionViewModel(d));
+            Directions = items;
 
-            // Суммы только по корневым узлам (без ParentId)
-            var roots = _report.PlannedVolumes.Where(r => r.ParentId == null).ToList();
-            TotalBaseHours = roots.Sum(r => r.BaseHours);
-            TotalOptimisticHours = roots.Sum(r => r.OptimisticHours);
-            TotalPessimisticHours = roots.Sum(r => r.PessimisticHours);
+            var roots = items.Where(d => d.ParentId == null).ToList();
+            TotalBaseHours = roots.Sum(d => d.BaseHours);
+            TotalOptimisticHours = roots.Sum(d => d.OptimisticHours);
+            TotalPessimisticHours = roots.Sum(d => d.PessimisticHours);
 
             ExportToExcelCommand.NotifyCanExecuteChanged();
         }
@@ -121,35 +124,48 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     }
 }
 
-public sealed class ForecastRowViewModel
+public sealed class ForecastDirectionViewModel
 {
-    private readonly ForecastIicVolumeRowDto _dto;
-
-    public ForecastRowViewModel(ForecastIicVolumeRowDto dto)
+    public ForecastDirectionViewModel(ProjectVersionDirectionDto dto)
     {
-        _dto = dto;
-    }
+        Id = dto.Id;
+        ParentId = dto.ParentId;
+        Code = dto.Code;
+        Name = dto.Name;
+        UnitName = dto.UnitName;
+        FactPhysicalVolume = dto.FactPhysicalVolume;
+        NormProductivity = dto.NormProductivity;
+        NormStdDev = dto.NormStdDev;
+        PhysicalVolumes = dto.PhysicalVolumes;
+        IndentMargin = Math.Max(0, dto.Level) * 24d;
 
-    public int Id => _dto.WorkDirectionId;
-    public int? ParentId => _dto.ParentId;
-    public string Name => _dto.Name;
-    public string UnitName => _dto.UnitName ?? string.Empty;
-    public decimal? NormProductivity => _dto.NormProductivity;
-    public decimal PlannedVolume => _dto.PlannedVolume;
-    public decimal BaseHours => _dto.BaseHours;
-    public decimal OptimisticHours => _dto.OptimisticHours;
-    public decimal PessimisticHours => _dto.PessimisticHours;
-    public string Range => _dto.Range;
-
-    /// <summary>Отступ карточки по уровню иерархии.</summary>
-    public double IndentMargin
-    {
-        get
+        if (dto.FactPhysicalVolume.HasValue && dto.NormProductivity.HasValue && dto.NormProductivity.Value > 0)
         {
-            // Вычисляем через HierarchyPath: количество разделителей = уровень
-            if (string.IsNullOrEmpty(_dto.HierarchyPath)) return 0;
-            var level = _dto.HierarchyPath.Count(c => c == '/');
-            return Math.Max(0, level) * 20d;
+            BaseHours = Math.Round(dto.FactPhysicalVolume.Value * dto.NormProductivity.Value, 2);
+            if (dto.NormStdDev.HasValue && dto.NormStdDev.Value > 0)
+            {
+                OptimisticHours = Math.Round(dto.FactPhysicalVolume.Value * Math.Max(0m, dto.NormProductivity.Value - 0.5m * dto.NormStdDev.Value), 2);
+                PessimisticHours = Math.Round(dto.FactPhysicalVolume.Value * (dto.NormProductivity.Value + 0.5m * dto.NormStdDev.Value), 2);
+            }
+            else
+            {
+                OptimisticHours = BaseHours;
+                PessimisticHours = BaseHours;
+            }
         }
     }
+
+    public int Id { get; }
+    public int? ParentId { get; }
+    public string Code { get; }
+    public string Name { get; }
+    public string? UnitName { get; }
+    public decimal? FactPhysicalVolume { get; }
+    public decimal? NormProductivity { get; }
+    public decimal? NormStdDev { get; }
+    public decimal BaseHours { get; }
+    public decimal OptimisticHours { get; }
+    public decimal PessimisticHours { get; }
+    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; }
+    public double IndentMargin { get; }
 }

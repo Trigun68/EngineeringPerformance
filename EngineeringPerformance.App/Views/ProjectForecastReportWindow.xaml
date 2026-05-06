@@ -7,11 +7,33 @@
         xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
         mc:Ignorable="d"
         Title="Прогноз трудозатрат"
-        Height="800" Width="1200"
+        Height="800" Width="1400"
         WindowStartupLocation="CenterOwner"
         Icon="/Assets/logo.png">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderBrush" Value="#E2E8F0" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+
+        <Style x:Key="MetricLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#64748B" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style x:Key="MetricValueStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="#2C3E50" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
 
         <Style x:Key="ActionButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#3498DB" />
@@ -42,93 +64,117 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="MetricLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="#64748B" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-        </Style>
-
-        <Style x:Key="MetricValueStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="Foreground" Value="#2C3E50" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Margin" Value="0,2,0,0" />
-        </Style>
-
-        <!-- Шаблон строки-карточки направления ИИС -->
-        <DataTemplate x:Key="ForecastRowTemplate">
-            <Border Background="#FFFFFF"
-                    CornerRadius="6"
-                    BorderBrush="#E2E8F0"
-                    BorderThickness="1"
-                    Padding="14,10">
+        <!-- Шаблон карточки направления ИИС с прогнозными часами и таблицей физ. объёмов -->
+        <DataTemplate x:Key="ForecastDirectionCardTemplate">
+            <Border Style="{StaticResource CardStyle}">
                 <Border.Margin>
-                    <MultiBinding StringFormat="{}{0},0,0,6">
+                    <MultiBinding StringFormat="{}{0},0,0,10">
                         <Binding Path="IndentMargin" />
                     </MultiBinding>
                 </Border.Margin>
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="100" />
-                        <ColumnDefinition Width="100" />
-                        <ColumnDefinition Width="110" />
-                        <ColumnDefinition Width="110" />
-                        <ColumnDefinition Width="110" />
-                        <ColumnDefinition Width="110" />
-                    </Grid.ColumnDefinitions>
 
-                    <!-- Название -->
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding Name}"
-                               FontSize="13" FontWeight="SemiBold"
-                               Foreground="#2C3E50"
-                               VerticalAlignment="Center"
-                               TextWrapping="Wrap"
-                               Margin="0,0,12,0" />
+                <StackPanel>
+                    <!-- Заголовок направления -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-                    <!-- Ед. изм. -->
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding UnitName, TargetNullValue=—}"
-                               FontSize="12" Foreground="#64748B"
-                               VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        <Border Grid.Column="0"
+                                Background="#EEF4FF" CornerRadius="4"
+                                Padding="6,3" Margin="0,0,10,0" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Code}"
+                                       FontFamily="Consolas" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#2563EB" />
+                        </Border>
 
-                    <!-- Норм. производит. -->
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding NormProductivity, StringFormat={}{0:N4}, TargetNullValue=—}"
-                               FontSize="12" Foreground="#64748B"
-                               VerticalAlignment="Center" HorizontalAlignment="Right"
-                               Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding Name}"
+                                   FontSize="15" FontWeight="SemiBold" Foreground="#2C3E50"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" />
 
-                    <!-- Базовый -->
-                    <StackPanel Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
-                        <TextBlock Text="{Binding BaseHours, StringFormat={}{0:N1}, TargetNullValue=—}"
-                                   FontSize="13" FontWeight="SemiBold" Foreground="#2C3E50"
-                                   HorizontalAlignment="Right" />
-                    </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="ед. изм.:" Foreground="#94A3B8" FontSize="12" Margin="0,0,4,0" />
+                            <TextBlock Text="{Binding UnitName, TargetNullValue=—}"
+                                       Foreground="#475569" FontSize="12" FontWeight="SemiBold" />
+                        </StackPanel>
+                    </Grid>
 
-                    <!-- Оптимист. -->
-                    <StackPanel Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
-                        <TextBlock Text="{Binding OptimisticHours, StringFormat={}{0:N1}, TargetNullValue=—}"
-                                   FontSize="13" FontWeight="SemiBold" Foreground="#27AE60"
-                                   HorizontalAlignment="Right" />
-                    </StackPanel>
-
-                    <!-- Пессимист. -->
-                    <StackPanel Grid.Column="5" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
-                        <TextBlock Text="{Binding PessimisticHours, StringFormat={}{0:N1}, TargetNullValue=—}"
-                                   FontSize="13" FontWeight="SemiBold" Foreground="#E74C3C"
-                                   HorizontalAlignment="Right" />
-                    </StackPanel>
-
-                    <!-- Диапазон -->
-                    <Border Grid.Column="6"
-                            Background="#F8FAFC" CornerRadius="3" Padding="6,2"
-                            VerticalAlignment="Center" HorizontalAlignment="Right">
-                        <TextBlock Text="{Binding Range, TargetNullValue=—}"
-                                   FontSize="11" Foreground="#64748B" />
+                    <!-- Метрики прогноза -->
+                    <Border Background="#F8FAFC" CornerRadius="6" Padding="12,10" Margin="0,10,0,0"
+                            BorderBrush="#E2E8F0" BorderThickness="1">
+                        <UniformGrid Columns="5">
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Text="Факт ФО" Style="{StaticResource MetricLabelStyle}" />
+                                <TextBlock Text="{Binding FactPhysicalVolume, StringFormat={}{0:N2}, TargetNullValue=—}"
+                                           Style="{StaticResource MetricValueStyle}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Text="Норм. произв." Style="{StaticResource MetricLabelStyle}" />
+                                <TextBlock Text="{Binding NormProductivity, StringFormat={}{0:N4}, TargetNullValue=—}"
+                                           Style="{StaticResource MetricValueStyle}" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Text="Базовый, ч" Style="{StaticResource MetricLabelStyle}" />
+                                <TextBlock Text="{Binding BaseHours, StringFormat={}{0:N1}}"
+                                           FontSize="15" FontWeight="SemiBold" Foreground="#2C3E50"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Text="Оптимист., ч" Style="{StaticResource MetricLabelStyle}" />
+                                <TextBlock Text="{Binding OptimisticHours, StringFormat={}{0:N1}}"
+                                           FontSize="15" FontWeight="SemiBold" Foreground="#27AE60"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="Пессимист., ч" Style="{StaticResource MetricLabelStyle}" />
+                                <TextBlock Text="{Binding PessimisticHours, StringFormat={}{0:N1}}"
+                                           FontSize="15" FontWeight="SemiBold" Foreground="#E74C3C"
+                                           Margin="0,2,0,0" />
+                            </StackPanel>
+                        </UniformGrid>
                     </Border>
-                </Grid>
+
+                    <!-- Физ. объёмы проекта -->
+                    <StackPanel Margin="0,12,0,0">
+                        <TextBlock Text="Физ. объёмы проекта"
+                                   FontSize="12" FontWeight="SemiBold" Foreground="#64748B"
+                                   Margin="0,0,0,6" />
+                        <dxg:GridControl ItemsSource="{Binding PhysicalVolumes}"
+                                         AutoGenerateColumns="None"
+                                         MaxHeight="240">
+                            <dxg:GridControl.Columns>
+                                <dxg:GridColumn FieldName="Code" Header="Код" Width="7*" />
+                                <dxg:GridColumn FieldName="Name" Header="Номенклатурная позиция" Width="60*" MinWidth="80" />
+                                <dxg:GridColumn FieldName="UnitName" Header="Ед. изм." Width="7*" />
+                                <dxg:GridColumn FieldName="Quantity" Header="Кол-во" Width="7*">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                                <dxg:GridColumn FieldName="Coefficient" Header="Коэфф." Width="7*">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                                <dxg:GridColumn FieldName="Total" Header="Итого" Width="12*" MinWidth="60">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                            </dxg:GridControl.Columns>
+                            <dxg:GridControl.View>
+                                <dxg:TableView NavigationStyle="Row"
+                                               AllowEditing="False"
+                                               ShowGroupPanel="False"
+                                               ShowIndicator="False"
+                                               AutoWidth="True" />
+                            </dxg:GridControl.View>
+                        </dxg:GridControl>
+                    </StackPanel>
+                </StackPanel>
             </Border>
         </DataTemplate>
     </Window.Resources>
@@ -189,87 +235,61 @@
                 </Border>
 
                 <!-- Заголовок колонок -->
-                <Border Background="#2C3E50" CornerRadius="6" Padding="14,8" Margin="0,0,0,4">
+                <Border Background="#2C3E50" CornerRadius="6" Padding="16,8" Margin="0,0,0,4">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="80" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="100" />
-                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="120" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Наименование" Foreground="#94A3B8"
-                                   FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="Ед. изм." Foreground="#94A3B8"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="Норм. произв." Foreground="#94A3B8"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="3" Text="Базовый, ч" Foreground="#94A3B8"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="4" Text="Оптимист., ч" Foreground="#27AE60"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="5" Text="Пессимист., ч" Foreground="#E74C3C"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="6" Text="Диапазон" Foreground="#94A3B8"
-                                   FontSize="11" FontWeight="SemiBold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="0" Text="Шифр" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="Направление" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="Факт ФО" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="3" Text="Норм. произв." Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="4" Text="Базовый, ч" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="5" Text="Оптимист., ч" Foreground="#27AE60" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="6" Text="Пессимист., ч" Foreground="#E74C3C" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Right" />
                     </Grid>
                 </Border>
 
                 <!-- Итого по проекту -->
-                <Border Background="#1E3A5F" CornerRadius="6" Padding="14,8" Margin="0,0,0,8">
+                <Border Background="#1E3A5F" CornerRadius="6" Padding="16,8" Margin="0,0,0,8">
                     <Grid>
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="80" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="100" />
-                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="120" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                             <ColumnDefinition Width="110" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="ИТОГО по проекту"
-                                   Foreground="#FFFFFF" FontSize="13" FontWeight="Bold"
-                                   VerticalAlignment="Center" />
-                        <TextBlock Grid.Column="1" Text="—" Foreground="#64748B"
-                                   FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                        <TextBlock Grid.Column="2" Text="—" Foreground="#64748B"
-                                   FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="3"
+                        <TextBlock Grid.Column="0" Text="ИТОГО" Foreground="#FFFFFF" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="1" Text="По проекту" Foreground="#CBD5E1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Grid.Column="2" Text="—" Foreground="#64748B" FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="3" Text="—" Foreground="#64748B" FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="4"
                                    Text="{Binding TotalBaseHours, StringFormat={}{0:N1}}"
                                    Foreground="#FFFFFF" FontSize="13" FontWeight="Bold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="4"
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="5"
                                    Text="{Binding TotalOptimisticHours, StringFormat={}{0:N1}}"
                                    Foreground="#A9DFBF" FontSize="13" FontWeight="Bold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="5"
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="6"
                                    Text="{Binding TotalPessimisticHours, StringFormat={}{0:N1}}"
                                    Foreground="#F1948A" FontSize="13" FontWeight="Bold"
-                                   VerticalAlignment="Center" HorizontalAlignment="Right"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Grid.Column="6" Text="—" Foreground="#64748B"
-                                   FontSize="13" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                                   VerticalAlignment="Center" HorizontalAlignment="Right" />
                     </Grid>
                 </Border>
 
-                <!-- Строки прогноза -->
-                <ItemsControl ItemsSource="{Binding Rows}"
-                              ItemTemplate="{StaticResource ForecastRowTemplate}" />
+                <!-- Карточки направлений -->
+                <ItemsControl ItemsSource="{Binding Directions}"
+                              ItemTemplate="{StaticResource ForecastDirectionCardTemplate}" />
 
             </StackPanel>
         </ScrollViewer>
