@@ -143,7 +143,16 @@
                                 <dxg:GridControl Grid.Column="0" ItemsSource="{Binding ForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
-                                        <dxg:GridColumn FieldName="Name" Header="Наименование" Width="30*" />
+                                        <dxg:GridColumn FieldName="Name" Header="Наименование" Width="30*">
+                                            <dxg:GridColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding RowData.Row.Name}"
+                                                               Margin="{Binding RowData.Row.IndentMargin, Converter={StaticResource IndentToMarginConverter}}"
+                                                               FontStyle="{Binding RowData.Row.IsTotal, Converter={StaticResource BoolToFontStyle}}"
+                                                               FontWeight="{Binding RowData.Row.IsTotal, Converter={StaticResource BoolToFontWeightConverter}}" />
+                                                </DataTemplate>
+                                            </dxg:GridColumn.CellTemplate>
+                                        </dxg:GridColumn>
                                         <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="8*" />
                                         <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="12*">
                                             <dxg:GridColumn.EditSettings>
@@ -172,11 +181,11 @@
                                         </dxg:GridColumn>
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.View>
-                                        <dxg:TreeListView AllowEditing="False" AllowSorting="False"
-                                                          NavigationStyle="Row"
-                                                          KeyFieldName="Id" ParentFieldName="ParentId"
-                                                          AutoWidth="True" ShowIndicator="False"
-                                                          ShowVerticalLines="False" />
+                                        <dxg:TableView AllowEditing="False" AllowSorting="False"
+                                                       NavigationStyle="Row"
+                                                       AutoWidth="True" ShowIndicator="False"
+                                                       ShowVerticalLines="False"
+                                                       RowStyle="{StaticResource ForecastRowStyle}" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 

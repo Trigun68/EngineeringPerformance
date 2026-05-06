@@ -3,15 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:EngineeringPerformance.App"
              xmlns:conv="clr-namespace:EngineeringPerformance.App.Converters"
+             xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
              Startup="Application_Startup"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
         <conv:BoolToFontWeightConverter x:Key="BoolToFontWeightConverter" />
+        <conv:BoolToFontStyleConverter x:Key="BoolToFontStyle" />
+        <conv:BoolToTotalBackgroundConverter x:Key="BoolToTotalBackground" />
         <conv:IndentToMarginConverter x:Key="IndentToMarginConverter" />
         <conv:NullToCollapsedConverter x:Key="NullToCollapsed" />
         <conv:NullToBoolConverter x:Key="NullToBool" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+
+        <!-- Стиль строки итога в таблице прогноза -->
+        <Style x:Key="ForecastRowStyle" TargetType="dxg:RowControl">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Row.IsTotal}" Value="True">
+                    <Setter Property="Background" Value="#EBF5FB" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
 
         <!-- Стиль вкладки: плоская кнопка, активная — синяя, иконка + текст -->
         <Style x:Key="PageTabItemStyle" TargetType="TabItem">

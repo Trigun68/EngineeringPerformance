@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.Views;
+using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
@@ -221,34 +222,119 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var data = await Task.Run(() => _performanceService.GetPerformanceDataAsync(projectId, versionId));
-            var items = new ObservableCollection<ForecastPerformanceItem>();
-            foreach (var row in data)
-            {
-                var factVol = row.FactPhysicalVolume ?? 0m;
-                decimal? baseH = factVol > 0 && row.NormProductivity.HasValue
-                    ? Math.Round(factVol * row.NormProductivity.Value, 2)
-                    : null;
-                decimal? optH = factVol > 0 && row.NormProductivity.HasValue && row.NormStdDev.HasValue
-                    ? Math.Round(factVol * Math.Max(0m, row.NormProductivity.Value - 0.5m * row.NormStdDev.Value), 2)
-                    : null;
-                decimal? pesH = factVol > 0 && row.NormProductivity.HasValue && row.NormStdDev.HasValue
-                    ? Math.Round(factVol * (row.NormProductivity.Value + 0.5m * row.NormStdDev.Value), 2)
-                    : null;
 
-                items.Add(new ForecastPerformanceItem
+            // Строим плоский список с итоговыми строками для узлов, имеющих потомков.
+            // Алгоритм: рекурсивный обход дерева (pre-order узел + дети + post-order итог).
+            var rowById = data
+                .Where(r => r.WorkDirectionId >= 0)
+                .ToDictionary(r => r.WorkDirectionId);
+            var childrenByParent = data
+                .Where(r => r.WorkDirectionId >= 0 && r.ParentId.HasValue)
+                .ToLookup(r => r.ParentId!.Value);
+            var roots = data
+                .Where(r => r.WorkDirectionId >= 0 && !r.ParentId.HasValue)
+                .ToList();
+
+            var result = new List<ForecastPerformanceItem>();
+
+            (decimal? baseH, decimal? optH, decimal? pesH) CalcHours(PerformanceRowDto row)
+            {
+                var vol = row.FactPhysicalVolume ?? 0m;
+                if (vol <= 0 || !row.NormProductivity.HasValue)
+                    return (null, null, null);
+                var p = row.NormProductivity.Value;
+                var std = row.NormStdDev ?? 0m;
+                return (
+                    Math.Round(vol * p, 2),
+                    std > 0 ? Math.Round(vol * Math.Max(0m, p - 0.5m * std), 2) : Math.Round(vol * p, 2),
+                    std > 0 ? Math.Round(vol * (p + 0.5m * std), 2) : Math.Round(vol * p, 2)
+                );
+            }
+
+            // Возвращает агрегат поддерева (baseH, optH, pesH) включая собственные данные узла.
+            (decimal baseH, decimal optH, decimal pesH) BuildSubtree(PerformanceRowDto row, int level)
+            {
+                var (ownBase, ownOpt, ownPes) = CalcHours(row);
+                var children = childrenByParent[row.WorkDirectionId].ToList();
+                bool hasChildren = children.Count > 0;
+
+                // Добавляем строку самого узла
+                result.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
-                    ParentId = row.ParentId,
                     Name = row.WorkDirectionName,
                     NormUnitName = row.NormUnitName ?? string.Empty,
                     FactPhysicalVolume = row.FactPhysicalVolume,
                     NormProductivity = row.NormProductivity,
-                    BaseHours = baseH,
-                    OptimisticHours = optH,
-                    PessimisticHours = pesH,
+                    BaseHours = ownBase,
+                    OptimisticHours = ownOpt,
+                    PessimisticHours = ownPes,
+                    IsTotal = false,
+                    Level = level,
+                    IndentMargin = level * 20d,
+                });
+
+                if (!hasChildren)
+                    return (ownBase ?? 0m, ownOpt ?? 0m, ownPes ?? 0m);
+
+                // Рекурсивно обрабатываем детей
+                decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
+                foreach (var child in children)
+                {
+                    var (cb, co, cp) = BuildSubtree(child, level + 1);
+                    totalBase += cb;
+                    totalOpt += co;
+                    totalPes += cp;
+                }
+
+                // Итог = собственные данные узла + агрегат всех потомков
+                var aggBase = (ownBase ?? 0m) + totalBase;
+                var aggOpt = (ownOpt ?? 0m) + totalOpt;
+                var aggPes = (ownPes ?? 0m) + totalPes;
+
+                result.Add(new ForecastPerformanceItem
+                {
+                    Id = row.WorkDirectionId,
+                    Name = $"Итого: {row.WorkDirectionName}",
+                    NormUnitName = row.NormUnitName ?? string.Empty,
+                    FactPhysicalVolume = null,
+                    NormProductivity = null,
+                    BaseHours = aggBase > 0 ? aggBase : null,
+                    OptimisticHours = aggOpt > 0 ? aggOpt : null,
+                    PessimisticHours = aggPes > 0 ? aggPes : null,
+                    IsTotal = true,
+                    Level = level,
+                    IndentMargin = level * 20d,
+                });
+
+                return (aggBase, aggOpt, aggPes);
+            }
+
+            foreach (var root in roots)
+                BuildSubtree(root, 0);
+
+            // Строка «(пусто)» из PerformanceService — нераспределённые ФО
+            var unallocated = data.FirstOrDefault(r => r.WorkDirectionId < 0);
+            if (unallocated is not null)
+            {
+                var (ub, uo, up) = CalcHours(unallocated);
+                result.Add(new ForecastPerformanceItem
+                {
+                    Id = unallocated.WorkDirectionId,
+                    Name = unallocated.WorkDirectionName,
+                    NormUnitName = string.Empty,
+                    FactPhysicalVolume = unallocated.FactPhysicalVolume,
+                    NormProductivity = null,
+                    BaseHours = ub,
+                    OptimisticHours = uo,
+                    PessimisticHours = up,
+                    IsTotal = false,
+                    Level = 0,
+                    IndentMargin = 0d,
                 });
             }
-            ForecastData = items;
+
+            ForecastData = new ObservableCollection<ForecastPerformanceItem>(result);
         }
         catch (Exception ex)
         {
@@ -612,7 +698,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 public sealed class ForecastPerformanceItem
 {
     public int Id { get; set; }
-    public int? ParentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string NormUnitName { get; set; } = string.Empty;
     public decimal? FactPhysicalVolume { get; set; }
@@ -620,6 +705,9 @@ public sealed class ForecastPerformanceItem
     public decimal? BaseHours { get; set; }
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
+    public bool IsTotal { get; set; }
+    public int Level { get; set; }
+    public double IndentMargin { get; set; }
 }
 
 public sealed class VersionCompareRow
