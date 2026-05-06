@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -63,6 +64,8 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
         if (dialog.ShowDialog() == true)
         {
             SelectedFilePath = dialog.FileName;
+            if (string.IsNullOrWhiteSpace(Description))
+                Description = Path.GetFileName(dialog.FileName);
             ErrorMessage = null;
         }
     }

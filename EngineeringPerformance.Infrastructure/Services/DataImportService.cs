@@ -141,7 +141,7 @@ public sealed class DataImportService : IDataImportService
                      && i.ProjectAnalysisVersionId == versionId
                      && i.DataType == dataType)
             .OrderByDescending(i => i.ImportedAt)
-            .Select(i => new DataImportIterationInfo(i.ImportedAt, i.RecordCount))
+            .Select(i => new DataImportIterationInfo(i.ImportedAt, i.RecordCount, i.Description, i.SourceFileName))
             .ToListAsync();
     }
 
@@ -181,6 +181,7 @@ public sealed class DataImportService : IDataImportService
             ProjectAnalysisVersionId = versionId,
             DataType = DataImportType.PhysicalVolume,
             Description = description,
+            SourceFileName = Path.GetFileName(filePath),
             ImportedAt = DateTime.UtcNow,
         };
         context.DataImportIterations.Add(iteration);
@@ -352,6 +353,7 @@ public sealed class DataImportService : IDataImportService
             ProjectAnalysisVersionId = versionId,
             DataType = DataImportType.LaborIntensity,
             Description = description,
+            SourceFileName = Path.GetFileName(filePath),
             ImportedAt = DateTime.UtcNow,
         };
         context.DataImportIterations.Add(iteration);

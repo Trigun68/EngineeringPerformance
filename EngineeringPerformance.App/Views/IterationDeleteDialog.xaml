@@ -5,7 +5,7 @@
         xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
         xmlns:vm="clr-namespace:EngineeringPerformance.App.ViewModels"
         Title="{Binding WindowTitle}"
-        Height="350" Width="500"
+        Height="400" Width="700"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Icon="/Assets/logo.png">
@@ -35,7 +35,14 @@
                                  SelectedItem="{Binding SelectedIteration}"
                                  AutoGenerateColumns="None">
                     <dxg:GridControl.Columns>
-                        <dxg:GridColumn FieldName="DisplayText" Header="Итерация" Width="*" />
+                        <dxg:GridColumn FieldName="ImportedAt" Header="Дата загрузки" Width="140">
+                            <dxg:GridColumn.EditSettings>
+                                <dxe:TextEditSettings DisplayFormat="dd.MM.yyyy HH:mm" />
+                            </dxg:GridColumn.EditSettings>
+                        </dxg:GridColumn>
+                        <dxg:GridColumn FieldName="RecordCount" Header="Записей" Width="70" />
+                        <dxg:GridColumn FieldName="Description" Header="Описание" Width="*" />
+                        <dxg:GridColumn FieldName="SourceFileName" Header="Файл" Width="180" />
                     </dxg:GridControl.Columns>
                     <dxg:GridControl.View>
                         <dxg:TableView AllowEditing="False" NavigationStyle="Row" ShowGroupPanel="False" />

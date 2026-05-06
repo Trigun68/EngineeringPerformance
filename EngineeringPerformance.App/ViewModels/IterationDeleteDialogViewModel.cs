@@ -48,7 +48,13 @@ public sealed partial class IterationDeleteDialogViewModel : ObservableObject
         Iterations.Clear();
         foreach (var info in iterationInfos)
         {
-            Iterations.Add(new IterationItem { ImportedAt = info.ImportedAt, RecordCount = info.RecordCount });
+            Iterations.Add(new IterationItem
+            {
+                ImportedAt = info.ImportedAt,
+                RecordCount = info.RecordCount,
+                Description = info.Description,
+                SourceFileName = info.SourceFileName,
+            });
         }
     }
 
@@ -104,4 +110,8 @@ public sealed class IterationItem
     public string DisplayText => $"{ImportedAt:dd.MM.yyyy HH:mm} — {RecordCount} записей";
 
     public int RecordCount { get; set; }
+
+    public string? Description { get; set; }
+
+    public string? SourceFileName { get; set; }
 }
