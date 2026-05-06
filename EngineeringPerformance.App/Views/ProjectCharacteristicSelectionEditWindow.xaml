@@ -34,7 +34,7 @@
                 <TextBlock Grid.Row="0" Grid.Column="0" Text="Характеристика" VerticalAlignment="Center" Margin="0,0,8,8" />
                 <dxe:ComboBoxEdit Grid.Row="0" Grid.Column="1"
                                   ItemsSource="{Binding Characteristics}"
-                                  EditValue="{Binding SelectedCharacteristicId}"
+                                  EditValue="{Binding SelectedCharacteristicId, UpdateSourceTrigger=PropertyChanged}"
                                   ValueMember="Id"
                                   DisplayMember="Name"
                                   IsTextEditable="False"

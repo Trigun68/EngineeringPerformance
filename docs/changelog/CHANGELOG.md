@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added (2026-05-06, Projects page improvements)
+- `ProjectPickerDialog` / `ProjectPickerDialogViewModel` — новый диалог выбора проекта: только список проектов (без версий), тулбар с кнопками добавить/редактировать/удалить/в архив/из архива, чекбокс «Показывать архивные», поиск по коду и названию, двойной клик для выбора.
+- `ProjectQuickEditDialog` / `ProjectQuickEditDialogViewModel` — вложенный диалог ввода кода и наименования проекта (вызывается из `ProjectPickerDialog`).
+- `ProjectDataDialog` / `ProjectDataDialogViewModel` / `IProjectDataDialogService` — объединённый диалог «Основные данные»: содержит все поля из блока «Основные данные проекта» и все поля из «Дополнительных данных» в одном окне.
+- `ProjectParticipantsDialog` / `ProjectParticipantsDialogViewModel` / `IProjectParticipantsDialogService` — диалог участников проекта с тулбаром добавления (через стандартный `ProjectParticipantEditWindow`) и кнопкой удаления.
+- `IProjectPickerDialogService` / `ProjectPickerDialogService` — сервис показа нового диалога выбора проекта.
+
+### Changed (2026-05-06, Projects page improvements)
+- `ProjectsPageViewModel`: кнопка «Выбрать проект» теперь вызывает `ProjectPickerDialog` (только выбор проекта) вместо `ProjectSelectionDialog` (проект + версия); зависимость `IProjectEditDialogService` заменена на `IProjectPickerDialogService`, `IProjectDataDialogService`, `IProjectParticipantsDialogService`.
+- `ProjectsPageViewModel.OpenProjectDataCommand`: открывает `ProjectDataDialog` (основные + доп. поля) вместо `ProjectEditWindow`.
+- `ProjectsPageViewModel.OpenParticipantsCommand`: открывает `ProjectParticipantsDialog` вместо `IProjectParticipantEditDialogService.ShowEditDialogAsync`.
+- `ProjectsPageView.xaml`: кнопка «Выбрать проект» получила `IsEnabled="True"` явно — теперь всегда активна и не блекнет.
+- `ProjectCharacteristicSelectionEditWindow.xaml`: биндинг `SelectedCharacteristicId` добавлен `UpdateSourceTrigger=PropertyChanged` — исправлен баг, при котором список вариантов не подгружался при первом выборе характеристики.
+- `App.xaml.cs`: зарегистрированы `ProjectPickerDialog`, `ProjectPickerDialogViewModel`, `IProjectPickerDialogService`, `ProjectDataDialog`, `ProjectDataDialogViewModel`, `IProjectDataDialogService`, `ProjectParticipantsDialog`, `ProjectParticipantsDialogViewModel`, `IProjectParticipantsDialogService`.
+
 ### Added (2026-05-06, Phase 2 — Projects page redesign)
 - `ProjectsPageView.xaml` / `ProjectsPageView.xaml.cs` — новая страница «Проекты»: заменяет `ProjectsWindow` в навигации; содержит панель выбора проекта (код, название, отклонение), кнопки «Выбрать проект», «Основные данные», «Характеристики», «Участники», а ниже — внутренний `TabControl` с 4 вкладками.
 - `ProjectsPageViewModel` — ViewModel страницы: управляет выбором проекта, версий (план/факт), загрузкой данных производительности и прогноза, вызовом всех диалогов.

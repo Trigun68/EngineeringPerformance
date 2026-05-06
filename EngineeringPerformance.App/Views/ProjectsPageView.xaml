@@ -58,7 +58,8 @@
                 <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,0">
                     <Button Content="Выбрать проект" Command="{Binding SelectProjectCommand}"
                             Background="#3498DB" Foreground="White" BorderThickness="0"
-                            Padding="12,7" Margin="0,0,8,0" FontWeight="SemiBold" Cursor="Hand" />
+                            Padding="12,7" Margin="0,0,8,0" FontWeight="SemiBold" Cursor="Hand"
+                            IsEnabled="True" />
                     <Button Content="Основные данные" Command="{Binding OpenProjectDataCommand}"
                             IsEnabled="{Binding HasProject}"
                             Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />

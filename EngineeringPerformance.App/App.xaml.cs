@@ -308,6 +308,15 @@ public partial class App : Application
         services.AddTransient<ProjectEditWindow>();
         services.AddSingleton<IProjectEditDialogService, ProjectEditDialogService>();
         services.AddSingleton<IProjectAdditionalFieldsDialogService, ProjectAdditionalFieldsDialogService>();
+        services.AddTransient<ProjectPickerDialogViewModel>();
+        services.AddTransient<ProjectPickerDialog>();
+        services.AddSingleton<IProjectPickerDialogService, ProjectPickerDialogService>();
+        services.AddTransient<ProjectDataDialogViewModel>();
+        services.AddTransient<ProjectDataDialog>();
+        services.AddSingleton<IProjectDataDialogService, ProjectDataDialogService>();
+        services.AddTransient<ProjectParticipantsDialogViewModel>();
+        services.AddTransient<ProjectParticipantsDialog>();
+        services.AddSingleton<IProjectParticipantsDialogService, ProjectParticipantsDialogService>();
         services.AddSingleton<PhysicalVolumesViewModel>();
         services.AddTransient<PhysicalVolumesWindow>();
         services.AddTransient<PhysicalVolumeEditViewModel>();

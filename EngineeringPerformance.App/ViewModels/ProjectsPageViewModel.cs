@@ -15,10 +15,11 @@ namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableViewModel
 {
-    private readonly IProjectSelectionDialogService _projectSelectionDialog;
-    private readonly IProjectEditDialogService _projectEditDialog;
+    private readonly IProjectPickerDialogService _projectPickerDialog;
+    private readonly IProjectDataDialogService _projectDataDialog;
     private readonly IProjectCharacteristicsDialogService _characteristicsDialog;
-    private readonly IProjectParticipantEditDialogService _participantEditDialog;
+    private readonly IProjectParticipantsDialogService _participantsDialog;
+    private readonly IProjectSelectionDialogService _projectSelectionDialog;
     private readonly IProjectAnalysisVersionQueryService _versionQueryService;
     private readonly IPerformanceService _performanceService;
     private readonly IDataImportDialogService _dataImportDialog;
@@ -52,10 +53,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private bool _isLoading;
 
     public ProjectsPageViewModel(
-        IProjectSelectionDialogService projectSelectionDialog,
-        IProjectEditDialogService projectEditDialog,
+        IProjectPickerDialogService projectPickerDialog,
+        IProjectDataDialogService projectDataDialog,
         IProjectCharacteristicsDialogService characteristicsDialog,
-        IProjectParticipantEditDialogService participantEditDialog,
+        IProjectParticipantsDialogService participantsDialog,
+        IProjectSelectionDialogService projectSelectionDialog,
         IProjectAnalysisVersionQueryService versionQueryService,
         IPerformanceService performanceService,
         IDataImportDialogService dataImportDialog,
@@ -65,10 +67,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IDbContextFactory<AppDbContext> contextFactory,
         IServiceProvider serviceProvider)
     {
-        _projectSelectionDialog = projectSelectionDialog;
-        _projectEditDialog = projectEditDialog;
+        _projectPickerDialog = projectPickerDialog;
+        _projectDataDialog = projectDataDialog;
         _characteristicsDialog = characteristicsDialog;
-        _participantEditDialog = participantEditDialog;
+        _participantsDialog = participantsDialog;
+        _projectSelectionDialog = projectSelectionDialog;
         _versionQueryService = versionQueryService;
         _performanceService = performanceService;
         _dataImportDialog = dataImportDialog;
@@ -87,10 +90,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         var owner = GetOwner();
         if (owner is null) return;
-        _projectSelectionDialog.SetOwnerWindow(owner);
-        _projectEditDialog.SetOwnerWindow(owner);
+        _projectPickerDialog.SetOwnerWindow(owner);
+        _projectDataDialog.SetOwnerWindow(owner);
         _characteristicsDialog.SetOwnerWindow(owner);
-        _participantEditDialog.SetOwnerWindow(owner);
+        _participantsDialog.SetOwnerWindow(owner);
+        _projectSelectionDialog.SetOwnerWindow(owner);
         _dataImportDialog.SetOwnerWindow(owner);
         _iterationDeleteDialog.SetOwnerWindow(owner);
     }
@@ -99,9 +103,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private async Task SelectProjectAsync()
     {
         SetDialogOwners();
-        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
-        if (result is not var (projectId, _)) return;
-        await LoadProjectAsync(projectId);
+        var projectId = await _projectPickerDialog.ShowPickerAsync();
+        if (projectId is not int pid) return;
+        await LoadProjectAsync(pid);
     }
 
     private async Task LoadProjectAsync(int projectId)
@@ -134,8 +138,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         await using var context = await _contextFactory.CreateDbContextAsync();
         var project = await context.Projects.FindAsync(pid);
-        await _projectEditDialog.ShowEditDialogAsync(project);
-        await LoadProjectAsync(pid);
+        if (project is null) return;
+        var saved = await _projectDataDialog.ShowAsync(project);
+        if (saved) await LoadProjectAsync(pid);
     }
 
     [RelayCommand]
@@ -152,7 +157,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
-        await _participantEditDialog.ShowEditDialogAsync(pid);
+        await _participantsDialog.ShowAsync(pid);
     }
 
     // ─── Прогнозирование ───────────────────────────────────────────────────
