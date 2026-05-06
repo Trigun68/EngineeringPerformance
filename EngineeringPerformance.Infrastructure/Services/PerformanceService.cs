@@ -10,29 +10,51 @@ namespace EngineeringPerformance.Infrastructure.Services;
 public sealed class PerformanceService : IPerformanceService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private List<IicWorkDirection>? _workDirectionsCache;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     public PerformanceService(IDbContextFactory<AppDbContext> contextFactory)
     {
         _contextFactory = contextFactory;
     }
 
+    private async Task<List<IicWorkDirection>> GetWorkDirectionsAsync()
+    {
+        if (_workDirectionsCache is not null)
+            return _workDirectionsCache;
+
+        await _cacheLock.WaitAsync();
+        try
+        {
+            if (_workDirectionsCache is not null)
+                return _workDirectionsCache;
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            _workDirectionsCache = await ctx.IicWorkDirections
+                .AsNoTracking()
+                .Include(d => d.Unit)
+                .Where(d => !d.IsArchived)
+                .ToListAsync();
+            return _workDirectionsCache;
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
     public async Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId)
     {
         // Запускаем независимые запросы параллельно через отдельные контексты
         await using var ctx1 = await _contextFactory.CreateDbContextAsync();
-        await using var ctx2 = await _contextFactory.CreateDbContextAsync();
         await using var ctx3 = await _contextFactory.CreateDbContextAsync();
         await using var ctx4 = await _contextFactory.CreateDbContextAsync();
+
+        var workDirectionsTask = GetWorkDirectionsAsync();
 
         var versionExistsTask = ctx1.ProjectAnalysisVersions
             .AsNoTracking()
             .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId);
-
-        var workDirectionsTask = ctx2.IicWorkDirections
-            .AsNoTracking()
-            .Include(d => d.Unit)
-            .Where(d => !d.IsArchived)
-            .ToListAsync();
 
         var physicalVolumesTask = ctx3.ProjectPhysicalVolumes
             .AsNoTracking()
@@ -46,10 +68,10 @@ public sealed class PerformanceService : IPerformanceService
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        await Task.WhenAll(versionExistsTask, workDirectionsTask, physicalVolumesTask, laborIntensitiesTask);
+        await Task.WhenAll(workDirectionsTask, versionExistsTask, physicalVolumesTask, laborIntensitiesTask);
 
-        var versionExists = versionExistsTask.Result;
         var workDirections = workDirectionsTask.Result;
+        var versionExists = versionExistsTask.Result;
         var physicalVolumes = physicalVolumesTask.Result;
         var laborIntensities = laborIntensitiesTask.Result;
 
