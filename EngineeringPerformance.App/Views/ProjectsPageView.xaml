@@ -170,9 +170,9 @@
                                 </StackPanel>
                             </Button>
                             <Button Content="📊 Прогноз" Command="{Binding OpenForecastReportCommand}"
-                                    IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
-                                    Background="#27AE60" Foreground="White" BorderThickness="0"
-                                    Width="160" Height="36" Cursor="Hand" />
+                                IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                Background="#27AE60" Foreground="White" BorderThickness="0"
+                                Width="160" Height="36" Cursor="Hand" />
                         </StackPanel>
                     </Grid>
                 </Grid>
@@ -294,12 +294,201 @@
 
             <!-- ══════════════════ Сравнение версий ══════════════════ -->
             <dx:DXTabItem Header="Сравнение версий">
-                <TextBlock Text="Сравнение версий проекта" Margin="20" Foreground="#95A5A6" FontSize="14" />
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="8" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Выбор двух версий -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Версия А -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Button Content="📋 Версия А" Command="{Binding SelectCompareVersionACommand}"
+                                    IsEnabled="{Binding HasProject}"
+                                    Background="#2980B9" Foreground="White" BorderThickness="0"
+                                    Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
+                            <Border Visibility="{Binding CompareVersionAId, Converter={StaticResource NullToCollapsed}}"
+                                    Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
+                                    CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding CompareVersionAName}" Foreground="#1A5276" FontSize="12" />
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Версия Б -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                            <Button Content="📋 Версия Б" Command="{Binding SelectCompareVersionBCommand}"
+                                    IsEnabled="{Binding HasProject}"
+                                    Background="#8E44AD" Foreground="White" BorderThickness="0"
+                                    Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
+                            <Border Visibility="{Binding CompareVersionBId, Converter={StaticResource NullToCollapsed}}"
+                                    Background="#F5EEF8" BorderBrush="#D7BDE2" BorderThickness="1"
+                                    CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding CompareVersionBName}" Foreground="#6C3483" FontSize="12" />
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Таблица сравнения -->
+                    <dxg:GridControl Grid.Row="2" ItemsSource="{Binding CompareRows}"
+                                     AutoGenerateColumns="None">
+                        <dxg:GridControl.Columns>
+                            <dxg:GridColumn FieldName="Name" Header="Направление" Width="30*" />
+                            <dxg:GridColumn FieldName="ZScoreA" Width="12*">
+                                <dxg:GridColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DataContext.CompareVersionAName,
+                                            RelativeSource={RelativeSource AncestorType=dxg:GridControl},
+                                            FallbackValue='Версия А'}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center" />
+                                    </DataTemplate>
+                                </dxg:GridColumn.HeaderTemplate>
+                                <dxg:GridColumn.EditSettings>
+                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                </dxg:GridColumn.EditSettings>
+                            </dxg:GridColumn>
+                            <dxg:GridColumn FieldName="InterpretationA" Header="Оценка А" Width="16*" />
+                            <dxg:GridColumn FieldName="ZScoreB" Width="12*">
+                                <dxg:GridColumn.HeaderTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DataContext.CompareVersionBName,
+                                            RelativeSource={RelativeSource AncestorType=dxg:GridControl},
+                                            FallbackValue='Версия Б'}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center" />
+                                    </DataTemplate>
+                                </dxg:GridColumn.HeaderTemplate>
+                                <dxg:GridColumn.EditSettings>
+                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                </dxg:GridColumn.EditSettings>
+                            </dxg:GridColumn>
+                            <dxg:GridColumn FieldName="InterpretationB" Header="Оценка Б" Width="16*" />
+                            <dxg:GridColumn FieldName="ZDelta" Header="Δ Z-score" Width="10*">
+                                <dxg:GridColumn.EditSettings>
+                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                </dxg:GridColumn.EditSettings>
+                                <dxg:GridColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding RowData.Row.ZDelta, StringFormat=N4}"
+                                                   HorizontalAlignment="Right" Padding="4,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding RowData.Row.ZDelta, Converter={StaticResource NullToBool}}" Value="False">
+                                                            <Setter Property="Foreground" Value="#95A5A6" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                    <Setter Property="Foreground" Value="#27AE60" />
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </dxg:GridColumn.CellTemplate>
+                            </dxg:GridColumn>
+                        </dxg:GridControl.Columns>
+                        <dxg:GridControl.View>
+                            <dxg:TreeListView AllowEditing="False" AllowSorting="False"
+                                              NavigationStyle="Row"
+                                              KeyFieldName="Id" ParentFieldName="ParentId"
+                                              AutoWidth="True" ShowIndicator="False"
+                                              ShowVerticalLines="False" />
+                        </dxg:GridControl.View>
+                    </dxg:GridControl>
+                </Grid>
             </dx:DXTabItem>
 
             <!-- ══════════════════ Отчёты ══════════════════ -->
             <dx:DXTabItem Header="Отчёты">
-                <TextBlock Text="Отчёты проекта" Margin="20" Foreground="#95A5A6" FontSize="14" />
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="16">
+
+                        <!-- Группа: Оценка факта -->
+                        <Border Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
+                                CornerRadius="4" Padding="12,8" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Оценка факта" FontWeight="SemiBold" FontSize="14"
+                                           Foreground="#1A5276" Margin="0,0,0,8" />
+                                <TextBlock Foreground="#5D6D7E" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12">
+                                    Отчёт по производительности: физ. объёмы, трудоёмкость, Z-score по направлениям ИИС.
+                                    Требуется выбранная версия факта на вкладке «Оценка факта».
+                                </TextBlock>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Command="{Binding OpenVersionAnalysisCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Background="#3498DB" Foreground="White" BorderThickness="0"
+                                            Padding="12,8" Margin="0,0,8,0" Cursor="Hand">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📊" Margin="0,0,6,0" />
+                                            <TextBlock Text="Анализ версии (экран)" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding ExportFactAnalysisToExcelCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Background="#27AE60" Foreground="White" BorderThickness="0"
+                                            Padding="12,8" Margin="0,0,8,0" Cursor="Hand">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт в Excel" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding ExportFactAnalysisToPdfCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Background="#E74C3C" Foreground="White" BorderThickness="0"
+                                            Padding="12,8" Cursor="Hand">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="📄" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт в PDF" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Группа: Прогноз -->
+                        <Border Background="#EAFAF1" BorderBrush="#A9DFBF" BorderThickness="1"
+                                CornerRadius="4" Padding="12,8" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock Text="Прогноз трудозатрат" FontWeight="SemiBold" FontSize="14"
+                                           Foreground="#1E8449" Margin="0,0,0,8" />
+                                <TextBlock Foreground="#5D6D7E" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12">
+                                    Три сценария трудозатрат (базовый, оптимистичный, пессимистичный) по плановым объёмам.
+                                    Требуется выбранная плановая версия на вкладке «Прогнозирование».
+                                </TextBlock>
+                                <Button Command="{Binding ExportForecastToExcelCommand}"
+                                        IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                        Background="#27AE60" Foreground="White" BorderThickness="0"
+                                        Padding="12,8" HorizontalAlignment="Left" Cursor="Hand">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                        <TextBlock Text="Экспорт прогноза в Excel" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Группа: Сравнение версий -->
+                        <Border Background="#FEF9E7" BorderBrush="#F9E79F" BorderThickness="1"
+                                CornerRadius="4" Padding="12,8">
+                            <StackPanel>
+                                <TextBlock Text="Сравнение версий" FontWeight="SemiBold" FontSize="14"
+                                           Foreground="#7D6608" Margin="0,0,0,8" />
+                                <TextBlock Foreground="#5D6D7E" FontSize="12" TextWrapping="Wrap">
+                                    Для сравнения двух версий перейдите на вкладку «Сравнение версий»,
+                                    выберите Версию А и Версию Б. Таблица с Δ Z-score отобразится там же.
+                                </TextBlock>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
             </dx:DXTabItem>
         </dx:DXTabControl>
     </Grid>

@@ -10,6 +10,7 @@ using EngineeringPerformance.Infrastructure.Data;
 using EngineeringPerformance.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -25,6 +26,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private readonly IDataImportDialogService _dataImportDialog;
     private readonly IIterationDeleteDialogService _iterationDeleteDialog;
     private readonly IProjectVersionAnalysisExportService _exportService;
+    private readonly IProjectForecastExportService _forecastExportService;
+    private readonly IProjectForecastService _forecastService;
     private readonly ProjectCharacteristicSelectionService _characteristicSelectionService;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IServiceProvider _serviceProvider;
@@ -49,6 +52,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _factVersionName = string.Empty;
     [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
 
+    // Вкладка Сравнение версий
+    [ObservableProperty] private int? _compareVersionAId;
+    [ObservableProperty] private string _compareVersionAName = string.Empty;
+    [ObservableProperty] private int? _compareVersionBId;
+    [ObservableProperty] private string _compareVersionBName = string.Empty;
+    [ObservableProperty] private ObservableCollection<VersionCompareRow> _compareRows = [];
+
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private bool _isLoading;
 
@@ -60,9 +70,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IProjectSelectionDialogService projectSelectionDialog,
         IProjectAnalysisVersionQueryService versionQueryService,
         IPerformanceService performanceService,
+        IProjectForecastService forecastService,
         IDataImportDialogService dataImportDialog,
         IIterationDeleteDialogService iterationDeleteDialog,
         IProjectVersionAnalysisExportService exportService,
+        IProjectForecastExportService forecastExportService,
         ProjectCharacteristicSelectionService characteristicSelectionService,
         IDbContextFactory<AppDbContext> contextFactory,
         IServiceProvider serviceProvider)
@@ -74,9 +86,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _projectSelectionDialog = projectSelectionDialog;
         _versionQueryService = versionQueryService;
         _performanceService = performanceService;
+        _forecastService = forecastService;
         _dataImportDialog = dataImportDialog;
         _iterationDeleteDialog = iterationDeleteDialog;
         _exportService = exportService;
+        _forecastExportService = forecastExportService;
         _characteristicSelectionService = characteristicSelectionService;
         _contextFactory = contextFactory;
         _serviceProvider = serviceProvider;
@@ -242,9 +256,37 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     }
 
     [RelayCommand]
-    private void OpenForecastReport()
+    private async Task OpenForecastReportAsync()
     {
-        ErrorMessage = "Экспорт прогноза будет реализован в Фазе 3";
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт прогноза в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"Прогноз_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var report = await _forecastService.GenerateForecastAsync(pid, vid);
+            await _forecastExportService.ExportToExcelAsync(report, dlg.FileName);
+            ErrorMessage = null;
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
     }
 
     // ─── Оценка факта ──────────────────────────────────────────────────────
@@ -361,6 +403,185 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _ = vm.LoadAsync();
         window.ShowDialog();
     }
+
+    // ─── Сравнение версий ──────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task SelectCompareVersionAAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
+        if (result is not var (_, versionId)) return;
+        CompareVersionAId = versionId;
+        var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
+        CompareVersionAName = versions.FirstOrDefault(v => v.Id == versionId)?.VersionName ?? string.Empty;
+        await RunCompareAsync();
+    }
+
+    [RelayCommand]
+    private async Task SelectCompareVersionBAsync()
+    {
+        if (SelectedProjectId is not int pid) return;
+        SetDialogOwners();
+        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
+        if (result is not var (_, versionId)) return;
+        CompareVersionBId = versionId;
+        var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
+        CompareVersionBName = versions.FirstOrDefault(v => v.Id == versionId)?.VersionName ?? string.Empty;
+        await RunCompareAsync();
+    }
+
+    private async Task RunCompareAsync()
+    {
+        if (SelectedProjectId is not int pid
+            || CompareVersionAId is not int vidA
+            || CompareVersionBId is not int vidB)
+            return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var dataA = await _performanceService.GetPerformanceDataAsync(pid, vidA);
+            var dataB = await _performanceService.GetPerformanceDataAsync(pid, vidB);
+
+            var dictA = dataA.ToDictionary(r => r.WorkDirectionId);
+            var dictB = dataB.ToDictionary(r => r.WorkDirectionId);
+            var allIds = dictA.Keys.Union(dictB.Keys).ToList();
+
+            CompareRows.Clear();
+            foreach (var id in allIds)
+            {
+                dictA.TryGetValue(id, out var a);
+                dictB.TryGetValue(id, out var b);
+                var row = a ?? b!;
+                var zDelta = (b?.ZScore ?? a?.ZScore) - (a?.ZScore ?? b?.ZScore);
+                CompareRows.Add(new VersionCompareRow
+                {
+                    Id = row.WorkDirectionId,
+                    ParentId = row.ParentId,
+                    Name = row.WorkDirectionName,
+                    ZScoreA = a?.ZScore,
+                    ZScoreB = b?.ZScore,
+                    ZDelta = zDelta,
+                    InterpretationA = a?.Interpretation?.ToRussian() ?? "—",
+                    InterpretationB = b?.Interpretation?.ToRussian() ?? "—",
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка сравнения: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    // ─── Отчёты ───────────────────────────────────────────────────────────
+
+    [RelayCommand]
+    private async Task ExportFactAnalysisToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт анализа версии в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"АнализВерсии_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var svc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
+            var report = await svc.GenerateReportAsync(pid, vid);
+            await _exportService.ExportToExcelAsync(report, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportFactAnalysisToPdfAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт анализа версии в PDF",
+            Filter = "PDF (*.pdf)|*.pdf",
+            FileName = $"АнализВерсии_{SelectedProjectCode}_{FactVersionName}.pdf",
+            DefaultExt = "pdf",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var svc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
+            var report = await svc.GenerateReportAsync(pid, vid);
+            await _exportService.ExportToPdfAsync(report, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportForecastToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт прогноза в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"Прогноз_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var report = await _forecastService.GenerateForecastAsync(pid, vid);
+            await _forecastExportService.ExportToExcelAsync(report, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
 }
 
 public sealed class ForecastPerformanceItem
@@ -374,4 +595,16 @@ public sealed class ForecastPerformanceItem
     public decimal? BaseHours { get; set; }
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
+}
+
+public sealed class VersionCompareRow
+{
+    public int Id { get; set; }
+    public int? ParentId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal? ZScoreA { get; set; }
+    public decimal? ZScoreB { get; set; }
+    public decimal? ZDelta { get; set; }
+    public string InterpretationA { get; set; } = string.Empty;
+    public string InterpretationB { get; set; } = string.Empty;
 }

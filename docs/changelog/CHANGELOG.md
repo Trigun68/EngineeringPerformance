@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added (2026-05-06, Phase 3 — forecast export, version comparison, reports tab)
+- `IProjectForecastExportService` / `ProjectForecastExportService` — экспорт прогноза трудозатрат в Excel (ClosedXML): 3 листа — «Сценарии», «Плановые объёмы», «ТОП дисциплин».
+- `ProjectsPageViewModel.OpenForecastReportAsyncCommand` — реализован экспорт прогноза с `SaveFileDialog`; ранее была заглушка «Экспорт прогноза будет реализован в Фазе 3».
+- `ProjectsPageViewModel`: команды `SelectCompareVersionACommand`, `SelectCompareVersionBCommand` — выбор двух версий для сравнения и расчёт Δ Z-score по всем направлениям ИИС в `CompareRows`.
+- `ProjectsPageViewModel`: команды `ExportFactAnalysisToExcelCommand`, `ExportFactAnalysisToPdfCommand`, `ExportForecastToExcelCommand` — прямой экспорт через `SaveFileDialog` с вкладки «Отчёты».
+- `VersionCompareRow` — модель строки сравнения версий (ZScoreA, ZScoreB, ZDelta, InterpretationA/B).
+- `App.xaml.cs`: зарегистрирован `IProjectForecastExportService`.
+
+### Changed (2026-05-06, Phase 3 — UI)
+- `ProjectsPageView.xaml`, вкладка «Сравнение версий»: реализована полноценная вкладка — панель выбора двух версий (Версия А / Версия Б) + `TreeListView` с колонками Z-score А, Оценка А, Z-score Б, Оценка Б, Δ Z-score; заголовки версий динамические (берутся из ViewModel).
+- `ProjectsPageView.xaml`, вкладка «Отчёты»: реализована полноценная вкладка — три карточки-группы: «Оценка факта» (просмотр на экране + Excel + PDF), «Прогноз трудозатрат» (Excel), «Сравнение версий» (ссылка на вкладку).
+
 ### Added (2026-05-06, Projects page improvements)
 - `ProjectPickerDialog` / `ProjectPickerDialogViewModel` — новый диалог выбора проекта: только список проектов (без версий), тулбар с кнопками добавить/редактировать/удалить/в архив/из архива, чекбокс «Показывать архивные», поиск по коду и названию, двойной клик для выбора.
 - `ProjectQuickEditDialog` / `ProjectQuickEditDialogViewModel` — вложенный диалог ввода кода и наименования проекта (вызывается из `ProjectPickerDialog`).

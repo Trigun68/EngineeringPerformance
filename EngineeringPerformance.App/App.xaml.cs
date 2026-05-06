@@ -286,6 +286,7 @@ public partial class App : Application
         services.AddSingleton<IProjectAnalysisService, ProjectAnalysisService>();
         services.AddSingleton<IProjectVersionAnalysisService, ProjectVersionAnalysisService>();
         services.AddSingleton<IProjectVersionAnalysisExportService, ProjectVersionAnalysisExportService>();
+        services.AddSingleton<IProjectForecastExportService, ProjectForecastExportService>();
         services.AddSingleton<IDataImportService, DataImportService>();
         services.AddSingleton<IProjectForecastService, ProjectForecastService>();
         services.AddSingleton<IForecastPlannedVolumePersistenceService, ForecastPlannedVolumePersistenceService>();
