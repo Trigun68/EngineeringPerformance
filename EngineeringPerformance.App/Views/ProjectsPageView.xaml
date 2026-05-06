@@ -143,29 +143,29 @@
                                 <dxg:GridControl Grid.Column="0" ItemsSource="{Binding ForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
-                                        <dxg:GridColumn FieldName="DisplayName" Header="Наименование" Width="30*" />
-                                        <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="8*" />
-                                        <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="12*">
+                                        <dxg:GridColumn FieldName="DisplayName" Header="Наименование" Width="3*" MinWidth="120" />
+                                        <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="0.8*" MinWidth="60" />
+                                        <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="1.2*" MinWidth="70">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="NormProductivity" Header="Норм. производит." Width="10*">
+                                        <dxg:GridColumn FieldName="NormProductivity" Header="Норм. производит." Width="1*" MinWidth="80">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="20*">
+                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="2*" MinWidth="80">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="15*">
+                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="1.5*" MinWidth="80">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="15*">
+                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="1.5*" MinWidth="80">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
@@ -174,7 +174,7 @@
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="False"
                                                        NavigationStyle="Row"
-                                                       AutoWidth="True" ShowIndicator="False"
+                                                       ShowIndicator="False"
                                                        ShowVerticalLines="False"
                                                        RowStyle="{StaticResource ForecastRowStyle}" />
                                     </dxg:GridControl.View>
