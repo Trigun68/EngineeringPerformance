@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-06, forecast algorithm)
+- `ProjectForecastService`: алгоритм прогноза переведён с лог-нормального пространства на линейный. Базовый = ФО × Performance; Оптимистичный = ФО × (Performance − 0.5 × StdDev); Пессимистичный = ФО × (Performance + 0.5 × StdDev). Убраны `exp(Estimate)` и вспомогательный `SafeExpDecimal`.
+- `ProjectForecastServiceTests`: тест `GenerateForecast_ScenarioHours` обновлён под новый алгоритм (ожидания: base=2.00, opt=1.50, pes=2.50).
+- `docs/features/forecast-algorithm.md`: создан, описывает формулы и историю изменений алгоритма.
+
 ### Added (2026-05-06, Phase 3 — forecast export, version comparison, reports tab)
 - `IProjectForecastExportService` / `ProjectForecastExportService` — экспорт прогноза трудозатрат в Excel (ClosedXML): 3 листа — «Сценарии», «Плановые объёмы», «ТОП дисциплин».
 - `ProjectsPageViewModel.OpenForecastReportAsyncCommand` — реализован экспорт прогноза с `SaveFileDialog`; ранее была заглушка «Экспорт прогноза будет реализован в Фазе 3».

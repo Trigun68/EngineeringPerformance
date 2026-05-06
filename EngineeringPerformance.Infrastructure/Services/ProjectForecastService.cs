@@ -8,10 +8,6 @@ namespace EngineeringPerformance.Infrastructure.Services;
 
 public sealed class ProjectForecastService : IProjectForecastService
 {
-    private const decimal OptimisticZ = -0.5m;
-    private const decimal BaseZ = 0m;
-    private const decimal PessimisticZ = 0.5m;
-
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
     public ProjectForecastService(IDbContextFactory<AppDbContext> contextFactory)
@@ -241,7 +237,7 @@ public sealed class ProjectForecastService : IProjectForecastService
 
             var baseHours = ComputeBaseHours(vol, norm, laborHours);
 
-            var (opt, pes, range) = ComputeScenarioHours(baseHours, norm);
+            var (opt, pes, range) = ComputeScenarioHours(baseHours, norm, vol);
 
             var isLeaf = !hasChildren.Contains(d.Id);
             if (!isLeaf)
@@ -255,7 +251,7 @@ public sealed class ProjectForecastService : IProjectForecastService
                 if (childSumHours > 0)
                 {
                     baseHours = Math.Round(childSumHours, 2);
-                    (opt, pes, range) = ComputeScenarioHours(baseHours, norm);
+                    (opt, pes, range) = ComputeScenarioHours(baseHours, norm, vol);
                 }
             }
 
@@ -313,40 +309,28 @@ public sealed class ProjectForecastService : IProjectForecastService
 
         static decimal ComputeBaseHours(decimal plannedVolume, IicWorkDirectionNorm? norm, decimal laborHours)
         {
-            // Базовый сценарий = нормативная производительность × плановый объём.
-            // В лог-пространстве это эквивалентно volume × exp(NormEstimate).
-            if (plannedVolume > 0)
+            // Базовый: ФактФО × НормПроизводительность (20%)
+            if (plannedVolume > 0 && norm?.Performance is { } p && p > 0)
             {
-                if (norm?.Estimate is { } estimate)
-                {
-                    return Math.Round(plannedVolume * SafeExpDecimal((double)estimate), 2);
-                }
-                if (norm?.Performance is { } p && p > 0)
-                {
-                    return Math.Round(plannedVolume * p, 2);
-                }
+                return Math.Round(plannedVolume * p, 2);
             }
 
             return laborHours;
         }
 
-        static (decimal Opt, decimal Pes, string Range) ComputeScenarioHours(decimal baseHours, IicWorkDirectionNorm? norm)
+        static (decimal Opt, decimal Pes, string Range) ComputeScenarioHours(decimal baseHours, IicWorkDirectionNorm? norm, decimal plannedVolume)
         {
-            if (baseHours <= 0)
+            if (baseHours <= 0 || plannedVolume <= 0)
             {
                 return (0m, 0m, "—");
             }
 
-            // Сценарные отклонения применяются в лог-пространстве (оценка — это натуральный логарифм производительности):
-            //   опт. оценка = NormEstimate - 0.5 × NormStdDev  → меньше часов (более высокая производительность);
-            //   пес. оценка = NormEstimate + 0.5 × NormStdDev  → больше часов.
-            // Экспоненцирование возвращает множитель к baseHours: exp(±0.5 × std).
-            // Без NormStdDev сценарии сводятся к базовому (нечем модулировать).
-            if (norm?.StandardDeviation is { } std && std > 0)
+            // Оптимистичный (15%): ФО × (Performance − 0.5 × StdDev)
+            // Пессимистичный (15%): ФО × (Performance + 0.5 × StdDev)
+            if (norm?.Performance is { } p && p > 0 && norm.StandardDeviation is { } std && std > 0)
             {
-                var s = (double)std;
-                var opt = Math.Round(baseHours * SafeExpDecimal((double)OptimisticZ * s), 2);
-                var pes = Math.Round(baseHours * SafeExpDecimal((double)PessimisticZ * s), 2);
+                var opt = Math.Round(plannedVolume * Math.Max(0m, p - 0.5m * std), 2);
+                var pes = Math.Round(plannedVolume * (p + 0.5m * std), 2);
                 return (opt, pes, $"{opt:F2} - {pes:F2}");
             }
 
@@ -395,7 +379,7 @@ public sealed class ProjectForecastService : IProjectForecastService
         {
             new(
                 ScenarioName: "Оптимистичный",
-                ZScore: OptimisticZ,
+                ZScore: -0.5m,
                 TotalLaborHours: optimisticTotal,
                 Disciplines: disciplines.Select(d => MapRow(
                     d,
@@ -405,7 +389,7 @@ public sealed class ProjectForecastService : IProjectForecastService
                     d.Range)).ToList()),
             new(
                 ScenarioName: "Базовый",
-                ZScore: BaseZ,
+                ZScore: 0m,
                 TotalLaborHours: baseTotal,
                 Disciplines: disciplines.Select(d => MapRow(
                     d,
@@ -415,7 +399,7 @@ public sealed class ProjectForecastService : IProjectForecastService
                     d.Range)).ToList()),
             new(
                 ScenarioName: "Пессимистичный",
-                ZScore: PessimisticZ,
+                ZScore: 0.5m,
                 TotalLaborHours: pessimisticTotal,
                 Disciplines: disciplines.Select(d => MapRow(
                     d,
@@ -483,19 +467,5 @@ public sealed class ProjectForecastService : IProjectForecastService
             characteristics["ГИП"] = project.Gip;
 
         return characteristics;
-    }
-
-    /// <summary>
-    /// Безопасное экспоненцирование double → decimal: клампирует результат
-    /// в диапазон decimal, чтобы не получить OverflowException.
-    /// </summary>
-    private static decimal SafeExpDecimal(double x)
-    {
-        var result = Math.Exp(x);
-        if (double.IsNaN(result) || double.IsInfinity(result) || result > (double)decimal.MaxValue)
-            return decimal.MaxValue;
-        if (result < (double)decimal.MinValue)
-            return decimal.MinValue;
-        return (decimal)result;
     }
 }

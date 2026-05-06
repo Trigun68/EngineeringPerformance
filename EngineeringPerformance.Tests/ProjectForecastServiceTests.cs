@@ -54,14 +54,15 @@ public sealed class ProjectForecastServiceTests
     }
 
     /// <summary>
-    /// Регрессия (since 2026-05-05): сценарии строятся из нормативной производительности,
-    /// оптимистичный/пессимистичный = экспонента от NormEstimate ∓ 0.5·NormStdDev
-    /// (std — в лог-пространстве, т.к. Estimate = ln(Performance)).
+    /// Алгоритм прогноза (линейный, с 2026-05-06):
+    ///   Базовый       (20%): ФО × Performance
+    ///   Оптимистичный (15%): ФО × (Performance − 0.5 × StdDev)
+    ///   Пессимистичный(15%): ФО × (Performance + 0.5 × StdDev)
     ///
-    /// Фикстура: объём=1, NormEstimate=ln(2), std=1. Ожидаем:
-    ///   base =  1 × exp(ln 2)                 = 2
-    ///   opt  =  1 × exp(ln 2 - 0.5)           ≈ 1.21
-    ///   pes  =  1 × exp(ln 2 + 0.5)           ≈ 3.30
+    /// Фикстура: ФО=1, Performance=2, StdDev=1. Ожидаем:
+    ///   base = 1 × 2         = 2.00
+    ///   opt  = 1 × (2 − 0.5) = 1.50
+    ///   pes  = 1 × (2 + 0.5) = 2.50
     /// </summary>
     [Fact]
     public async Task GenerateForecast_ScenarioHours_FollowNormEstimateWithHalfStdDeviation()
@@ -73,13 +74,12 @@ public sealed class ProjectForecastServiceTests
             seed.Projects.Add(new Project { Id = 1, Code = "PRJ", Name = "test" });
             seed.IicWorkDirections.Add(new IicWorkDirection { Id = 10, Name = "root", Code = "R" });
 
-            var lnTwo = (decimal)Math.Log(2.0);
             seed.IicWorkDirectionNorms.Add(new IicWorkDirectionNorm
             {
                 Id = 100,
                 WorkDirectionId = 10,
                 Performance = 2m,
-                Estimate = lnTwo,
+                Estimate = (decimal)Math.Log(2.0),
                 StandardDeviation = 1m,
                 EffectiveFrom = DateTime.UtcNow.AddDays(-30),
                 EffectiveTo = null
@@ -119,11 +119,13 @@ public sealed class ProjectForecastServiceTests
         var optimistic = report.Scenarios.Single(s => s.ScenarioName == "Оптимистичный");
         var pessimistic = report.Scenarios.Single(s => s.ScenarioName == "Пессимистичный");
 
+        // base = 1 × 2 = 2
         baseScenario.TotalLaborHours.Should().BeApproximately(2m, 0.01m);
-        optimistic.TotalLaborHours.Should().BeApproximately((decimal)Math.Exp(Math.Log(2.0) - 0.5), 0.01m);
-        pessimistic.TotalLaborHours.Should().BeApproximately((decimal)Math.Exp(Math.Log(2.0) + 0.5), 0.01m);
+        // opt  = 1 × (2 − 0.5×1) = 1.5
+        optimistic.TotalLaborHours.Should().BeApproximately(1.5m, 0.01m);
+        // pes  = 1 × (2 + 0.5×1) = 2.5
+        pessimistic.TotalLaborHours.Should().BeApproximately(2.5m, 0.01m);
 
-        // Z-метки сценариев фиксируются константами сервиса: ∓0.5 и 0.
         optimistic.ZScore.Should().Be(-0.5m);
         baseScenario.ZScore.Should().Be(0m);
         pessimistic.ZScore.Should().Be(0.5m);
