@@ -256,7 +256,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     }
 
     [RelayCommand]
-    private async Task OpenForecastReportAsync()
+    private async Task OpenForecastReport()
     {
         if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
 
