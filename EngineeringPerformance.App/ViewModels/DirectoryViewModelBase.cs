@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Models;
 using EngineeringPerformance.Core.Services;
@@ -18,6 +19,10 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
 
     public Window? OwnerWindow { get; set; }
 
+    public UserSettingsHelper? SettingsHelper { get; set; }
+
+    private string SettingsKey => $"ShowArchived.{GetType().Name}";
+
     [ObservableProperty]
     private ObservableCollection<T> _items = [];
 
@@ -27,8 +32,12 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
     [ObservableProperty]
     private bool _showArchived;
 
+    private bool _restoringSettings;
+
     partial void OnShowArchivedChanged(bool value)
     {
+        if (!_restoringSettings && SettingsHelper is not null)
+            _ = SettingsHelper.SaveBoolAsync(SettingsKey, value);
         _ = LoadSafeAsync();
     }
 
@@ -132,6 +141,17 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
 
     public virtual async Task LoadAsync()
     {
+        if (SettingsHelper is not null)
+        {
+            var saved = await SettingsHelper.GetBoolAsync(SettingsKey);
+            if (saved != ShowArchived)
+            {
+                _restoringSettings = true;
+                ShowArchived = saved;
+                _restoringSettings = false;
+                return;
+            }
+        }
         await LoadInternalAsync();
     }
 

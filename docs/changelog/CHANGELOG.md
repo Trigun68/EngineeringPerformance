@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added (2026-05-07, user settings persistence)
+- `UserSetting` — сущность БД (UserId, Key, Value nvarchar(max)); EF-миграция `20260507160328_AddUserSettings`; SQL-скрипт `migrations/schema/014_AddUserSettings.sql`.
+- `IUserSettingsService` / `UserSettingsService` — CRUD ключ-значение по userId: `GetAsync`, `SetAsync`, `GetAllAsync`.
+- `UserSettingsHelper` — хелпер App-уровня: `SaveGridLayoutAsync`/`RestoreGridLayoutAsync` (DevExpress `SaveLayoutToStream`), `SaveBoolAsync`/`GetBoolAsync`, `SaveIntAsync`/`GetIntAsync`.
+- `DirectoryViewModelBase`: свойство `SettingsHelper`; при изменении `ShowArchived` — автосохранение (`pref.ShowArchived.<VMName>`); при первом `LoadAsync` — восстановление сохранённого значения.
+- `ProjectsPageView.xaml.cs`: при загрузке — восстановление активной вкладки (`pref.ProjectsPage.ActiveTab`) и layout 7 гридов; при смене вкладки / сортировке / группировке — автосохранение.
+- `ProjectsPageView.xaml`: именованы 7 `GridControl` (`ForecastGrid`, `FacilityForecastGrid`, `DetailForecastGrid`, `FactPerformanceGrid`, `FactFacilityGrid`, `FactDetailGrid`, `CompareGrid`).
+- `DialogWireup.WireSettingsHelper`: подключает `UserSettingsHelper` ко всем singleton-VM справочников и `ProjectsPageView`.
+- `App.xaml.cs`: регистрированы `IUserSettingsService`, `UserSettingsHelper`; после логина вызывается `UserSettingsHelper.SetUser(userId)`.
+
 ### Fixed (2026-05-07, detail forecast IIC group)
 - `ProjectsPageViewModel`, `LoadForecastDataAsync` / `LoadFactDataAsync`: `classifierMap` теперь загружается через отдельный `await` до запуска параллельных задач — ранее `ctx3` диспозился до завершения `ToListAsync()`, словарь был пуст и поле «Группа ФО IIC» оставалось пустым.
 - `DetailForecastItem.IicGroupName`: формат `«Код Наименование»` через lookup по `classifierMap` вместо навигационного свойства `Classifier`.

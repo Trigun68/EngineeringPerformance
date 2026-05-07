@@ -1048,6 +1048,36 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("UserSettings", (string)null);
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.AccessRight", b =>
                 {
                     b.HasOne("EngineeringPerformance.Infrastructure.Data.Role", "Role")
@@ -1347,6 +1377,17 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserSetting", b =>
+                {
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", b =>

@@ -140,7 +140,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding ForecastData}"
+                                <dxg:GridControl x:Name="ForecastGrid" Grid.Column="0" ItemsSource="{Binding ForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="DisplayName" Header="Наименование" Width="3*" MinWidth="120" />
@@ -197,7 +197,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FacilityForecastData}"
+                                <dxg:GridControl x:Name="FacilityForecastGrid" Grid.Column="0" ItemsSource="{Binding FacilityForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
@@ -256,7 +256,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding DetailForecastData}"
+                                <dxg:GridControl x:Name="DetailForecastGrid" Grid.Column="0" ItemsSource="{Binding DetailForecastData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="90" MinWidth="60" />
@@ -411,7 +411,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactPerformanceData}"
+                                <dxg:GridControl x:Name="FactPerformanceGrid" Grid.Column="0" ItemsSource="{Binding FactPerformanceData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="Name" Header="Наименование" Width="200" />
@@ -469,7 +469,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactFacilityData}"
+                                <dxg:GridControl x:Name="FactFacilityGrid" Grid.Column="0" ItemsSource="{Binding FactFacilityData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
@@ -528,7 +528,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactDetailData}"
+                                <dxg:GridControl x:Name="FactDetailGrid" Grid.Column="0" ItemsSource="{Binding FactDetailData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
                                         <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="90" MinWidth="60" />
@@ -653,7 +653,7 @@
                     </Grid>
 
                     <!-- Таблица сравнения -->
-                    <dxg:GridControl Grid.Row="2" ItemsSource="{Binding CompareRows}"
+                    <dxg:GridControl x:Name="CompareGrid" Grid.Row="2" ItemsSource="{Binding CompareRows}"
                                      AutoGenerateColumns="None">
                         <dxg:GridControl.Columns>
                             <dxg:GridColumn FieldName="Name" Header="Направление" Width="30*" />

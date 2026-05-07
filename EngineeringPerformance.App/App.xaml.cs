@@ -106,6 +106,9 @@ public partial class App : Application
         var currentUserHolder = _host.Services.GetRequiredService<CurrentUserHolder>();
         currentUserHolder.User = _currentUser;
 
+        var settingsHelper = _host.Services.GetRequiredService<UserSettingsHelper>();
+        settingsHelper.SetUser(_currentUser.Id);
+
         await ShowMainWindowAsync();
     }
 
@@ -416,6 +419,9 @@ public partial class App : Application
         services.AddTransient<DataImportDialogViewModel>();
         services.AddTransient<DataImportDialog>();
         services.AddSingleton<IDataImportDialogService, DataImportDialogService>();
+
+        services.AddSingleton<IUserSettingsService, UserSettingsService>();
+        services.AddSingleton<UserSettingsHelper>();
 
         services.AddTransient<IterationDeleteDialogViewModel>();
         services.AddTransient<IterationDeleteDialog>();

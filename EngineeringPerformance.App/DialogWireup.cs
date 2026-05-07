@@ -1,6 +1,8 @@
 using System.Windows;
+using DevExpress.Xpf.Core;
 using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.ViewModels;
+using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +29,7 @@ internal sealed class DialogWireup
 
     public void Apply()
     {
+        WireSettingsHelper();
         WireUsers();
         WireProjects();
         WirePhysicalVolumes();
@@ -49,6 +52,24 @@ internal sealed class DialogWireup
                 try { action(); } catch { /* shutting down */ }
             }
         };
+    }
+
+    private void WireSettingsHelper()
+    {
+        var helper = _services.GetRequiredService<UserSettingsHelper>();
+
+        _services.GetRequiredService<UsersViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<ProjectsViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<PhysicalVolumesViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<PhysicalVolumeTypesViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<IicWorkDirectionsViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<ProjectAnalysisVersionsViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<UnitOfMeasurementsViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<LaborIntensitiesViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<ProjectCharacteristicsViewModel>().SettingsHelper = helper;
+
+        var pageView = _services.GetRequiredService<Views.ProjectsPageView>();
+        pageView.SetSettingsHelper(helper);
     }
 
     private void WireUsers()
