@@ -8,6 +8,9 @@
 - `UserSettingsHelper` — хелпер App-уровня: `SaveGridLayoutAsync`/`RestoreGridLayoutAsync` (DevExpress `SaveLayoutToStream`), `SaveBoolAsync`/`GetBoolAsync`, `SaveIntAsync`/`GetIntAsync`.
 - `DirectoryViewModelBase`: свойство `SettingsHelper`; при изменении `ShowArchived` — автосохранение (`pref.ShowArchived.<VMName>`); при первом `LoadAsync` — восстановление сохранённого значения.
 - `ProjectsPageView.xaml.cs`: при загрузке — восстановление активной вкладки (`pref.ProjectsPage.ActiveTab`) и layout 7 гридов; при смене вкладки / сортировке / группировке — автосохранение.
+
+### Fixed (2026-05-07, column visibility persistence)
+- `ProjectsPageView.xaml.cs`: добавлена подписка на `GridColumn.VisibleProperty` через `DependencyPropertyDescriptor` для каждой колонки каждого грида — скрытие/отображение колонок теперь сохраняется в БД немедленно (ранее `SaveGridLayoutAsync` вызывался только по `EndSorting`/`EndGrouping`, скрытые колонки появлялись снова после перезапуска).
 - `ProjectsPageView.xaml`: именованы 7 `GridControl` (`ForecastGrid`, `FacilityForecastGrid`, `DetailForecastGrid`, `FactPerformanceGrid`, `FactFacilityGrid`, `FactDetailGrid`, `CompareGrid`).
 - `DialogWireup.WireSettingsHelper`: подключает `UserSettingsHelper` ко всем singleton-VM справочников и `ProjectsPageView`.
 - `App.xaml.cs`: регистрированы `IUserSettingsService`, `UserSettingsHelper`; после логина вызывается `UserSettingsHelper.SetUser(userId)`.

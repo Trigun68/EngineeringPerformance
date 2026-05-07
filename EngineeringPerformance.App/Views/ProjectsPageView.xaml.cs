@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Windows;
 using DevExpress.Xpf.Core;
 using DevExpress.Xpf.Grid;
 using EngineeringPerformance.App.Services;
@@ -45,12 +47,15 @@ public partial class ProjectsPageView : UserControl
 
         TabControl.SelectionChanged += OnTabSelectionChanged;
 
+        var dpd = DependencyPropertyDescriptor.FromProperty(GridColumn.VisibleProperty, typeof(GridColumn));
         for (var i = 0; i < grids.Length; i++)
         {
             var grid = grids[i];
             var name = GridNames[i];
             grid.EndSorting += (_, _) => _ = _settingsHelper?.SaveGridLayoutAsync(grid, name);
             grid.EndGrouping += (_, _) => _ = _settingsHelper?.SaveGridLayoutAsync(grid, name);
+            foreach (var col in grid.Columns)
+                dpd.AddValueChanged(col, (_, _) => _ = _settingsHelper?.SaveGridLayoutAsync(grid, name));
         }
     }
 
