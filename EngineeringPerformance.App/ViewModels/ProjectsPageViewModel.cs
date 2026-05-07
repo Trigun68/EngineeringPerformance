@@ -58,6 +58,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _factVersionName = string.Empty;
     [ObservableProperty] private string _factVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
+    [ObservableProperty] private ObservableCollection<FacilityForecastItem> _factFacilityData = [];
+    [ObservableProperty] private ObservableCollection<DetailForecastItem> _factDetailData = [];
 
     // Вкладка Сравнение версий
     [ObservableProperty] private int? _compareVersionAId;
@@ -155,6 +157,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         FactVersionName = string.Empty;
         FactVersionLabel = string.Empty;
         FactPerformanceData = [];
+        FactFacilityData = [];
+        FactDetailData = [];
 
         CompareVersionAId = null;
         CompareVersionAName = string.Empty;
@@ -239,9 +243,18 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                              && pv.PhysicalVolume.ClassifierId != null)
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask);
+            await using var ctx2 = await _contextFactory.CreateDbContextAsync();
+            var pvAllTask = ctx2.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .Include(pv => pv.PhysicalVolume)
+                .Where(pv => pv.ProjectId == projectId
+                             && pv.ProjectAnalysisVersionId == versionId)
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask, pvAllTask);
             var data = perfTask.Result;
             var physicalVolumes = pvTask.Result;
+            var physicalVolumesAll = pvAllTask.Result;
 
             // ── Вкладка «Итого»: иерархия направлений ──────────────────────
             var childrenByParent = data
@@ -425,7 +438,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
 
             // ── Вкладка «Детально»: одна строка БД → одна строка таблицы ──
-            var allPv = physicalVolumes
+            var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
                 .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
@@ -436,9 +449,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 var dirId = pv.PhysicalVolume?.ClassifierId;
                 PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
 
+                var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
                 var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
                 decimal? baseH = null, optH = null, pesH = null;
-                if (norm?.NormProductivity is decimal p && vol != 0)
+                if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
                 {
                     var std = norm.NormStdDev ?? 0m;
                     baseH = Math.Round(vol * p, 2);
@@ -460,7 +474,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     EstimationBasis   = pv.EstimationBasis ?? string.Empty,
                     PvCode            = pv.PhysicalVolume?.Code ?? string.Empty,
                     PvName            = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment      = pv.PhysicalVolume?.IsAssessment == true ? "Да" : "Нет",
+                    IsAssessment      = isAssessment ? "Да" : "Нет",
                     Coefficient       = pv.PhysicalVolume?.Coefficient,
                     IicGroupName      = pv.PhysicalVolume?.Classifier?.Name ?? string.Empty,
                     IicUnitName       = norm?.NormUnitName ?? string.Empty,
@@ -574,7 +588,33 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var data = await Task.Run(() => _performanceService.GetPerformanceDataAsync(projectId, versionId));
+
+            var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            var pvTask = ctx.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .Include(pv => pv.PhysicalVolume)
+                .Where(pv => pv.ProjectId == projectId
+                             && pv.ProjectAnalysisVersionId == versionId
+                             && pv.PhysicalVolume!.IsAssessment == true
+                             && pv.PhysicalVolume.ClassifierId != null)
+                .ToListAsync();
+
+            await using var ctx2 = await _contextFactory.CreateDbContextAsync();
+            var pvAllTask = ctx2.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .Include(pv => pv.PhysicalVolume)
+                .Where(pv => pv.ProjectId == projectId
+                             && pv.ProjectAnalysisVersionId == versionId)
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask, pvAllTask);
+            var data = perfTask.Result;
+            var physicalVolumes = pvTask.Result;
+            var physicalVolumesAll = pvAllTask.Result;
+
+            // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
             var items = new ObservableCollection<PerformanceItem>();
             foreach (var row in data)
             {
@@ -596,6 +636,127 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
             FactPerformanceData = items;
+
+            // ── Вкладка «По объектам» ────────────────────────────────────────
+            var normByDirection = data
+                .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
+                .ToDictionary(r => r.WorkDirectionId);
+
+            var byFacility = physicalVolumes
+                .GroupBy(pv => (
+                    Code: pv.FacilityCode ?? string.Empty,
+                    Name: pv.FacilityName ?? string.Empty))
+                .OrderBy(g => g.Key.Code)
+                .ThenBy(g => g.Key.Name);
+
+            var facilityResult = new List<FacilityForecastItem>();
+            foreach (var facilityGroup in byFacility)
+            {
+                decimal baseH = 0m, optH = 0m, pesH = 0m;
+                foreach (var pv in facilityGroup)
+                {
+                    var dirId = pv.PhysicalVolume!.ClassifierId!.Value;
+                    if (!normByDirection.TryGetValue(dirId, out var norm))
+                        continue;
+
+                    var vol = pv.Quantity * pv.PhysicalVolume.Coefficient;
+                    var p   = norm.NormProductivity!.Value;
+                    var std = norm.NormStdDev ?? 0m;
+
+                    baseH += vol * p;
+                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
+                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                }
+
+                facilityResult.Add(new FacilityForecastItem
+                {
+                    FacilityCode     = facilityGroup.Key.Code,
+                    FacilityName     = facilityGroup.Key.Name,
+                    BaseHours        = baseH > 0 ? Math.Round(baseH, 2) : null,
+                    OptimisticHours  = optH  > 0 ? Math.Round(optH,  2) : null,
+                    PessimisticHours = pesH  > 0 ? Math.Round(pesH,  2) : null,
+                });
+            }
+
+            FactFacilityData = new ObservableCollection<FacilityForecastItem>(facilityResult);
+
+            if (facilityResult.Count > 0)
+            {
+                FactFacilityData.Add(new FacilityForecastItem
+                {
+                    FacilityCode     = string.Empty,
+                    FacilityName     = "ИТОГО",
+                    BaseHours        = facilityResult.Sum(r => r.BaseHours ?? 0m),
+                    OptimisticHours  = facilityResult.Sum(r => r.OptimisticHours ?? 0m),
+                    PessimisticHours = facilityResult.Sum(r => r.PessimisticHours ?? 0m),
+                    IsTotal = true,
+                });
+            }
+
+            // ── Вкладка «Детально» ──────────────────────────────────────────
+            var allPv = physicalVolumesAll
+                .OrderBy(pv => pv.FacilityCode ?? string.Empty)
+                .ThenBy(pv => pv.FacilityName ?? string.Empty)
+                .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+
+            var detailRows = new List<DetailForecastItem>();
+            foreach (var pv in allPv)
+            {
+                var dirId = pv.PhysicalVolume?.ClassifierId;
+                PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
+
+                var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
+                var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+                decimal? baseH = null, optH = null, pesH = null;
+                if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
+                {
+                    var std = norm.NormStdDev ?? 0m;
+                    baseH = Math.Round(vol * p, 2);
+                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
+                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                }
+
+                detailRows.Add(new DetailForecastItem
+                {
+                    FacilityCode     = pv.FacilityCode ?? string.Empty,
+                    FacilityName     = pv.FacilityName ?? string.Empty,
+                    BindingType      = pv.BindingType ?? string.Empty,
+                    DocumentSet      = pv.DocumentSet ?? string.Empty,
+                    CatalogId        = pv.CatalogId ?? string.Empty,
+                    Tag              = pv.Tag ?? string.Empty,
+                    WorkId           = pv.WorkId ?? string.Empty,
+                    WorkName         = pv.WorkName ?? string.Empty,
+                    WorkComment      = pv.WorkComment ?? string.Empty,
+                    EstimationBasis  = pv.EstimationBasis ?? string.Empty,
+                    PvCode           = pv.PhysicalVolume?.Code ?? string.Empty,
+                    PvName           = pv.PhysicalVolume?.Name ?? string.Empty,
+                    IsAssessment     = isAssessment ? "Да" : "Нет",
+                    Coefficient      = pv.PhysicalVolume?.Coefficient,
+                    IicGroupName     = pv.PhysicalVolume?.Classifier?.Name ?? string.Empty,
+                    IicUnitName      = norm?.NormUnitName ?? string.Empty,
+                    NormProductivity = norm?.NormProductivity,
+                    NormStdDev       = norm?.NormStdDev,
+                    Quantity         = pv.Quantity,
+                    BaseHours        = baseH,
+                    OptimisticHours  = optH,
+                    PessimisticHours = pesH,
+                });
+            }
+
+            if (detailRows.Count > 0)
+            {
+                detailRows.Add(new DetailForecastItem
+                {
+                    FacilityCode     = string.Empty,
+                    FacilityName     = "ИТОГО",
+                    BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m),
+                    OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m),
+                    PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m),
+                    IsTotal          = true,
+                });
+            }
+
+            FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
         }
         catch (Exception ex)
         {
@@ -947,6 +1108,119 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .ToList();
             await _forecastExportService.ExportDetailForecastToExcelAsync(
                 rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportFactFacilityToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт факта по объектам в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"ФактПоОбъектам_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = FactFacilityData
+                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportFactFacilityToPdfAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт факта по объектам в PDF",
+            Filter = "PDF (*.pdf)|*.pdf",
+            FileName = $"ФактПоОбъектам_{SelectedProjectCode}_{FactVersionName}.pdf",
+            DefaultExt = "pdf",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = FactFacilityData
+                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportFactDetailToExcelAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Экспорт детального факта в Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"ФактДетально_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+            var rows = FactDetailData
+                .Where(r => !r.IsTotal)
+                .Select(r => new DetailForecastRowDto(
+                    r.FacilityCode, r.FacilityName, r.BindingType, r.DocumentSet,
+                    r.CatalogId, r.Tag, r.WorkId, r.WorkName, r.WorkComment,
+                    r.EstimationBasis, r.PvCode, r.PvName, r.IsAssessment,
+                    r.Coefficient, r.IicGroupName, r.IicUnitName,
+                    r.NormProductivity, r.NormStdDev, r.Quantity,
+                    r.BaseHours, r.OptimisticHours, r.PessimisticHours))
+                .ToList();
+            await _forecastExportService.ExportDetailForecastToExcelAsync(
+                rows, SelectedProjectCode, FactVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }

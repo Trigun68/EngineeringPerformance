@@ -345,73 +345,29 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- Верхняя панель -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal">
-                        <Button Content="📋 Версия (факт)" Command="{Binding SelectFactVersionCommand}"
-                                IsEnabled="{Binding HasProject}"
-                                Background="#2980B9" Foreground="Black" BorderThickness="0"
-                                Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
-                        <Border Visibility="{Binding FactVersionId, Converter={StaticResource NullToCollapsed}}"
-                                Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
-                                CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding FactVersionLabel}" Foreground="#1A5276" FontSize="12" />
-                        </Border>
-                    </StackPanel>
-
-                    <!-- Таблица + кнопки -->
-                    <Grid Grid.Row="2">
+                    <!-- Верхняя панель: версия слева, кнопки импорта справа -->
+                    <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- Таблица производительности (текущая) -->
-                        <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactPerformanceData}"
-                                         AutoGenerateColumns="None">
-                            <dxg:GridControl.Columns>
-                                <dxg:GridColumn FieldName="Name" Header="Наименование" Width="200" />
-                                <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="100" />
-                                <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="90">
-                                    <dxg:GridColumn.EditSettings>
-                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
-                                    </dxg:GridColumn.EditSettings>
-                                </dxg:GridColumn>
-                                <dxg:GridColumn FieldName="FactLaborHours" Header="Факт Трудоёмк." Width="100">
-                                    <dxg:GridColumn.EditSettings>
-                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
-                                    </dxg:GridColumn.EditSettings>
-                                </dxg:GridColumn>
-                                <dxg:GridColumn FieldName="FactProductivity" Header="Факт производит." Width="110">
-                                    <dxg:GridColumn.EditSettings>
-                                        <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                    </dxg:GridColumn.EditSettings>
-                                </dxg:GridColumn>
-                                <dxg:GridColumn FieldName="NormProductivity" Header="Норм производит." Width="110">
-                                    <dxg:GridColumn.EditSettings>
-                                        <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                    </dxg:GridColumn.EditSettings>
-                                </dxg:GridColumn>
-                                <dxg:GridColumn FieldName="ZScore" Header="Z-score" Width="80">
-                                    <dxg:GridColumn.EditSettings>
-                                        <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                    </dxg:GridColumn.EditSettings>
-                                </dxg:GridColumn>
-                                <dxg:GridColumn FieldName="Interpretation" Header="Интерпретация" Width="180" />
-                            </dxg:GridControl.Columns>
-                            <dxg:GridControl.View>
-                                <dxg:TreeListView AllowEditing="False" AllowSorting="False"
-                                                  NavigationStyle="Row"
-                                                  KeyFieldName="Id" ParentFieldName="ParentId"
-                                                  AutoWidth="True" ShowIndicator="False"
-                                                  ShowVerticalLines="False" />
-                            </dxg:GridControl.View>
-                        </dxg:GridControl>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Content="📋 Версия (факт)" Command="{Binding SelectFactVersionCommand}"
+                                    IsEnabled="{Binding HasProject}"
+                                    Background="#2980B9" Foreground="Black" BorderThickness="0"
+                                    Padding="12,7" Margin="0,0,8,0" Cursor="Hand" />
+                            <Border Visibility="{Binding FactVersionId, Converter={StaticResource NullToCollapsed}}"
+                                    Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
+                                    CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding FactVersionLabel}" Foreground="#1A5276" FontSize="12" />
+                            </Border>
+                        </StackPanel>
 
-                        <!-- Кнопки справа -->
-                        <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                             <Button Command="{Binding ImportFactPhysicalVolumesCommand}"
                                     IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Margin="0,0,0,6" Width="160" Height="36" ToolTip="Импорт физических объёмов">
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Импорт физических объёмов">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Импорт ФО" VerticalAlignment="Center" />
@@ -419,7 +375,7 @@
                             </Button>
                             <Button Command="{Binding DeleteFactPhysicalVolumesCommand}"
                                     IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Margin="0,0,0,6" Width="160" Height="36" ToolTip="Удалить физические объёмы">
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Удалить физические объёмы">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Удалить ФО" VerticalAlignment="Center" />
@@ -427,7 +383,7 @@
                             </Button>
                             <Button Command="{Binding ImportLaborIntensitiesCommand}"
                                     IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Margin="0,0,0,6" Width="160" Height="36" ToolTip="Импорт трудоёмкости">
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Импорт трудоёмкости">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Импорт труд." VerticalAlignment="Center" />
@@ -435,18 +391,220 @@
                             </Button>
                             <Button Command="{Binding DeleteLaborIntensitiesCommand}"
                                     IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Margin="0,0,0,16" Width="160" Height="36" ToolTip="Удалить трудоёмкость">
+                                    Height="32" Padding="10,0" ToolTip="Удалить трудоёмкость">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Удалить труд." VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
-                            <Button Content="📊 Анализ версии" Command="{Binding OpenVersionAnalysisCommand}"
-                                    IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
-                                    Background="#3498DB" Foreground="Black" BorderThickness="0"
-                                    Width="160" Height="36" Cursor="Hand" />
                         </StackPanel>
                     </Grid>
+
+                    <!-- Внутренние вкладки -->
+                    <dx:DXTabControl Grid.Row="2">
+
+                        <!-- Вкладка: Итого -->
+                        <dx:DXTabItem Header="Итого">
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactPerformanceData}"
+                                                 AutoGenerateColumns="None">
+                                    <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="Name" Header="Наименование" Width="200" />
+                                        <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="100" />
+                                        <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="90">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="FactLaborHours" Header="Факт Трудоёмк." Width="100">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="FactProductivity" Header="Факт производит." Width="110">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="NormProductivity" Header="Норм производит." Width="110">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="ZScore" Header="Z-score" Width="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="Interpretation" Header="Интерпретация" Width="180" />
+                                    </dxg:GridControl.Columns>
+                                    <dxg:GridControl.View>
+                                        <dxg:TreeListView AllowEditing="False" AllowSorting="False"
+                                                          NavigationStyle="Row"
+                                                          KeyFieldName="Id" ParentFieldName="ParentId"
+                                                          AutoWidth="True" ShowIndicator="False"
+                                                          ShowVerticalLines="False" />
+                                    </dxg:GridControl.View>
+                                </dxg:GridControl>
+
+                                <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
+                                    <Button Content="📊 Анализ версии" Command="{Binding OpenVersionAnalysisCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Background="#3498DB" Foreground="Black" BorderThickness="0"
+                                            Width="160" Height="36" Cursor="Hand" />
+                                </StackPanel>
+                            </Grid>
+                        </dx:DXTabItem>
+
+                        <!-- Вкладка: По объектам -->
+                        <dx:DXTabItem Header="По объектам">
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactFacilityData}"
+                                                 AutoGenerateColumns="None">
+                                    <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="4*" MinWidth="150" />
+                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="2*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="1.5*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="1.5*" MinWidth="80">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                    </dxg:GridControl.Columns>
+                                    <dxg:GridControl.View>
+                                        <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                                       NavigationStyle="Row"
+                                                       ShowIndicator="False"
+                                                       ShowVerticalLines="False"
+                                                       RowStyle="{StaticResource FacilityForecastRowStyle}" />
+                                    </dxg:GridControl.View>
+                                </dxg:GridControl>
+
+                                <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
+                                    <Button Command="{Binding ExportFactFacilityToExcelCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,6" Width="160" Height="36" ToolTip="Экспорт в Excel">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт Excel" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding ExportFactFacilityToPdfCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,0" Width="160" Height="36" ToolTip="Экспорт в PDF">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-pdf-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт PDF" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </dx:DXTabItem>
+
+                        <!-- Вкладка: Детально -->
+                        <dx:DXTabItem Header="Детально">
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <dxg:GridControl Grid.Column="0" ItemsSource="{Binding FactDetailData}"
+                                                 AutoGenerateColumns="None">
+                                    <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="90" MinWidth="60" />
+                                        <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="180" MinWidth="100" />
+                                        <dxg:GridColumn FieldName="BindingType" Header="Тип привязки" Width="90" MinWidth="60" />
+                                        <dxg:GridColumn FieldName="DocumentSet" Header="Комплект документов" Width="120" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="CatalogId" Header="ID по каталогу" Width="100" MinWidth="70" />
+                                        <dxg:GridColumn FieldName="Tag" Header="TAG" Width="80" MinWidth="50" />
+                                        <dxg:GridColumn FieldName="WorkId" Header="ID работы" Width="100" MinWidth="70" />
+                                        <dxg:GridColumn FieldName="WorkName" Header="Наименование работы" Width="180" MinWidth="100" />
+                                        <dxg:GridColumn FieldName="WorkComment" Header="Комментарий" Width="120" MinWidth="70" />
+                                        <dxg:GridColumn FieldName="EstimationBasis" Header="Описательная часть" Width="150" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="PvCode" Header="Код" Width="80" MinWidth="50" />
+                                        <dxg:GridColumn FieldName="PvName" Header="Наименование" Width="180" MinWidth="100" />
+                                        <dxg:GridColumn FieldName="IsAssessment" Header="Оценка" Width="60" MinWidth="50" />
+                                        <dxg:GridColumn FieldName="Coefficient" Header="Коэфф." Width="70" MinWidth="50">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="IicGroupName" Header="Группа ФО IIC" Width="150" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="IicUnitName" Header="Ед. изм." Width="70" MinWidth="50" />
+                                        <dxg:GridColumn FieldName="NormProductivity" Header="Производит." Width="90" MinWidth="60">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="NormStdDev" Header="СО" Width="70" MinWidth="50">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="Quantity" Header="Кол-во" Width="80" MinWidth="60">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="90" MinWidth="70">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="90" MinWidth="70">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="90" MinWidth="70">
+                                            <dxg:GridColumn.EditSettings>
+                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                            </dxg:GridColumn.EditSettings>
+                                        </dxg:GridColumn>
+                                    </dxg:GridControl.Columns>
+                                    <dxg:GridControl.View>
+                                        <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                                       NavigationStyle="Row"
+                                                       ShowIndicator="False"
+                                                       ShowVerticalLines="False"
+                                                       RowStyle="{StaticResource FacilityForecastRowStyle}" />
+                                    </dxg:GridControl.View>
+                                </dxg:GridControl>
+
+                                <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
+                                    <Button Command="{Binding ExportFactDetailToExcelCommand}"
+                                            IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,0" Width="160" Height="36" ToolTip="Экспорт в Excel">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Экспорт Excel" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </dx:DXTabItem>
+
+                    </dx:DXTabControl>
                 </Grid>
             </dx:DXTabItem>
 
