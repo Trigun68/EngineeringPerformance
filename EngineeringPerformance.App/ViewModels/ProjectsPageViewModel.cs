@@ -233,6 +233,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
 
+            await using var ctxCl = await _contextFactory.CreateDbContextAsync();
+            var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
+                .ToDictionaryAsync(c => c.Id);
+
             await using var ctx = await _contextFactory.CreateDbContextAsync();
             var pvTask = ctx.ProjectPhysicalVolumes
                 .AsNoTracking()
@@ -247,7 +251,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var pvAllTask = ctx2.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
-                    .ThenInclude(pv => pv!.Classifier)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
@@ -477,7 +480,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PvName            = pv.PhysicalVolume?.Name ?? string.Empty,
                     IsAssessment      = isAssessment ? "Да" : "Нет",
                     Coefficient       = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName      = pv.PhysicalVolume?.Classifier is { } cl ? $"{cl.Code} {cl.Name}" : string.Empty,
+                    IicGroupName      = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl) ? $"{cl.Code} {cl.Name}" : string.Empty,
                     IicUnitName       = norm?.NormUnitName ?? string.Empty,
                     NormProductivity  = norm?.NormProductivity,
                     NormStdDev        = norm?.NormStdDev,
@@ -592,6 +595,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
 
+            await using var ctxCl = await _contextFactory.CreateDbContextAsync();
+            var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
+                .ToDictionaryAsync(c => c.Id);
+
             await using var ctx = await _contextFactory.CreateDbContextAsync();
             var pvTask = ctx.ProjectPhysicalVolumes
                 .AsNoTracking()
@@ -606,7 +613,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var pvAllTask = ctx2.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
-                    .ThenInclude(pv => pv!.Classifier)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
@@ -734,7 +740,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PvName           = pv.PhysicalVolume?.Name ?? string.Empty,
                     IsAssessment     = isAssessment ? "Да" : "Нет",
                     Coefficient      = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName     = pv.PhysicalVolume?.Classifier is { } cl2 ? $"{cl2.Code} {cl2.Name}" : string.Empty,
+                    IicGroupName     = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
                     IicUnitName      = norm?.NormUnitName ?? string.Empty,
                     NormProductivity = norm?.NormProductivity,
                     NormStdDev       = norm?.NormStdDev,
