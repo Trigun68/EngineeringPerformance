@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, detail forecast IIC group)
+- `ProjectsPageViewModel`, `LoadForecastDataAsync` / `LoadFactDataAsync`: добавлен `ThenInclude(pv => pv.Classifier)` к запросу `pvAllTask` — ранее `Classifier` не загружался и поле «Группа ФО IIC» оставалось пустым.
+- `DetailForecastItem.IicGroupName`: формат изменён на `«Код Наименование»` (было только `Name`).
+
+### Added (2026-05-07, fact analysis sub-tabs)
+- `ProjectsPageViewModel`: добавлены коллекции `FactFacilityData`, `FactDetailData` и команды `ExportFactFacilityToExcelCommand`, `ExportFactFacilityToPdfCommand`, `ExportFactDetailToExcelCommand`.
+- `LoadFactDataAsync`: параллельная загрузка двух наборов ФО (фильтрованный для «По объектам», полный для «Детально») через два отдельных `DbContext`.
+- `ProjectsPageView.xaml`, вкладка «Оценка факта»: реструктурирована — 3 подвкладки (Итого / По объектам / Детально) по аналогии с «Прогнозированием»; кнопки Импорт/Удалить ФО и Трудоёмкость перенесены в верхнюю панель.
+
+### Added (2026-05-07, forecast detail tab — all rows)
+- `LoadForecastDataAsync`: добавлен второй запрос `pvAllTask` (без фильтра по `IsAssessment`) для вкладки «Детально» — отображаются все строки ФО, трудоёмкость считается только для строк с `IsAssessment=true`.
+- Исправлено расхождение итогов между «По объектам» и «Детально»: строки с `IsAssessment=false` отображаются но не включаются в расчёт часов.
+
 ### Changed (2026-05-06, forecast algorithm)
 - `ProjectForecastService`: алгоритм прогноза переведён с лог-нормального пространства на линейный. Базовый = ФО × Performance; Оптимистичный = ФО × (Performance − 0.5 × StdDev); Пессимистичный = ФО × (Performance + 0.5 × StdDev). Убраны `exp(Estimate)` и вспомогательный `SafeExpDecimal`.
 - `ProjectForecastServiceTests`: тест `GenerateForecast_ScenarioHours` обновлён под новый алгоритм (ожидания: base=2.00, opt=1.50, pes=2.50).

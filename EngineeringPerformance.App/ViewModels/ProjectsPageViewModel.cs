@@ -247,6 +247,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var pvAllTask = ctx2.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
+                    .ThenInclude(pv => pv!.Classifier)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
@@ -476,7 +477,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PvName            = pv.PhysicalVolume?.Name ?? string.Empty,
                     IsAssessment      = isAssessment ? "Да" : "Нет",
                     Coefficient       = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName      = pv.PhysicalVolume?.Classifier?.Name ?? string.Empty,
+                    IicGroupName      = pv.PhysicalVolume?.Classifier is { } cl ? $"{cl.Code} {cl.Name}" : string.Empty,
                     IicUnitName       = norm?.NormUnitName ?? string.Empty,
                     NormProductivity  = norm?.NormProductivity,
                     NormStdDev        = norm?.NormStdDev,
@@ -605,6 +606,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var pvAllTask = ctx2.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
+                    .ThenInclude(pv => pv!.Classifier)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
@@ -732,7 +734,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PvName           = pv.PhysicalVolume?.Name ?? string.Empty,
                     IsAssessment     = isAssessment ? "Да" : "Нет",
                     Coefficient      = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName     = pv.PhysicalVolume?.Classifier?.Name ?? string.Empty,
+                    IicGroupName     = pv.PhysicalVolume?.Classifier is { } cl2 ? $"{cl2.Code} {cl2.Name}" : string.Empty,
                     IicUnitName      = norm?.NormUnitName ?? string.Empty,
                     NormProductivity = norm?.NormProductivity,
                     NormStdDev       = norm?.NormStdDev,
