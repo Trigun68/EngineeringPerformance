@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, forecast modal: PV tables, PDF export, excel alignment)
+- `ProjectForecastReportViewModel`: добавлена асинхронная загрузка физических объёмов (`LoadPhysicalVolumesAsync`) после `SetForecastData` — таблицы ФО в карточках направлений теперь заполнены данными.
+- `ForecastDirectionViewModel`: добавлены `Id` и метод `SetPhysicalVolumes` — позволяет заполнить `PhysicalVolumes` после загрузки из БД.
+- `IProjectForecastExportService` / `ProjectForecastExportService`: добавлен метод `ExportForecastSummaryToPdfAsync` — PDF-экспорт из модального окна «Прогноз трудозатрат» теперь работает.
+- `BuildForecastSummaryExcel`: исправлено смещение итоговых строк — часы теперь пишутся в колонки 6,7,8 (совпадают с заголовками «Базовый», «Оптимист.», «Пессимист.»); заголовочный merge скорректирован с 7 до 8 колонок.
+
 ### Fixed (2026-05-07, forecast summary modal and excel align with tab)
 - `ProjectForecastReportViewModel`: переписан — больше не выполняет самостоятельную загрузку данных через `PerformanceService`; принимает уже готовую коллекцию `ForecastData` через `SetForecastData()` из `ProjectsPageViewModel`. Итоговые часы берутся из той же итоговой строки `Level=-1`.
 - `ProjectsPageViewModel.OpenForecastReport`: передаёт `ForecastData` в модальное окно вместо `LoadAsync()` — данные всегда совпадают с вкладкой «Итого».

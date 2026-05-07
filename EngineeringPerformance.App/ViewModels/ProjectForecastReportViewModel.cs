@@ -4,6 +4,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Services;
+using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
@@ -11,6 +13,7 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class ProjectForecastReportViewModel : ObservableObject, ILoadableViewModel
 {
     private readonly IProjectForecastExportService _exportService;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
     public int ProjectId { get; set; }
     public int VersionId { get; set; }
@@ -30,9 +33,12 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     private string _projectCode = string.Empty;
     private string _versionName = string.Empty;
 
-    public ProjectForecastReportViewModel(IProjectForecastExportService exportService)
+    public ProjectForecastReportViewModel(
+        IProjectForecastExportService exportService,
+        IDbContextFactory<AppDbContext> contextFactory)
     {
         _exportService = exportService;
+        _contextFactory = contextFactory;
     }
 
     public void SetForecastData(
@@ -74,6 +80,44 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
 
         ExportToExcelCommand.NotifyCanExecuteChanged();
         ExportToPdfCommand.NotifyCanExecuteChanged();
+
+        _ = LoadPhysicalVolumesAsync();
+    }
+
+    private async Task LoadPhysicalVolumesAsync()
+    {
+        if (ProjectId <= 0 || VersionId <= 0) return;
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var pvList = await ctx.ProjectPhysicalVolumes
+            .AsNoTracking()
+            .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
+            .Where(pv => pv.ProjectId == ProjectId
+                         && pv.ProjectAnalysisVersionId == VersionId
+                         && pv.Quantity > 0
+                         && pv.PhysicalVolume!.IsAssessment == true
+                         && pv.PhysicalVolume.ClassifierId != null)
+            .ToListAsync();
+
+        var pvByDirection = pvList
+            .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+            .ToDictionary(g => g.Key, g => g
+                .Select(pv =>
+                {
+                    var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
+                    return new ProjectVersionPhysicalVolumeDto(
+                        Code: pv.PhysicalVolume?.Code ?? string.Empty,
+                        Name: pv.PhysicalVolume?.Name ?? string.Empty,
+                        UnitName: pv.PhysicalVolume?.Unit?.Name,
+                        Quantity: pv.Quantity,
+                        Coefficient: coeff,
+                        Total: pv.Quantity * coeff);
+                })
+                .OrderBy(p => p.Code)
+                .ToList());
+
+        foreach (var dir in Directions)
+            dir.SetPhysicalVolumes(pvByDirection);
     }
 
     public Task LoadAsync() => Task.CompletedTask;
@@ -96,21 +140,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            var rows = Directions
-                .Select(d => new ForecastSummaryRowDto(
-                    d.Code, d.Name, d.DisplayName, d.UnitName ?? string.Empty,
-                    d.FactPhysicalVolume, d.NormProductivity,
-                    d.BaseHours, d.OptimisticHours, d.PessimisticHours,
-                    d.IsTotal, d.Level))
-                .ToList();
-            if (TotalBaseHours > 0 || TotalOptimisticHours > 0 || TotalPessimisticHours > 0)
-            {
-                rows.Add(new ForecastSummaryRowDto(
-                    string.Empty, "ИТОГО", "ИТОГО", string.Empty,
-                    null, null,
-                    TotalBaseHours, TotalOptimisticHours, TotalPessimisticHours,
-                    true, -1));
-            }
+            var rows = BuildExportRows();
             await _exportService.ExportForecastSummaryToExcelAsync(rows, _projectCode, _versionName, dlg.FileName);
         }
         catch (Exception ex)
@@ -140,14 +170,39 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         IsExporting = true;
         try
         {
-            MessageBox.Show("PDF экспорт из модального окна не поддерживается. Используйте вкладку Отчёты.", "Информация",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            var rows = BuildExportRows();
+            await _exportService.ExportForecastSummaryToPdfAsync(rows, _projectCode, _versionName, dlg.FileName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
             IsExporting = false;
             ExportToPdfCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private List<ForecastSummaryRowDto> BuildExportRows()
+    {
+        var rows = Directions
+            .Select(d => new ForecastSummaryRowDto(
+                d.Code, d.Name, d.DisplayName, d.UnitName ?? string.Empty,
+                d.FactPhysicalVolume, d.NormProductivity,
+                d.BaseHours, d.OptimisticHours, d.PessimisticHours,
+                d.IsTotal, d.Level))
+            .ToList();
+        if (TotalBaseHours > 0 || TotalOptimisticHours > 0 || TotalPessimisticHours > 0)
+        {
+            rows.Add(new ForecastSummaryRowDto(
+                string.Empty, "ИТОГО", "ИТОГО", string.Empty,
+                null, null,
+                TotalBaseHours, TotalOptimisticHours, TotalPessimisticHours,
+                true, -1));
+        }
+        return rows;
     }
 
     private bool CanExport() => !string.IsNullOrEmpty(_versionName) && !IsExporting;
@@ -162,6 +217,7 @@ public sealed class ForecastDirectionViewModel
 {
     public ForecastDirectionViewModel(ForecastPerformanceItem item)
     {
+        Id = item.Id;
         Code = item.Code;
         Name = item.Name;
         DisplayName = item.DisplayName;
@@ -177,6 +233,13 @@ public sealed class ForecastDirectionViewModel
         PhysicalVolumes = [];
     }
 
+    public void SetPhysicalVolumes(IReadOnlyDictionary<int, List<ProjectVersionPhysicalVolumeDto>> pvByDirection)
+    {
+        if (pvByDirection.TryGetValue(Id, out var list))
+            PhysicalVolumes = list;
+    }
+
+    public int Id { get; }
     public string Code { get; }
     public string Name { get; }
     public string DisplayName { get; }
@@ -188,6 +251,6 @@ public sealed class ForecastDirectionViewModel
     public decimal PessimisticHours { get; }
     public bool IsTotal { get; }
     public int Level { get; }
-    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; }
+    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; private set; }
     public double IndentMargin { get; }
 }

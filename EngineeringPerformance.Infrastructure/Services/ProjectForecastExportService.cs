@@ -18,6 +18,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportForecastSummaryToExcelAsync(IReadOnlyList<ForecastSummaryRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildForecastSummaryExcel(rows, projectCode, versionName, filePath));
 
+    public Task ExportForecastSummaryToPdfAsync(IReadOnlyList<ForecastSummaryRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildForecastSummaryPdf(rows, projectCode, versionName, filePath));
+
     public Task ExportFacilityForecastToExcelAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildFacilityExcel(rows, projectCode, versionName, filePath));
 
@@ -37,7 +40,7 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         ws.Cell(1, 1).Value = $"Прогноз трудозатрат (Итого): {projectCode} ({versionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
-        ws.Range(1, 1, 1, 7).Merge();
+        ws.Range(1, 1, 1, 8).Merge();
 
         var headers = new[] { "Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Базовый, ч", "Оптимист., ч", "Пессимист., ч" };
         WriteHeaderRow(ws, 2, headers);
@@ -49,9 +52,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             {
                 ws.Cell(dataRow, 1).Value = "ИТОГО";
                 ws.Cell(dataRow, 2).Value = "По проекту";
-                SetDecimal(ws.Cell(dataRow, 5), r.BaseHours, "N2");
-                SetDecimal(ws.Cell(dataRow, 6), r.OptimisticHours, "N2");
-                SetDecimal(ws.Cell(dataRow, 7), r.PessimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 6), r.BaseHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 7), r.OptimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 8), r.PessimisticHours, "N2");
                 ws.Row(dataRow).Style.Font.Bold = true;
                 ws.Row(dataRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
                 ws.Row(dataRow).Style.Font.FontColor = XLColor.White;
@@ -60,9 +63,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             {
                 ws.Cell(dataRow, 1).Value = string.Empty;
                 ws.Cell(dataRow, 2).Value = r.DisplayName;
-                SetDecimal(ws.Cell(dataRow, 5), r.BaseHours, "N2");
-                SetDecimal(ws.Cell(dataRow, 6), r.OptimisticHours, "N2");
-                SetDecimal(ws.Cell(dataRow, 7), r.PessimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 6), r.BaseHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 7), r.OptimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 8), r.PessimisticHours, "N2");
                 ws.Row(dataRow).Style.Font.Bold = true;
                 ws.Row(dataRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
             }
@@ -95,6 +98,96 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         ws.SheetView.FreezeRows(2);
 
         wb.SaveAs(filePath);
+    }
+
+    // ─── PDF Итого (ForecastSummary) ────────────────────────────────────────
+
+    private static void BuildForecastSummaryPdf(IReadOnlyList<ForecastSummaryRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        if (GlobalFontSettings.FontResolver is null)
+            GlobalFontSettings.FontResolver = new ForecastWindowsFontResolver();
+
+        var doc = new PdfDocument();
+        doc.Info.Title = $"Прогноз трудозатрат (Итого): {projectCode}";
+
+        var page = doc.AddPage();
+        page.Orientation = PdfSharp.PageOrientation.Landscape;
+        var gfx = XGraphics.FromPdfPage(page);
+
+        var fontTitle  = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fontHeader = new XFont("Arial",  8, XFontStyleEx.Bold);
+        var fontBody   = new XFont("Arial",  7, XFontStyleEx.Regular);
+        var fontBold   = new XFont("Arial",  7, XFontStyleEx.Bold);
+        var fontTotal  = new XFont("Arial",  8, XFontStyleEx.Bold);
+
+        var margin = 30.0;
+        var pageW  = page.Width.Point;
+        var y = margin;
+
+        gfx.DrawString($"Прогноз трудозатрат (Итого): {projectCode} ({versionName})",
+            fontTitle, XBrushes.Black, new XRect(margin, y, pageW - margin * 2, 20), XStringFormats.TopLeft);
+        y += 24;
+        gfx.DrawString($"Дата формирования: {DateTime.Now:dd.MM.yyyy HH:mm}",
+            fontBody, XBrushes.Gray, new XRect(margin, y, pageW - margin * 2, 14), XStringFormats.TopLeft);
+        y += 20;
+
+        double[] colW = [50, 260, 45, 65, 70, 80, 80, 80];
+        string[] colH = ["Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Базовый, ч", "Оптимист., ч", "Пессимист., ч"];
+
+        var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
+        DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
+        y += 14;
+
+        var bgLight   = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+        var bgSubtot  = new XSolidBrush(XColor.FromArgb(0xFF, 0xEE, 0xF4, 0xFF));
+        var bgTotal   = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
+        var rowIdx = 0;
+
+        foreach (var r in rows)
+        {
+            if (y + 12 > page.Height.Point - margin) break;
+
+            if (r.IsTotal && r.Level == -1)
+            {
+                string[] vals = ["ИТОГО", "По проекту", "", "",
+                    r.BaseHours.HasValue        ? r.BaseHours.Value.ToString("N1")        : "—",
+                    r.OptimisticHours.HasValue  ? r.OptimisticHours.Value.ToString("N1")  : "—",
+                    r.PessimisticHours.HasValue ? r.PessimisticHours.Value.ToString("N1") : "—",
+                    string.Empty];
+                DrawPdfRow(gfx, margin, y, colW, vals, fontTotal, XBrushes.White, bgTotal, 14);
+                y += 14;
+            }
+            else if (r.IsTotal)
+            {
+                string[] vals = [string.Empty, TruncatePdf(r.DisplayName, 42), "", "", "",
+                    r.BaseHours.HasValue        ? r.BaseHours.Value.ToString("N1")        : "—",
+                    r.OptimisticHours.HasValue  ? r.OptimisticHours.Value.ToString("N1")  : "—",
+                    r.PessimisticHours.HasValue ? r.PessimisticHours.Value.ToString("N1") : "—"];
+                DrawPdfRow(gfx, margin, y, colW, vals, fontBold, XBrushes.Black, bgSubtot, 12);
+                y += 12;
+            }
+            else
+            {
+                var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
+                var font = r.Level == 0 ? fontBold : fontBody;
+                string[] vals =
+                [
+                    r.Code,
+                    TruncatePdf(r.DisplayName, 40),
+                    r.NormUnitName,
+                    r.FactPhysicalVolume.HasValue   ? r.FactPhysicalVolume.Value.ToString("N2")   : "—",
+                    r.NormProductivity.HasValue     ? r.NormProductivity.Value.ToString("N4")     : "—",
+                    r.BaseHours.HasValue            ? r.BaseHours.Value.ToString("N1")            : "—",
+                    r.OptimisticHours.HasValue      ? r.OptimisticHours.Value.ToString("N1")      : "—",
+                    r.PessimisticHours.HasValue     ? r.PessimisticHours.Value.ToString("N1")     : "—",
+                ];
+                DrawPdfRow(gfx, margin, y, colW, vals, font, XBrushes.Black, bg, 12);
+                y += 12;
+                rowIdx++;
+            }
+        }
+
+        doc.Save(filePath);
     }
 
     // ─── Excel по объектам ───────────────────────────────────────────────────
