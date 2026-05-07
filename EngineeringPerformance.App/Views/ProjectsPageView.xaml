@@ -318,9 +318,9 @@
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.TotalSummary>
                                         <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
-                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
-                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
-                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
+                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"
@@ -602,9 +602,9 @@
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.TotalSummary>
                                         <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
-                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
-                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
-                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="{}{0:N2}" />
+                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"
