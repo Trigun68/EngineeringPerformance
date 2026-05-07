@@ -385,7 +385,7 @@ public partial class App : Application
         services.AddTransient<ProjectDashboardView>();
 
         services.AddSingleton<ProjectsPageViewModel>();
-        services.AddTransient<ProjectsPageView>();
+        services.AddSingleton<ProjectsPageView>();
 
         services.AddSingleton<AssessmentFormViewModel>();
         services.AddSingleton<PlanningFormViewModel>();
