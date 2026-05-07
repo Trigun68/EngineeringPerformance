@@ -43,7 +43,16 @@ public partial class ProjectsPageView : UserControl
 
         var grids = GetAllGrids();
         for (var i = 0; i < grids.Length; i++)
-            await _settingsHelper.RestoreGridLayoutAsync(grids[i], GridNames[i]);
+        {
+            var grid = grids[i];
+            var savedSummary = grid.TotalSummary.OfType<GridSummaryItem>().ToList();
+            await _settingsHelper.RestoreGridLayoutAsync(grid, GridNames[i]);
+            if (grid.TotalSummary.Count == 0 && savedSummary.Count > 0)
+            {
+                foreach (var item in savedSummary)
+                    grid.TotalSummary.Add(item);
+            }
+        }
 
         TabControl.SelectionChanged += OnTabSelectionChanged;
 
