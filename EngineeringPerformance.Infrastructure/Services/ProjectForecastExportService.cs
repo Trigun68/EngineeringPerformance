@@ -15,6 +15,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportToPdfAsync(ProjectVersionAnalysisDto report, string filePath)
         => Task.Run(() => BuildPdf(report, filePath));
 
+    public Task ExportForecastSummaryToExcelAsync(IReadOnlyList<ForecastSummaryRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildForecastSummaryExcel(rows, projectCode, versionName, filePath));
+
     public Task ExportFacilityForecastToExcelAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildFacilityExcel(rows, projectCode, versionName, filePath));
 
@@ -23,6 +26,76 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
 
     public Task ExportDetailForecastToExcelAsync(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildDetailExcel(rows, projectCode, versionName, filePath));
+
+    // ─── Excel Итого (ForecastSummary) ──────────────────────────────────────
+
+    private static void BuildForecastSummaryExcel(IReadOnlyList<ForecastSummaryRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Итого");
+
+        ws.Cell(1, 1).Value = $"Прогноз трудозатрат (Итого): {projectCode} ({versionName})";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Range(1, 1, 1, 7).Merge();
+
+        var headers = new[] { "Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Базовый, ч", "Оптимист., ч", "Пессимист., ч" };
+        WriteHeaderRow(ws, 2, headers);
+
+        var dataRow = 3;
+        foreach (var r in rows)
+        {
+            if (r.IsTotal && r.Level == -1)
+            {
+                ws.Cell(dataRow, 1).Value = "ИТОГО";
+                ws.Cell(dataRow, 2).Value = "По проекту";
+                SetDecimal(ws.Cell(dataRow, 5), r.BaseHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 6), r.OptimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 7), r.PessimisticHours, "N2");
+                ws.Row(dataRow).Style.Font.Bold = true;
+                ws.Row(dataRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+                ws.Row(dataRow).Style.Font.FontColor = XLColor.White;
+            }
+            else if (r.IsTotal)
+            {
+                ws.Cell(dataRow, 1).Value = string.Empty;
+                ws.Cell(dataRow, 2).Value = r.DisplayName;
+                SetDecimal(ws.Cell(dataRow, 5), r.BaseHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 6), r.OptimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 7), r.PessimisticHours, "N2");
+                ws.Row(dataRow).Style.Font.Bold = true;
+                ws.Row(dataRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
+            }
+            else
+            {
+                ws.Cell(dataRow, 1).Value = r.Code;
+                ws.Cell(dataRow, 2).Value = r.DisplayName;
+                ws.Cell(dataRow, 3).Value = r.NormUnitName;
+                SetDecimal(ws.Cell(dataRow, 4), r.FactPhysicalVolume, "N2");
+                SetDecimal(ws.Cell(dataRow, 5), r.NormProductivity, "N4");
+                SetDecimal(ws.Cell(dataRow, 6), r.BaseHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 7), r.OptimisticHours, "N2");
+                SetDecimal(ws.Cell(dataRow, 8), r.PessimisticHours, "N2");
+                if (r.Level == 0)
+                    ws.Row(dataRow).Style.Font.Bold = true;
+                else if (dataRow % 2 == 0)
+                    ws.Row(dataRow).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+            }
+            dataRow++;
+        }
+
+        var tableRange = ws.Range(2, 1, dataRow - 1, headers.Length);
+        tableRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tableRange.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+
+        ws.Column(1).Width = 14;
+        ws.Column(2).Width = 45;
+        ws.Column(3).Width = 10;
+        for (var c = 4; c <= headers.Length; c++) ws.Column(c).AdjustToContents();
+        ws.SheetView.FreezeRows(2);
+
+        wb.SaveAs(filePath);
+    }
 
     // ─── Excel по объектам ───────────────────────────────────────────────────
 

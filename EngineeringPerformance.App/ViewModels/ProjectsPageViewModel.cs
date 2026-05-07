@@ -294,6 +294,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
+                    Code = row.WorkDirectionCode,
                     Name = row.WorkDirectionName,
                     DisplayName = indent + row.WorkDirectionName,
                     NormUnitName = row.NormUnitName ?? string.Empty,
@@ -538,10 +539,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var vm = _serviceProvider.GetRequiredService<ProjectForecastReportViewModel>();
         vm.ProjectId = pid;
         vm.VersionId = vid;
+        vm.ProjectNameWithVersion = string.IsNullOrWhiteSpace(PlanVersionName)
+            ? SelectedProjectName
+            : $"{SelectedProjectName} ({PlanVersionName})";
+        vm.SetForecastData(ForecastData, SelectedProjectCode, PlanVersionName);
         vm.OwnerWindow = window;
         window.DataContext = vm;
         window.Owner = owner;
-        _ = vm.LoadAsync();
         window.ShowDialog();
     }
 
@@ -974,9 +978,14 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var analysisSvc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
-            var report = await analysisSvc.GenerateReportAsync(pid, vid);
-            await _forecastExportService.ExportToExcelAsync(report, dlg.FileName);
+            var rows = ForecastData
+                .Select(r => new ForecastSummaryRowDto(
+                    r.Code, r.Name, r.DisplayName, r.NormUnitName,
+                    r.FactPhysicalVolume, r.NormProductivity,
+                    r.BaseHours, r.OptimisticHours, r.PessimisticHours,
+                    r.IsTotal, r.Level))
+                .ToList();
+            await _forecastExportService.ExportForecastSummaryToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1224,6 +1233,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 public sealed class ForecastPerformanceItem
 {
     public int Id { get; set; }
+    public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
     public string NormUnitName { get; set; } = string.Empty;

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, forecast summary modal and excel align with tab)
+- `ProjectForecastReportViewModel`: переписан — больше не выполняет самостоятельную загрузку данных через `PerformanceService`; принимает уже готовую коллекцию `ForecastData` через `SetForecastData()` из `ProjectsPageViewModel`. Итоговые часы берутся из той же итоговой строки `Level=-1`.
+- `ProjectsPageViewModel.OpenForecastReport`: передаёт `ForecastData` в модальное окно вместо `LoadAsync()` — данные всегда совпадают с вкладкой «Итого».
+- `ForecastPerformanceItem`: добавлено поле `Code` (шифр направления); заполняется в `BuildSubtree` из `WorkDirectionCode`.
+- `ForecastSummaryRowDto` (новый DTO): передаёт строки вкладки «Итого» в сервис экспорта.
+- `IProjectForecastExportService` / `ProjectForecastExportService`: добавлен метод `ExportForecastSummaryToExcelAsync` — строит Excel из `ForecastSummaryRowDto`, отражая ту же иерархию и итоги что на вкладке «Итого».
+- `ExportForecastToExcelAsync`: переключён на `ExportForecastSummaryToExcelAsync(ForecastData)` вместо `GenerateReportAsync` — Excel теперь совпадает с вкладкой.
+
 ### Fixed (2026-05-07, facility forecast total row)
 - `ProjectsPageViewModel`: убрана ручная итоговая строка (`IsTotal=true`) из `FacilityForecastData` и `FactFacilityData` — она попадала в Excel и удваивала итог (Excel сам считал сумму по всем строкам включая итоговую).
 - `ProjectsPageView.xaml`, `FacilityForecastGrid` и `FactFacilityGrid`: итог реализован через `GridControl.TotalSummary` (Sum по трём колонкам часов + Count по объектам) и `TableView.ShowTotalSummary="True"` — нативный механизм DevExpress, не искажает данные при сортировке/группировке.
