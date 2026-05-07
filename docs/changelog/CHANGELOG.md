@@ -3,8 +3,8 @@
 ## [Unreleased]
 
 ### Fixed (2026-05-07, detail forecast IIC group)
-- `ProjectsPageViewModel`, `LoadForecastDataAsync` / `LoadFactDataAsync`: добавлен `ThenInclude(pv => pv.Classifier)` к запросу `pvAllTask` — ранее `Classifier` не загружался и поле «Группа ФО IIC» оставалось пустым.
-- `DetailForecastItem.IicGroupName`: формат изменён на `«Код Наименование»` (было только `Name`).
+- `ProjectsPageViewModel`, `LoadForecastDataAsync` / `LoadFactDataAsync`: `classifierMap` теперь загружается через отдельный `await` до запуска параллельных задач — ранее `ctx3` диспозился до завершения `ToListAsync()`, словарь был пуст и поле «Группа ФО IIC» оставалось пустым.
+- `DetailForecastItem.IicGroupName`: формат `«Код Наименование»` через lookup по `classifierMap` вместо навигационного свойства `Classifier`.
 
 ### Added (2026-05-07, fact analysis sub-tabs)
 - `ProjectsPageViewModel`: добавлены коллекции `FactFacilityData`, `FactDetailData` и команды `ExportFactFacilityToExcelCommand`, `ExportFactFacilityToPdfCommand`, `ExportFactDetailToExcelCommand`.
