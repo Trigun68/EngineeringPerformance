@@ -48,76 +48,77 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     {
         _projectCode = projectCode;
         _versionName = versionName;
+        _pendingItems = items.ToList();
+
+        ExportToExcelCommand.NotifyCanExecuteChanged();
+        ExportToPdfCommand.NotifyCanExecuteChanged();
+
+        _ = LoadAndBuildAsync();
+    }
+
+    private List<ForecastPerformanceItem> _pendingItems = [];
+
+    private async Task LoadAndBuildAsync()
+    {
+        IReadOnlyDictionary<int, List<ProjectVersionPhysicalVolumeDto>> pvByDirection =
+            new Dictionary<int, List<ProjectVersionPhysicalVolumeDto>>();
+
+        if (ProjectId > 0 && VersionId > 0)
+        {
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            var pvList = await ctx.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
+                .Where(pv => pv.ProjectId == ProjectId
+                             && pv.ProjectAnalysisVersionId == VersionId
+                             && pv.Quantity > 0
+                             && pv.PhysicalVolume!.IsAssessment == true
+                             && pv.PhysicalVolume.ClassifierId != null)
+                .ToListAsync();
+
+            pvByDirection = pvList
+                .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+                .ToDictionary(g => g.Key, g => g
+                    .Select(pv =>
+                    {
+                        var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
+                        return new ProjectVersionPhysicalVolumeDto(
+                            Code: pv.PhysicalVolume?.Code ?? string.Empty,
+                            Name: pv.PhysicalVolume?.Name ?? string.Empty,
+                            UnitName: pv.PhysicalVolume?.Unit?.Name,
+                            Quantity: pv.Quantity,
+                            Coefficient: coeff,
+                            Total: pv.Quantity * coeff);
+                    })
+                    .OrderBy(p => p.Code)
+                    .ToList());
+        }
 
         var directions = new ObservableCollection<ForecastDirectionViewModel>();
         ForecastPerformanceItem? totalRow = null;
 
-        foreach (var item in items)
+        foreach (var item in _pendingItems)
         {
-            if (item.IsTotal && item.Level == -1)
-            {
-                totalRow = item;
-                continue;
-            }
-            directions.Add(new ForecastDirectionViewModel(item));
+            if (item.IsTotal && item.Level == -1) { totalRow = item; continue; }
+            pvByDirection.TryGetValue(item.Id, out var pvs);
+            directions.Add(new ForecastDirectionViewModel(item, pvs ?? []));
         }
 
         Directions = directions;
 
         if (totalRow is not null)
         {
-            TotalBaseHours = totalRow.BaseHours ?? 0m;
+            TotalBaseHours       = totalRow.BaseHours       ?? 0m;
             TotalOptimisticHours = totalRow.OptimisticHours ?? 0m;
-            TotalPessimisticHours = totalRow.PessimisticHours ?? 0m;
+            TotalPessimisticHours= totalRow.PessimisticHours?? 0m;
         }
         else
         {
             var roots = directions.Where(d => d.Level == 0 && !d.IsTotal).ToList();
-            TotalBaseHours = roots.Sum(d => d.BaseHours);
+            TotalBaseHours       = roots.Sum(d => d.BaseHours);
             TotalOptimisticHours = roots.Sum(d => d.OptimisticHours);
-            TotalPessimisticHours = roots.Sum(d => d.PessimisticHours);
+            TotalPessimisticHours= roots.Sum(d => d.PessimisticHours);
         }
-
-        ExportToExcelCommand.NotifyCanExecuteChanged();
-        ExportToPdfCommand.NotifyCanExecuteChanged();
-
-        _ = LoadPhysicalVolumesAsync();
-    }
-
-    private async Task LoadPhysicalVolumesAsync()
-    {
-        if (ProjectId <= 0 || VersionId <= 0) return;
-
-        await using var ctx = await _contextFactory.CreateDbContextAsync();
-        var pvList = await ctx.ProjectPhysicalVolumes
-            .AsNoTracking()
-            .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
-            .Where(pv => pv.ProjectId == ProjectId
-                         && pv.ProjectAnalysisVersionId == VersionId
-                         && pv.Quantity > 0
-                         && pv.PhysicalVolume!.IsAssessment == true
-                         && pv.PhysicalVolume.ClassifierId != null)
-            .ToListAsync();
-
-        var pvByDirection = pvList
-            .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
-            .ToDictionary(g => g.Key, g => g
-                .Select(pv =>
-                {
-                    var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
-                    return new ProjectVersionPhysicalVolumeDto(
-                        Code: pv.PhysicalVolume?.Code ?? string.Empty,
-                        Name: pv.PhysicalVolume?.Name ?? string.Empty,
-                        UnitName: pv.PhysicalVolume?.Unit?.Name,
-                        Quantity: pv.Quantity,
-                        Coefficient: coeff,
-                        Total: pv.Quantity * coeff);
-                })
-                .OrderBy(p => p.Code)
-                .ToList());
-
-        foreach (var dir in Directions)
-            dir.SetPhysicalVolumes(pvByDirection);
     }
 
     public Task LoadAsync() => Task.CompletedTask;
@@ -215,7 +216,7 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
 
 public sealed class ForecastDirectionViewModel
 {
-    public ForecastDirectionViewModel(ForecastPerformanceItem item)
+    public ForecastDirectionViewModel(ForecastPerformanceItem item, IReadOnlyList<ProjectVersionPhysicalVolumeDto> physicalVolumes)
     {
         Id = item.Id;
         Code = item.Code;
@@ -230,13 +231,7 @@ public sealed class ForecastDirectionViewModel
         IsTotal = item.IsTotal;
         Level = item.Level;
         IndentMargin = Math.Max(0, item.Level) * 24d;
-        PhysicalVolumes = [];
-    }
-
-    public void SetPhysicalVolumes(IReadOnlyDictionary<int, List<ProjectVersionPhysicalVolumeDto>> pvByDirection)
-    {
-        if (pvByDirection.TryGetValue(Id, out var list))
-            PhysicalVolumes = list;
+        PhysicalVolumes = physicalVolumes;
     }
 
     public int Id { get; }
@@ -251,6 +246,6 @@ public sealed class ForecastDirectionViewModel
     public decimal PessimisticHours { get; }
     public bool IsTotal { get; }
     public int Level { get; }
-    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; private set; }
+    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; }
     public double IndentMargin { get; }
 }

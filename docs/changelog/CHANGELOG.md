@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, forecast modal: PV tables INotifyPropertyChanged + PDF pagination)
+- `ForecastDirectionViewModel`: убран `SetPhysicalVolumes` — `PhysicalVolumes` теперь передаётся напрямую в конструктор, что исключает проблему `INotifyPropertyChanged` (WPF не видел изменение `private set` свойства после асинхронной загрузки).
+- `ProjectForecastReportViewModel`: `SetForecastData` теперь сначала загружает ФО из БД (`LoadAndBuildAsync`), затем создаёт `ForecastDirectionViewModel` с уже готовыми данными — таблицы ФО в карточках отображаются корректно.
+- `BuildForecastSummaryPdf`: исправлен `break` при переполнении страницы — теперь добавляется новая страница с повтором заголовка колонок (`EnsureSpace`); `gfx.Dispose()` вызывается явно перед `doc.Save`.
+
 ### Fixed (2026-05-07, forecast modal: PV tables, PDF export, excel alignment)
 - `ProjectForecastReportViewModel`: добавлена асинхронная загрузка физических объёмов (`LoadPhysicalVolumesAsync`) после `SetForecastData` — таблицы ФО в карточках направлений теперь заполнены данными.
 - `ForecastDirectionViewModel`: добавлены `Id` и метод `SetPhysicalVolumes` — позволяет заполнить `PhysicalVolumes` после загрузки из БД.

@@ -110,10 +110,6 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         var doc = new PdfDocument();
         doc.Info.Title = $"Прогноз трудозатрат (Итого): {projectCode}";
 
-        var page = doc.AddPage();
-        page.Orientation = PdfSharp.PageOrientation.Landscape;
-        var gfx = XGraphics.FromPdfPage(page);
-
         var fontTitle  = new XFont("Arial", 13, XFontStyleEx.Bold);
         var fontHeader = new XFont("Arial",  8, XFontStyleEx.Bold);
         var fontBody   = new XFont("Arial",  7, XFontStyleEx.Regular);
@@ -121,7 +117,25 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         var fontTotal  = new XFont("Arial",  8, XFontStyleEx.Bold);
 
         var margin = 30.0;
-        var pageW  = page.Width.Point;
+        double[] colW = [50, 260, 45, 65, 70, 80, 80, 80];
+        string[] colH = ["Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Базовый, ч", "Оптимист., ч", "Пессимист., ч"];
+
+        var hdrBg    = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
+        var bgLight  = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+        var bgSubtot = new XSolidBrush(XColor.FromArgb(0xFF, 0xEE, 0xF4, 0xFF));
+        var bgTotalB = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
+
+        PdfPage AddPage()
+        {
+            var p = doc.AddPage();
+            p.Orientation = PdfSharp.PageOrientation.Landscape;
+            return p;
+        }
+
+        var page = AddPage();
+        var gfx  = XGraphics.FromPdfPage(page);
+        var pageW = page.Width.Point;
+        var pageH = page.Height.Point;
         var y = margin;
 
         gfx.DrawString($"Прогноз трудозатрат (Итого): {projectCode} ({versionName})",
@@ -131,34 +145,38 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             fontBody, XBrushes.Gray, new XRect(margin, y, pageW - margin * 2, 14), XStringFormats.TopLeft);
         y += 20;
 
-        double[] colW = [50, 260, 45, 65, 70, 80, 80, 80];
-        string[] colH = ["Шифр", "Направление ИИС", "Ед. изм.", "Факт ФО", "Норм. произв.", "Базовый, ч", "Оптимист., ч", "Пессимист., ч"];
-
-        var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
         DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
         y += 14;
 
-        var bgLight   = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
-        var bgSubtot  = new XSolidBrush(XColor.FromArgb(0xFF, 0xEE, 0xF4, 0xFF));
-        var bgTotal   = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
         var rowIdx = 0;
+
+        void EnsureSpace(double rowH)
+        {
+            if (y + rowH <= pageH - margin) return;
+            gfx.Dispose();
+            page = AddPage();
+            gfx  = XGraphics.FromPdfPage(page);
+            y    = margin;
+            DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
+            y += 14;
+        }
 
         foreach (var r in rows)
         {
-            if (y + 12 > page.Height.Point - margin) break;
-
             if (r.IsTotal && r.Level == -1)
             {
+                EnsureSpace(14);
                 string[] vals = ["ИТОГО", "По проекту", "", "",
                     r.BaseHours.HasValue        ? r.BaseHours.Value.ToString("N1")        : "—",
                     r.OptimisticHours.HasValue  ? r.OptimisticHours.Value.ToString("N1")  : "—",
                     r.PessimisticHours.HasValue ? r.PessimisticHours.Value.ToString("N1") : "—",
                     string.Empty];
-                DrawPdfRow(gfx, margin, y, colW, vals, fontTotal, XBrushes.White, bgTotal, 14);
+                DrawPdfRow(gfx, margin, y, colW, vals, fontTotal, XBrushes.White, bgTotalB, 14);
                 y += 14;
             }
             else if (r.IsTotal)
             {
+                EnsureSpace(12);
                 string[] vals = [string.Empty, TruncatePdf(r.DisplayName, 42), "", "", "",
                     r.BaseHours.HasValue        ? r.BaseHours.Value.ToString("N1")        : "—",
                     r.OptimisticHours.HasValue  ? r.OptimisticHours.Value.ToString("N1")  : "—",
@@ -168,18 +186,19 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             }
             else
             {
-                var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
+                EnsureSpace(12);
+                var bg   = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
                 var font = r.Level == 0 ? fontBold : fontBody;
                 string[] vals =
                 [
                     r.Code,
                     TruncatePdf(r.DisplayName, 40),
                     r.NormUnitName,
-                    r.FactPhysicalVolume.HasValue   ? r.FactPhysicalVolume.Value.ToString("N2")   : "—",
-                    r.NormProductivity.HasValue     ? r.NormProductivity.Value.ToString("N4")     : "—",
-                    r.BaseHours.HasValue            ? r.BaseHours.Value.ToString("N1")            : "—",
-                    r.OptimisticHours.HasValue      ? r.OptimisticHours.Value.ToString("N1")      : "—",
-                    r.PessimisticHours.HasValue     ? r.PessimisticHours.Value.ToString("N1")     : "—",
+                    r.FactPhysicalVolume.HasValue  ? r.FactPhysicalVolume.Value.ToString("N2")  : "—",
+                    r.NormProductivity.HasValue    ? r.NormProductivity.Value.ToString("N4")    : "—",
+                    r.BaseHours.HasValue           ? r.BaseHours.Value.ToString("N1")           : "—",
+                    r.OptimisticHours.HasValue     ? r.OptimisticHours.Value.ToString("N1")     : "—",
+                    r.PessimisticHours.HasValue    ? r.PessimisticHours.Value.ToString("N1")    : "—",
                 ];
                 DrawPdfRow(gfx, margin, y, colW, vals, font, XBrushes.Black, bg, 12);
                 y += 12;
@@ -187,6 +206,7 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             }
         }
 
+        gfx.Dispose();
         doc.Save(filePath);
     }
 
