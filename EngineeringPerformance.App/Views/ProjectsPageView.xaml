@@ -316,18 +316,12 @@
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
                                     </dxg:GridControl.Columns>
-                                    <dxg:GridControl.TotalSummary>
-                                        <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
-                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
-                                    </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"
-                                                       ShowTotalSummary="True" />
+                                                       RowStyle="{StaticResource FacilityForecastRowStyle}" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 
@@ -600,18 +594,12 @@
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
                                     </dxg:GridControl.Columns>
-                                    <dxg:GridControl.TotalSummary>
-                                        <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
-                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
-                                    </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"
-                                                       ShowTotalSummary="True" />
+                                                       RowStyle="{StaticResource FacilityForecastRowStyle}" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 

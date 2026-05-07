@@ -479,6 +479,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
+            detailRows.Add(new DetailForecastItem
+            {
+                FacilityCode     = "ИТОГО",
+                FacilityName     = string.Empty,
+                BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m) is decimal tb && tb > 0 ? tb : null,
+                OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m) is decimal to && to > 0 ? to : null,
+                PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m) is decimal tp && tp > 0 ? tp : null,
+                IsTotal          = true,
+            });
+
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
         }
         catch (Exception ex)
@@ -714,6 +724,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PessimisticHours = pesH,
                 });
             }
+
+            detailRows.Add(new DetailForecastItem
+            {
+                FacilityCode     = "ИТОГО",
+                FacilityName     = string.Empty,
+                BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m) is decimal tb && tb > 0 ? tb : null,
+                OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m) is decimal to && to > 0 ? to : null,
+                PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m) is decimal tp && tp > 0 ? tp : null,
+                IsTotal          = true,
+            });
 
             FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
         }
