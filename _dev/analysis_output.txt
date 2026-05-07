@@ -1,4 +1,0 @@
-  File "c:\Users\elise\YandexDisk\!Project\EngineeringPerformance\analyze_excel_detailed.py", line 18
-    print(f'\n{\"=\"*80}')
-                ^
-SyntaxError: unexpected character after line continuation character

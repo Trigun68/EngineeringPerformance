@@ -41,17 +41,22 @@ _tmp/
 # DevExpress license
 *.key
 
-# Claude Code internal data (debug logs, conversation history, backups)
-.claude/backups/
-.claude/cache/
-.claude/debug/
-.claude/plans/
-.claude/plugins/
-.claude/projects/
-.claude/shell-snapshots/
-.claude/settings.json
-.claude/settings.local.json
+# AI tool internals — полностью исключены из репозитория
+.claude/
+.cursor/
+.playwright-mcp/
+
+# Source research files (исходники, референсы, черновики)
+.src/
+
+# Dev scripts / exploration (не продовый код)
+_dev/
+
+# Session reports (рабочие артефакты)
+_work/
+
+# Utility scripts
+scripts/
 
 # Misc artifacts
 backups/
-(unspecified file_path)
