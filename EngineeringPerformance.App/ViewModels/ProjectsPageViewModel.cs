@@ -479,20 +479,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
-            // Итоговая строка
-            if (detailRows.Count > 0)
-            {
-                detailRows.Add(new DetailForecastItem
-                {
-                    FacilityCode     = string.Empty,
-                    FacilityName     = "ИТОГО",
-                    BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m),
-                    OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m),
-                    PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m),
-                    IsTotal          = true,
-                });
-            }
-
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
         }
         catch (Exception ex)
@@ -726,19 +712,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     BaseHours        = baseH,
                     OptimisticHours  = optH,
                     PessimisticHours = pesH,
-                });
-            }
-
-            if (detailRows.Count > 0)
-            {
-                detailRows.Add(new DetailForecastItem
-                {
-                    FacilityCode     = string.Empty,
-                    FacilityName     = "ИТОГО",
-                    BaseHours        = detailRows.Sum(r => r.BaseHours ?? 0m),
-                    OptimisticHours  = detailRows.Sum(r => r.OptimisticHours ?? 0m),
-                    PessimisticHours = detailRows.Sum(r => r.PessimisticHours ?? 0m),
-                    IsTotal          = true,
                 });
             }
 

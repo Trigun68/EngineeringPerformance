@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, detail tab total row via grid TotalSummary)
+- `ProjectsPageViewModel`, `LoadForecastDataAsync` / `LoadFactDataAsync`: убраны ручные итоговые строки (`IsTotal=true`) из `DetailForecastData` и `FactDetailData`.
+- `ProjectsPageView.xaml`, `DetailForecastGrid` и `FactDetailGrid`: итог реализован через `GridControl.TotalSummary` (Sum по трём колонкам часов + Count строк) и `TableView.ShowTotalSummary="True"` — нативный механизм DevExpress, не искажает данные при сортировке/группировке/фильтрации.
+
 ### Fixed (2026-05-07, forecast modal: PV tables INotifyPropertyChanged + PDF pagination)
 - `ForecastDirectionViewModel`: убран `SetPhysicalVolumes` — `PhysicalVolumes` теперь передаётся напрямую в конструктор, что исключает проблему `INotifyPropertyChanged` (WPF не видел изменение `private set` свойства после асинхронной загрузки).
 - `ProjectForecastReportViewModel`: `SetForecastData` теперь сначала загружает ФО из БД (`LoadAndBuildAsync`), затем создаёт `ForecastDirectionViewModel` с уже готовыми данными — таблицы ФО в карточках отображаются корректно.
