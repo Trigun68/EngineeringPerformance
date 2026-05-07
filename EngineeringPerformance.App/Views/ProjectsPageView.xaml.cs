@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using DevExpress.Xpf.Bars;
 using DevExpress.Xpf.Core;
 using DevExpress.Xpf.Grid;
 using EngineeringPerformance.App.Services;
-using System.Windows.Controls;
+using EngineeringPerformance.App.ViewModels;
 
 namespace EngineeringPerformance.App.Views;
 
@@ -23,6 +25,7 @@ public partial class ProjectsPageView : UserControl
         InitializeComponent();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        DetailForecastView.ShowGridMenu += OnDetailForecastShowGridMenu;
     }
 
     public void SetSettingsHelper(UserSettingsHelper helper) => _settingsHelper = helper;
@@ -33,7 +36,39 @@ public partial class ProjectsPageView : UserControl
         FactPerformanceGrid, FactFacilityGrid, FactDetailGrid, CompareGrid,
     ];
 
-    private async void OnLoaded(object sender, System.Windows.RoutedEventArgs e)
+    private void OnDetailForecastShowGridMenu(object sender, GridMenuEventArgs e)
+    {
+        if (e.MenuInfo.MenuType != GridMenuType.RowCell) return;
+        if (DataContext is not ProjectsPageViewModel vm) return;
+
+        var rowHandle = DetailForecastView.FocusedRowHandle;
+        var row = DetailForecastGrid.GetRow(rowHandle) as DetailForecastItem;
+        if (row is null || row.IsTotal)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.MenuInfo.Menu.Items.Clear();
+
+        var item1 = new BarButtonItem { Content = "Редактировать физ. объём" };
+        item1.ItemClick += (_, _) => vm.EditProjectPhysicalVolumeCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item1);
+
+        var item2 = new BarButtonItem { Content = "Редактировать номенклатуру физ. объёма" };
+        item2.ItemClick += (_, _) => vm.EditPhysicalVolumeNomenclatureCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item2);
+
+        var item3 = new BarButtonItem
+        {
+            Content = "Редактировать норму IIC",
+            IsEnabled = row.NormId.HasValue,
+        };
+        item3.ItemClick += (_, _) => vm.EditIicNormCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item3);
+    }
+
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (_settingsHelper is null) return;
 
@@ -68,7 +103,7 @@ public partial class ProjectsPageView : UserControl
         }
     }
 
-    private void OnUnloaded(object sender, System.Windows.RoutedEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         TabControl.SelectionChanged -= OnTabSelectionChanged;
     }

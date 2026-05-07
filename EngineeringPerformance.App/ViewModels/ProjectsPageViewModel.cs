@@ -255,10 +255,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask, pvAllTask);
+            await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
+            var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
+                .AsNoTracking()
+                .Where(s => s.ProjectAnalysisVersionId == versionId)
+                .Select(s => new { s.WorkDirectionId, s.NormId })
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask);
             var data = perfTask.Result;
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
+            var snapshotNormIdByDirection = snapshotMapTask.Result
+                .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
 
             // ── Вкладка «Итого»: иерархия направлений ──────────────────────
             var childrenByParent = data
@@ -454,28 +463,31 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
                 detailRows.Add(new DetailForecastItem
                 {
-                    FacilityCode      = pv.FacilityCode ?? string.Empty,
-                    FacilityName      = pv.FacilityName ?? string.Empty,
-                    BindingType       = pv.BindingType ?? string.Empty,
-                    DocumentSet       = pv.DocumentSet ?? string.Empty,
-                    CatalogId         = pv.CatalogId ?? string.Empty,
-                    Tag               = pv.Tag ?? string.Empty,
-                    WorkId            = pv.WorkId ?? string.Empty,
-                    WorkName          = pv.WorkName ?? string.Empty,
-                    WorkComment       = pv.WorkComment ?? string.Empty,
-                    EstimationBasis   = pv.EstimationBasis ?? string.Empty,
-                    PvCode            = pv.PhysicalVolume?.Code ?? string.Empty,
-                    PvName            = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment      = isAssessment ? "Да" : "Нет",
-                    Coefficient       = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName      = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl) ? $"{cl.Code} {cl.Name}" : string.Empty,
-                    IicUnitName       = norm?.NormUnitName ?? string.Empty,
-                    NormProductivity  = norm?.NormProductivity,
-                    NormStdDev        = norm?.NormStdDev,
-                    Quantity          = pv.Quantity,
-                    BaseHours         = baseH,
-                    OptimisticHours   = optH,
-                    PessimisticHours  = pesH,
+                    ProjectPhysicalVolumeId = pv.Id,
+                    PhysicalVolumeId      = pv.PhysicalVolumeId,
+                    NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid) ? nid : null,
+                    FacilityCode          = pv.FacilityCode ?? string.Empty,
+                    FacilityName          = pv.FacilityName ?? string.Empty,
+                    BindingType           = pv.BindingType ?? string.Empty,
+                    DocumentSet           = pv.DocumentSet ?? string.Empty,
+                    CatalogId             = pv.CatalogId ?? string.Empty,
+                    Tag                   = pv.Tag ?? string.Empty,
+                    WorkId                = pv.WorkId ?? string.Empty,
+                    WorkName              = pv.WorkName ?? string.Empty,
+                    WorkComment           = pv.WorkComment ?? string.Empty,
+                    EstimationBasis       = pv.EstimationBasis ?? string.Empty,
+                    PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
+                    PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
+                    IsAssessment          = isAssessment ? "Да" : "Нет",
+                    Coefficient           = pv.PhysicalVolume?.Coefficient,
+                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl) ? $"{cl.Code} {cl.Name}" : string.Empty,
+                    IicUnitName           = norm?.NormUnitName ?? string.Empty,
+                    NormProductivity      = norm?.NormProductivity,
+                    NormStdDev            = norm?.NormStdDev,
+                    Quantity              = pv.Quantity,
+                    BaseHours             = baseH,
+                    OptimisticHours       = optH,
+                    PessimisticHours      = pesH,
                 });
             }
 
@@ -594,10 +606,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask, pvAllTask);
+            await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
+            var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
+                .AsNoTracking()
+                .Where(s => s.ProjectAnalysisVersionId == versionId)
+                .Select(s => new { s.WorkDirectionId, s.NormId })
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask);
             var data = perfTask.Result;
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
+            var snapshotNormIdByDirection = snapshotMapTask.Result
+                .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
 
             // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
             var items = new ObservableCollection<PerformanceItem>();
@@ -690,28 +711,31 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
                 detailRows.Add(new DetailForecastItem
                 {
-                    FacilityCode     = pv.FacilityCode ?? string.Empty,
-                    FacilityName     = pv.FacilityName ?? string.Empty,
-                    BindingType      = pv.BindingType ?? string.Empty,
-                    DocumentSet      = pv.DocumentSet ?? string.Empty,
-                    CatalogId        = pv.CatalogId ?? string.Empty,
-                    Tag              = pv.Tag ?? string.Empty,
-                    WorkId           = pv.WorkId ?? string.Empty,
-                    WorkName         = pv.WorkName ?? string.Empty,
-                    WorkComment      = pv.WorkComment ?? string.Empty,
-                    EstimationBasis  = pv.EstimationBasis ?? string.Empty,
-                    PvCode           = pv.PhysicalVolume?.Code ?? string.Empty,
-                    PvName           = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment     = isAssessment ? "Да" : "Нет",
-                    Coefficient      = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName     = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
-                    IicUnitName      = norm?.NormUnitName ?? string.Empty,
-                    NormProductivity = norm?.NormProductivity,
-                    NormStdDev       = norm?.NormStdDev,
-                    Quantity         = pv.Quantity,
-                    BaseHours        = baseH,
-                    OptimisticHours  = optH,
-                    PessimisticHours = pesH,
+                    ProjectPhysicalVolumeId = pv.Id,
+                    PhysicalVolumeId      = pv.PhysicalVolumeId,
+                    NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
+                    FacilityCode          = pv.FacilityCode ?? string.Empty,
+                    FacilityName          = pv.FacilityName ?? string.Empty,
+                    BindingType           = pv.BindingType ?? string.Empty,
+                    DocumentSet           = pv.DocumentSet ?? string.Empty,
+                    CatalogId             = pv.CatalogId ?? string.Empty,
+                    Tag                   = pv.Tag ?? string.Empty,
+                    WorkId                = pv.WorkId ?? string.Empty,
+                    WorkName              = pv.WorkName ?? string.Empty,
+                    WorkComment           = pv.WorkComment ?? string.Empty,
+                    EstimationBasis       = pv.EstimationBasis ?? string.Empty,
+                    PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
+                    PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
+                    IsAssessment          = isAssessment ? "Да" : "Нет",
+                    Coefficient           = pv.PhysicalVolume?.Coefficient,
+                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
+                    IicUnitName           = norm?.NormUnitName ?? string.Empty,
+                    NormProductivity      = norm?.NormProductivity,
+                    NormStdDev            = norm?.NormStdDev,
+                    Quantity              = pv.Quantity,
+                    BaseHours             = baseH,
+                    OptimisticHours       = optH,
+                    PessimisticHours      = pesH,
                 });
             }
 
@@ -1201,6 +1225,63 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = false;
         }
     }
+
+    // ─── Контекстное меню «Детально» ──────────────────────────────────────
+
+    [RelayCommand]
+    private async Task EditProjectPhysicalVolumeAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeQuickEditViewModel>();
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        vm.Prepare(row.ProjectPhysicalVolumeId, nomenclature, row.Quantity);
+
+        var window = _serviceProvider.GetRequiredService<Views.ProjectPhysicalVolumeQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        if (window.ShowDialog() == true)
+            await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task EditPhysicalVolumeNomenclatureAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<PhysicalVolumeQuickEditViewModel>();
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        vm.Prepare(row.PhysicalVolumeId, nomenclature, row.NormId.HasValue ? null : (int?)null,
+            row.Coefficient ?? 1m, row.IsAssessment == "Да" ? true : row.IsAssessment == "Нет" ? false : (bool?)null);
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var pv = await ctx.PhysicalVolumes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PhysicalVolumeId);
+        if (pv is not null)
+            vm.Prepare(row.PhysicalVolumeId, nomenclature, pv.ClassifierId, pv.Coefficient, pv.IsAssessment);
+
+        var window = _serviceProvider.GetRequiredService<Views.PhysicalVolumeQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        _ = vm.LoadLookupsAsync();
+        if (window.ShowDialog() == true)
+            await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task EditIicNormAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || row.NormId is not int normId) return;
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<IicNormQuickEditViewModel>();
+        await vm.PrepareAsync(normId);
+
+        var window = _serviceProvider.GetRequiredService<Views.IicNormQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        if (window.ShowDialog() == true)
+            await LoadForecastDataAsync(pid, vid);
+    }
 }
 
 public sealed class ForecastPerformanceItem
@@ -1243,6 +1324,9 @@ public sealed class FacilityForecastItem
 
 public sealed class DetailForecastItem
 {
+    public int ProjectPhysicalVolumeId { get; set; }
+    public int PhysicalVolumeId { get; set; }
+    public int? NormId { get; set; }
     public string FacilityCode { get; set; } = string.Empty;
     public string FacilityName { get; set; } = string.Empty;
     public string BindingType { get; set; } = string.Empty;

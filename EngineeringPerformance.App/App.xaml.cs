@@ -426,6 +426,13 @@ public partial class App : Application
         services.AddTransient<IterationDeleteDialogViewModel>();
         services.AddTransient<IterationDeleteDialog>();
         services.AddSingleton<IIterationDeleteDialogService, IterationDeleteDialogService>();
+
+        services.AddTransient<ProjectPhysicalVolumeQuickEditViewModel>();
+        services.AddTransient<ProjectPhysicalVolumeQuickEditDialog>();
+        services.AddTransient<PhysicalVolumeQuickEditViewModel>();
+        services.AddTransient<PhysicalVolumeQuickEditDialog>();
+        services.AddTransient<IicNormQuickEditViewModel>();
+        services.AddTransient<IicNormQuickEditDialog>();
     }
 
     private static void ConfigureSerilog()

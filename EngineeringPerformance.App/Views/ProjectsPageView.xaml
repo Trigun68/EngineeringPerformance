@@ -323,7 +323,8 @@
                                         <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
-                                        <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                        <dxg:TableView x:Name="DetailForecastView"
+                                                       AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"
