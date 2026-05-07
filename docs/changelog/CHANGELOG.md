@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-07, facility forecast total row)
+- `ProjectsPageViewModel`: убрана ручная итоговая строка (`IsTotal=true`) из `FacilityForecastData` и `FactFacilityData` — она попадала в Excel и удваивала итог (Excel сам считал сумму по всем строкам включая итоговую).
+- `ProjectsPageView.xaml`, `FacilityForecastGrid` и `FactFacilityGrid`: итог реализован через `GridControl.TotalSummary` (Sum по трём колонкам часов + Count по объектам) и `TableView.ShowTotalSummary="True"` — нативный механизм DevExpress, не искажает данные при сортировке/группировке.
+- `ExportFacilityForecastToExcelCommand`, `ExportFacilityForecastToPdfCommand`, `ExportFactFacilityToExcelCommand`, `ExportFactFacilityToPdfCommand`: добавлен фильтр `.Where(f => !f.IsTotal)` при формировании DTO-списка для экспорта (аналогично уже существующему фильтру для Detail-вкладок).
+
 ### Added (2026-05-07, user settings persistence)
 - `UserSetting` — сущность БД (UserId, Key, Value nvarchar(max)); EF-миграция `20260507160328_AddUserSettings`; SQL-скрипт `migrations/schema/014_AddUserSettings.sql`.
 - `IUserSettingsService` / `UserSettingsService` — CRUD ключ-значение по userId: `GetAsync`, `SetAsync`, `GetAllAsync`.

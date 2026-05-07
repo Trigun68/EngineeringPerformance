@@ -428,19 +428,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             FacilityForecastData = new ObservableCollection<FacilityForecastItem>(facilityResult);
 
-            if (facilityResult.Count > 0)
-            {
-                FacilityForecastData.Add(new FacilityForecastItem
-                {
-                    FacilityCode = string.Empty,
-                    FacilityName = "ИТОГО",
-                    BaseHours        = facilityResult.Sum(r => r.BaseHours ?? 0m),
-                    OptimisticHours  = facilityResult.Sum(r => r.OptimisticHours ?? 0m),
-                    PessimisticHours = facilityResult.Sum(r => r.PessimisticHours ?? 0m),
-                    IsTotal = true,
-                });
-            }
-
             // ── Вкладка «Детально»: одна строка БД → одна строка таблицы ──
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
@@ -687,19 +674,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
 
             FactFacilityData = new ObservableCollection<FacilityForecastItem>(facilityResult);
-
-            if (facilityResult.Count > 0)
-            {
-                FactFacilityData.Add(new FacilityForecastItem
-                {
-                    FacilityCode     = string.Empty,
-                    FacilityName     = "ИТОГО",
-                    BaseHours        = facilityResult.Sum(r => r.BaseHours ?? 0m),
-                    OptimisticHours  = facilityResult.Sum(r => r.OptimisticHours ?? 0m),
-                    PessimisticHours = facilityResult.Sum(r => r.PessimisticHours ?? 0m),
-                    IsTotal = true,
-                });
-            }
 
             // ── Вкладка «Детально» ──────────────────────────────────────────
             var allPv = physicalVolumesAll
@@ -1035,6 +1009,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FacilityForecastData
+                .Where(f => !f.IsTotal)
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
@@ -1070,6 +1045,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FacilityForecastData
+                .Where(f => !f.IsTotal)
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
@@ -1148,6 +1124,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FactFacilityData
+                .Where(f => !f.IsTotal)
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
@@ -1183,6 +1160,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FactFacilityData
+                .Where(f => !f.IsTotal)
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
