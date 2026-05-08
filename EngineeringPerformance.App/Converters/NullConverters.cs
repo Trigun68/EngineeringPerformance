@@ -33,3 +33,18 @@ public sealed class BoolToVisibilityConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>AnalysisDirection → "План" / "Факт"</summary>
+public sealed class AnalysisDirectionToStringConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value switch
+        {
+            EngineeringPerformance.Core.Enums.AnalysisDirection.Plan => "План",
+            EngineeringPerformance.Core.Enums.AnalysisDirection.Fact => "Факт",
+            _ => string.Empty,
+        };
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

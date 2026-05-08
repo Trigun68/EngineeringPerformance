@@ -55,6 +55,15 @@
                                  MouseDoubleClick="Grid_MouseDoubleClick">
                     <dxg:GridControl.Columns>
                         <dxg:GridColumn FieldName="VersionName" Header="Наименование версии" Width="*" />
+                        <dxg:GridColumn FieldName="Direction" Header="Тип" Width="80">
+                            <dxg:GridColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding RowData.Row.Direction,
+                                        Converter={StaticResource AnalysisDirectionToString}}"
+                                               HorizontalAlignment="Center" />
+                                </DataTemplate>
+                            </dxg:GridColumn.CellTemplate>
+                        </dxg:GridColumn>
                         <dxg:GridColumn FieldName="Description" Header="Описание" Width="2*" />
                         <dxg:GridColumn FieldName="CreatedAt" Header="Дата создания" Width="140">
                             <dxg:GridColumn.EditSettings>

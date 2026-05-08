@@ -659,7 +659,7 @@
                             <Border Visibility="{Binding CompareVersionAId, Converter={StaticResource NullToCollapsed}}"
                                     Background="#EBF5FB" BorderBrush="#AED6F1" BorderThickness="1"
                                     CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding CompareVersionAName}" Foreground="#1A5276" FontSize="12" />
+                                <TextBlock Text="{Binding CompareVersionALabel}" Foreground="#1A5276" FontSize="12" />
                             </Border>
                         </StackPanel>
 
@@ -672,7 +672,7 @@
                             <Border Visibility="{Binding CompareVersionBId, Converter={StaticResource NullToCollapsed}}"
                                     Background="#F5EEF8" BorderBrush="#D7BDE2" BorderThickness="1"
                                     CornerRadius="3" Padding="8,4" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding CompareVersionBName}" Foreground="#6C3483" FontSize="12" />
+                                <TextBlock Text="{Binding CompareVersionBLabel}" Foreground="#6C3483" FontSize="12" />
                             </Border>
                         </StackPanel>
                     </Grid>

@@ -18,6 +18,15 @@ public partial class ProjectVersionPickerDialog : Window
         string projectName,
         AnalysisDirection direction)
     {
+        return await ShowPickerAsync(owner, projectId, projectName, (AnalysisDirection?)direction);
+    }
+
+    public async Task<int?> ShowPickerAsync(
+        Window owner,
+        int projectId,
+        string projectName,
+        AnalysisDirection? direction)
+    {
         Owner = owner;
         var vm = (ProjectVersionPickerDialogViewModel)DataContext;
 

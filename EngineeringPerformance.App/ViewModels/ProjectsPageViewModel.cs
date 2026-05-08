@@ -64,8 +64,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     // Р’РєР»Р°РґРєР° РЎСЂР°РІРЅРµРЅРёРµ РІРµСЂСЃРёР№
     [ObservableProperty] private int? _compareVersionAId;
     [ObservableProperty] private string _compareVersionAName = string.Empty;
+    [ObservableProperty] private string _compareVersionALabel = string.Empty;
     [ObservableProperty] private int? _compareVersionBId;
     [ObservableProperty] private string _compareVersionBName = string.Empty;
+    [ObservableProperty] private string _compareVersionBLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<VersionCompareRow> _compareRows = [];
     [ObservableProperty] private ObservableCollection<FacilityForecastItem> _compareFacilityData = [];
     [ObservableProperty] private ObservableCollection<DetailForecastItem> _compareDetailData = [];
@@ -164,8 +166,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         CompareVersionAId = null;
         CompareVersionAName = string.Empty;
+        CompareVersionALabel = string.Empty;
         CompareVersionBId = null;
         CompareVersionBName = string.Empty;
+        CompareVersionBLabel = string.Empty;
         CompareRows = [];
         CompareFacilityData = [];
         CompareDetailData = [];
@@ -821,11 +825,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
-        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
-        if (result is not var (_, versionId)) return;
-        CompareVersionAId = versionId;
+        var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName);
+        if (versionId is not int vid) return;
+        CompareVersionAId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        CompareVersionAName = versions.FirstOrDefault(v => v.Id == versionId)?.VersionName ?? string.Empty;
+        var ver = versions.FirstOrDefault(v => v.Id == vid);
+        CompareVersionAName = ver?.VersionName ?? string.Empty;
+        CompareVersionALabel = BuildVersionLabel(ver);
         await RunCompareAsync();
     }
 
@@ -834,11 +840,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
-        var result = await _projectSelectionDialog.ShowSelectionDialogAsync(AnalysisDirection.Fact);
-        if (result is not var (_, versionId)) return;
-        CompareVersionBId = versionId;
+        var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName);
+        if (versionId is not int vid) return;
+        CompareVersionBId = vid;
         var versions = await _versionQueryService.GetByProjectAsync(pid, includeArchived: false);
-        CompareVersionBName = versions.FirstOrDefault(v => v.Id == versionId)?.VersionName ?? string.Empty;
+        var ver = versions.FirstOrDefault(v => v.Id == vid);
+        CompareVersionBName = ver?.VersionName ?? string.Empty;
+        CompareVersionBLabel = BuildVersionLabel(ver);
         await RunCompareAsync();
     }
 

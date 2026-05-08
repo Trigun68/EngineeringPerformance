@@ -15,6 +15,7 @@
         <conv:NullToBoolConverter x:Key="NullToBool" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <conv:AnalysisDirectionToStringConverter x:Key="AnalysisDirectionToString" />
 
         <!-- Стиль строки итога в таблице прогноза -->
         <Style x:Key="ForecastRowStyle" TargetType="dxg:RowControl">

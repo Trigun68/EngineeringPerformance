@@ -19,7 +19,7 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
 
     public int ProjectId { get; private set; }
     public string ProjectName { get; private set; } = string.Empty;
-    public AnalysisDirection Direction { get; private set; }
+    public AnalysisDirection? Direction { get; private set; }
 
     [ObservableProperty] private string _windowTitle = "Версии анализа";
     [ObservableProperty] private ObservableCollection<ProjectAnalysisVersion> _versions = [];
@@ -43,7 +43,7 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
     public async Task InitializeAsync(
         int projectId,
         string projectName,
-        AnalysisDirection direction,
+        AnalysisDirection? direction,
         Action<bool>? closeDialog = null)
     {
         ProjectId = projectId;
@@ -54,7 +54,9 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
 
         WindowTitle = direction == AnalysisDirection.Plan
             ? $"Версии плана — {projectName}"
-            : $"Версии факта — {projectName}";
+            : direction == AnalysisDirection.Fact
+                ? $"Версии факта — {projectName}"
+                : $"Версии анализа — {projectName}";
 
         await ReloadAsync();
     }
@@ -64,7 +66,9 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
         try
         {
             var all = await _queryService.GetByProjectAsync(ProjectId, includeArchived: false);
-            var filtered = all.Where(v => v.Direction == Direction).ToList();
+            var filtered = Direction.HasValue
+                ? all.Where(v => v.Direction == Direction.Value).ToList()
+                : all.ToList();
             Versions = new ObservableCollection<ProjectAnalysisVersion>(filtered);
         }
         catch (Exception ex)
