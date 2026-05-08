@@ -1,6 +1,7 @@
 using System.Windows;
 using EngineeringPerformance.App.ViewModels;
 using EngineeringPerformance.App.Views;
+using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,7 @@ namespace EngineeringPerformance.App.Services;
 public interface IProjectAnalysisVersionEditDialogService
 {
     void SetOwnerWindow(Window owner);
-    Task<bool> ShowEditDialogAsync(ProjectAnalysisVersion? item, int? preselectedProjectId = null);
+    Task<bool> ShowEditDialogAsync(ProjectAnalysisVersion? item, int? preselectedProjectId = null, AnalysisDirection? direction = null);
 }
 
 public sealed class ProjectAnalysisVersionEditDialogService : IProjectAnalysisVersionEditDialogService
@@ -30,7 +31,7 @@ public sealed class ProjectAnalysisVersionEditDialogService : IProjectAnalysisVe
         _owner = owner;
     }
 
-    public async Task<bool> ShowEditDialogAsync(ProjectAnalysisVersion? item, int? preselectedProjectId = null)
+    public async Task<bool> ShowEditDialogAsync(ProjectAnalysisVersion? item, int? preselectedProjectId = null, AnalysisDirection? direction = null)
     {
         if (_owner is null)
             return false;
@@ -45,6 +46,7 @@ public sealed class ProjectAnalysisVersionEditDialogService : IProjectAnalysisVe
         viewModel.PrepareSync(
             item,
             preselectedProjectId,
+            direction,
             result => window.Dispatcher.Invoke(() => window.DialogResult = result));
 
         using var loadCts = new CancellationTokenSource();

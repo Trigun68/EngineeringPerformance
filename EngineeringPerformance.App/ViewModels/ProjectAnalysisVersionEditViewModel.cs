@@ -57,12 +57,6 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
     [ObservableProperty]
     private int _entityId;
 
-    public ObservableCollection<AnalysisDirectionItem> DirectionItems { get; } =
-    [
-        new AnalysisDirectionItem { Direction = AnalysisDirection.Plan, DisplayName = "План" },
-        new AnalysisDirectionItem { Direction = AnalysisDirection.Fact, DisplayName = "Факт" },
-    ];
-
     public ProjectAnalysisVersionEditViewModel(
         IDirectoryService<ProjectAnalysisVersion> service,
         IDirectoryService<Project> projectService,
@@ -76,10 +70,12 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
     /// <summary>
     /// Мгновенно заполняет форму значениями. Справочник типов физ. объёмов
     /// и наименование проекта подгружаются <see cref="LoadLookupsAsync"/>.
+    /// Параметр direction задаёт направление автоматически (Plan/Fact) — поле не показывается пользователю.
     /// </summary>
     public void PrepareSync(
         ProjectAnalysisVersion? entity,
         int? preselectedProjectId = null,
+        AnalysisDirection? direction = null,
         Action<bool>? closeDialog = null)
     {
         _closeDialog = closeDialog;
@@ -96,7 +92,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
             EntityId = entity.Id;
             VersionName = entity.VersionName;
             Description = entity.Description;
-            SelectedDirection = entity.Direction;
+            SelectedDirection = direction ?? entity.Direction;
             SelectedPhysicalVolumeTypeId = entity.PhysicalVolumeTypeId;
             CreatedAt = entity.CreatedAt.Date;
         }
@@ -106,7 +102,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
             WindowTitle = "Новая версия анализа проекта";
             EntityId = 0;
             CreatedAt = DateTime.Today;
-            SelectedDirection = AnalysisDirection.Plan;
+            SelectedDirection = direction ?? AnalysisDirection.Plan;
             SelectedPhysicalVolumeTypeId = null;
             VersionName = string.Empty;
             Description = null;

@@ -82,7 +82,7 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
     {
         var owner = GetOwner();
         if (owner is not null) _editDialog.SetOwnerWindow(owner);
-        var saved = await _editDialog.ShowEditDialogAsync(null, ProjectId);
+        var saved = await _editDialog.ShowEditDialogAsync(null, ProjectId, Direction);
         if (saved) await ReloadAsync();
     }
 
@@ -92,7 +92,7 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
         if (SelectedVersion is null) return;
         var owner = GetOwner();
         if (owner is not null) _editDialog.SetOwnerWindow(owner);
-        var saved = await _editDialog.ShowEditDialogAsync(SelectedVersion, ProjectId);
+        var saved = await _editDialog.ShowEditDialogAsync(SelectedVersion, ProjectId, Direction);
         if (saved) await ReloadAsync();
     }
 
