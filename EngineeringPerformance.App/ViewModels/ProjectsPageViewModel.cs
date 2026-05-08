@@ -1,4 +1,4 @@
-﻿﻿﻿using System.Collections.ObjectModel;
+﻿﻿﻿﻿﻿﻿﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -118,7 +118,6 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     public Action<DetailGridState>? RestoreFactDetailStateCallback { get; set; }
 
     public Task LoadAsync() => Task.CompletedTask;
-
     private Window? GetOwner() => OwnerWindow ?? Application.Current.MainWindow;
 
     private void SetDialogOwners()
@@ -238,7 +237,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         await LoadForecastDataAsync(pid, vid);
     }
 
-    private async Task LoadForecastDataAsync(int projectId, int versionId)
+    private async Task LoadForecastDataAsync(int projectId, int versionId, DetailGridState? savedState = null)
     {
         try
         {
@@ -507,6 +506,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var forecastState = SaveDetailForecastStateCallback?.Invoke();
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
+            if (savedState is not null)
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                    () => RestoreDetailForecastStateCallback?.Invoke(savedState),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
             if (forecastState is not null)
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreDetailForecastStateCallback?.Invoke(forecastState),
@@ -594,7 +597,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         return label;
     }
 
-    private async Task LoadFactDataAsync(int projectId, int versionId)
+    private async Task LoadFactDataAsync(int projectId, int versionId, DetailGridState? savedState = null)
     {
         try
         {
@@ -760,6 +763,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var factState = SaveFactDetailStateCallback?.Invoke();
             FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
+            if (savedState is not null)
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                    () => RestoreFactDetailStateCallback?.Invoke(savedState),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
             if (factState is not null)
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreFactDetailStateCallback?.Invoke(factState),
@@ -1268,14 +1275,17 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var window = _serviceProvider.GetRequiredService<Views.ProjectPhysicalVolumeQuickEditDialog>();
         window.DataContext = vm;
         window.Owner = GetOwner();
+        var state = SaveDetailForecastStateCallback?.Invoke();
         if (window.ShowDialog() == true)
-            await LoadForecastDataAsync(pid, vid);
+            await LoadForecastDataAsync(pid, vid, state);
     }
 
     [RelayCommand]
     private async Task EditPhysicalVolumeNomenclatureAsync(DetailForecastItem? row)
     {
         if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var state = SaveDetailForecastStateCallback?.Invoke();
 
         var vm = _serviceProvider.GetRequiredService<PhysicalVolumeQuickEditViewModel>();
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
@@ -1292,13 +1302,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.Owner = GetOwner();
         _ = vm.LoadLookupsAsync();
         if (window.ShowDialog() == true)
-            await LoadForecastDataAsync(pid, vid);
+            await LoadForecastDataAsync(pid, vid, state);
     }
 
     [RelayCommand]
     private async Task EditIicNormAsync(DetailForecastItem? row)
     {
         if (row is null || row.IsTotal || row.NormId is not int normId) return;
+
+        var state = SaveDetailForecastStateCallback?.Invoke();
         if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
 
         var vm = _serviceProvider.GetRequiredService<IicNormQuickEditViewModel>();
@@ -1308,7 +1320,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.DataContext = vm;
         window.Owner = GetOwner();
         if (window.ShowDialog() == true)
-            await LoadForecastDataAsync(pid, vid);
+            await LoadForecastDataAsync(pid, vid, state);
     }
 }
 
