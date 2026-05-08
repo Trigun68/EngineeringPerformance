@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+﻿﻿﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -579,7 +579,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var date = ver.CreatedAt.ToString("dd.MM.yyyy");
         var label = $"({date}) {ver.VersionName}";
         if (!string.IsNullOrWhiteSpace(ver.Description))
-            label += $" вЂ” {ver.Description}";
+            label += $": {ver.Description}";
         return label;
     }
 
@@ -883,8 +883,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     ZScoreA = a?.ZScore,
                     ZScoreB = b?.ZScore,
                     ZDelta = zDelta,
-                    InterpretationA = a?.Interpretation?.ToRussian() ?? "вЂ”",
-                    InterpretationB = b?.Interpretation?.ToRussian() ?? "вЂ”",
+                    InterpretationA = a?.Interpretation?.ToRussian() ?? "-",
+                    InterpretationB = b?.Interpretation?.ToRussian() ?? "-",
                 });
             }
             CompareRows = items;

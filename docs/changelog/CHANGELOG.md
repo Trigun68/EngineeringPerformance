@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-08, version label format)
+- `ProjectsPageViewModel.BuildVersionLabel`: исправлены артефакты кодировки в строковых литералах — метка версии теперь отображается в формате `(Дата) Название: Комментарий` на всех вкладках (Прогнозирование, Оценка факта, Сравнение версий); исправлен fallback `"-"` для интерпретации Z-score на вкладке Сравнение.
+
 ### Changed (2026-05-08, hide analysis direction field in version edit dialog)
 - `ProjectAnalysisVersionEditDialogService`: метод `ShowEditDialogAsync` получил параметр `direction` — передаёт направление анализа напрямую в VM, исключая ручной выбор пользователем.
 - `ProjectAnalysisVersionEditViewModel.PrepareSync`: принимает `direction?` и устанавливает `SelectedDirection` автоматически; при редактировании существующей версии сохраняет переданное направление.
