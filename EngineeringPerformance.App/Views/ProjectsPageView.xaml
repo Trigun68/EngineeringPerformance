@@ -677,72 +677,192 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Таблица сравнения -->
-                    <dxg:GridControl x:Name="CompareGrid" Grid.Row="2" ItemsSource="{Binding CompareRows}"
-                                     AutoGenerateColumns="None">
-                        <dxg:GridControl.Columns>
-                            <dxg:GridColumn FieldName="Name" Header="Направление" Width="30*" />
-                            <dxg:GridColumn FieldName="ZScoreA" Width="12*">
-                                <dxg:GridColumn.HeaderTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DataContext.CompareVersionAName,
-                                            RelativeSource={RelativeSource AncestorType=dxg:GridControl},
-                                            FallbackValue='Версия А'}"
-                                                   FontWeight="SemiBold" TextWrapping="Wrap"
-                                                   HorizontalAlignment="Center" />
-                                    </DataTemplate>
-                                </dxg:GridColumn.HeaderTemplate>
-                                <dxg:GridColumn.EditSettings>
-                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                </dxg:GridColumn.EditSettings>
-                            </dxg:GridColumn>
-                            <dxg:GridColumn FieldName="InterpretationA" Header="Оценка А" Width="16*" />
-                            <dxg:GridColumn FieldName="ZScoreB" Width="12*">
-                                <dxg:GridColumn.HeaderTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DataContext.CompareVersionBName,
-                                            RelativeSource={RelativeSource AncestorType=dxg:GridControl},
-                                            FallbackValue='Версия Б'}"
-                                                   FontWeight="SemiBold" TextWrapping="Wrap"
-                                                   HorizontalAlignment="Center" />
-                                    </DataTemplate>
-                                </dxg:GridColumn.HeaderTemplate>
-                                <dxg:GridColumn.EditSettings>
-                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                </dxg:GridColumn.EditSettings>
-                            </dxg:GridColumn>
-                            <dxg:GridColumn FieldName="InterpretationB" Header="Оценка Б" Width="16*" />
-                            <dxg:GridColumn FieldName="ZDelta" Header="Δ Z-score" Width="10*">
-                                <dxg:GridColumn.EditSettings>
-                                    <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
-                                </dxg:GridColumn.EditSettings>
-                                <dxg:GridColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding RowData.Row.ZDelta, StringFormat=N4}"
-                                                   HorizontalAlignment="Right" Padding="4,0">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding RowData.Row.ZDelta, Converter={StaticResource NullToBool}}" Value="False">
-                                                            <Setter Property="Foreground" Value="#95A5A6" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                    <Setter Property="Foreground" Value="#27AE60" />
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                    </DataTemplate>
-                                </dxg:GridColumn.CellTemplate>
-                            </dxg:GridColumn>
-                        </dxg:GridControl.Columns>
-                        <dxg:GridControl.View>
-                            <dxg:TreeListView AllowEditing="False" AllowSorting="False"
-                                              NavigationStyle="Row"
-                                              KeyFieldName="Id" ParentFieldName="ParentId"
-                                              AutoWidth="True" ShowIndicator="False"
-                                              ShowVerticalLines="False" />
-                        </dxg:GridControl.View>
-                    </dxg:GridControl>
+                    <!-- Внутренние вкладки -->
+                    <dx:DXTabControl Grid.Row="2">
+
+                        <!-- Вкладка: Итого -->
+                        <dx:DXTabItem Header="Итого">
+                            <dxg:GridControl x:Name="CompareGrid" Margin="0,8,0,0" ItemsSource="{Binding CompareRows}"
+                                             AutoGenerateColumns="None">
+                                <dxg:GridControl.Columns>
+                                    <dxg:GridColumn FieldName="Name" Header="Направление" Width="30*" />
+                                    <dxg:GridColumn FieldName="ZScoreA" Width="12*">
+                                        <dxg:GridColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DataContext.CompareVersionAName,
+                                                    RelativeSource={RelativeSource AncestorType=dxg:GridControl},
+                                                    FallbackValue='Версия А'}"
+                                                           FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           HorizontalAlignment="Center" />
+                                            </DataTemplate>
+                                        </dxg:GridColumn.HeaderTemplate>
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="InterpretationA" Header="Оценка А" Width="16*" />
+                                    <dxg:GridColumn FieldName="ZScoreB" Width="12*">
+                                        <dxg:GridColumn.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding DataContext.CompareVersionBName,
+                                                    RelativeSource={RelativeSource AncestorType=dxg:GridControl},
+                                                    FallbackValue='Версия Б'}"
+                                                           FontWeight="SemiBold" TextWrapping="Wrap"
+                                                           HorizontalAlignment="Center" />
+                                            </DataTemplate>
+                                        </dxg:GridColumn.HeaderTemplate>
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="InterpretationB" Header="Оценка Б" Width="16*" />
+                                    <dxg:GridColumn FieldName="ZDelta" Header="Δ Z-score" Width="10*">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                        <dxg:GridColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding RowData.Row.ZDelta, StringFormat=N4}"
+                                                           HorizontalAlignment="Right" Padding="4,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding RowData.Row.ZDelta, Converter={StaticResource NullToBool}}" Value="False">
+                                                                    <Setter Property="Foreground" Value="#95A5A6" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                            <Setter Property="Foreground" Value="#27AE60" />
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </dxg:GridColumn.CellTemplate>
+                                    </dxg:GridColumn>
+                                </dxg:GridControl.Columns>
+                                <dxg:GridControl.View>
+                                    <dxg:TreeListView AllowEditing="False" AllowSorting="False"
+                                                      NavigationStyle="Row"
+                                                      KeyFieldName="Id" ParentFieldName="ParentId"
+                                                      AutoWidth="True" ShowIndicator="False"
+                                                      ShowVerticalLines="False" />
+                                </dxg:GridControl.View>
+                            </dxg:GridControl>
+                        </dx:DXTabItem>
+
+                        <!-- Вкладка: По объектам -->
+                        <dx:DXTabItem Header="По объектам">
+                            <dxg:GridControl x:Name="CompareFacilityGrid" Margin="0,8,0,0"
+                                             ItemsSource="{Binding CompareFacilityData}"
+                                             AutoGenerateColumns="None">
+                                <dxg:GridControl.Columns>
+                                    <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
+                                    <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="4*" MinWidth="150" />
+                                    <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="2*" MinWidth="80">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="1.5*" MinWidth="80">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="1.5*" MinWidth="80">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                </dxg:GridControl.Columns>
+                                <dxg:GridControl.TotalSummary>
+                                    <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Объектов: {0}" />
+                                    <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                </dxg:GridControl.TotalSummary>
+                                <dxg:GridControl.View>
+                                    <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                                   NavigationStyle="Row"
+                                                   ShowIndicator="False"
+                                                   ShowVerticalLines="False"
+                                                   ShowTotalSummary="True" />
+                                </dxg:GridControl.View>
+                            </dxg:GridControl>
+                        </dx:DXTabItem>
+
+                        <!-- Вкладка: Детально -->
+                        <dx:DXTabItem Header="Детально">
+                            <dxg:GridControl x:Name="CompareDetailGrid" Margin="0,8,0,0"
+                                             ItemsSource="{Binding CompareDetailData}"
+                                             AutoGenerateColumns="None">
+                                <dxg:GridControl.Columns>
+                                    <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="90" MinWidth="60" />
+                                    <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="180" MinWidth="100" />
+                                    <dxg:GridColumn FieldName="BindingType" Header="Тип привязки" Width="90" MinWidth="60" />
+                                    <dxg:GridColumn FieldName="DocumentSet" Header="Комплект документов" Width="120" MinWidth="80" />
+                                    <dxg:GridColumn FieldName="CatalogId" Header="ID по каталогу" Width="100" MinWidth="70" />
+                                    <dxg:GridColumn FieldName="Tag" Header="TAG" Width="80" MinWidth="50" />
+                                    <dxg:GridColumn FieldName="WorkId" Header="ID работы" Width="100" MinWidth="70" />
+                                    <dxg:GridColumn FieldName="WorkName" Header="Наименование работы" Width="180" MinWidth="100" />
+                                    <dxg:GridColumn FieldName="WorkComment" Header="Комментарий" Width="120" MinWidth="70" />
+                                    <dxg:GridColumn FieldName="EstimationBasis" Header="Описательная часть" Width="150" MinWidth="80" />
+                                    <dxg:GridColumn FieldName="PvCode" Header="Код" Width="80" MinWidth="50" />
+                                    <dxg:GridColumn FieldName="PvName" Header="Наименование" Width="180" MinWidth="100" />
+                                    <dxg:GridColumn FieldName="IsAssessment" Header="Оценка" Width="60" MinWidth="50" />
+                                    <dxg:GridColumn FieldName="Coefficient" Header="Коэфф." Width="70" MinWidth="50">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="IicGroupName" Header="Группа ФО IIC" Width="150" MinWidth="80" />
+                                    <dxg:GridColumn FieldName="IicUnitName" Header="Ед. изм." Width="70" MinWidth="50" />
+                                    <dxg:GridColumn FieldName="NormProductivity" Header="Производит." Width="90" MinWidth="60">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="NormStdDev" Header="СО" Width="70" MinWidth="50">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="Quantity" Header="Кол-во" Width="80" MinWidth="60">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="90" MinWidth="70">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="90" MinWidth="70">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                    <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="90" MinWidth="70">
+                                        <dxg:GridColumn.EditSettings>
+                                            <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                        </dxg:GridColumn.EditSettings>
+                                    </dxg:GridColumn>
+                                </dxg:GridControl.Columns>
+                                <dxg:GridControl.TotalSummary>
+                                    <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
+                                    <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                </dxg:GridControl.TotalSummary>
+                                <dxg:GridControl.View>
+                                    <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                                   NavigationStyle="Row"
+                                                   ShowIndicator="False"
+                                                   ShowVerticalLines="False"
+                                                   ShowTotalSummary="True" />
+                                </dxg:GridControl.View>
+                            </dxg:GridControl>
+                        </dx:DXTabItem>
+
+                    </dx:DXTabControl>
                 </Grid>
             </dx:DXTabItem>
 
