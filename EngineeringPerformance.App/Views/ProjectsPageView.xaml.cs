@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿﻿using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using DevExpress.Xpf.Bars;
@@ -48,10 +48,10 @@ public partial class ProjectsPageView : UserControl
         for (var i = 0; i < grid.VisibleRowCount; i++)
         {
             var rh = grid.GetRowHandleByVisibleIndex(i);
-            if (grid.IsGroupRowHandle(rh) && !grid.IsGroupRowExpanded(rh))
+            if (grid.IsGroupRowHandle(rh) && grid.IsGroupRowExpanded(rh))
             {
-                var val = grid.GetGroupRowValue(rh);
-                if (val is not null) state.CollapsedGroupValues.Add(val);
+                var val = grid.GetGroupRowValue(rh)?.ToString();
+                if (val is not null) state.ExpandedGroupTexts.Add(val);
             }
         }
         return state;
@@ -59,13 +59,15 @@ public partial class ProjectsPageView : UserControl
 
     private static void RestoreGridState(GridControl grid, DetailGridState state)
     {
+        if (state.ExpandedGroupTexts.Count == 0) return;
+        grid.CollapseAllGroups();
         for (var i = 0; i < grid.VisibleRowCount; i++)
         {
             var rh = grid.GetRowHandleByVisibleIndex(i);
             if (!grid.IsGroupRowHandle(rh)) continue;
-            var val = grid.GetGroupRowValue(rh);
-            if (val is not null && state.CollapsedGroupValues.Contains(val))
-                grid.CollapseGroupRow(rh);
+            var text = grid.GetGroupRowValue(rh)?.ToString();
+            if (text is not null && state.ExpandedGroupTexts.Contains(text))
+                grid.ExpandGroupRow(rh, false);
         }
         if (state.TopRowIndex > 0 && grid.View is TableView tv)
             tv.TopRowIndex = state.TopRowIndex;
