@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added (2026-05-08, preserve detail grid state on reload)
+- `ProjectsPageViewModel`: делегаты `SaveDetailForecastStateCallback`/`RestoreDetailForecastStateCallback` и аналогичные для `FactDetailData` — вызываются вокруг замены `ItemsSource` при перезагрузке данных после редактирования.
+- `ProjectsPageView.xaml.cs`: методы `SaveGridState`/`RestoreGridState` — сохраняют свёрнутые группы (по значению) и позицию скролла (`TopRowIndex`) перед перезагрузкой, восстанавливают через `Dispatcher.BeginInvoke` после привязки новых данных.
+- `DetailGridState`: класс-контейнер состояния (множество свёрнутых значений групп + позиция скролла).
+
 ### Fixed (2026-05-08, version label format)
 - `ProjectsPageViewModel.BuildVersionLabel`: исправлены артефакты кодировки в строковых литералах — метка версии теперь отображается в формате `(Дата) Название: Комментарий` на всех вкладках (Прогнозирование, Оценка факта, Сравнение версий); исправлен fallback `"-"` для интерпретации Z-score на вкладке Сравнение.
 

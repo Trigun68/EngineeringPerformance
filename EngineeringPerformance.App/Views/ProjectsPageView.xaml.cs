@@ -26,9 +26,50 @@ public partial class ProjectsPageView : UserControl
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         DetailForecastView.ShowGridMenu += OnDetailForecastShowGridMenu;
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.NewValue is ProjectsPageViewModel vm)
+        {
+            vm.SaveDetailForecastStateCallback    = () => SaveGridState(DetailForecastGrid);
+            vm.RestoreDetailForecastStateCallback = s  => RestoreGridState(DetailForecastGrid, s);
+            vm.SaveFactDetailStateCallback        = () => SaveGridState(FactDetailGrid);
+            vm.RestoreFactDetailStateCallback     = s  => RestoreGridState(FactDetailGrid, s);
+        }
     }
 
     public void SetSettingsHelper(UserSettingsHelper helper) => _settingsHelper = helper;
+
+    private static DetailGridState SaveGridState(GridControl grid)
+    {
+        var state = new DetailGridState { TopRowIndex = (grid.View as TableView)?.TopRowIndex ?? 0 };
+        for (var i = 0; i < grid.VisibleRowCount; i++)
+        {
+            var rh = grid.GetRowHandleByVisibleIndex(i);
+            if (grid.IsGroupRowHandle(rh) && !grid.IsGroupRowExpanded(rh))
+            {
+                var val = grid.GetGroupRowValue(rh);
+                if (val is not null) state.CollapsedGroupValues.Add(val);
+            }
+        }
+        return state;
+    }
+
+    private static void RestoreGridState(GridControl grid, DetailGridState state)
+    {
+        for (var i = 0; i < grid.VisibleRowCount; i++)
+        {
+            var rh = grid.GetRowHandleByVisibleIndex(i);
+            if (!grid.IsGroupRowHandle(rh)) continue;
+            var val = grid.GetGroupRowValue(rh);
+            if (val is not null && state.CollapsedGroupValues.Contains(val))
+                grid.CollapseGroupRow(rh);
+        }
+        if (state.TopRowIndex > 0 && grid.View is TableView tv)
+            tv.TopRowIndex = state.TopRowIndex;
+    }
 
     private GridControl[] GetAllGrids() =>
     [

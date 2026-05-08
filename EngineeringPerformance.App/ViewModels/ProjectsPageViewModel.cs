@@ -111,6 +111,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _serviceProvider = serviceProvider;
     }
 
+    public Func<DetailGridState>? SaveDetailForecastStateCallback { get; set; }
+    public Action<DetailGridState>? RestoreDetailForecastStateCallback { get; set; }
+
+    public Func<DetailGridState>? SaveFactDetailStateCallback { get; set; }
+    public Action<DetailGridState>? RestoreFactDetailStateCallback { get; set; }
+
     public Task LoadAsync() => Task.CompletedTask;
 
     private Window? GetOwner() => OwnerWindow ?? Application.Current.MainWindow;
@@ -499,7 +505,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
+            var forecastState = SaveDetailForecastStateCallback?.Invoke();
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
+            if (forecastState is not null)
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                    () => RestoreDetailForecastStateCallback?.Invoke(forecastState),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
@@ -747,7 +758,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
+            var factState = SaveFactDetailStateCallback?.Invoke();
             FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
+            if (factState is not null)
+                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                    () => RestoreFactDetailStateCallback?.Invoke(factState),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
@@ -1332,6 +1348,12 @@ public sealed class FacilityForecastItem
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
+}
+
+public sealed class DetailGridState
+{
+    public HashSet<object> CollapsedGroupValues { get; } = [];
+    public int TopRowIndex { get; set; }
 }
 
 public sealed class DetailForecastItem
