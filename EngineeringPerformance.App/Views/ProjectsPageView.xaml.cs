@@ -47,13 +47,21 @@ public partial class ProjectsPageView : UserControl
         var tv = grid.View as TableView;
         var state = new DetailGridState();
         var topIndex = tv?.TopRowIndex ?? 0;
-        for (var i = topIndex; i < grid.VisibleRowCount; i++)
+        state.TopRowIndex = topIndex;
+        if (tv is not null)
         {
-            var rh = grid.GetRowHandleByVisibleIndex(i);
-            if (!grid.IsGroupRowHandle(rh))
+            var focusedRh = tv.FocusedRowHandle;
+            if (!grid.IsGroupRowHandle(focusedRh) && grid.GetRow(focusedRh) is DetailForecastItem focused)
             {
-                state.TopRowHandle = rh;
-                break;
+                state.FocusedRowId = focused.ProjectPhysicalVolumeId;
+                for (var i = 0; i < grid.VisibleRowCount; i++)
+                {
+                    if (grid.GetRowHandleByVisibleIndex(i) == focusedRh)
+                    {
+                        state.FocusedVisibleOffset = i - topIndex;
+                        break;
+                    }
+                }
             }
         }
         for (var i = 0; i < grid.VisibleRowCount; i++)
@@ -80,8 +88,27 @@ public partial class ProjectsPageView : UserControl
             if (text is not null && !state.ExpandedGroupTexts.Contains(text))
                 grid.CollapseGroupRow(rh, false);
         }
-        if (state.TopRowHandle != GridControl.InvalidRowHandle && grid.View is TableView tv)
-            tv.ScrollIntoView(state.TopRowHandle);
+        if (grid.View is not TableView tv) return;
+        if (state.FocusedRowId >= 0)
+        {
+            for (var i = 0; i < grid.VisibleRowCount; i++)
+            {
+                var rh = grid.GetRowHandleByVisibleIndex(i);
+                if (!grid.IsGroupRowHandle(rh) && grid.GetRow(rh) is DetailForecastItem row
+                    && row.ProjectPhysicalVolumeId == state.FocusedRowId)
+                {
+                    var newTop = Math.Max(0, i - state.FocusedVisibleOffset);
+                    System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                        () => tv.TopRowIndex = newTop,
+                        System.Windows.Threading.DispatcherPriority.Render);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            tv.TopRowIndex = state.TopRowIndex;
+        }
     }
 
     private GridControl[] GetAllGrids() =>

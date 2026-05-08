@@ -1360,7 +1360,9 @@ public sealed class FacilityForecastItem
 public sealed class DetailGridState
 {
     public HashSet<string> ExpandedGroupTexts { get; } = [];
-    public int TopRowHandle { get; set; } = -1;
+    public int TopRowIndex { get; set; } = 0;
+    public int FocusedRowId { get; set; } = -1;
+    public int FocusedVisibleOffset { get; set; } = 0;
 }
 
 public sealed class DetailForecastItem
