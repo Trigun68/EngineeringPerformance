@@ -71,14 +71,14 @@ public partial class ProjectsPageView : UserControl
     private static void RestoreGridState(GridControl grid, DetailGridState state)
     {
         if (state.ExpandedGroupTexts.Count == 0) return;
-        grid.CollapseAllGroups();
+        grid.ExpandAllGroups();
         for (var i = 0; i < grid.VisibleRowCount; i++)
         {
             var rh = grid.GetRowHandleByVisibleIndex(i);
             if (!grid.IsGroupRowHandle(rh)) continue;
             var text = grid.GetGroupRowValue(rh)?.ToString();
-            if (text is not null && state.ExpandedGroupTexts.Contains(text))
-                grid.ExpandGroupRow(rh, false);
+            if (text is not null && !state.ExpandedGroupTexts.Contains(text))
+                grid.CollapseGroupRow(rh, false);
         }
         if (state.TopRowHandle != GridControl.InvalidRowHandle && grid.View is TableView tv)
             tv.ScrollIntoView(state.TopRowHandle);

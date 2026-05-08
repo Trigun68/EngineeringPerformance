@@ -504,15 +504,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
-            var forecastState = SaveDetailForecastStateCallback?.Invoke();
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
             if (savedState is not null)
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreDetailForecastStateCallback?.Invoke(savedState),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
-            if (forecastState is not null)
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                    () => RestoreDetailForecastStateCallback?.Invoke(forecastState),
                     System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
