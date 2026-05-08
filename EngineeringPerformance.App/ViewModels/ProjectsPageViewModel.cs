@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿using System.Collections.ObjectModel;
+﻿﻿﻿﻿﻿﻿﻿﻿﻿using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -1365,7 +1365,7 @@ public sealed class FacilityForecastItem
 public sealed class DetailGridState
 {
     public HashSet<string> ExpandedGroupTexts { get; } = [];
-    public int TopRowIndex { get; set; }
+    public int TopRowHandle { get; set; } = -1;
 }
 
 public sealed class DetailForecastItem

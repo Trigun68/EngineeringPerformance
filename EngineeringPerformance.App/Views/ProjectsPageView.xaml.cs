@@ -1,4 +1,4 @@
-﻿﻿using System.ComponentModel;
+﻿﻿﻿using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using DevExpress.Xpf.Bars;
@@ -44,7 +44,18 @@ public partial class ProjectsPageView : UserControl
 
     private static DetailGridState SaveGridState(GridControl grid)
     {
-        var state = new DetailGridState { TopRowIndex = (grid.View as TableView)?.TopRowIndex ?? 0 };
+        var tv = grid.View as TableView;
+        var state = new DetailGridState();
+        var topIndex = tv?.TopRowIndex ?? 0;
+        for (var i = topIndex; i < grid.VisibleRowCount; i++)
+        {
+            var rh = grid.GetRowHandleByVisibleIndex(i);
+            if (!grid.IsGroupRowHandle(rh))
+            {
+                state.TopRowHandle = rh;
+                break;
+            }
+        }
         for (var i = 0; i < grid.VisibleRowCount; i++)
         {
             var rh = grid.GetRowHandleByVisibleIndex(i);
@@ -69,8 +80,8 @@ public partial class ProjectsPageView : UserControl
             if (text is not null && state.ExpandedGroupTexts.Contains(text))
                 grid.ExpandGroupRow(rh, false);
         }
-        if (state.TopRowIndex > 0 && grid.View is TableView tv)
-            tv.TopRowIndex = state.TopRowIndex;
+        if (state.TopRowHandle != GridControl.InvalidRowHandle && grid.View is TableView tv)
+            tv.ScrollIntoView(state.TopRowHandle);
     }
 
     private GridControl[] GetAllGrids() =>
