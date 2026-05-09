@@ -1,7 +1,6 @@
 # Сохранение состояния детальной сетки (Forecast / Fact)
 
-**Статус:** ✅ Реализовано (последняя итерация: 2026-05-09 — ISS-002 iter. 2)
-**К возврату в следующей сессии:** да — UI-проверки видеосценария и альтернативы in-place обновления коллекций.
+**Статус:** ✅ Реализовано (ISS-002 закрыта 2026-05-09, итерация 2 + UI-подтверждение пользователя)
 
 ## Назначение
 
@@ -75,17 +74,15 @@ public sealed class DetailGridState
 | 2026-05-09 (74eea05) | `RestoreStateOnSourceChange="True"` + `RestoreStateKeyFieldName` | DevExpress делает focus/groups, code-behind — только скролл |
 | 2026-05-09 (ISS-002 iter. 2) | Унификация Fact-пути с Forecast (убран дублирующий `factState`-restore); `Math.Clamp` для `TopRowIndex` при уменьшении `VisibleRowCount`; `RestoreStateOnSourceChange` подключён к `CompareGrid` | **Текущая версия.** Снят один источник «вздрагивания» на Fact-вкладке; экран не прыгает при удалении строки |
 
-## Что осталось решить (вернуться в следующей сессии)
+## Итог (ISS-002 закрыта 2026-05-09)
 
-См. [`docs/issues/ISS-002-detail-grid-flicker-revisit.md`](../issues/ISS-002-detail-grid-flicker-revisit.md). После итерации 2 (2026-05-09) закрыты:
-- ✅ Дублирующий restore-pass на Fact-пути (был один из источников мигания).
+См. [`docs/issues/ISS-002-detail-grid-flicker-revisit.md`](../issues/ISS-002-detail-grid-flicker-revisit.md). После итерации 2 + UI-подтверждения пользователя:
+- ✅ Дублирующий restore-pass на Fact-пути устранён (был источником мигания).
 - ✅ Fallback при отсутствии focused row — `Math.Clamp` к актуальному `VisibleRowCount`.
 - ✅ `CompareGrid` подключён к нативному механизму DevExpress.
+- ✅ UI-сценарии редактирования (Forecast/Fact, IIC-норма, удаление строки) проходят без визуального мигания и потери фокуса.
 
-Открыто (требует UI-сессии пользователя):
-- Видеозапись сценария редактирования и подтверждение, что «вздрагивания» полностью ушли (ISS-002 п. 1, 4).
-- Возможные оптимизации в обход смены `ItemsSource` — in-place `Add/Remove` или `BeginDataUpdate`/`EndDataUpdate` (ISS-002 п. 2).
-- Тест-кейс редактирования IIC-нормы (ISS-002 п. 6).
+Микро-оптимизации (in-place `Add/Remove` или `BeginDataUpdate`/`EndDataUpdate`) и профайлинг layout-pass'ов оставлены как backlog-варианты на случай, если проблема вернётся в новых сценариях. Сейчас не требуются.
 
 ## Файлы
 

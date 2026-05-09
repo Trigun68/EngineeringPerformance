@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-09, ISS-002 closed)
+- `docs/issues/ISS-002-detail-grid-flicker-revisit.md`: статус → ✅ Closed после UI-подтверждения пользователя. Сценарии редактирования (Forecast/Fact, IIC-норма, удаление строки) проходят без вздрагиваний и потери фокуса. Микро-оптимизации (`BeginDataUpdate/EndDataUpdate`, in-place `Add/Remove`) переведены в backlog как не требующиеся.
+- `docs/features/detail-grid-state-preservation.md`: раздел «Что осталось решить» заменён на «Итог» с фиксацией закрытия ISS-002.
+
 ### Fixed (2026-05-09, ISS-002 iteration 2 — detail grid flicker)
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs`: в `LoadFactDataAsync` убран дублирующий restore-pass детальной сетки факта. Раньше внутри `Load*` повторно снимался `factState = SaveFactDetailStateCallback?.Invoke()` и через второй `Dispatcher.BeginInvoke` перетирал восстановление, переданное вызывающей командой (`EditProjectPhysicalVolumeAsync` и т.п.). Это был остаток от отклонённого 2026-05-08 анти-паттерна (см. таблицу истории в feature-doc, строка 01db0b7). Теперь Fact-путь идентичен Forecast-пути — единственный restore идёт от `savedState`, переданного из команды редактирования. Убирает один из источников «вздрагивания» на вкладке «Оценка факта → Детально».
 - `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs`: `RestoreGridState` стал устойчив к уменьшению `VisibleRowCount`. Если `FocusedRowId` отсутствует в новом снимке (строка удалена/отфильтрована/перешла под другую группу), вместо безусловного `tv.TopRowIndex = state.TopRowIndex` теперь выполняется `Math.Clamp` к диапазону `[0, VisibleRowCount-1]`. Дополнительно: при `VisibleRowCount == 0` ставится `0` без поиска — экран не «прыгает» в случайную позицию.
