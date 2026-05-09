@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, log PhysicalVolume / LaborIntensity imports)
+- `EngineeringPerformance.App/ViewModels/DataImportDialogViewModel.cs`: после успешного импорта пишется `PhysicalVolumeImport` или `LaborIntensityImport` (зависит от `DataType`) с указанием `EntityType=ProjectAnalysisVersion`, `EntityId=VersionId` и описанием (project/version/rows/filename). Внедрены зависимости `IUserActionLogService` и `CurrentUserHolder`.
+
 ### Added (2026-05-09, log Login / LoginFailed events)
 - `EngineeringPerformance.Infrastructure/Services/AuthenticationService.cs`: внедрён `IUserActionLogService`. `LoginAsync` логирует `Login` (успех) и `LoginFailed` (известный пользователь, неверный пароль; для неизвестных имён — только Serilog, т.к. UserId FK Restrict). `TryAutoLoginAsync` логирует `Login` для авто-входа по Windows-учётке.
 

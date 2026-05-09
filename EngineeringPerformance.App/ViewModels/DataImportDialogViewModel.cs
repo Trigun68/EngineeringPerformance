@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Enums;
@@ -13,6 +14,8 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class DataImportDialogViewModel : ObservableObject
 {
     private readonly IDataImportService _importService;
+    private readonly IUserActionLogService _actionLog;
+    private readonly CurrentUserHolder _currentUser;
     private Action<bool>? _closeDialog;
 
     [ObservableProperty] private int _projectId;
@@ -31,9 +34,14 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
         ? "Физические объёмы"
         : "Трудоёмкость";
 
-    public DataImportDialogViewModel(IDataImportService importService)
+    public DataImportDialogViewModel(
+        IDataImportService importService,
+        IUserActionLogService actionLog,
+        CurrentUserHolder currentUser)
     {
         _importService = importService;
+        _actionLog = actionLog;
+        _currentUser = currentUser;
     }
 
     public void Initialize(int projectId, int versionId, DataImportType dataType, Action<bool>? closeDialog = null)
@@ -166,6 +174,16 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
 
             if (ImportResult.Success)
             {
+                var userId = _currentUser.User?.Id;
+                if (userId is not null)
+                {
+                    var actionType = DataType == DataImportType.PhysicalVolume
+                        ? UserActionType.PhysicalVolumeImport
+                        : UserActionType.LaborIntensityImport;
+                    var desc = $"ProjectId={ProjectId}, VersionId={VersionId}, rows={ImportResult.RecordsImported}, file={Path.GetFileName(SelectedFilePath)}";
+                    await _actionLog.LogAsync(userId.Value, actionType, entityType: "ProjectAnalysisVersion", entityId: VersionId, description: desc);
+                }
+
                 var text = ImportResult.RecordsImported > 0
                     ? $"Импортировано строк: {ImportResult.RecordsImported}."
                     : string.IsNullOrWhiteSpace(ImportResult.SuccessDetails)
