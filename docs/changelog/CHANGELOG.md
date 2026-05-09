@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, ISS-003 backlog)
+- `docs/issues/ISS-003-detail-grid-context-menu-add-delete.md`: backlog-задача — 3 новых пункта в контекстное меню `DetailForecastGrid` (Удалить выбранную строку / Добавить копированием / Добавить пустую). Включает требования пользователя, acceptance criteria, стартовые точки для новой сессии (паттерны для копирования: `PhysicalVolumeQuickEditDialog`, `IterationDeleteDialog`, `EditProjectPhysicalVolumeAsync`), список «не делать» (не редактировать связанные поля, не использовать `MessageBox`, не терять focus/scroll).
+
 ### Chore (2026-05-09, ProjectsPageViewModel.cs encoding + warnings)
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs`: файл перекодирован UTF-8-mojibake → корректный UTF-8 без BOM (раньше был с 9 повторяющимися BOM-маркерами и двойной перекодировкой UTF-8 → CP1251 → UTF-8, из-за чего русские строки отображались как `РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё`). Перекодировка через strict `cp1251.GetBytes()` подтвердила нулевую потерю данных (`lost_chars: 0`). Размер файла 68436 → 64129 байт. Теперь error messages, контекстные комментарии и разделители в UI рендерятся корректно (например, «Ошибка загрузки данных прогноза» вместо mojibake).
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs`: добавлен `_ =` перед `Dispatcher.BeginInvoke` в `LoadForecastDataAsync` (строка 515) и `LoadFactDataAsync` (строка 767). Гасит 4 пред-существующих warning CS4014 («вызов не ожидается»). Сборка теперь даёт **0 предупреждений**.
