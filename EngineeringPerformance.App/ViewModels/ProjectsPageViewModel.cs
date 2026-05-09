@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -39,7 +39,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
     public Window? OwnerWindow { get; set; }
 
-    // Р’С‹Р±СЂР°РЅРЅС‹Р№ РїСЂРѕРµРєС‚
+    // Выбранный проект
     [ObservableProperty] private int? _selectedProjectId;
     [ObservableProperty] private string _selectedProjectCode = string.Empty;
     [ObservableProperty] private string _selectedProjectName = string.Empty;
@@ -47,7 +47,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private decimal? _accuracyScore;
     [ObservableProperty] private bool _hasProject;
 
-    // Р’РєР»Р°РґРєР° РџСЂРѕРіРЅРѕР·РёСЂРѕРІР°РЅРёРµ вЂ” РІС‹Р±СЂР°РЅРЅР°СЏ РІРµСЂСЃРёСЏ (РїР»Р°РЅ)
+    // Вкладка Прогнозирование — выбранная версия (план)
     [ObservableProperty] private int? _planVersionId;
     [ObservableProperty] private string _planVersionName = string.Empty;
     [ObservableProperty] private string _planVersionLabel = string.Empty;
@@ -55,7 +55,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private ObservableCollection<FacilityForecastItem> _facilityForecastData = [];
     [ObservableProperty] private ObservableCollection<DetailForecastItem> _detailForecastData = [];
 
-    // Р’РєР»Р°РґРєР° РћС†РµРЅРєР° С„Р°РєС‚Р° вЂ” РІС‹Р±СЂР°РЅРЅР°СЏ РІРµСЂСЃРёСЏ (С„Р°РєС‚)
+    // Вкладка Оценка факта — выбранная версия (факт)
     [ObservableProperty] private int? _factVersionId;
     [ObservableProperty] private string _factVersionName = string.Empty;
     [ObservableProperty] private string _factVersionLabel = string.Empty;
@@ -63,7 +63,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private ObservableCollection<FacilityForecastItem> _factFacilityData = [];
     [ObservableProperty] private ObservableCollection<DetailForecastItem> _factDetailData = [];
 
-    // Р’РєР»Р°РґРєР° РЎСЂР°РІРЅРµРЅРёРµ РІРµСЂСЃРёР№
+    // Вкладка Сравнение версий
     [ObservableProperty] private int? _compareVersionAId;
     [ObservableProperty] private string _compareVersionAName = string.Empty;
     [ObservableProperty] private string _compareVersionALabel = string.Empty;
@@ -225,7 +225,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         await _participantsDialog.ShowAsync(pid);
     }
 
-    // в”Ђв”Ђв”Ђ РџСЂРѕРіРЅРѕР·РёСЂРѕРІР°РЅРёРµ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ─── Прогнозирование ───────────────────────────────────────────────────
 
     [RelayCommand]
     private async Task SelectPlanVersionAsync()
@@ -288,7 +288,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«РС‚РѕРіРѕВ»: РёРµСЂР°СЂС…РёСЏ РЅР°РїСЂР°РІР»РµРЅРёР№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            // ── Вкладка «Итого»: иерархия направлений ──────────────────────
             var childrenByParent = data
                 .Where(r => r.WorkDirectionId >= 0 && r.ParentId.HasValue)
                 .ToLookup(r => r.ParentId!.Value);
@@ -354,8 +354,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = row.WorkDirectionId,
-                    Name = $"РС‚РѕРіРѕ: {row.WorkDirectionName}",
-                    DisplayName = indent + $"РС‚РѕРіРѕ: {row.WorkDirectionName}",
+                    Name = $"Итого: {row.WorkDirectionName}",
+                    DisplayName = indent + $"Итого: {row.WorkDirectionName}",
                     NormUnitName = row.NormUnitName ?? string.Empty,
                     FactPhysicalVolume = null,
                     NormProductivity = null,
@@ -392,15 +392,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
-            // РС‚РѕРіРѕРІР°СЏ СЃС‚СЂРѕРєР° РІРєР»Р°РґРєРё В«РС‚РѕРіРѕВ» вЂ” СЃСѓРјРјР° РєРѕСЂРЅРµРІС‹С… РёС‚РѕРіРѕРІ
+            // Итоговая строка вкладки «Итого» — сумма корневых итогов
             var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
             if (rootTotals.Count > 0)
             {
                 result.Add(new ForecastPerformanceItem
                 {
                     Id = int.MinValue,
-                    Name = "РРўРћР“Рћ",
-                    DisplayName = "РРўРћР“Рћ",
+                    Name = "ИТОГО",
+                    DisplayName = "ИТОГО",
                     NormUnitName = string.Empty,
                     FactPhysicalVolume = null,
                     NormProductivity = null,
@@ -414,7 +414,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             ForecastData = new ObservableCollection<ForecastPerformanceItem>(result);
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«РџРѕ РѕР±СЉРµРєС‚Р°РјВ»: Р°РіСЂРµРіР°С‚ РїРѕ FacilityCode в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            // ── Вкладка «По объектам»: агрегат по FacilityCode ─────────────
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
@@ -457,7 +457,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             FacilityForecastData = new ObservableCollection<FacilityForecastItem>(facilityResult);
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«Р”РµС‚Р°Р»СЊРЅРѕВ»: РѕРґРЅР° СЃС‚СЂРѕРєР° Р‘Р” в†’ РѕРґРЅР° СЃС‚СЂРѕРєР° С‚Р°Р±Р»РёС†С‹ в”Ђв”Ђ
+            // ── Вкладка «Детально»: одна строка БД → одна строка таблицы ──
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
@@ -497,7 +497,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     EstimationBasis       = pv.EstimationBasis ?? string.Empty,
                     PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
                     PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment          = isAssessment ? "Р”Р°" : "РќРµС‚",
+                    IsAssessment          = isAssessment ? "Да" : "Нет",
                     Coefficient           = pv.PhysicalVolume?.Coefficient,
                     IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl) ? $"{cl.Code} {cl.Name}" : string.Empty,
                     IicUnitName           = norm?.NormUnitName ?? string.Empty,
@@ -512,13 +512,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             DetailForecastData = new ObservableCollection<DetailForecastItem>(detailRows);
             if (savedState is not null)
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreDetailForecastStateCallback?.Invoke(savedState),
                     System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С… РїСЂРѕРіРЅРѕР·Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка загрузки данных прогноза: {ex.Message}";
         }
         finally
         {
@@ -549,7 +549,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid || PlanVersionId is not int vid)
         {
-            ErrorMessage = "Р’С‹Р±РµСЂРёС‚Рµ РІРµСЂСЃРёСЋ РїР»Р°РЅР° РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° РїСЂРѕРіРЅРѕР·Р°";
+            ErrorMessage = "Выберите версию плана для просмотра прогноза";
             return;
         }
 
@@ -570,7 +570,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.ShowDialog();
     }
 
-    // в”Ђв”Ђв”Ђ РћС†РµРЅРєР° С„Р°РєС‚Р° в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ─── Оценка факта ──────────────────────────────────────────────────────
 
     [RelayCommand]
     private async Task SelectFactVersionAsync()
@@ -643,7 +643,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«РС‚РѕРіРѕВ»: РёРµСЂР°СЂС…РёСЏ РЅР°РїСЂР°РІР»РµРЅРёР№ (С‚РµРєСѓС‰Р°СЏ Р»РѕРіРёРєР°) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
             var items = new ObservableCollection<PerformanceItem>();
             foreach (var row in data)
             {
@@ -666,7 +666,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
             FactPerformanceData = items;
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«РџРѕ РѕР±СЉРµРєС‚Р°РјВ» в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            // ── Вкладка «По объектам» ────────────────────────────────────────
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
@@ -709,7 +709,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             FactFacilityData = new ObservableCollection<FacilityForecastItem>(facilityResult);
 
-            // в”Ђв”Ђ Р’РєР»Р°РґРєР° В«Р”РµС‚Р°Р»СЊРЅРѕВ» в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+            // ── Вкладка «Детально» ──────────────────────────────────────────
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
@@ -749,7 +749,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     EstimationBasis       = pv.EstimationBasis ?? string.Empty,
                     PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
                     PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment          = isAssessment ? "Р”Р°" : "РќРµС‚",
+                    IsAssessment          = isAssessment ? "Да" : "Нет",
                     Coefficient           = pv.PhysicalVolume?.Coefficient,
                     IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
                     IicUnitName           = norm?.NormUnitName ?? string.Empty,
@@ -764,13 +764,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
             if (savedState is not null)
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(
+                _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreFactDetailStateCallback?.Invoke(savedState),
                     System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РґР°РЅРЅС‹С… РѕС†РµРЅРєРё: {ex.Message}";
+            ErrorMessage = $"Ошибка загрузки данных оценки: {ex.Message}";
         }
         finally
         {
@@ -819,7 +819,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid || FactVersionId is not int vid)
         {
-            ErrorMessage = "Р’С‹Р±РµСЂРёС‚Рµ РІРµСЂСЃРёСЋ РґР»СЏ РѕС‚С‡С‘С‚Р°";
+            ErrorMessage = "Выберите версию для отчёта";
             return;
         }
 
@@ -837,7 +837,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.ShowDialog();
     }
 
-    // в”Ђв”Ђв”Ђ РЎСЂР°РІРЅРµРЅРёРµ РІРµСЂСЃРёР№ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ─── Сравнение версий ──────────────────────────────────────────────────
 
     [RelayCommand]
     private async Task SelectCompareVersionAAsync()
@@ -910,7 +910,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЃСЂР°РІРЅРµРЅРёСЏ: {ex.Message}";
+            ErrorMessage = $"Ошибка сравнения: {ex.Message}";
         }
         finally
         {
@@ -918,7 +918,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
     }
 
-    // в”Ђв”Ђв”Ђ РћС‚С‡С‘С‚С‹ в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ─── Отчёты ───────────────────────────────────────────────────────────
 
     [RelayCommand]
     private async Task ExportFactAnalysisToExcelAsync()
@@ -927,9 +927,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ Р°РЅР°Р»РёР·Р° РІРµСЂСЃРёРё РІ Excel",
+            Title = "Экспорт анализа версии в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"РђРЅР°Р»РёР·Р’РµСЂСЃРёРё_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            FileName = $"АнализВерсии_{SelectedProjectCode}_{FactVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -941,12 +941,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var svc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
             var report = await svc.GenerateReportAsync(pid, vid);
             await _exportService.ExportToExcelAsync(report, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -961,9 +961,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ Р°РЅР°Р»РёР·Р° РІРµСЂСЃРёРё РІ PDF",
+            Title = "Экспорт анализа версии в PDF",
             Filter = "PDF (*.pdf)|*.pdf",
-            FileName = $"РђРЅР°Р»РёР·Р’РµСЂСЃРёРё_{SelectedProjectCode}_{FactVersionName}.pdf",
+            FileName = $"АнализВерсии_{SelectedProjectCode}_{FactVersionName}.pdf",
             DefaultExt = "pdf",
         };
         if (dlg.ShowDialog() != true) return;
@@ -975,12 +975,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var svc = _serviceProvider.GetRequiredService<Core.Services.IProjectVersionAnalysisService>();
             var report = await svc.GenerateReportAsync(pid, vid);
             await _exportService.ExportToPdfAsync(report, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -995,9 +995,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ РїСЂРѕРіРЅРѕР·Р° РІ Excel",
+            Title = "Экспорт прогноза в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"РџСЂРѕРіРЅРѕР·_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            FileName = $"Прогноз_{SelectedProjectCode}_{PlanVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1014,12 +1014,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     r.IsTotal, r.Level))
                 .ToList();
             await _forecastExportService.ExportForecastSummaryToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1034,9 +1034,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ РїСЂРѕРіРЅРѕР·Р° РїРѕ РѕР±СЉРµРєС‚Р°Рј РІ Excel",
+            Title = "Экспорт прогноза по объектам в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"РџСЂРѕРіРЅРѕР·РџРѕРћР±СЉРµРєС‚Р°Рј_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            FileName = $"ПрогнозПоОбъектам_{SelectedProjectCode}_{PlanVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1050,12 +1050,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1070,9 +1070,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ РїСЂРѕРіРЅРѕР·Р° РїРѕ РѕР±СЉРµРєС‚Р°Рј РІ PDF",
+            Title = "Экспорт прогноза по объектам в PDF",
             Filter = "PDF (*.pdf)|*.pdf",
-            FileName = $"РџСЂРѕРіРЅРѕР·РџРѕРћР±СЉРµРєС‚Р°Рј_{SelectedProjectCode}_{PlanVersionName}.pdf",
+            FileName = $"ПрогнозПоОбъектам_{SelectedProjectCode}_{PlanVersionName}.pdf",
             DefaultExt = "pdf",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1086,12 +1086,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1106,9 +1106,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ РґРµС‚Р°Р»СЊРЅРѕРіРѕ РїСЂРѕРіРЅРѕР·Р° РІ Excel",
+            Title = "Экспорт детального прогноза в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"РџСЂРѕРіРЅРѕР·Р”РµС‚Р°Р»СЊРЅРѕ_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            FileName = $"ПрогнозДетально_{SelectedProjectCode}_{PlanVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1129,12 +1129,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .ToList();
             await _forecastExportService.ExportDetailForecastToExcelAsync(
                 rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1149,9 +1149,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ С„Р°РєС‚Р° РїРѕ РѕР±СЉРµРєС‚Р°Рј РІ Excel",
+            Title = "Экспорт факта по объектам в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"Р¤Р°РєС‚РџРѕРћР±СЉРµРєС‚Р°Рј_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            FileName = $"ФактПоОбъектам_{SelectedProjectCode}_{FactVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1165,12 +1165,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1185,9 +1185,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ С„Р°РєС‚Р° РїРѕ РѕР±СЉРµРєС‚Р°Рј РІ PDF",
+            Title = "Экспорт факта по объектам в PDF",
             Filter = "PDF (*.pdf)|*.pdf",
-            FileName = $"Р¤Р°РєС‚РџРѕРћР±СЉРµРєС‚Р°Рј_{SelectedProjectCode}_{FactVersionName}.pdf",
+            FileName = $"ФактПоОбъектам_{SelectedProjectCode}_{FactVersionName}.pdf",
             DefaultExt = "pdf",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1201,12 +1201,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
                 .ToList();
             await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1221,9 +1221,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var dlg = new SaveFileDialog
         {
-            Title = "Р­РєСЃРїРѕСЂС‚ РґРµС‚Р°Р»СЊРЅРѕРіРѕ С„Р°РєС‚Р° РІ Excel",
+            Title = "Экспорт детального факта в Excel",
             Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = $"Р¤Р°РєС‚Р”РµС‚Р°Р»СЊРЅРѕ_{SelectedProjectCode}_{FactVersionName}.xlsx",
+            FileName = $"ФактДетально_{SelectedProjectCode}_{FactVersionName}.xlsx",
             DefaultExt = "xlsx",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1244,12 +1244,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .ToList();
             await _forecastExportService.ExportDetailForecastToExcelAsync(
                 rows, SelectedProjectCode, FactVersionName, dlg.FileName);
-            MessageBox.Show($"Р­РєСЃРїРѕСЂС‚ Р·Р°РІРµСЂС€С‘РЅ:\n{dlg.FileName}", "Р“РѕС‚РѕРІРѕ",
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"РћС€РёР±РєР° СЌРєСЃРїРѕСЂС‚Р°: {ex.Message}";
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
         }
         finally
         {
@@ -1257,7 +1257,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
     }
 
-    // в”Ђв”Ђв”Ђ РљРѕРЅС‚РµРєСЃС‚РЅРѕРµ РјРµРЅСЋ В«Р”РµС‚Р°Р»СЊРЅРѕВ» в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+    // ─── Контекстное меню «Детально» ──────────────────────────────────────
 
     [RelayCommand]
     private async Task EditProjectPhysicalVolumeAsync(DetailForecastItem? row)
@@ -1289,7 +1289,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var vm = _serviceProvider.GetRequiredService<PhysicalVolumeQuickEditViewModel>();
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
         vm.Prepare(row.PhysicalVolumeId, nomenclature, row.NormId.HasValue ? null : (int?)null,
-            row.Coefficient ?? 1m, row.IsAssessment == "Р”Р°" ? true : row.IsAssessment == "РќРµС‚" ? false : (bool?)null);
+            row.Coefficient ?? 1m, row.IsAssessment == "Да" ? true : row.IsAssessment == "Нет" ? false : (bool?)null);
 
         await using var ctx = await _contextFactory.CreateDbContextAsync();
         var pv = await ctx.PhysicalVolumes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PhysicalVolumeId);
