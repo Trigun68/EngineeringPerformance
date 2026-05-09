@@ -136,6 +136,20 @@ public partial class ProjectsPageView : UserControl
         };
         item3.ItemClick += (_, _) => vm.EditIicNormCommand.Execute(row);
         e.MenuInfo.Menu.Items.Add(item3);
+
+        e.MenuInfo.Menu.Items.Add(new BarItemSeparator());
+
+        var item4 = new BarButtonItem { Content = "Удалить выбранную строку" };
+        item4.ItemClick += (_, _) => vm.DeleteProjectPhysicalVolumeCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item4);
+
+        var item5 = new BarButtonItem { Content = "Добавить строку копированием выбранной" };
+        item5.ItemClick += (_, _) => vm.CreateProjectPhysicalVolumeFromCopyCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item5);
+
+        var item6 = new BarButtonItem { Content = "Добавить строку" };
+        item6.ItemClick += (_, _) => vm.CreateProjectPhysicalVolumeCommand.Execute(null);
+        e.MenuInfo.Menu.Items.Add(item6);
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

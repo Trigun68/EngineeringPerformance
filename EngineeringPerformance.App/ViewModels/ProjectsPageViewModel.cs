@@ -28,6 +28,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private readonly IPerformanceService _performanceService;
     private readonly IDataImportDialogService _dataImportDialog;
     private readonly IIterationDeleteDialogService _iterationDeleteDialog;
+    private readonly IConfirmDialogService _confirmDialog;
+    private readonly IProjectPhysicalVolumeCreateDialogService _ppvCreateDialog;
+    private readonly IDataTableService<ProjectPhysicalVolume> _ppvService;
     private readonly IProjectVersionAnalysisExportService _exportService;
     private readonly IProjectForecastExportService _forecastExportService;
     private readonly IProjectForecastService _forecastService;
@@ -89,6 +92,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IProjectForecastService forecastService,
         IDataImportDialogService dataImportDialog,
         IIterationDeleteDialogService iterationDeleteDialog,
+        IConfirmDialogService confirmDialog,
+        IProjectPhysicalVolumeCreateDialogService ppvCreateDialog,
+        IDataTableService<ProjectPhysicalVolume> ppvService,
         IProjectVersionAnalysisExportService exportService,
         IProjectForecastExportService forecastExportService,
         ProjectCharacteristicSelectionService characteristicSelectionService,
@@ -108,6 +114,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _forecastService = forecastService;
         _dataImportDialog = dataImportDialog;
         _iterationDeleteDialog = iterationDeleteDialog;
+        _confirmDialog = confirmDialog;
+        _ppvCreateDialog = ppvCreateDialog;
+        _ppvService = ppvService;
         _exportService = exportService;
         _forecastExportService = forecastExportService;
         _characteristicSelectionService = characteristicSelectionService;
@@ -1333,6 +1342,66 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var userId = _currentUser.User?.Id;
         if (userId is null) return;
         await _actionLog.LogAsync(userId.Value, actionType, entityType: entityType, entityId: entityId, description: description);
+    }
+
+    [RelayCommand]
+    private async Task DeleteProjectPhysicalVolumeAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        var confirmed = await _confirmDialog.ShowAsync(
+            "Удалить строку",
+            $"Удалить выбранную строку?\n{nomenclature}",
+            "Удалить");
+        if (!confirmed) return;
+
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        try
+        {
+            await _ppvService.DeleteAsync(row.ProjectPhysicalVolumeId);
+        }
+        catch (Exception ex)
+        {
+            // FK от связанных сущностей (например ProjectLaborIntensity по PhysicalVolumeId не блокирует,
+            // но возможны иные ограничения СУБД) — текст ошибки показываем пользователю как информационное окно.
+            await _confirmDialog.ShowAsync(
+                "Ошибка удаления",
+                $"Не удалось удалить строку: {ex.Message}",
+                "OK", "OK");
+            return;
+        }
+        await LogDetailEditAsync(UserActionType.PhysicalVolumeDelete, "ProjectPhysicalVolume",
+            row.ProjectPhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadForecastDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task CreateProjectPhysicalVolumeFromCopyAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        await ShowCreateDialogAsync(forCopy: true, source: row, pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task CreateProjectPhysicalVolumeAsync(DetailForecastItem? _)
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        await ShowCreateDialogAsync(forCopy: false, source: null, pid, vid);
+    }
+
+    private async Task ShowCreateDialogAsync(bool forCopy, DetailForecastItem? source, int projectId, int versionId)
+    {
+        _ppvCreateDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        var created = await _ppvCreateDialog.ShowAsync(forCopy, source, projectId, versionId);
+        if (!created) return;
+
+        var description = forCopy && source is not null
+            ? $"ProjectId={projectId}, VersionId={versionId}, copyOf={source.ProjectPhysicalVolumeId}"
+            : $"ProjectId={projectId}, VersionId={versionId}";
+        await LogDetailEditAsync(UserActionType.PhysicalVolumeCreate, "ProjectPhysicalVolume", 0, description);
+        await LoadForecastDataAsync(projectId, versionId, state);
     }
 }
 

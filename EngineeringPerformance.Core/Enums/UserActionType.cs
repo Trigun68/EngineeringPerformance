@@ -23,6 +23,7 @@ public enum UserActionType
     PhysicalVolumeImport = 30,
     PhysicalVolumeDelete = 31,
     PhysicalVolumeEdit = 32,
+    PhysicalVolumeCreate = 33,
 
     // Трудоёмкость
     LaborIntensityImport = 40,

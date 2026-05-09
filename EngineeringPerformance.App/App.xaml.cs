@@ -437,6 +437,14 @@ public partial class App : Application
         services.AddTransient<PhysicalVolumeQuickEditDialog>();
         services.AddTransient<IicNormQuickEditViewModel>();
         services.AddTransient<IicNormQuickEditDialog>();
+
+        services.AddTransient<ConfirmDialogViewModel>();
+        services.AddTransient<ConfirmDialog>();
+        services.AddSingleton<IConfirmDialogService, ConfirmDialogService>();
+
+        services.AddTransient<ProjectPhysicalVolumeCreateViewModel>();
+        services.AddTransient<ProjectPhysicalVolumeCreateDialog>();
+        services.AddSingleton<IProjectPhysicalVolumeCreateDialogService, ProjectPhysicalVolumeCreateDialogService>();
     }
 
     private static void ConfigureSerilog()
