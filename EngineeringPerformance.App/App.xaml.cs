@@ -254,6 +254,7 @@ public partial class App : Application
         services.AddSingleton<INavigationService>(sp => sp.GetRequiredService<NavigationService>());
         services.AddSingleton<IAuthenticationService, AuthenticationService>();
         services.AddSingleton<IDbConnectionService, DbConnectionService>();
+        services.AddSingleton<IUserActionLogService, UserActionLogService>();
 
         services.AddSingleton<CurrentUserHolder>();
 

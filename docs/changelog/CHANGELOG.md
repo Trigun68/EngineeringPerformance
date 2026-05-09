@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, user action log service)
+- `EngineeringPerformance.Infrastructure/Services/UserActionLogService.cs`: реализация `IUserActionLogService`. `LogAsync` best-effort (ошибки пишутся в Serilog и не бросаются), `GetAsync` с фильтром (период UTC, UserId, ActionType, EntityType, EntityId) и пагинацией, `ExportToFileAndPurgeAsync` (CSV UTF-8 BOM, разделитель `;`, RFC 4180-экранирование; файл пишется перед `ExecuteDeleteAsync` — при ошибке IO БД нетронута), `ImportFromFileAsync` с дедупликацией по `(UserId, Timestamp, ActionType, EntityType, EntityId)` и пропуском orphan-записей (UserId отсутствует в БД).
+- `EngineeringPerformance.App/App.xaml.cs`: регистрация `IUserActionLogService → UserActionLogService` как Singleton.
+
 ### Added (2026-05-09, user action log core contracts)
 - `EngineeringPerformance.Core/Enums/UserActionType.cs`: enum категорий действий (Login/Logout/LoginFailed, Project CRUD, Version CRUD, PhysicalVolume Import/Delete/Edit, LaborIntensity Import/Delete/Edit, IicNormEdit) — имена сохраняются в БД как nvarchar(64).
 - `Core/DTOs/UserActionLogDto.cs`: DTO записи журнала (включает `UserName` для отображения в гриде).
