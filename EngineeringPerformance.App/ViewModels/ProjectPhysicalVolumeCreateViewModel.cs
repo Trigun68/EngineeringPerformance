@@ -168,12 +168,32 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
             await _service.CreateAsync(entity);
             CloseDialog(true);
         }
+        catch (Exception ex) when (IsUniqueViolation(ex))
+        {
+            // На версию проекта допускается только одна строка ProjectPhysicalVolume для каждой
+            // номенклатуры (уникальный индекс ProjectAnalysisVersionId+ProjectId+PhysicalVolumeId).
+            // При копировании пользователь должен сменить номенклатуру в выпадающем списке.
+            ErrorMessage = "Строка с такой номенклатурой ФО в данной версии проекта уже существует. " +
+                           "Выберите другую номенклатуру в выпадающем списке.";
+        }
         catch (Exception ex)
         {
-            // Возможные причины: нарушение уникального индекса (ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId)
-            // или иные FK ограничения. Пользователю нужно сообщить точный текст СУБД для диагностики.
             ErrorMessage = $"Ошибка сохранения: {ex.Message}";
         }
+    }
+
+    private static bool IsUniqueViolation(Exception ex)
+    {
+        for (var current = (Exception?)ex; current is not null; current = current.InnerException)
+        {
+            var msg = current.Message;
+            if (msg.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase) ||
+                msg.Contains("duplicate key", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     [RelayCommand]

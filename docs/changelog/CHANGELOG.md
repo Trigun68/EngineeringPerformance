@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-09, ISS-003 unique violation message)
+- `EngineeringPerformance.App/ViewModels/ProjectPhysicalVolumeCreateViewModel.cs`: при попытке сохранить копию `ProjectPhysicalVolume` с той же номенклатурой ФО в той же версии проекта пользователь видел сырое сообщение EF Core «An error occurred while saving the entity changes. See the inner exception for details.» — без указания причины. Бизнес-правило БД: уникальный индекс `(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId)` запрещает дубликаты номенклатуры в одной версии проекта. Добавлен метод `IsUniqueViolation`, который проходит по цепочке `InnerException` и ищет ключевые слова `UNIQUE`/`duplicate key`. При срабатывании показывается понятное русское сообщение: «Строка с такой номенклатурой ФО в данной версии проекта уже существует. Выберите другую номенклатуру в выпадающем списке.». Для прочих ошибок остаётся общий fallback с текстом исключения.
+
 ### Added (2026-05-09, ISS-003 detail grid context menu CRUD)
 - `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs`: в `OnDetailForecastShowGridMenu` добавлены 3 пункта после разделителя — «Удалить выбранную строку», «Добавить строку копированием выбранной», «Добавить строку». Подключены к новым командам VM.
 - `EngineeringPerformance.App/Views/ConfirmDialog.xaml(.cs)` + `EngineeringPerformance.App/ViewModels/ConfirmDialogViewModel.cs`: универсальный confirm-диалог проектного стиля (header `#2C3E50`, белый body, кнопки Confirm/Cancel) с биндингом `Title`/`Message`/`ConfirmButtonText`/`CancelButtonText`. Заменяет паттерн `MessageBox.Show` для подтверждений.
