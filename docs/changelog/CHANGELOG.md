@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, user action log feature docs and tests)
+- `docs/features/user-action-journal.md`: документация фичи — схема БД, категории действий, точки внедрения логирования (таблица VM/сервисов), контракт `IUserActionLogService`, формат CSV, правила доступа, что НЕ реализовано (авто-архив, old/new value, Logout).
+- `EngineeringPerformance.Tests/UserActionLogServiceTests.cs`: 8 unit-тестов на сервис журнала — `LogAsync` (вставка, no-throw), `GetAsync` (фильтр по типу/пользователю/периоду, сортировка по `Timestamp DESC`), `ExportToFileAndPurge` (CSV-заголовок, экранирование `;`/`"`, удаление записей), `ImportFromFile` (дедупликация, orphan UserId, неверный заголовок).
+
+### Changed (2026-05-09, user action log purge implementation)
+- `EngineeringPerformance.Infrastructure/Services/UserActionLogService.cs`: метод `ExportToFileAndPurgeAsync` переписан с `ExecuteDeleteAsync` на `RemoveRange` + `SaveChangesAsync` — обеспечивает совместимость с EF InMemory provider в тестах. Журнал короткий (ограничен ручной архивацией), производительность приемлема.
+
 ### Added (2026-05-09, user action log UI tab)
 - `EngineeringPerformance.Core/AccessControlConstants.cs`: добавлен объект доступа `UserActionLog` (родитель `SettingsPage`, отображение «Журнал действий пользователей»).
 - `EngineeringPerformance.App/ViewModels/UserActionLogViewModel.cs`: VM журнала. Фильтры (период по умолчанию −30 дней, пользователь, тип действия), пагинация на 1000 строк, команды `RefreshAsync`, `ExportAndPurgeAsync` (Save+Delete с подтверждением и проверкой роли Administrator), `ImportAsync` с агрегированным отчётом (всего/добавлено/дубли/orphan/невалидные + первые 10 ошибок). Свойство `IsNotBusy` для блокировки тулбара.

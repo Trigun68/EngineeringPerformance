@@ -176,7 +176,13 @@ public sealed class UserActionLogService : IUserActionLogService
             }
         }
 
-        var deleted = await context.UserActionLogs.ExecuteDeleteAsync(cancellationToken);
+        var deleted = 0;
+        var trackedRows = await context.UserActionLogs.ToListAsync(cancellationToken);
+        if (trackedRows.Count > 0)
+        {
+            context.UserActionLogs.RemoveRange(trackedRows);
+            deleted = await context.SaveChangesAsync(cancellationToken);
+        }
         return new UserActionLogExportResult(filePath, rows.Count, deleted);
     }
 
