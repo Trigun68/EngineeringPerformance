@@ -409,6 +409,9 @@ public partial class App : Application
         services.AddTransient<AccessRightsWindow>();
         services.AddSingleton<AccessRightsViewModel>();
 
+        services.AddTransient<UserActionLogView>();
+        services.AddSingleton<UserActionLogViewModel>();
+
         services.AddTransient<InterpretationSettingsView>();
         services.AddSingleton<InterpretationSettingsViewModel>();
 

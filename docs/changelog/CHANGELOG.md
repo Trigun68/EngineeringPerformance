@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, user action log UI tab)
+- `EngineeringPerformance.Core/AccessControlConstants.cs`: добавлен объект доступа `UserActionLog` (родитель `SettingsPage`, отображение «Журнал действий пользователей»).
+- `EngineeringPerformance.App/ViewModels/UserActionLogViewModel.cs`: VM журнала. Фильтры (период по умолчанию −30 дней, пользователь, тип действия), пагинация на 1000 строк, команды `RefreshAsync`, `ExportAndPurgeAsync` (Save+Delete с подтверждением и проверкой роли Administrator), `ImportAsync` с агрегированным отчётом (всего/добавлено/дубли/orphan/невалидные + первые 10 ошибок). Свойство `IsNotBusy` для блокировки тулбара.
+- `EngineeringPerformance.App/Views/UserActionLogView.xaml(.cs)`: UserControl с панелью фильтров (DateEdit ×2, ComboBoxEdit ×2), тулбаром (Обновить / Сохранить и удалить / Восстановить / статус-сообщение), DevExpress GridControl с колонками Time UTC, User, Action, Entity, Id, Description, Host. Текстовое сообщение об ошибке внизу (NullToCollapsed-конвертер).
+- `EngineeringPerformance.App/App.xaml.cs`: DI-регистрация `UserActionLogView` (Transient) + `UserActionLogViewModel` (Singleton).
+- `EngineeringPerformance.App/ViewModels/SettingsPageViewModel.cs`: третья вкладка «Журнал действий» в `BuildTabs` после «Пользователи» и «Права пользователей»; видна только при `CanRead(user, "UserActionLog")`.
+
 ### Added (2026-05-09, log detail-grid quick edits)
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs`: внедрены зависимости `IUserActionLogService` и `CurrentUserHolder`. После успешного закрытия трёх диалогов быстрого редактирования детальной сетки пишется журнал: `EditProjectPhysicalVolumeAsync` → `PhysicalVolumeEdit` (EntityType=ProjectPhysicalVolume), `EditPhysicalVolumeNomenclatureAsync` → `LaborIntensityEdit` (EntityType=PhysicalVolume), `EditIicNormAsync` → `IicNormEdit` (EntityType=IicWorkDirectionNorm). Helper `LogDetailEditAsync` молчит для неавторизованного пользователя.
 

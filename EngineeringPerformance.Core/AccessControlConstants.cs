@@ -11,7 +11,7 @@ public static class AccessControlConstants
         "ProjectDataUpload", "Assessment", "Planning",
         "VersionComparison", "GroupAnalysis", "GroupTrend",
         "References", "DataPage", "SettingsPage", "HelpPage",
-        "LaborIntensities", "ProjectCharacteristics"
+        "LaborIntensities", "ProjectCharacteristics", "UserActionLog"
     ];
 
     // objectName → parent section name (null = top-level)
@@ -40,6 +40,7 @@ public static class AccessControlConstants
         ["HelpPage"]                    = null,
         ["SettingsPage"]               = null,
         ["Users"]                      = "SettingsPage",
+        ["UserActionLog"]              = "SettingsPage",
     };
 
     private static readonly Dictionary<string, string> ObjectNameRussianDisplayNames = new()
@@ -67,6 +68,7 @@ public static class AccessControlConstants
         ["HelpPage"] = "Справка",
         ["SettingsPage"] = "Настройки",
         ["Dashboard"] = "Главная",
+        ["UserActionLog"] = "Журнал действий пользователей",
     };
 
     public static string ToRussianObjectName(string objectName)
