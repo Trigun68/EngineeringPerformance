@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, detail grid state preservation docs)
+- `docs/features/detail-grid-state-preservation.md`: документация метода сохранения focus/scroll/групп в детальных сетках Forecast/Fact — комбинация `RestoreStateOnSourceChange="True"` + `RestoreStateKeyFieldName="ProjectPhysicalVolumeId"` (DevExpress нативно для focus и групп) и ручного `SaveGridState`/`RestoreGridState` (только вертикальный скролл через якорь `FocusedRowId` + `FocusedVisibleOffset`). Включена таблица истории эволюции — что пробовали и почему отклоняли.
+- `docs/issues/ISS-002-detail-grid-flicker-revisit.md`: backlog-задача на следующую сессию — устранить остаточные «вздрагивания» и возможную потерю фокуса. План проверок: видеозапись сценария, альтернативы смене `ItemsSource` (`Add/Remove`, `BeginDataUpdate`/`EndDataUpdate`), fallback при удалённой строке, унификация с `CompareGrid`. Definition of Done и список «не делать».
+
 ### Fixed (2026-05-09, populate empty AddUserActionLogs migration)
 - `EngineeringPerformance.Infrastructure/Migrations/20260509112303_AddUserActionLogs.cs`: предыдущая ревизия имела пустой `Up()`/`Down()` — `dotnet ef database update` не создавал таблицу `UserActionLogs`, и при первом обращении приложение падало `Invalid object name 'UserActionLog'`. Заполнено: `CreateTable("UserActionLogs")` с PK, FK на `Users` (Restrict) и тремя индексами (`UserId+Timestamp`, `ActionType`, `EntityType+EntityId`); `Down()` делает `DropTable`. Если миграция уже отмечена применённой в `__EFMigrationsHistory` — применить SQL-скрипт `migrations/schema/015_AddUserActionLogs.sql` напрямую (на dev-БД уже применено).
 
