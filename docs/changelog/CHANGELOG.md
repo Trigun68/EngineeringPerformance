@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, log Login / LoginFailed events)
+- `EngineeringPerformance.Infrastructure/Services/AuthenticationService.cs`: внедрён `IUserActionLogService`. `LoginAsync` логирует `Login` (успех) и `LoginFailed` (известный пользователь, неверный пароль; для неизвестных имён — только Serilog, т.к. UserId FK Restrict). `TryAutoLoginAsync` логирует `Login` для авто-входа по Windows-учётке.
+
 ### Added (2026-05-09, user action log service)
 - `EngineeringPerformance.Infrastructure/Services/UserActionLogService.cs`: реализация `IUserActionLogService`. `LogAsync` best-effort (ошибки пишутся в Serilog и не бросаются), `GetAsync` с фильтром (период UTC, UserId, ActionType, EntityType, EntityId) и пагинацией, `ExportToFileAndPurgeAsync` (CSV UTF-8 BOM, разделитель `;`, RFC 4180-экранирование; файл пишется перед `ExecuteDeleteAsync` — при ошибке IO БД нетронута), `ImportFromFileAsync` с дедупликацией по `(UserId, Timestamp, ActionType, EntityType, EntityId)` и пропуском orphan-записей (UserId отсутствует в БД).
 - `EngineeringPerformance.App/App.xaml.cs`: регистрация `IUserActionLogService → UserActionLogService` как Singleton.

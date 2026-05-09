@@ -13,11 +13,16 @@ namespace EngineeringPerformance.Infrastructure.Services;
 public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IUserActionLogService _actionLog;
     private readonly ILogger<AuthenticationService> _logger;
 
-    public AuthenticationService(IDbContextFactory<AppDbContext> contextFactory, ILogger<AuthenticationService> logger)
+    public AuthenticationService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        IUserActionLogService actionLog,
+        ILogger<AuthenticationService> logger)
     {
         _contextFactory = contextFactory;
+        _actionLog = actionLog;
         _logger = logger;
     }
 
@@ -43,6 +48,7 @@ public sealed class AuthenticationService : IAuthenticationService
             }
 
             _logger.LogInformation("Auto-login successful for userId={UserId}", user.Id);
+            await _actionLog.LogAsync(user.Id, UserActionType.Login, description: $"Auto-login: {windowsUsername}");
             return MapToDto(user);
         }
         catch (Exception ex)
@@ -76,20 +82,19 @@ public sealed class AuthenticationService : IAuthenticationService
 
         if (user is null)
         {
+            // Имя неизвестно — нет userId для FK, фиксируем только в Serilog.
+            _logger.LogInformation("Login failed: unknown username «{Username}»", username);
             throw new AuthenticationException("Invalid credentials");
         }
 
-        if (user.PasswordHash is null)
+        if (user.PasswordHash is null || !VerifyPassword(password, user.PasswordHash))
         {
-            throw new AuthenticationException("Invalid credentials");
-        }
-
-        if (!VerifyPassword(password, user.PasswordHash))
-        {
+            await _actionLog.LogAsync(user.Id, UserActionType.LoginFailed, description: $"Wrong password for «{username}»");
             throw new AuthenticationException("Invalid credentials");
         }
 
         _logger.LogInformation("Manual login successful for userId={UserId}", user.Id);
+        await _actionLog.LogAsync(user.Id, UserActionType.Login, description: $"Manual login: {username}");
         return MapToDto(user);
     }
 
