@@ -2,9 +2,13 @@
 
 ## [Unreleased]
 
-# Changelog
-
-## [Unreleased]
+### Added (2026-05-09, user action log schema)
+- `EngineeringPerformance.Infrastructure/Data/Entities/UserActionLog.cs`: новая сущность журнала действий — `Id`, `UserId` (FK Users, Restrict), `Timestamp` (UTC), `ActionType` nvarchar(64), `EntityType` nvarchar(100) NULL, `EntityId` int NULL, `Description` nvarchar(500) NULL, `IpOrHost` nvarchar(64) NULL.
+- `Infrastructure/Data/Configurations/UserActionLogConfiguration.cs`: EF-конфигурация с тремя индексами (`UserId+Timestamp`, `ActionType`, `EntityType+EntityId`).
+- `Infrastructure/Data/AppDbContext.cs`: `DbSet<UserActionLog> UserActionLogs` + регистрация конфигурации.
+- EF миграция `AddUserActionLogs` + SQL-дубль `migrations/schema/015_AddUserActionLogs.sql`.
+- ADR `docs/adr/ADR-002-user-action-journal.md` (схема + UI + правила экспорта/импорта в CSV).
+- Backlog `docs/issues/ISS-001-user-action-journal-auto-archival.md` — авто-архивация на будущее.
 
 ### Fixed (2026-05-09, detail grid: focus, scroll and groups preserved on edit reload)
 - `ProjectsPageView.xaml`, `DetailForecastGrid` и `FactDetailGrid`: добавлены `RestoreStateOnSourceChange="True"` и `RestoreStateKeyFieldName="ProjectPhysicalVolumeId"` — DevExpress теперь сам сохраняет фокусированную строку и раскрытие групп при смене `ItemsSource` (нативный механизм, исключает мигание из-за двойного рендера и потерю фокуса при ручном `FocusedRowHandle`).

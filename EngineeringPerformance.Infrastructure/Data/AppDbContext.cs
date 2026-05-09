@@ -29,6 +29,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<ProjectCharacteristicSelection> ProjectCharacteristicSelections => Set<ProjectCharacteristicSelection>();
     public DbSet<AnalysisVersionSnapshot> AnalysisVersionSnapshots => Set<AnalysisVersionSnapshot>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
+    public DbSet<UserActionLog> UserActionLogs => Set<UserActionLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,7 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ProjectCharacteristicSelectionConfiguration());
         modelBuilder.ApplyConfiguration(new AnalysisVersionSnapshotConfiguration());
         modelBuilder.ApplyConfiguration(new UserSettingConfiguration());
+        modelBuilder.ApplyConfiguration(new UserActionLogConfiguration());
 
         base.OnModelCreating(modelBuilder);
     }
