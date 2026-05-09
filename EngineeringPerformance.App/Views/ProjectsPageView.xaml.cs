@@ -74,9 +74,16 @@ public partial class ProjectsPageView : UserControl
         // Здесь возвращаем только позицию скролла — её DevExpress не сохраняет при смене ItemsSource.
         if (grid.View is not TableView tv) return;
 
+        var visibleCount = grid.VisibleRowCount;
+        if (visibleCount <= 0)
+        {
+            tv.TopRowIndex = 0;
+            return;
+        }
+
         if (state.FocusedRowId >= 0)
         {
-            for (var i = 0; i < grid.VisibleRowCount; i++)
+            for (var i = 0; i < visibleCount; i++)
             {
                 var rh = grid.GetRowHandleByVisibleIndex(i);
                 if (!grid.IsGroupRowHandle(rh) && grid.GetRow(rh) is DetailForecastItem row
@@ -88,7 +95,9 @@ public partial class ProjectsPageView : UserControl
             }
         }
 
-        tv.TopRowIndex = state.TopRowIndex;
+        // Фокусной строки нет в новом снимке (удалена/отфильтрована/перешла под другую группу) —
+        // откатываемся на сохранённый абсолютный TopRowIndex с clamp-ом к актуальному количеству строк.
+        tv.TopRowIndex = Math.Clamp(state.TopRowIndex, 0, visibleCount - 1);
     }
 
     private GridControl[] GetAllGrids() =>

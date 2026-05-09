@@ -762,15 +762,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
-            var factState = SaveFactDetailStateCallback?.Invoke();
             FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
             if (savedState is not null)
                 System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreFactDetailStateCallback?.Invoke(savedState),
-                    System.Windows.Threading.DispatcherPriority.Loaded);
-            if (factState is not null)
-                System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                    () => RestoreFactDetailStateCallback?.Invoke(factState),
                     System.Windows.Threading.DispatcherPriority.Loaded);
         }
         catch (Exception ex)

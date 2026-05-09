@@ -1,7 +1,7 @@
 # Сохранение состояния детальной сетки (Forecast / Fact)
 
-**Статус:** ✅ Реализовано (последняя итерация: 2026-05-09)
-**К возврату в следующей сессии:** да — устранить остаточные «вздрагивания» и возможную потерю фокуса.
+**Статус:** ✅ Реализовано (последняя итерация: 2026-05-09 — ISS-002 iter. 2)
+**К возврату в следующей сессии:** да — UI-проверки видеосценария и альтернативы in-place обновления коллекций.
 
 ## Назначение
 
@@ -72,14 +72,20 @@ public sealed class DetailGridState
 | 2026-05-08 (3fe55e2) | Save expanded (а не collapsed) groups | Логика инвертирована, но проблема двойного рендера сохранялась |
 | 2026-05-08 (f96000b) | RowHandle-якорь вместо TopRowIndex | Убрало смещение на 1 строку, но мигание от ручного управления группами осталось |
 | 2026-05-09 (5502dd5) | FocusedRowId + offset (текущий fallback) | Стабильно для случая «нет групп»; сохраняет позицию относительно фокуса |
-| 2026-05-09 (74eea05) | `RestoreStateOnSourceChange="True"` + `RestoreStateKeyFieldName` | **Текущая версия.** DevExpress делает focus/groups, code-behind — только скролл |
+| 2026-05-09 (74eea05) | `RestoreStateOnSourceChange="True"` + `RestoreStateKeyFieldName` | DevExpress делает focus/groups, code-behind — только скролл |
+| 2026-05-09 (ISS-002 iter. 2) | Унификация Fact-пути с Forecast (убран дублирующий `factState`-restore); `Math.Clamp` для `TopRowIndex` при уменьшении `VisibleRowCount`; `RestoreStateOnSourceChange` подключён к `CompareGrid` | **Текущая версия.** Снят один источник «вздрагивания» на Fact-вкладке; экран не прыгает при удалении строки |
 
 ## Что осталось решить (вернуться в следующей сессии)
 
-См. [`docs/issues/ISS-002-detail-grid-flicker-revisit.md`](../issues/ISS-002-detail-grid-flicker-revisit.md):
-- Возможные остаточные «вздрагивания» при определённых сценариях редактирования.
-- Проверить поведение при изменении количества строк (удаление через редактирование номенклатуры).
-- Возможна редкая потеря фокуса при отсутствии строки с прежним `ProjectPhysicalVolumeId` в новом снимке.
+См. [`docs/issues/ISS-002-detail-grid-flicker-revisit.md`](../issues/ISS-002-detail-grid-flicker-revisit.md). После итерации 2 (2026-05-09) закрыты:
+- ✅ Дублирующий restore-pass на Fact-пути (был один из источников мигания).
+- ✅ Fallback при отсутствии focused row — `Math.Clamp` к актуальному `VisibleRowCount`.
+- ✅ `CompareGrid` подключён к нативному механизму DevExpress.
+
+Открыто (требует UI-сессии пользователя):
+- Видеозапись сценария редактирования и подтверждение, что «вздрагивания» полностью ушли (ISS-002 п. 1, 4).
+- Возможные оптимизации в обход смены `ItemsSource` — in-place `Add/Remove` или `BeginDataUpdate`/`EndDataUpdate` (ISS-002 п. 2).
+- Тест-кейс редактирования IIC-нормы (ISS-002 п. 6).
 
 ## Файлы
 

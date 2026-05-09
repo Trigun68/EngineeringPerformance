@@ -687,7 +687,9 @@
                         <!-- Вкладка: Итого -->
                         <dx:DXTabItem Header="Итого">
                             <dxg:GridControl x:Name="CompareGrid" Margin="0,8,0,0" ItemsSource="{Binding CompareRows}"
-                                             AutoGenerateColumns="None">
+                                             AutoGenerateColumns="None"
+                                             RestoreStateOnSourceChange="True"
+                                             RestoreStateKeyFieldName="Id">
                                 <dxg:GridControl.Columns>
                                     <dxg:GridColumn FieldName="Name" Header="Направление" Width="30*" />
                                     <dxg:GridColumn FieldName="ZScoreA" Width="12*">
