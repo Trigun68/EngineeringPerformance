@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
@@ -14,6 +15,8 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
     private readonly IDirectoryService<ProjectAnalysisVersion> _service;
     private readonly IDirectoryService<Project> _projectService;
     private readonly IDirectoryCache<PhysicalVolumeType> _volumeTypeCache;
+    private readonly IUserActionLogService _actionLog;
+    private readonly CurrentUserHolder _currentUser;
     private Action<bool>? _closeDialog;
     private int? _preselectedProjectId;
     private ProjectAnalysisVersion? _preparedEntity;
@@ -60,11 +63,15 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
     public ProjectAnalysisVersionEditViewModel(
         IDirectoryService<ProjectAnalysisVersion> service,
         IDirectoryService<Project> projectService,
-        IDirectoryCache<PhysicalVolumeType> volumeTypeCache)
+        IDirectoryCache<PhysicalVolumeType> volumeTypeCache,
+        IUserActionLogService actionLog,
+        CurrentUserHolder currentUser)
     {
         _service = service;
         _projectService = projectService;
         _volumeTypeCache = volumeTypeCache;
+        _actionLog = actionLog;
+        _currentUser = currentUser;
     }
 
     /// <summary>
@@ -158,6 +165,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
                     existing.PhysicalVolumeTypeId = SelectedPhysicalVolumeTypeId;
                     existing.ModifiedAt = DateTime.UtcNow;
                     await _service.UpdateAsync(existing);
+                    await LogVersionActionAsync(UserActionType.VersionEdit, existing.Id, existing.ProjectId, existing.VersionName);
                 }
             }
             else
@@ -179,6 +187,7 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
                 };
 
                 await _service.CreateAsync(entity);
+                await LogVersionActionAsync(UserActionType.VersionCreate, entity.Id, entity.ProjectId, entity.VersionName);
             }
 
             CloseDialog(true);
@@ -191,6 +200,18 @@ public sealed partial class ProjectAnalysisVersionEditViewModel : ObservableObje
 
     [RelayCommand]
     private void Cancel() => CloseDialog(false);
+
+    private async Task LogVersionActionAsync(UserActionType actionType, int versionId, int projectId, string versionName)
+    {
+        var userId = _currentUser.User?.Id;
+        if (userId is null) return;
+        await _actionLog.LogAsync(
+            userId.Value,
+            actionType,
+            entityType: "ProjectAnalysisVersion",
+            entityId: versionId,
+            description: $"ProjectId={projectId}, «{versionName}», direction={SelectedDirection}");
+    }
 
     private void CloseDialog(bool result)
     {

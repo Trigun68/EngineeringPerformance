@@ -35,6 +35,7 @@ public sealed partial class ProjectEditViewModel : ObservableObject
     private readonly CurrentUserHolder _currentUserHolder;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IUserActionLogService _actionLog;
     private readonly DispatcherTimer _autoSaveTimer;
 
     private Action<bool>? _closeDialog;
@@ -99,7 +100,8 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         IProjectVisibilityService visibilityService,
         CurrentUserHolder currentUserHolder,
         IDbContextFactory<AppDbContext> contextFactory,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IUserActionLogService actionLog)
     {
         _projectService = projectService;
         _versionService = versionService;
@@ -117,6 +119,7 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         _currentUserHolder = currentUserHolder;
         _contextFactory = contextFactory;
         _serviceProvider = serviceProvider;
+        _actionLog = actionLog;
 
         _autoSaveTimer = new DispatcherTimer
         {
@@ -380,6 +383,7 @@ public sealed partial class ProjectEditViewModel : ObservableObject
                 existing.Program = Program?.Trim();
                 existing.ModifiedAt = DateTime.UtcNow;
                 await _projectService.UpdateAsync(existing);
+                await LogAsync(UserActionType.ProjectEdit, EntityId, $"{existing.Code} {existing.Name}");
             }
             else
             {
@@ -402,6 +406,7 @@ public sealed partial class ProjectEditViewModel : ObservableObject
                 EntityId = created.Id;
                 IsEditMode = true;
                 WindowTitle = "Редактирование проекта";
+                await LogAsync(UserActionType.ProjectCreate, created.Id, $"{created.Code} {created.Name}");
 
                 // V2-C: автору-не-админу нужна явная запись в ProjectPermission,
                 // иначе GetAccessibleProjectsAsync отсечёт его же проект сразу
@@ -515,7 +520,10 @@ public sealed partial class ProjectEditViewModel : ObservableObject
 
         if (confirm == MessageBoxResult.Yes)
         {
-            await _versionService.DeleteAsync(SelectedVersion.Id);
+            var versionId = SelectedVersion.Id;
+            var versionName = SelectedVersion.VersionName;
+            await _versionService.DeleteAsync(versionId);
+            await LogAsync(UserActionType.VersionDelete, versionId, $"ProjectId={EntityId}, «{versionName}»", entityType: "ProjectAnalysisVersion");
             await LoadAnalysisVersionsAsync();
         }
     }
@@ -667,6 +675,13 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         {
             await LoadPerformanceDataAsync(EntityId, SelectedVersion.Id);
         }
+    }
+
+    private async Task LogAsync(UserActionType actionType, int entityId, string description, string entityType = "Project")
+    {
+        var userId = _currentUserHolder.User?.Id;
+        if (userId is null) return;
+        await _actionLog.LogAsync(userId.Value, actionType, entityType: entityType, entityId: entityId, description: description);
     }
 
     [RelayCommand]

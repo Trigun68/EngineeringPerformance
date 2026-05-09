@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, log Version CRUD and Project edit/create from project edit dialog)
+- `EngineeringPerformance.App/ViewModels/ProjectAnalysisVersionEditViewModel.cs`: после успешного `Save` пишет `VersionCreate` или `VersionEdit` (EntityType=ProjectAnalysisVersion, описание содержит `ProjectId`, имя версии и направление). Внедрены `IUserActionLogService` и `CurrentUserHolder`.
+- `EngineeringPerformance.App/ViewModels/ProjectEditViewModel.cs`: добавлен helper `LogAsync` и логирование `ProjectCreate`/`ProjectEdit` в `Save`-команде, `VersionDelete` — в команде `DeleteVersion`. Подключена зависимость `IUserActionLogService` к существующему `CurrentUserHolder`.
+
 ### Added (2026-05-09, log Project CRUD and import-iteration delete)
 - `EngineeringPerformance.App/ViewModels/ProjectPickerDialogViewModel.cs`: пишет `ProjectCreate` / `ProjectEdit` / `ProjectDelete` в журнал после соответствующих операций (EntityType=Project, EntityId=projectId, описание `Code Name`). Внедрены `IUserActionLogService` и `CurrentUserHolder`. Helper `LogProjectActionAsync` молчит, если пользователь не авторизован.
 - `EngineeringPerformance.App/ViewModels/IterationDeleteDialogViewModel.cs`: после удаления итерации импорта пишет `PhysicalVolumeDelete` или `LaborIntensityDelete` (EntityType=ProjectAnalysisVersion, EntityId=VersionId, описание содержит `importedAt` и количество строк).
