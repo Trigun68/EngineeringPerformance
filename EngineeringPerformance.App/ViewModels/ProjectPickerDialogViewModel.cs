@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
+using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
 using EngineeringPerformance.Infrastructure.Services;
@@ -11,6 +13,8 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class ProjectPickerDialogViewModel : ObservableObject
 {
     private readonly IDirectoryService<Project> _projectService;
+    private readonly IUserActionLogService _actionLog;
+    private readonly CurrentUserHolder _currentUser;
     private Action<bool>? _closeDialog;
 
     [ObservableProperty] private ObservableCollection<ProjectPickerItem> _projects = [];
@@ -25,9 +29,14 @@ public sealed partial class ProjectPickerDialogViewModel : ObservableObject
     private ProjectPickerItem? _selectedProject;
     [ObservableProperty] private string? _errorMessage;
 
-    public ProjectPickerDialogViewModel(IDirectoryService<Project> projectService)
+    public ProjectPickerDialogViewModel(
+        IDirectoryService<Project> projectService,
+        IUserActionLogService actionLog,
+        CurrentUserHolder currentUser)
     {
         _projectService = projectService;
+        _actionLog = actionLog;
+        _currentUser = currentUser;
     }
 
     public async Task InitializeAsync(Action<bool>? closeDialog = null)
@@ -86,7 +95,8 @@ public sealed partial class ProjectPickerDialogViewModel : ObservableObject
         try
         {
             var item = new Project { Code = vm.Code.Trim(), Name = vm.Name.Trim() };
-            await _projectService.CreateAsync(item);
+            var created = await _projectService.CreateAsync(item);
+            await LogProjectActionAsync(UserActionType.ProjectCreate, created.Id, $"{created.Code} {created.Name}");
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -114,6 +124,7 @@ public sealed partial class ProjectPickerDialogViewModel : ObservableObject
             existing.Code = vm.Code.Trim();
             existing.Name = vm.Name.Trim();
             await _projectService.UpdateAsync(existing);
+            await LogProjectActionAsync(UserActionType.ProjectEdit, existing.Id, $"{existing.Code} {existing.Name}");
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -134,7 +145,10 @@ public sealed partial class ProjectPickerDialogViewModel : ObservableObject
 
         try
         {
-            await _projectService.DeleteAsync(SelectedProject.Id);
+            var snapshot = $"{SelectedProject.Code} {SelectedProject.Name}";
+            var deletedId = SelectedProject.Id;
+            await _projectService.DeleteAsync(deletedId);
+            await LogProjectActionAsync(UserActionType.ProjectDelete, deletedId, snapshot);
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -182,6 +196,13 @@ public sealed partial class ProjectPickerDialogViewModel : ObservableObject
     }
 
     private bool CanUnarchive() => SelectedProject is { IsArchived: true };
+
+    private async Task LogProjectActionAsync(UserActionType actionType, int projectId, string description)
+    {
+        var userId = _currentUser.User?.Id;
+        if (userId is null) return;
+        await _actionLog.LogAsync(userId.Value, actionType, entityType: "Project", entityId: projectId, description: description);
+    }
 
     [RelayCommand]
     private void Cancel() => CloseDialog(false);

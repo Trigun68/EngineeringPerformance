@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 
@@ -10,6 +11,8 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class IterationDeleteDialogViewModel : ObservableObject
 {
     private readonly IDataImportService _importService;
+    private readonly IUserActionLogService _actionLog;
+    private readonly CurrentUserHolder _currentUser;
     private Action<bool>? _closeDialog;
     // Любое удаление в текущем сеансе диалога делает результат «успешным» —
     // вызывающая сторона (ProjectEditViewModel) обновит таблицу, даже если
@@ -29,9 +32,14 @@ public sealed partial class IterationDeleteDialogViewModel : ObservableObject
         ? "Удаление итерации физических объёмов"
         : "Удаление итерации трудоёмкости";
 
-    public IterationDeleteDialogViewModel(IDataImportService importService)
+    public IterationDeleteDialogViewModel(
+        IDataImportService importService,
+        IUserActionLogService actionLog,
+        CurrentUserHolder currentUser)
     {
         _importService = importService;
+        _actionLog = actionLog;
+        _currentUser = currentUser;
     }
 
     public async Task InitializeAsync(int projectId, int versionId, DataImportType dataType, Action<bool>? closeDialog = null)
@@ -70,10 +78,21 @@ public sealed partial class IterationDeleteDialogViewModel : ObservableObject
         try
         {
             ErrorMessage = null;
-            await _importService.DeleteIterationAsync(ProjectId, VersionId, DataType, SelectedIteration.ImportedAt);
-            Iterations.Remove(SelectedIteration);
+            var iterationToDelete = SelectedIteration;
+            await _importService.DeleteIterationAsync(ProjectId, VersionId, DataType, iterationToDelete.ImportedAt);
+            Iterations.Remove(iterationToDelete);
             SelectedIteration = null;
             _anyDeleted = true;
+
+            var userId = _currentUser.User?.Id;
+            if (userId is not null)
+            {
+                var actionType = DataType == DataImportType.PhysicalVolume
+                    ? UserActionType.PhysicalVolumeDelete
+                    : UserActionType.LaborIntensityDelete;
+                var desc = $"ProjectId={ProjectId}, VersionId={VersionId}, importedAt={iterationToDelete.ImportedAt:O}, rows={iterationToDelete.RecordCount}";
+                await _actionLog.LogAsync(userId.Value, actionType, entityType: "ProjectAnalysisVersion", entityId: VersionId, description: desc);
+            }
         }
         catch (Exception ex)
         {

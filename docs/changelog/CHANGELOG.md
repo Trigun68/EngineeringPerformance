@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, log Project CRUD and import-iteration delete)
+- `EngineeringPerformance.App/ViewModels/ProjectPickerDialogViewModel.cs`: пишет `ProjectCreate` / `ProjectEdit` / `ProjectDelete` в журнал после соответствующих операций (EntityType=Project, EntityId=projectId, описание `Code Name`). Внедрены `IUserActionLogService` и `CurrentUserHolder`. Helper `LogProjectActionAsync` молчит, если пользователь не авторизован.
+- `EngineeringPerformance.App/ViewModels/IterationDeleteDialogViewModel.cs`: после удаления итерации импорта пишет `PhysicalVolumeDelete` или `LaborIntensityDelete` (EntityType=ProjectAnalysisVersion, EntityId=VersionId, описание содержит `importedAt` и количество строк).
+
 ### Added (2026-05-09, log PhysicalVolume / LaborIntensity imports)
 - `EngineeringPerformance.App/ViewModels/DataImportDialogViewModel.cs`: после успешного импорта пишется `PhysicalVolumeImport` или `LaborIntensityImport` (зависит от `DataType`) с указанием `EntityType=ProjectAnalysisVersion`, `EntityId=VersionId` и описанием (project/version/rows/filename). Внедрены зависимости `IUserActionLogService` и `CurrentUserHolder`.
 
