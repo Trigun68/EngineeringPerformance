@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, user action log core contracts)
+- `EngineeringPerformance.Core/Enums/UserActionType.cs`: enum категорий действий (Login/Logout/LoginFailed, Project CRUD, Version CRUD, PhysicalVolume Import/Delete/Edit, LaborIntensity Import/Delete/Edit, IicNormEdit) — имена сохраняются в БД как nvarchar(64).
+- `Core/DTOs/UserActionLogDto.cs`: DTO записи журнала (включает `UserName` для отображения в гриде).
+- `Core/DTOs/UserActionLogFilter.cs`: фильтр выборки (период UTC, пользователь, тип действия, сущность).
+- `Core/DTOs/UserActionLogIoResults.cs`: `UserActionLogExportResult` и `UserActionLogImportResult` (счётчики дублей/orphan/невалидных + список ошибок).
+- `Core/Services/IUserActionLogService.cs`: контракт сервиса — `LogAsync` (best-effort, не бросает наружу), `GetAsync` (с пагинацией), `ExportToFileAndPurgeAsync` (атомарно), `ImportFromFileAsync` (с дедупликацией).
+
 ### Added (2026-05-09, user action log schema)
 - `EngineeringPerformance.Infrastructure/Data/Entities/UserActionLog.cs`: новая сущность журнала действий — `Id`, `UserId` (FK Users, Restrict), `Timestamp` (UTC), `ActionType` nvarchar(64), `EntityType` nvarchar(100) NULL, `EntityId` int NULL, `Description` nvarchar(500) NULL, `IpOrHost` nvarchar(64) NULL.
 - `Infrastructure/Data/Configurations/UserActionLogConfiguration.cs`: EF-конфигурация с тремя индексами (`UserId+Timestamp`, `ActionType`, `EntityType+EntityId`).
