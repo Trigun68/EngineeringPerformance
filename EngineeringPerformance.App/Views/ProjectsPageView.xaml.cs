@@ -64,31 +64,16 @@ public partial class ProjectsPageView : UserControl
                 }
             }
         }
-        for (var i = 0; i < grid.VisibleRowCount; i++)
-        {
-            var rh = grid.GetRowHandleByVisibleIndex(i);
-            if (grid.IsGroupRowHandle(rh) && grid.IsGroupRowExpanded(rh))
-            {
-                var val = grid.GetGroupRowValue(rh)?.ToString();
-                if (val is not null) state.ExpandedGroupTexts.Add(val);
-            }
-        }
         return state;
     }
 
     private static void RestoreGridState(GridControl grid, DetailGridState state)
     {
-        if (state.ExpandedGroupTexts.Count == 0) return;
-        grid.ExpandAllGroups();
-        for (var i = 0; i < grid.VisibleRowCount; i++)
-        {
-            var rh = grid.GetRowHandleByVisibleIndex(i);
-            if (!grid.IsGroupRowHandle(rh)) continue;
-            var text = grid.GetGroupRowValue(rh)?.ToString();
-            if (text is not null && !state.ExpandedGroupTexts.Contains(text))
-                grid.CollapseGroupRow(rh, false);
-        }
+        // Восстановление focus и раскрытия групп выполняет сам DevExpress благодаря
+        // RestoreStateOnSourceChange="True" + RestoreStateKeyFieldName в XAML.
+        // Здесь возвращаем только позицию скролла — её DevExpress не сохраняет при смене ItemsSource.
         if (grid.View is not TableView tv) return;
+
         if (state.FocusedRowId >= 0)
         {
             for (var i = 0; i < grid.VisibleRowCount; i++)
@@ -97,18 +82,13 @@ public partial class ProjectsPageView : UserControl
                 if (!grid.IsGroupRowHandle(rh) && grid.GetRow(rh) is DetailForecastItem row
                     && row.ProjectPhysicalVolumeId == state.FocusedRowId)
                 {
-                    var newTop = Math.Max(0, i - state.FocusedVisibleOffset);
-                    System.Windows.Application.Current.Dispatcher.BeginInvoke(
-                        () => tv.TopRowIndex = newTop,
-                        System.Windows.Threading.DispatcherPriority.Render);
-                    break;
+                    tv.TopRowIndex = Math.Max(0, i - state.FocusedVisibleOffset);
+                    return;
                 }
             }
         }
-        else
-        {
-            tv.TopRowIndex = state.TopRowIndex;
-        }
+
+        tv.TopRowIndex = state.TopRowIndex;
     }
 
     private GridControl[] GetAllGrids() =>

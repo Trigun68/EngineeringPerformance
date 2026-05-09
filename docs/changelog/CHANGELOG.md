@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+# Changelog
+
+## [Unreleased]
+
+### Fixed (2026-05-09, detail grid: focus, scroll and groups preserved on edit reload)
+- `ProjectsPageView.xaml`, `DetailForecastGrid` и `FactDetailGrid`: добавлены `RestoreStateOnSourceChange="True"` и `RestoreStateKeyFieldName="ProjectPhysicalVolumeId"` — DevExpress теперь сам сохраняет фокусированную строку и раскрытие групп при смене `ItemsSource` (нативный механизм, исключает мигание из-за двойного рендера и потерю фокуса при ручном `FocusedRowHandle`).
+- `ProjectsPageView.xaml.cs`, `RestoreGridState`: переписан — убран ранний выход `if (state.ExpandedGroupTexts.Count == 0) return;` (скрытый баг — позиция скролла не восстанавливалась без группировки), убраны ручные операции `ExpandAllGroups` / `CollapseGroupRow` (управляются DevExpress), убрано ручное присваивание `FocusedRowHandle`. Метод теперь восстанавливает только `TopRowIndex` — относительно фокусированной строки или абсолютно.
+- `ProjectsPageView.xaml.cs`, `SaveGridState`: убран сбор `ExpandedGroupTexts` (DevExpress сам сохраняет состояние групп).
+- `ProjectsPageViewModel.cs`, `DetailGridState`: удалено поле `ExpandedGroupTexts` (больше не используется).
+
 ### Fixed (2026-05-08, preserve detail forecast grid state on reload after edit)
 - `ProjectsPageViewModel.LoadForecastDataAsync`: убран лишний `SaveDetailForecastStateCallback?.Invoke()` внутри метода и второй `BeginInvoke` — они выполнялись после смены `ItemsSource` (состояние всегда пустое) и перетирали корректный `savedState` из команды редактирования.
 - `ProjectsPageView.xaml.cs`, `RestoreGridState`: логика восстановления изменена с «CollapseAll → раскрыть нужные» на «ExpandAll → схлопнуть лишние» — после `CollapseAllGroups` `VisibleRowCount` резко падал и часть групп не находилась для раскрытия.
