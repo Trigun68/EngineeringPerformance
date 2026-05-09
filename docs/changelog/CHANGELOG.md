@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-09, populate empty AddUserActionLogs migration)
+- `EngineeringPerformance.Infrastructure/Migrations/20260509112303_AddUserActionLogs.cs`: предыдущая ревизия имела пустой `Up()`/`Down()` — `dotnet ef database update` не создавал таблицу `UserActionLogs`, и при первом обращении приложение падало `Invalid object name 'UserActionLog'`. Заполнено: `CreateTable("UserActionLogs")` с PK, FK на `Users` (Restrict) и тремя индексами (`UserId+Timestamp`, `ActionType`, `EntityType+EntityId`); `Down()` делает `DropTable`. Если миграция уже отмечена применённой в `__EFMigrationsHistory` — применить SQL-скрипт `migrations/schema/015_AddUserActionLogs.sql` напрямую (на dev-БД уже применено).
+
 ### Added (2026-05-09, user action log feature docs and tests)
 - `docs/features/user-action-journal.md`: документация фичи — схема БД, категории действий, точки внедрения логирования (таблица VM/сервисов), контракт `IUserActionLogService`, формат CSV, правила доступа, что НЕ реализовано (авто-архив, old/new value, Logout).
 - `EngineeringPerformance.Tests/UserActionLogServiceTests.cs`: 8 unit-тестов на сервис журнала — `LogAsync` (вставка, no-throw), `GetAsync` (фильтр по типу/пользователю/периоду, сортировка по `Timestamp DESC`), `ExportToFileAndPurge` (CSV-заголовок, экранирование `;`/`"`, удаление записей), `ImportFromFile` (дедупликация, orphan UserId, неверный заголовок).
