@@ -34,6 +34,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private readonly ProjectCharacteristicSelectionService _characteristicSelectionService;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IServiceProvider _serviceProvider;
+    private readonly IUserActionLogService _actionLog;
+    private readonly CurrentUserHolder _currentUser;
 
     public Window? OwnerWindow { get; set; }
 
@@ -91,7 +93,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IProjectForecastExportService forecastExportService,
         ProjectCharacteristicSelectionService characteristicSelectionService,
         IDbContextFactory<AppDbContext> contextFactory,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IUserActionLogService actionLog,
+        CurrentUserHolder currentUser)
     {
         _projectPickerDialog = projectPickerDialog;
         _projectDataDialog = projectDataDialog;
@@ -109,6 +113,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _characteristicSelectionService = characteristicSelectionService;
         _contextFactory = contextFactory;
         _serviceProvider = serviceProvider;
+        _actionLog = actionLog;
+        _currentUser = currentUser;
     }
 
     public Func<DetailGridState>? SaveDetailForecastStateCallback { get; set; }
@@ -1272,7 +1278,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.Owner = GetOwner();
         var state = SaveDetailForecastStateCallback?.Invoke();
         if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.PhysicalVolumeEdit, "ProjectPhysicalVolume", row.ProjectPhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
             await LoadForecastDataAsync(pid, vid, state);
+        }
     }
 
     [RelayCommand]
@@ -1297,7 +1306,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.Owner = GetOwner();
         _ = vm.LoadLookupsAsync();
         if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.LaborIntensityEdit, "PhysicalVolume", row.PhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
             await LoadForecastDataAsync(pid, vid, state);
+        }
     }
 
     [RelayCommand]
@@ -1315,7 +1327,17 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         window.DataContext = vm;
         window.Owner = GetOwner();
         if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.IicNormEdit, "IicWorkDirectionNorm", normId, $"ProjectId={pid}, VersionId={vid}");
             await LoadForecastDataAsync(pid, vid, state);
+        }
+    }
+
+    private async Task LogDetailEditAsync(UserActionType actionType, string entityType, int entityId, string description)
+    {
+        var userId = _currentUser.User?.Id;
+        if (userId is null) return;
+        await _actionLog.LogAsync(userId.Value, actionType, entityType: entityType, entityId: entityId, description: description);
     }
 }
 

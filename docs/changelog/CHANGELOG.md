@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (2026-05-09, log detail-grid quick edits)
+- `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs`: внедрены зависимости `IUserActionLogService` и `CurrentUserHolder`. После успешного закрытия трёх диалогов быстрого редактирования детальной сетки пишется журнал: `EditProjectPhysicalVolumeAsync` → `PhysicalVolumeEdit` (EntityType=ProjectPhysicalVolume), `EditPhysicalVolumeNomenclatureAsync` → `LaborIntensityEdit` (EntityType=PhysicalVolume), `EditIicNormAsync` → `IicNormEdit` (EntityType=IicWorkDirectionNorm). Helper `LogDetailEditAsync` молчит для неавторизованного пользователя.
+
 ### Added (2026-05-09, log Version CRUD and Project edit/create from project edit dialog)
 - `EngineeringPerformance.App/ViewModels/ProjectAnalysisVersionEditViewModel.cs`: после успешного `Save` пишет `VersionCreate` или `VersionEdit` (EntityType=ProjectAnalysisVersion, описание содержит `ProjectId`, имя версии и направление). Внедрены `IUserActionLogService` и `CurrentUserHolder`.
 - `EngineeringPerformance.App/ViewModels/ProjectEditViewModel.cs`: добавлен helper `LogAsync` и логирование `ProjectCreate`/`ProjectEdit` в `Save`-команде, `VersionDelete` — в команде `DeleteVersion`. Подключена зависимость `IUserActionLogService` к существующему `CurrentUserHolder`.
