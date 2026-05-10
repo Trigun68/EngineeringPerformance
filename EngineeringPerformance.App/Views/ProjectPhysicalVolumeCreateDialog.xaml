@@ -53,8 +53,10 @@
                                           ValueMember="Id"
                                           DisplayMember="Display"
                                           IncrementalFiltering="True"
+                                          FilterCondition="Contains"
                                           AutoComplete="True"
                                           ImmediatePopup="True"
+                                          ValidateOnTextInput="False"
                                           NullText="Не выбрано"
                                           Margin="0,0,0,8" />
 
