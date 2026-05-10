@@ -64,8 +64,10 @@
                           DisplayMember="Display"
                           IsEnabled="{Binding AreLookupsReady}"
                           IncrementalFiltering="True"
+                          FilterCondition="Contains"
                           AutoComplete="True"
                           ImmediatePopup="True"
+                          ValidateOnTextInput="False"
                           Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="5" Grid.Column="0" Text="Родитель" VerticalAlignment="Center" Margin="0,0,8,8" />
@@ -75,8 +77,10 @@
                           DisplayMember="Display"
                           IsEnabled="{Binding AreLookupsReady}"
                           IncrementalFiltering="True"
+                          FilterCondition="Contains"
                           AutoComplete="True"
                           ImmediatePopup="True"
+                          ValidateOnTextInput="False"
                           Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="6" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
@@ -95,8 +99,10 @@
                           DisplayMember="Name"
                           IsEnabled="{Binding AreLookupsReady}"
                           IncrementalFiltering="True"
+                          FilterCondition="Contains"
                           AutoComplete="True"
                           ImmediatePopup="True"
+                          ValidateOnTextInput="False"
                           NullText="Не выбрано"
                           Margin="0,0,0,8" />
 

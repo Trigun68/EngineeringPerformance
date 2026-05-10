@@ -51,8 +51,10 @@
                           ValueMember="Id"
                           DisplayMember="DisplayText"
                           IncrementalFiltering="True"
+                          FilterCondition="Contains"
                           AutoComplete="True"
                           ImmediatePopup="True"
+                          ValidateOnTextInput="False"
                           IsEnabled="{Binding AreLookupsReady}"
                           Margin="0,0,0,8"
                           NullText="(не выбрано)" />
@@ -64,8 +66,10 @@
                           ValueMember="Id"
                           DisplayMember="DisplayText"
                           IncrementalFiltering="True"
+                          FilterCondition="Contains"
                           AutoComplete="True"
                           ImmediatePopup="True"
+                          ValidateOnTextInput="False"
                           IsEnabled="{Binding AreLookupsReady}"
                           Margin="0,0,0,8"
                           NullText="(не выбрано)" />
