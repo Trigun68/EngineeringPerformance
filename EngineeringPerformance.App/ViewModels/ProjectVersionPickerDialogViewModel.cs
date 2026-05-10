@@ -15,6 +15,7 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
     private readonly IProjectAnalysisVersionQueryService _queryService;
     private readonly IDirectoryService<ProjectAnalysisVersion> _versionService;
     private readonly IProjectAnalysisVersionEditDialogService _editDialog;
+    private readonly IProjectAnalysisVersionCopyDialogService _copyDialog;
     private Action<bool>? _closeDialog;
 
     public int ProjectId { get; private set; }
@@ -27,17 +28,20 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
     [NotifyCanExecuteChangedFor(nameof(SelectCommand))]
     [NotifyCanExecuteChangedFor(nameof(EditVersionCommand))]
     [NotifyCanExecuteChangedFor(nameof(DeleteVersionCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyVersionCommand))]
     private ProjectAnalysisVersion? _selectedVersion;
     [ObservableProperty] private string? _errorMessage;
 
     public ProjectVersionPickerDialogViewModel(
         IProjectAnalysisVersionQueryService queryService,
         IDirectoryService<ProjectAnalysisVersion> versionService,
-        IProjectAnalysisVersionEditDialogService editDialog)
+        IProjectAnalysisVersionEditDialogService editDialog,
+        IProjectAnalysisVersionCopyDialogService copyDialog)
     {
         _queryService = queryService;
         _versionService = versionService;
         _editDialog = editDialog;
+        _copyDialog = copyDialog;
     }
 
     public async Task InitializeAsync(
@@ -118,6 +122,21 @@ public sealed partial class ProjectVersionPickerDialogViewModel : ObservableObje
         {
             ErrorMessage = $"Ошибка удаления: {ex.Message}";
         }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSelect))]
+    private async Task CopyVersionAsync()
+    {
+        if (SelectedVersion is null) return;
+        var owner = GetOwner();
+        if (owner is not null) _copyDialog.SetOwnerWindow(owner);
+
+        var newVersionId = await _copyDialog.ShowAsync(SelectedVersion);
+        if (newVersionId is null) return;
+
+        await ReloadAsync();
+        // После reload — выделяем созданную копию, чтобы пользователь сразу её видел.
+        SelectedVersion = Versions.FirstOrDefault(v => v.Id == newVersionId.Value);
     }
 
     [RelayCommand]

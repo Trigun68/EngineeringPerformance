@@ -28,7 +28,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Тулбар: добавить / редактировать / удалить -->
+                <!-- Тулбар: добавить / редактировать / удалить / копировать -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
                     <Button Command="{Binding AddVersionCommand}"
                             Width="32" Height="32" Padding="4" Margin="0,0,4,0"
@@ -41,10 +41,14 @@
                         <Image Source="/Assets/icons8-edit-90.png" />
                     </Button>
                     <Button Command="{Binding DeleteVersionCommand}"
-                            Width="32" Height="32" Padding="4"
+                            Width="32" Height="32" Padding="4" Margin="0,0,4,0"
                             ToolTip="Удалить версию">
                         <Image Source="/Assets/icons8-delete-96.png" />
                     </Button>
+                    <Button Command="{Binding CopyVersionCommand}"
+                            Content="Копировать"
+                            Height="32" MinWidth="100" Padding="8,0"
+                            ToolTip="Создать новую версию копированием выбранной (со всеми данными)" />
                 </StackPanel>
 
                 <!-- Список версий -->

@@ -18,6 +18,7 @@ public enum UserActionType
     VersionCreate = 20,
     VersionEdit = 21,
     VersionDelete = 22,
+    VersionCopy = 23,
 
     // Физические объёмы (ФО)
     PhysicalVolumeImport = 30,

@@ -276,6 +276,7 @@ public partial class App : Application
         services.AddSingleton<ProjectAnalysisVersionDirectoryService>();
         services.AddSingleton<IDirectoryService<ProjectAnalysisVersion>>(sp => sp.GetRequiredService<ProjectAnalysisVersionDirectoryService>());
         services.AddSingleton<IProjectAnalysisVersionQueryService>(sp => sp.GetRequiredService<ProjectAnalysisVersionDirectoryService>());
+        services.AddSingleton<IProjectAnalysisVersionCopyService, ProjectAnalysisVersionCopyService>();
 
         services.AddSingleton(typeof(IDirectoryCache<>), typeof(DirectoryCache<>));
 
@@ -369,6 +370,9 @@ public partial class App : Application
         services.AddTransient<ProjectVersionPickerDialogViewModel>();
         services.AddTransient<ProjectVersionPickerDialog>();
         services.AddSingleton<IProjectVersionPickerDialogService, ProjectVersionPickerDialogService>();
+        services.AddTransient<ProjectAnalysisVersionCopyViewModel>();
+        services.AddTransient<ProjectAnalysisVersionCopyDialog>();
+        services.AddSingleton<IProjectAnalysisVersionCopyDialogService, ProjectAnalysisVersionCopyDialogService>();
         services.AddSingleton<IicWorkDirectionNormsViewModel>();
         services.AddTransient<IicWorkDirectionNormsWindow>();
         services.AddTransient<IicWorkDirectionNormEditViewModel>();

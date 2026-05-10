@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added (2026-05-10, ISS-004 — копирование версии анализа с данными)
+- `EngineeringPerformance.Core/Services/IProjectAnalysisVersionCopyService.cs`: контракт сервиса копирования версии. Один метод `CopyVersionAsync(sourceVersionId, newVersionName, newDescription)`, возвращает Id новой версии.
+- `EngineeringPerformance.Infrastructure/Services/ProjectAnalysisVersionCopyService.cs`: реализация — копирование в одной транзакции. Создаёт новый `ProjectAnalysisVersion` с теми же `Direction`/`PhysicalVolumeTypeId`/`ProjectId`, копирует все `ProjectPhysicalVolume` (всегда), `ProjectLaborIntensity` (только для `Direction=Fact`), `DataImportIteration` 1-в-1 с теми же `ImportedAt`/`SourceFileHash`/`SourceFileName`/`RecordCount`/`DataType`/`ImportedByUserId` (вариант «б» — буквальная копия аудит-истории). `AnalysisVersionSnapshot` НЕ копируется (вариант «б» — пересоздаётся при первом расчёте по актуальным нормам IIC).
+- `EngineeringPerformance.App/Views/ProjectAnalysisVersionCopyDialog.xaml(.cs)` + `EngineeringPerformance.App/ViewModels/ProjectAnalysisVersionCopyViewModel.cs`: мини-диалог «Копировать версию (план/факт)». Поля: `Имя` (предзаполнено `«{sourceName} (копия)»`) и `Описание` (предзаполнено описанием источника). Кнопки `Сохранить`/`Отмена`. На время операции `IsBusy = true`, ошибки выводятся через `ErrorMessage`. Логирование `UserActionType.VersionCopy`.
+- `EngineeringPerformance.App/Services/ProjectAnalysisVersionCopyDialogService.cs`: `IProjectAnalysisVersionCopyDialogService.ShowAsync(source)` → `Task<int?>`. Возвращает Id созданной версии при успехе, `null` при отмене.
+- `EngineeringPerformance.App/Views/ProjectVersionPickerDialog.xaml`: в тулбар добавлена кнопка `Копировать` (текстовая, `IsEnabled` биндится через CanExecute = `SelectedVersion != null`).
+- `EngineeringPerformance.App/ViewModels/ProjectVersionPickerDialogViewModel.cs`: добавлена `CopyVersionCommand`. После успешного копирования — `ReloadAsync()` и `SelectedVersion = Versions.First(v => v.Id == newId)`, чтобы пользователь сразу видел созданную копию.
+- `EngineeringPerformance.Core/Enums/UserActionType.cs`: добавлено значение `VersionCopy = 23` в категорию «Версии анализа» (между `VersionDelete = 22` и блоком физ. объёмов).
+- `EngineeringPerformance.App/App.xaml.cs`: DI — `IProjectAnalysisVersionCopyService` (Singleton); `ProjectAnalysisVersionCopyViewModel`/`ProjectAnalysisVersionCopyDialog` (Transient); `IProjectAnalysisVersionCopyDialogService` (Singleton).
+- `docs/issues/ISS-004-version-copy.md`: backlog/in-progress задача с фиксацией решений пользователя по 3 вопросам (копирование DataImportIteration 1-в-1, не копировать AnalysisVersionSnapshot, однокнопочный UX flow).
+
 ### Changed (2026-05-10, ISS-003 closed after UI confirmation)
 - `docs/issues/ISS-003-detail-grid-context-menu-add-delete.md`: статус → ✅ Closed после UI-подтверждения пользователя 2026-05-10. Все 3 сценария контекстного меню детальной сетки (Удалить выбранную строку / Добавить копированием выбранной / Добавить строку) проверены руками, focus и scroll сохраняются. Сценарий «копирование с одной номенклатурой на разный объект» работает после применения миграции `ExpandProjectPhysicalVolumeUniqueIndex` к dev-БД.
 
