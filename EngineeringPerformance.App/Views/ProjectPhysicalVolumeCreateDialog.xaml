@@ -51,7 +51,9 @@
                                           ItemsSource="{Binding PhysicalVolumeDisplayItems}"
                                           SelectedItem="{Binding SelectedPhysicalVolumeItem}"
                                           DisplayMember="Display"
-                                          IsTextEditable="False"
+                                          IncrementalFiltering="True"
+                                          AutoComplete="True"
+                                          ImmediatePopup="True"
                                           Margin="0,0,0,8" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Количество" VerticalAlignment="Center" Margin="0,0,8,8" />

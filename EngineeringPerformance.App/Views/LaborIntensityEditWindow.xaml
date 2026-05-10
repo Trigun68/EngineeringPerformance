@@ -55,7 +55,9 @@
                                   EditValue="{Binding SelectedIicWorkDirectionId}"
                                   ValueMember="Id"
                                   DisplayMember="DisplayText"
-                                  IsTextEditable="False"
+                                  IncrementalFiltering="True"
+                                  AutoComplete="True"
+                                  ImmediatePopup="True"
                                   Margin="0,0,0,8"
                                   NullText="Не выбрано" />
 

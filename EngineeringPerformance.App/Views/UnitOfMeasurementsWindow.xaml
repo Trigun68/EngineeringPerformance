@@ -43,6 +43,8 @@
             </dxg:GridControl.Columns>
             <dxg:GridControl.View>
                 <dxg:TableView x:Name="TableView" AllowEditing="False" NavigationStyle="Row"
+                               ShowSearchPanelMode="Always"
+                               SearchPanelHighlightResults="True"
                                AllowDragDrop="True"
                                DropRecord="TableView_DropRecord"
                                CompleteRecordDragDrop="TableView_CompleteRecordDragDrop" />

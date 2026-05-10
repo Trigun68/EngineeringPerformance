@@ -48,7 +48,9 @@
                                   ParentFieldName="ParentId"
                                   AllowEditing="False"
                                   NavigationStyle="Row"
-                                  AutoExpandAllNodes="False" />
+                                  AutoExpandAllNodes="False"
+                                  ShowSearchPanelMode="Always"
+                                  SearchPanelHighlightResults="True" />
             </dxg:GridControl.View>
         </dxg:GridControl>
     </Grid>

@@ -54,6 +54,8 @@
                                   AllowEditing="False"
                                   NavigationStyle="Row"
                                   AutoExpandAllNodes="False"
+                                  ShowSearchPanelMode="Always"
+                                  SearchPanelHighlightResults="True"
                                   AllowDragDrop="True"
                                   DropRecord="TreeListView_DropRecord"
                                   CompleteRecordDragDrop="TreeListView_CompleteRecordDragDrop" />

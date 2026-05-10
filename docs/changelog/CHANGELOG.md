@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added (2026-05-10, поиск в справочниках и фильтрация lookup-комбобоксов)
+- `EngineeringPerformance.App/Views/PhysicalVolumesWindow.xaml`, `LaborIntensitiesWindow.xaml`, `UnitOfMeasurementsWindow.xaml`, `IicWorkDirectionsWindow.xaml`, `IicWorkDirectionNormsWindow.xaml`: на `TreeListView`/`TableView` включены стандартные DevExpress-свойства `ShowSearchPanelMode="Always"` + `SearchPanelHighlightResults="True"`. Пользователь видит поисковую строку над гридом, ввод в неё фильтрует записи по всем видимым колонкам с подсветкой найденного фрагмента (Ctrl+F также работает).
+- `EngineeringPerformance.App/Views/PhysicalVolumeEditWindow.xaml` (карточка «Классификатор»), `PhysicalVolumeQuickEditDialog.xaml` (быстрая карточка «Классификатор»), `LaborIntensityEditWindow.xaml` (карточка «Группа IIC»): на `ComboBoxEdit` заменено `IsTextEditable="False"` на тройку `IncrementalFiltering="True"` + `AutoComplete="True"` + `ImmediatePopup="True"`. Пользователь печатает в поле — выпадающий список сразу открывается и фильтруется по `DisplayMember`, оставляя только совпадения.
+- `EngineeringPerformance.App/Views/ProjectPhysicalVolumeCreateDialog.xaml`: та же фильтрация-по-набору применена к полю «Номенклатура ФО» (`PhysicalVolumeDisplayItems`) — критично для сценария «Добавить копированием» в детальном прогнозировании, где справочник номенклатуры ФО большой.
+
 ### Changed (2026-05-10, ISS-004 closed after UI confirmation)
 - `docs/issues/ISS-004-version-copy.md`: статус → ✅ Closed после UI-подтверждения пользователя 2026-05-10. В скопированных Plan- и Fact-версиях расчёт производительности отрабатывает после фикса генерации `AnalysisVersionSnapshot` в `ProjectAnalysisVersionCopyService.CopyVersionAsync` (коммит `9dc0469`). Все Acceptance criteria и Definition of Done закрыты.
 
