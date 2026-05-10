@@ -1,9 +1,10 @@
 # ISS-004: Копирование версии анализа с данными
 
-**Статус:** 🔄 in-progress (UI-проверка 2026-05-10 выявила дефект — см. «Известный дефект» ниже)
+**Статус:** ✅ Closed (UI-подтверждение пользователя 2026-05-10 после фикса снапшота норм IIC)
 **Создано:** 2026-05-10
+**Закрыто:** 2026-05-10
 **Приоритет:** 🟡 Medium
-**Связано:** `ProjectVersionPickerDialog`, `ProjectAnalysisVersion`, `ProjectPhysicalVolume`, `ProjectLaborIntensity`, `DataImportIteration`
+**Связано:** `ProjectVersionPickerDialog`, `ProjectAnalysisVersion`, `ProjectPhysicalVolume`, `ProjectLaborIntensity`, `DataImportIteration`, `AnalysisVersionSnapshot`
 
 ## Контекст
 
@@ -44,18 +45,18 @@
 
 ## Acceptance criteria
 
-- [ ] Кнопка «Копировать» в тулбаре `ProjectVersionPickerDialog` (enabled если выбрана версия).
-- [ ] Мини-диалог: поля «Имя» (предзаполнено) и «Описание», кнопки «Сохранить» / «Отмена».
-- [ ] Plan-версия: копируются PPV + DataImportIteration. PLI не копируются.
-- [ ] Fact-версия: копируются PPV + PLI + DataImportIteration.
-- [ ] `AnalysisVersionSnapshot` НЕ копируется.
-- [ ] Новая версия появляется в гриде после Save, focus на ней.
-- [ ] Логирование `UserActionType.VersionCopy` в `UserActionLog`.
-- [ ] CHANGELOG `[Unreleased]` обновлён.
-- [ ] `dotnet build` 0 ошибок 0 warnings.
-- [ ] `dotnet test` 111+/111+ green.
-- [ ] Запушено в `origin/master`.
-- [ ] UI-подтверждение пользователем.
+- [x] Кнопка «Копировать» в тулбаре `ProjectVersionPickerDialog` (enabled если выбрана версия).
+- [x] Мини-диалог: поля «Имя» (предзаполнено) и «Описание», кнопки «Сохранить» / «Отмена».
+- [x] Plan-версия: копируются PPV + DataImportIteration. PLI не копируются.
+- [x] Fact-версия: копируются PPV + PLI + DataImportIteration.
+- [x] `AnalysisVersionSnapshot` источника НЕ копируется (новый строится по актуальным нормам IIC — см. «Известный дефект 2026-05-10»).
+- [x] Новая версия появляется в гриде после Save, focus на ней.
+- [x] Логирование `UserActionType.VersionCopy` в `UserActionLog`.
+- [x] CHANGELOG `[Unreleased]` обновлён.
+- [x] `dotnet build` 0 ошибок 0 warnings.
+- [x] `dotnet test` 111/111 green.
+- [x] Запушено в `origin/master`.
+- [x] UI-подтверждение пользователем (2026-05-10 после фикса снапшота).
 
 ## Стартовые точки
 
@@ -129,11 +130,11 @@ foreach (var norm in pickedByDirection)
 **Альтернатива (отвергнута):** делегировать создание снапшота через `IDirectoryService<ProjectAnalysisVersion>.CreateAsync()`, а потом догружать данные. Минус — два SaveChanges вместо одной транзакции, и часть полей (`Direction`, `PhysicalVolumeTypeId`) пришлось бы заполнять отдельно. Прямая копия `PopulateSnapshotInternalAsync` в той же транзакции — короче и атомарнее.
 
 **Definition of Done после фикса:**
-- [ ] `ProjectAnalysisVersionCopyService.CopyVersionAsync` создаёт `AnalysisVersionSnapshot` для новой версии до `tx.CommitAsync`.
-- [ ] UI: в скопированной Plan-версии расчёт производительности отрабатывает (Forecast).
-- [ ] UI: в скопированной Fact-версии расчёт фактической производительности отрабатывает.
-- [ ] CHANGELOG `[Unreleased]` обновлён (Fixed).
-- [ ] `dotnet build` 0 ошибок 0 warnings, `dotnet test` 111+/111+ green.
-- [ ] Коммит `fix(infra): populate AnalysisVersionSnapshot on version copy (ISS-004)` запушен в origin/master.
-- [ ] UI-подтверждение пользователя.
-- [ ] Статус ISS-004 → ✅ Closed после подтверждения.
+- [x] `ProjectAnalysisVersionCopyService.CopyVersionAsync` создаёт `AnalysisVersionSnapshot` для новой версии до `tx.CommitAsync` (коммит `9dc0469`).
+- [x] UI: в скопированной Plan-версии расчёт производительности отрабатывает (Forecast).
+- [x] UI: в скопированной Fact-версии расчёт фактической производительности отрабатывает.
+- [x] CHANGELOG `[Unreleased]` обновлён (Fixed).
+- [x] `dotnet build` 0 ошибок 0 warnings, `dotnet test` 111/111 green.
+- [x] Коммит `fix(infra): populate AnalysisVersionSnapshot on version copy (ISS-004)` запушен в `origin/master` (`9dc0469`).
+- [x] UI-подтверждение пользователя (2026-05-10).
+- [x] Статус ISS-004 → ✅ Closed после подтверждения.

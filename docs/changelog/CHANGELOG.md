@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-10, ISS-004 closed after UI confirmation)
+- `docs/issues/ISS-004-version-copy.md`: статус → ✅ Closed после UI-подтверждения пользователя 2026-05-10. В скопированных Plan- и Fact-версиях расчёт производительности отрабатывает после фикса генерации `AnalysisVersionSnapshot` в `ProjectAnalysisVersionCopyService.CopyVersionAsync` (коммит `9dc0469`). Все Acceptance criteria и Definition of Done закрыты.
+
 ### Fixed (2026-05-10, ISS-004 — снапшот норм IIC при копировании версии)
 - `EngineeringPerformance.Infrastructure/Services/ProjectAnalysisVersionCopyService.cs`: внутри транзакции `CopyVersionAsync` после `SaveChangesAsync` (когда `copy.Id` получен) и до `tx.CommitAsync` теперь генерируются записи `AnalysisVersionSnapshot` для новой версии на момент `copy.CreatedAt`. Логика дублирует `ProjectAnalysisVersionDirectoryService.PopulateSnapshotInternalAsync`: выбираются нормы `IicWorkDirectionNorms`, действующие на `CreatedAt` (`EffectiveFrom <= now AND (EffectiveTo IS NULL OR EffectiveTo >= now)`), при перекрытиях берётся самая свежая по `EffectiveFrom`. Без этого `PerformanceService` не находил норм для скопированной версии и расчёт молча возвращал пустой результат (UI-проверка пользователя 2026-05-10). Решение «не копировать AnalysisVersionSnapshot» (вариант «б» в `docs/issues/ISS-004-version-copy.md`) сохраняется: снапшот источника не копируется, но новый строится по актуальным нормам IIC, а не замораживается у source.
 
