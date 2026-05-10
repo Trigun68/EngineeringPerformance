@@ -1,8 +1,9 @@
 # ISS-003: Контекстное меню детальной сетки прогнозирования — Удалить / Копировать / Добавить
 
-**Статус:** ✅ Closed (2026-05-10, UI-подтверждение пользователя + расширение уникального ключа)
+**Статус:** ✅ Closed (2026-05-10, UI-подтверждение пользователя 2026-05-10 + расширение уникального ключа)
 **Создано:** 2026-05-09
 **Закрыто:** 2026-05-10
+**UI-подтверждение:** 2026-05-10 — пользователь проверил все 3 сценария меню, копирование строки с одной номенклатурой на разный объект работает корректно после применения миграции `ExpandProjectPhysicalVolumeUniqueIndex`
 **Приоритет:** 🟡 Medium
 **Связано:** [`docs/features/detail-grid-state-preservation.md`](../features/detail-grid-state-preservation.md), `OnDetailForecastShowGridMenu` в `ProjectsPageView.xaml.cs`, [`ADR-003`](../adr/ADR-003-project-physical-volume-unique-key.md)
 

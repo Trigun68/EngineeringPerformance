@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-10, ISS-003 closed after UI confirmation)
+- `docs/issues/ISS-003-detail-grid-context-menu-add-delete.md`: статус → ✅ Closed после UI-подтверждения пользователя 2026-05-10. Все 3 сценария контекстного меню детальной сетки (Удалить выбранную строку / Добавить копированием выбранной / Добавить строку) проверены руками, focus и scroll сохраняются. Сценарий «копирование с одной номенклатурой на разный объект» работает после применения миграции `ExpandProjectPhysicalVolumeUniqueIndex` к dev-БД.
+
 ### Fixed (2026-05-10, ProjectPhysicalVolume HasFilter(null) — устранение фантомного diff модели)
 - `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectPhysicalVolumeConfiguration.cs`: к уникальному составному индексу добавлен `.HasFilter(null)`. Без этого SQL Server convention EF Core автоматически добавляла filter `WHERE [col] IS NOT NULL AND ...` для unique-индекса по nullable-колонкам — модель навсегда расходилась со snapshot/миграцией без filter, и `dotnet ef migrations add` генерировал «фантомную» миграцию при каждом вызове, а `database update` падал с `PendingModelChangesWarning`. Явный `.HasFilter(null)` отменяет convention и закрепляет вариант A из ADR-003 (строгий UNIQUE без filtered index).
 
