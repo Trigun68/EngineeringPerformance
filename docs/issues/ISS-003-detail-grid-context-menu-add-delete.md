@@ -1,9 +1,23 @@
 # ISS-003: Контекстное меню детальной сетки прогнозирования — Удалить / Копировать / Добавить
 
-**Статус:** 📋 backlog (готово к взятию в новой сессии)
+**Статус:** ✅ Closed (2026-05-10, UI-подтверждение пользователя + расширение уникального ключа)
 **Создано:** 2026-05-09
+**Закрыто:** 2026-05-10
 **Приоритет:** 🟡 Medium
-**Связано:** [`docs/features/detail-grid-state-preservation.md`](../features/detail-grid-state-preservation.md), `OnDetailForecastShowGridMenu` в `ProjectsPageView.xaml.cs`
+**Связано:** [`docs/features/detail-grid-state-preservation.md`](../features/detail-grid-state-preservation.md), `OnDetailForecastShowGridMenu` в `ProjectsPageView.xaml.cs`, [`ADR-003`](../adr/ADR-003-project-physical-volume-unique-key.md)
+
+## Резюме закрытия
+
+Все 3 пункта меню реализованы и работают:
+1. **Удалить выбранную строку** — confirm-диалог → `IDataTableService<ProjectPhysicalVolume>.DeleteAsync` → reload с `savedState`. Логирование `PhysicalVolumeDelete`. Коммит `61f034f`.
+2. **Добавить копированием** — модальный диалог `ProjectPhysicalVolumeCreateDialog` (`forCopy: true`) с предзаполненными полями + lookup на справочник `PhysicalVolume`. Коммит `61f034f`.
+3. **Добавить строку** — тот же диалог (`forCopy: false`), поля пустые. Коммит `61f034f`.
+
+Сопутствующие правки:
+- Понятное русское сообщение при нарушении уникального ключа БД (`IsUniqueViolation`) — коммит `a7acc44`.
+- Расширение уникального составного индекса `ProjectPhysicalVolume` с 3 до 6 колонок (см. `ADR-003`) — после того как пользователь обнаружил, что старый ключ блокирует валидный сценарий «одна номенклатура на разных объектах» при копировании. Коммит выполнен в той же итерации.
+
+Focus и scroll сохраняются после всех операций — паттерн `state = SaveDetailForecastStateCallback?.Invoke(); ... LoadForecastDataAsync(pid, vid, state)`.
 
 ## Контекст
 

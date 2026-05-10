@@ -887,7 +887,7 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId", "PhysicalVolumeId")
+                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId", "PhysicalVolumeId", "FacilityCode", "FacilityName", "WorkId")
                         .IsUnique();
 
                     b.ToTable("ProjectPhysicalVolumes", (string)null);
@@ -1046,6 +1046,54 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasFilter("WindowsUsername IS NOT NULL");
 
                     b.ToTable("Users", (string)null);
+                });
+
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserActionLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("IpOrHost")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActionType")
+                        .HasDatabaseName("IX_UserActionLogs_ActionType");
+
+                    b.HasIndex("EntityType", "EntityId")
+                        .HasDatabaseName("IX_UserActionLogs_EntityType_EntityId");
+
+                    b.HasIndex("UserId", "Timestamp")
+                        .HasDatabaseName("IX_UserActionLogs_UserId_Timestamp");
+
+                    b.ToTable("UserActionLogs", (string)null);
                 });
 
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserSetting", b =>
@@ -1377,6 +1425,17 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("Role");
+                });
+
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserActionLog", b =>
+                {
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.UserSetting", b =>

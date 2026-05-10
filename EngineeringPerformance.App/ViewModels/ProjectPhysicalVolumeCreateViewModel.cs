@@ -170,11 +170,13 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
         }
         catch (Exception ex) when (IsUniqueViolation(ex))
         {
-            // На версию проекта допускается только одна строка ProjectPhysicalVolume для каждой
-            // номенклатуры (уникальный индекс ProjectAnalysisVersionId+ProjectId+PhysicalVolumeId).
-            // При копировании пользователь должен сменить номенклатуру в выпадающем списке.
-            ErrorMessage = "Строка с такой номенклатурой ФО в данной версии проекта уже существует. " +
-                           "Выберите другую номенклатуру в выпадающем списке.";
+            // На версию проекта допускается только одна строка ProjectPhysicalVolume
+            // для каждой комбинации (номенклатура ФО × код объекта × наименование объекта × ID работы).
+            // Уникальный индекс ProjectAnalysisVersionId+ProjectId+PhysicalVolumeId+FacilityCode+FacilityName+WorkId
+            // (см. ADR-003). При копировании пользователь должен сменить хотя бы одно из этих полей.
+            ErrorMessage = "Строка с такой комбинацией «номенклатура ФО + код/наименование объекта + ID работы» " +
+                           "в данной версии проекта уже существует. Измените номенклатуру в выпадающем списке " +
+                           "либо отредактируйте поля «Код объекта», «Наименование объекта» или «ID работы».";
         }
         catch (Exception ex)
         {

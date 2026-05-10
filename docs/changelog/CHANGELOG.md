@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-10, ADR-003 — расширение уникального ключа ProjectPhysicalVolume)
+- `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectPhysicalVolumeConfiguration.cs`: уникальный составной индекс `ProjectPhysicalVolumes` расширен с 3 колонок `(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId)` до 6 `(… + FacilityCode, FacilityName, WorkId)`. Бизнес-причина: одна номенклатура ФО может встречаться на разных объектах/работах одного проекта — старый ключ блокировал сценарий «Добавить копированием» из ISS-003. Решение зафиксировано в `docs/adr/ADR-003-project-physical-volume-unique-key.md`. Строгий UNIQUE без filtered index (NULL = NULL → блокирует дубликаты).
+- `EngineeringPerformance.App/ViewModels/ProjectPhysicalVolumeCreateViewModel.cs`: сообщение об ошибке при нарушении уникального индекса обновлено — теперь указывает на комбинацию «номенклатура ФО + код/наименование объекта + ID работы» и предлагает изменить любое из этих полей.
+- `docs/issues/ISS-003-detail-grid-context-menu-add-delete.md`: статус → ✅ Closed с резюме реализации.
+
 ### Fixed (2026-05-09, ISS-003 unique violation message)
 - `EngineeringPerformance.App/ViewModels/ProjectPhysicalVolumeCreateViewModel.cs`: при попытке сохранить копию `ProjectPhysicalVolume` с той же номенклатурой ФО в той же версии проекта пользователь видел сырое сообщение EF Core «An error occurred while saving the entity changes. See the inner exception for details.» — без указания причины. Бизнес-правило БД: уникальный индекс `(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId)` запрещает дубликаты номенклатуры в одной версии проекта. Добавлен метод `IsUniqueViolation`, который проходит по цепочке `InnerException` и ищет ключевые слова `UNIQUE`/`duplicate key`. При срабатывании показывается понятное русское сообщение: «Строка с такой номенклатурой ФО в данной версии проекта уже существует. Выберите другую номенклатуру в выпадающем списке.». Для прочих ошибок остаётся общий fallback с текстом исключения.
 
