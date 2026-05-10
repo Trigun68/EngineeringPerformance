@@ -1,6 +1,6 @@
 # ISS-004: Копирование версии анализа с данными
 
-**Статус:** 🔄 in-progress
+**Статус:** 🔄 in-progress (UI-проверка 2026-05-10 выявила дефект — см. «Известный дефект» ниже)
 **Создано:** 2026-05-10
 **Приоритет:** 🟡 Medium
 **Связано:** `ProjectVersionPickerDialog`, `ProjectAnalysisVersion`, `ProjectPhysicalVolume`, `ProjectLaborIntensity`, `DataImportIteration`
@@ -81,3 +81,59 @@
 - ❌ Не создавать DataImportIteration с новыми `ImportedAt`/`ImportedByUserId` — копировать 1-в-1.
 - ❌ Не изменять существующий `ProjectAnalysisVersionEditWindow` — отдельный мини-диалог.
 - ❌ Не добавлять новые пакеты.
+
+---
+
+## Известный дефект 2026-05-10 (handoff для следующей сессии)
+
+**Симптом (UI-проверка пользователя 2026-05-10):**
+В созданной копированием версии (Plan и Fact) **не подтягиваются нормы IIC и не выполняется расчёт производительности**. Грид расчёта пуст. В логах ошибок нет — расчёт молча возвращает пустой результат.
+
+**Корневая причина:**
+В `ProjectAnalysisVersionDirectoryService.CreateAsync` (`EngineeringPerformance.Infrastructure/Services/ProjectAnalysisVersionDirectoryService.cs:19-30`) после INSERT новой версии вызывается `PopulateSnapshotInternalAsync` — он создаёт записи `AnalysisVersionSnapshot` (заморозку норм IIC по `WorkDirectionId` на момент `CreatedAt`). Без этих снапшотов `PerformanceService` не находит нормы для расчёта.
+
+`ProjectAnalysisVersionCopyService.CopyVersionAsync` добавляет новую версию напрямую через `context.ProjectAnalysisVersions.Add()` **в обход** `CreateAsync` directory-сервиса. Снапшоты не создаются → расчёт пуст.
+
+Решение по вопросу 2 («не копировать AnalysisVersionSnapshot, пересоздадутся при первом расчёте по актуальным нормам IIC») было принято с ложной предпосылкой: в текущей архитектуре снапшоты автоматически при расчёте НЕ пересоздаются. Они создаются только в `CreateAsync` или явно через `RebuildSnapshotAsync`.
+
+**Фикс:**
+В `ProjectAnalysisVersionCopyService.CopyVersionAsync` после `await context.SaveChangesAsync()` (когда `copy.Id` уже получен), но **до** `tx.CommitAsync`, сгенерировать снапшоты норм для новой версии на момент `copy.CreatedAt`. Логика — копия `PopulateSnapshotInternalAsync` из `ProjectAnalysisVersionDirectoryService.cs:60-85`:
+
+```csharp
+// Снапшот норм IIC для новой версии на момент copy.CreatedAt — без него PerformanceService
+// не находит нормы (см. ISS-004 «Известный дефект»). Решение 2б остаётся в силе:
+// нормы берутся актуальные на момент создания копии, а не замороженные у source.
+var activeNorms = await context.IicWorkDirectionNorms
+    .AsNoTracking()
+    .Where(n => n.EffectiveFrom <= copy.CreatedAt
+                && (n.EffectiveTo == null || n.EffectiveTo >= copy.CreatedAt))
+    .ToListAsync(cancellationToken);
+
+var pickedByDirection = activeNorms
+    .GroupBy(n => n.WorkDirectionId)
+    .Select(g => g.OrderByDescending(n => n.EffectiveFrom).First());
+
+foreach (var norm in pickedByDirection)
+{
+    context.AnalysisVersionSnapshots.Add(new AnalysisVersionSnapshot
+    {
+        ProjectAnalysisVersionId = copy.Id,
+        WorkDirectionId = norm.WorkDirectionId,
+        NormId = norm.Id
+    });
+}
+```
+
+Это **уточнение** ADR/решения 2б, не его отмена: «AnalysisVersionSnapshot источника не копируется, но новый снапшот по актуальным нормам IIC создаётся в момент копирования».
+
+**Альтернатива (отвергнута):** делегировать создание снапшота через `IDirectoryService<ProjectAnalysisVersion>.CreateAsync()`, а потом догружать данные. Минус — два SaveChanges вместо одной транзакции, и часть полей (`Direction`, `PhysicalVolumeTypeId`) пришлось бы заполнять отдельно. Прямая копия `PopulateSnapshotInternalAsync` в той же транзакции — короче и атомарнее.
+
+**Definition of Done после фикса:**
+- [ ] `ProjectAnalysisVersionCopyService.CopyVersionAsync` создаёт `AnalysisVersionSnapshot` для новой версии до `tx.CommitAsync`.
+- [ ] UI: в скопированной Plan-версии расчёт производительности отрабатывает (Forecast).
+- [ ] UI: в скопированной Fact-версии расчёт фактической производительности отрабатывает.
+- [ ] CHANGELOG `[Unreleased]` обновлён (Fixed).
+- [ ] `dotnet build` 0 ошибок 0 warnings, `dotnet test` 111+/111+ green.
+- [ ] Коммит `fix(infra): populate AnalysisVersionSnapshot on version copy (ISS-004)` запушен в origin/master.
+- [ ] UI-подтверждение пользователя.
+- [ ] Статус ISS-004 → ✅ Closed после подтверждения.

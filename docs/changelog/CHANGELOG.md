@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Known Issue (2026-05-10, ISS-004 — снапшот норм IIC не создаётся при копировании версии)
+- `EngineeringPerformance.Infrastructure/Services/ProjectAnalysisVersionCopyService.cs`: UI-проверка пользователя 2026-05-10 выявила, что в созданной копированием версии (Plan и Fact) расчёт производительности возвращает пустой результат. Корневая причина: `CopyVersionAsync` добавляет новую версию через `context.Add()` в обход `ProjectAnalysisVersionDirectoryService.CreateAsync`, который вызывает `PopulateSnapshotInternalAsync` для генерации `AnalysisVersionSnapshot`. Без снапшота `PerformanceService` не находит нормы IIC. Подробный handoff и план фикса — в `docs/issues/ISS-004-version-copy.md` секция «Известный дефект 2026-05-10». Фикс — добавить генерацию снапшота на актуальные нормы IIC внутри транзакции `CopyVersionAsync` до `tx.CommitAsync`.
+
 ### Added (2026-05-10, ISS-004 — копирование версии анализа с данными)
 - `EngineeringPerformance.Core/Services/IProjectAnalysisVersionCopyService.cs`: контракт сервиса копирования версии. Один метод `CopyVersionAsync(sourceVersionId, newVersionName, newDescription)`, возвращает Id новой версии.
 - `EngineeringPerformance.Infrastructure/Services/ProjectAnalysisVersionCopyService.cs`: реализация — копирование в одной транзакции. Создаёт новый `ProjectAnalysisVersion` с теми же `Direction`/`PhysicalVolumeTypeId`/`ProjectId`, копирует все `ProjectPhysicalVolume` (всегда), `ProjectLaborIntensity` (только для `Direction=Fact`), `DataImportIteration` 1-в-1 с теми же `ImportedAt`/`SourceFileHash`/`SourceFileName`/`RecordCount`/`DataType`/`ImportedByUserId` (вариант «б» — буквальная копия аудит-истории). `AnalysisVersionSnapshot` НЕ копируется (вариант «б» — пересоздаётся при первом расчёте по актуальным нормам IIC).
