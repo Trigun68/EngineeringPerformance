@@ -141,9 +141,30 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             });
         }
 
-        // AnalysisVersionSnapshot НЕ копируем (вариант «б»): пересоздадутся при первом расчёте
-        // PerformanceService по актуальным нормам IIC. Замораживать снимок на момент копии бессмысленно —
-        // копия фактически новая версия с CreatedAt = сейчас, и снимок должен соответствовать этому моменту.
+        // AnalysisVersionSnapshot не копируем у source, но генерируем новый по актуальным нормам IIC
+        // на момент copy.CreatedAt. Без этого PerformanceService не находит нормы и расчёт пуст
+        // (см. ISS-004 «Известный дефект 2026-05-10»). Логика дублирует
+        // ProjectAnalysisVersionDirectoryService.PopulateSnapshotInternalAsync — один SaveChanges
+        // и одна транзакция атомарнее, чем делегирование в directory-сервис.
+        var activeNorms = await context.IicWorkDirectionNorms
+            .AsNoTracking()
+            .Where(n => n.EffectiveFrom <= copy.CreatedAt
+                        && (n.EffectiveTo == null || n.EffectiveTo >= copy.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        var pickedByDirection = activeNorms
+            .GroupBy(n => n.WorkDirectionId)
+            .Select(g => g.OrderByDescending(n => n.EffectiveFrom).First());
+
+        foreach (var norm in pickedByDirection)
+        {
+            context.AnalysisVersionSnapshots.Add(new AnalysisVersionSnapshot
+            {
+                ProjectAnalysisVersionId = copy.Id,
+                WorkDirectionId = norm.WorkDirectionId,
+                NormId = norm.Id,
+            });
+        }
 
         await context.SaveChangesAsync(cancellationToken);
         await tx.CommitAsync(cancellationToken);
