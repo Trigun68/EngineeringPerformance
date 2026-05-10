@@ -20,7 +20,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
     [ObservableProperty] private bool _isLoading = true;
 
     [ObservableProperty] private int? _selectedPhysicalVolumeId;
-    [ObservableProperty] private PhysicalVolumeDisplayItem? _selectedPhysicalVolumeItem;
 
     [ObservableProperty] private string? _facilityCode;
     [ObservableProperty] private string? _facilityName;
@@ -45,9 +44,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
         _service = service;
         _pvCache = pvCache;
     }
-
-    partial void OnSelectedPhysicalVolumeItemChanged(PhysicalVolumeDisplayItem? value)
-        => SelectedPhysicalVolumeId = value?.Id;
 
     public void Prepare(bool forCopy, DetailForecastItem? source, int projectId, int versionId)
     {
@@ -96,8 +92,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
         {
             var all = await _pvCache.GetAllAsync();
             BuildPhysicalVolumeDisplayItems(all);
-            SelectedPhysicalVolumeItem = PhysicalVolumeDisplayItems.FirstOrDefault(i => i.Id == SelectedPhysicalVolumeId)
-                                         ?? PhysicalVolumeDisplayItems.FirstOrDefault();
         }
         finally
         {
@@ -108,7 +102,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
     private void BuildPhysicalVolumeDisplayItems(IReadOnlyList<PhysicalVolume> volumes)
     {
         PhysicalVolumeDisplayItems.Clear();
-        PhysicalVolumeDisplayItems.Add(new PhysicalVolumeDisplayItem { Id = null, Display = "Не выбрано" });
 
         var byParent = volumes
             .Where(v => !v.IsArchived)
@@ -213,6 +206,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
 
 public sealed class PhysicalVolumeDisplayItem
 {
-    public int? Id { get; set; }
+    public int Id { get; set; }
     public string Display { get; set; } = string.Empty;
 }

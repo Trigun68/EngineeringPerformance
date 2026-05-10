@@ -49,11 +49,13 @@
                         <TextBlock Grid.Row="0" Grid.Column="0" Text="Номенклатура ФО" VerticalAlignment="Center" Margin="0,0,8,8" />
                         <dxe:ComboBoxEdit Grid.Row="0" Grid.Column="1"
                                           ItemsSource="{Binding PhysicalVolumeDisplayItems}"
-                                          SelectedItem="{Binding SelectedPhysicalVolumeItem}"
+                                          EditValue="{Binding SelectedPhysicalVolumeId}"
+                                          ValueMember="Id"
                                           DisplayMember="Display"
                                           IncrementalFiltering="True"
                                           AutoComplete="True"
                                           ImmediatePopup="True"
+                                          NullText="Не выбрано"
                                           Margin="0,0,0,8" />
 
                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Количество" VerticalAlignment="Center" Margin="0,0,8,8" />

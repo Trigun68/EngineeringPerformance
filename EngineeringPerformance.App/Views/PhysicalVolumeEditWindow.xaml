@@ -74,7 +74,9 @@
                           SelectedItem="{Binding SelectedParentItem}"
                           DisplayMember="Display"
                           IsEnabled="{Binding AreLookupsReady}"
-                          IsTextEditable="False"
+                          IncrementalFiltering="True"
+                          AutoComplete="True"
+                          ImmediatePopup="True"
                           Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="6" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
@@ -92,7 +94,9 @@
                           SelectedItem="{Binding SelectedUnit}"
                           DisplayMember="Name"
                           IsEnabled="{Binding AreLookupsReady}"
-                          IsTextEditable="False"
+                          IncrementalFiltering="True"
+                          AutoComplete="True"
+                          ImmediatePopup="True"
                           NullText="Не выбрано"
                           Margin="0,0,0,8" />
 

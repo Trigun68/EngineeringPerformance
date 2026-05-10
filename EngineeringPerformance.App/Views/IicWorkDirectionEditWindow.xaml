@@ -50,7 +50,9 @@
                           EditValue="{Binding SelectedUnitId}"
                           ValueMember="Id"
                           DisplayMember="DisplayText"
-                          IsTextEditable="False"
+                          IncrementalFiltering="True"
+                          AutoComplete="True"
+                          ImmediatePopup="True"
                           IsEnabled="{Binding AreLookupsReady}"
                           Margin="0,0,0,8"
                           NullText="(не выбрано)" />
@@ -61,7 +63,9 @@
                           EditValue="{Binding SelectedParentId}"
                           ValueMember="Id"
                           DisplayMember="DisplayText"
-                          IsTextEditable="False"
+                          IncrementalFiltering="True"
+                          AutoComplete="True"
+                          ImmediatePopup="True"
                           IsEnabled="{Binding AreLookupsReady}"
                           Margin="0,0,0,8"
                           NullText="(не выбрано)" />
