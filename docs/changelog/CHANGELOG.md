@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (2026-05-10, документация по поиску в справочниках и фильтрации lookup-комбобоксов)
+- `docs/features/directory-search-and-lookup-filtering.md`: единый feature-doc — пользовательская инструкция (поиск над таблицей справочника + фильтрация-по-набору в lookup-полях карточек), таблица «где работает», техническое описание паттерна (5 атрибутов `IncrementalFiltering`+`FilterCondition`+`AutoComplete`+`ImmediatePopup`+`ValidateOnTextInput` на `dxe:ComboBoxEdit`), анти-паттерны (фейковый item «Не выбрано», `IsTextEditable="False"`, дефолтный `FilterCondition=StartsWith` с декоративными префиксами Display), список затронутых XAML-файлов и ссылки на DevExpress docs.
+
 ### Fixed (2026-05-10, масштабирование фикса ввода на все lookup-комбобоксы карточек справочников)
 - `EngineeringPerformance.App/Views/PhysicalVolumeEditWindow.xaml` (поля «Классификатор», «Родитель», «Ед. изм.»), `PhysicalVolumeQuickEditDialog.xaml` (поле «Классификатор»), `LaborIntensityEditWindow.xaml` (поля «Родитель», «Группа IIC»), `IicWorkDirectionEditWindow.xaml` (поля «Ед. измерения», «Родитель»), `IicWorkDirectionNormEditWindow.xaml` (поле «Группа»): применён тот же паттерн, что подтверждён UI-проверкой пользователя на «Номенклатура ФО» в `ProjectPhysicalVolumeCreateDialog`. К каждому `ComboBoxEdit` добавлены `FilterCondition="Contains"` (поиск по подстроке вместо дефолтного StartsWith — обходит декоративные префиксы `Display`-строк, например `└ ` в иерархических списках) и `ValidateOnTextInput="False"` (по [DevExpress docs](https://docs.devexpress.com/WPF/400504): при определённых `DisplayMember`+`ValueMember` без этого флага редактор отклоняет ввод текста, не совпадающего с item-ами коллекции). Итого 9 lookup-полей теперь принимают свободный ввод и фильтруют popup по подстроке.
 
