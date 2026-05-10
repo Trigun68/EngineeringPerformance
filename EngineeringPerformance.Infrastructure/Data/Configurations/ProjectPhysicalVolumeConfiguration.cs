@@ -80,6 +80,7 @@ public sealed class ProjectPhysicalVolumeConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(pv => pv.CatalogId);
 
         builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeId, pv.FacilityCode, pv.FacilityName, pv.WorkId })
-            .IsUnique();
+            .IsUnique()
+            .HasFilter(null);
     }
 }

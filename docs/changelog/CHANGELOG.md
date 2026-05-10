@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-10, ProjectPhysicalVolume HasFilter(null) — устранение фантомного diff модели)
+- `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectPhysicalVolumeConfiguration.cs`: к уникальному составному индексу добавлен `.HasFilter(null)`. Без этого SQL Server convention EF Core автоматически добавляла filter `WHERE [col] IS NOT NULL AND ...` для unique-индекса по nullable-колонкам — модель навсегда расходилась со snapshot/миграцией без filter, и `dotnet ef migrations add` генерировал «фантомную» миграцию при каждом вызове, а `database update` падал с `PendingModelChangesWarning`. Явный `.HasFilter(null)` отменяет convention и закрепляет вариант A из ADR-003 (строгий UNIQUE без filtered index).
+
 ### Changed (2026-05-10, ADR-003 — расширение уникального ключа ProjectPhysicalVolume)
 - `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectPhysicalVolumeConfiguration.cs`: уникальный составной индекс `ProjectPhysicalVolumes` расширен с 3 колонок `(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId)` до 6 `(… + FacilityCode, FacilityName, WorkId)`. Бизнес-причина: одна номенклатура ФО может встречаться на разных объектах/работах одного проекта — старый ключ блокировал сценарий «Добавить копированием» из ISS-003. Решение зафиксировано в `docs/adr/ADR-003-project-physical-volume-unique-key.md`. Строгий UNIQUE без filtered index (NULL = NULL → блокирует дубликаты).
 - `EngineeringPerformance.App/ViewModels/ProjectPhysicalVolumeCreateViewModel.cs`: сообщение об ошибке при нарушении уникального индекса обновлено — теперь указывает на комбинацию «номенклатура ФО + код/наименование объекта + ID работы» и предлагает изменить любое из этих полей.
