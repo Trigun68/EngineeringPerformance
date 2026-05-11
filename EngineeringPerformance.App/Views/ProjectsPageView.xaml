@@ -455,12 +455,17 @@
                                         <dxg:GridColumn FieldName="Percentile" Header="Перцентиль" Width="90" />
                                         <dxg:GridColumn FieldName="Interpretation" Header="Интерпретация" Width="180" />
                                     </dxg:GridControl.Columns>
+                                    <dxg:GridControl.TotalSummary>
+                                        <dxg:GridSummaryItem FieldName="Name" SummaryType="Count" DisplayFormat="Направлений: {0}" />
+                                        <dxg:GridSummaryItem FieldName="FactLaborHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TreeListView AllowEditing="False" AllowSorting="False"
                                                           NavigationStyle="Row"
                                                           KeyFieldName="Id" ParentFieldName="ParentId"
                                                           AutoWidth="True" ShowIndicator="False"
-                                                          ShowVerticalLines="False" />
+                                                          ShowVerticalLines="False"
+                                                          ShowTotalSummary="True" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 

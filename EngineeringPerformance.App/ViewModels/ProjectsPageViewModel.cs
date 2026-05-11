@@ -661,9 +661,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var laborIntensitiesRaw = liTask.Result;
             // Нормализация: DocumentationCode в LI хранится как составной ключ
             // «<тип документации>/<название>|<шифр объекта>-<суффикс>», тогда как
-            // PV.FacilityCode — это чистый базовый шифр (например «3E0000»).
-            // Извлекаем шифр: берём подстроку после первого «|», затем до первого «-».
-            // Если разделителя «|» нет — используем оригинальное значение (обратная совместимость).
+            // PV.FacilityCode — это чистый шифр (например «4M0100» — листовой подобъект).
+            // LI ведёт часы только на КОРНЕВОМ шифре (вид «XX0000»), а PV — на листовом.
+            // Поэтому нормализуем обе стороны к корневому шифру (первые 2 символа + «0000»)
+            // и распределяем корневые часы LI пропорционально объёмам PV внутри корня.
             static string ExtractFacilityCode(string? code)
             {
                 if (string.IsNullOrEmpty(code)) return string.Empty;
@@ -672,10 +673,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 var dashIdx = tail.IndexOf('-');
                 return (dashIdx >= 0 ? tail[..dashIdx] : tail).Trim();
             }
+            static string ToRootFacility(string? code)
+            {
+                if (string.IsNullOrEmpty(code)) return string.Empty;
+                return code.Length >= 2 ? code[..2] + "0000" : code;
+            }
             var laborIntensities = laborIntensitiesRaw
                 .Select(li => new
                 {
-                    FacilityCode = ExtractFacilityCode(li.DocumentationCode),
+                    RootFacility = ToRootFacility(ExtractFacilityCode(li.DocumentationCode)),
                     li.WorkDirectionId,
                     li.PlannedHours,
                     li.ActualHours,
@@ -709,39 +715,49 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             // ── Вкладка «По объектам» ────────────────────────────────────────
             // Z-score объекта = взвешенная по часам факта оценка.
-            // Связка: ProjectLaborIntensity.DocumentationCode ↔ ProjectPhysicalVolume.FacilityCode.
-            // Часы по направлению берём из LI, физ. объёмы — из PV (IsAssessment=true), нормы — из снапшота через PerformanceRowDto.
+            // LI ведёт часы на КОРНЕВОМ шифре (XX0000), PV — на листовом (XX0100, XX0200...).
+            // Поэтому: 1) часы LI агрегируем по корневому шифру и направлению;
+            // 2) объёмы PV суммируем по тому же ключу (root, direction);
+            // 3) для каждой строки «По объектам» (по листовому FacilityCode)
+            //    часы = доля её объёма от корневого × корневые часы.
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
 
-            var hoursByFacilityDir = laborIntensities
-                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.FacilityCode))
-                .GroupBy(li => (Code: li.FacilityCode, Dir: li.WorkDirectionId!.Value))
+            var hoursByRootDir = laborIntensities
+                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.RootFacility))
+                .GroupBy(li => (Root: li.RootFacility, Dir: li.WorkDirectionId!.Value))
                 .ToDictionary(
                     g => g.Key,
                     g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
 
-            var hoursByFacility = laborIntensities
-                .Where(li => !string.IsNullOrEmpty(li.FacilityCode))
-                .GroupBy(li => li.FacilityCode)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
-
-            var byFacility = physicalVolumes
+            // Объёмы PV (assessment) по (root, direction) — знаменатель для пропорции.
+            var rootVolumes = physicalVolumesAll
+                .Where(pv => pv.PhysicalVolume?.IsAssessment == true
+                          && pv.PhysicalVolume.ClassifierId.HasValue
+                          && !string.IsNullOrEmpty(pv.FacilityCode))
                 .GroupBy(pv => (
-                    Code: pv.FacilityCode ?? string.Empty,
-                    Name: pv.FacilityName ?? string.Empty))
-                .OrderBy(g => g.Key.Code)
-                .ThenBy(g => g.Key.Name);
+                    Root: ToRootFacility(pv.FacilityCode),
+                    Dir:  pv.PhysicalVolume!.ClassifierId!.Value))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+
+            // Группируем PV-assessment по листовому FacilityCode (дедуп по Name).
+            // Один FacilityCode → одна строка; FacilityName — первое встретившееся имя.
+            var byFacility = physicalVolumes
+                .Where(pv => !string.IsNullOrEmpty(pv.FacilityCode))
+                .GroupBy(pv => pv.FacilityCode!)
+                .OrderBy(g => g.Key);
 
             var facilityResult = new List<FactFacilityRow>();
             foreach (var facilityGroup in byFacility)
             {
-                var facilityCode = facilityGroup.Key.Code;
+                var facilityCode = facilityGroup.Key;
+                var facilityName = facilityGroup.First().FacilityName ?? string.Empty;
+                var rootCode = ToRootFacility(facilityCode);
 
-                // Объёмы по направлениям внутри объекта (только IsAssessment=true с привязкой к группе ИИС).
+                // Объёмы листового объекта по направлениям (для пропорции внутри корня).
                 var volumeByDir = facilityGroup
                     .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true)
                     .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
@@ -749,32 +765,42 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
                 decimal weightedZ = 0m;
                 decimal weightSum = 0m;
+                decimal totalFacilityHours = 0m;
+                bool anyHours = false;
+
                 foreach (var (dirId, vol) in volumeByDir)
                 {
                     if (vol <= 0) continue;
+                    if (!hoursByRootDir.TryGetValue((rootCode, dirId), out var rootHours) || rootHours <= 0) continue;
+                    if (!rootVolumes.TryGetValue((rootCode, dirId), out var rootVol) || rootVol <= 0) continue;
+
+                    // Часы листового объекта по направлению = доля × корневые часы.
+                    var facilityDirHours = rootHours * (vol / rootVol);
+                    totalFacilityHours += facilityDirHours;
+                    anyHours = true;
+
+                    // Z-score считаем по производительности направления внутри корня
+                    // (она одинакова для всех листовых объектов корня — это свойство модели).
                     if (!normByDirection.TryGetValue(dirId, out var norm)) continue;
                     if (!norm.NormEstimate.HasValue || !norm.NormStdDev.HasValue || norm.NormStdDev.Value <= 0) continue;
-                    if (!hoursByFacilityDir.TryGetValue((facilityCode, dirId), out var dirHours) || dirHours <= 0) continue;
 
-                    var factProd = dirHours / vol;
+                    var factProd = rootHours / rootVol;
                     if (factProd <= 0) continue;
                     var factEstimate = (decimal)Math.Log((double)factProd);
                     var zDir = (factEstimate - norm.NormEstimate.Value) / norm.NormStdDev.Value;
 
-                    weightedZ += zDir * dirHours;
-                    weightSum += dirHours;
+                    weightedZ += zDir * facilityDirHours;
+                    weightSum += facilityDirHours;
                 }
 
                 decimal? facilityZ = weightSum > 0 ? Math.Round(weightedZ / weightSum, 4) : null;
-                decimal? totalHours = hoursByFacility.TryGetValue(facilityCode, out var th) && th > 0
-                    ? Math.Round(th, 2)
-                    : null;
+                decimal? totalHours = anyHours ? Math.Round(totalFacilityHours, 2) : null;
                 var interpretation = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
 
                 facilityResult.Add(new FactFacilityRow
                 {
                     Code = facilityCode,
-                    Name = facilityGroup.Key.Name,
+                    Name = facilityName,
                     FactLaborHours = totalHours,
                     ZScore = facilityZ,
                     Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
@@ -785,19 +811,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             FactFacilityData = new ObservableCollection<FactFacilityRow>(facilityResult);
 
             // ── Вкладка «Детально» ──────────────────────────────────────────
-            // Часы факта распределяются пропорционально объёму внутри группы
-            // (FacilityCode, WorkDirectionId): factHours(ppv) = groupHours × volume(ppv)/groupVolume.
-            // Производительность и Z-score одинаковы для всех PPV одной группы — это не баг,
-            // а следствие того, что норма задаётся на направление, а не на отдельный физ. объём.
-            var groupVolumes = physicalVolumesAll
-                .Where(pv => pv.PhysicalVolume?.IsAssessment == true && pv.PhysicalVolume.ClassifierId.HasValue)
-                .GroupBy(pv => (
-                    Code: pv.FacilityCode ?? string.Empty,
-                    Dir:  pv.PhysicalVolume!.ClassifierId!.Value))
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
-
+            // Часы факта распределяются пропорционально объёму внутри (root, direction):
+            //   factHours(ppv) = rootHoursDir × volume(ppv) / rootVolumeDir.
+            // Производительность и Z-score одинаковы для всех PPV одного корня и направления —
+            // это следствие того, что норма задаётся на направление, а часы LI — на корень.
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
@@ -818,16 +835,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 string percentile = "Н/Д";
                 string interpretationText = string.Empty;
 
-                if (isAssessment && dirId.HasValue && vol > 0)
+                if (isAssessment && dirId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.FacilityCode))
                 {
-                    var key = (Code: pv.FacilityCode ?? string.Empty, Dir: dirId.Value);
-                    if (groupVolumes.TryGetValue(key, out var groupVol)
-                        && groupVol > 0
-                        && hoursByFacilityDir.TryGetValue(key, out var groupHours)
-                        && groupHours > 0)
+                    var rootKey = (Root: ToRootFacility(pv.FacilityCode), Dir: dirId.Value);
+                    if (rootVolumes.TryGetValue(rootKey, out var rootVol)
+                        && rootVol > 0
+                        && hoursByRootDir.TryGetValue(rootKey, out var rootHours)
+                        && rootHours > 0)
                     {
-                        factHours = Math.Round(groupHours * (vol / groupVol), 2);
-                        factProductivity = Math.Round(groupHours / groupVol, 4);
+                        factHours = Math.Round(rootHours * (vol / rootVol), 2);
+                        factProductivity = Math.Round(rootHours / rootVol, 4);
                         if (factProductivity > 0
                             && norm?.NormEstimate is decimal ne
                             && norm.NormStdDev is decimal nsd
