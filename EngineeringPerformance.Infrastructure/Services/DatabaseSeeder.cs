@@ -30,6 +30,8 @@ public static class DatabaseSeeder
 
         if (!await context.AccessRights.AnyAsync())
             await SeedAccessRightsAsync(context);
+        else
+            await BackfillAccessRightsAsync(context);
 
         if (!await context.UnitsOfMeasurement.AnyAsync())
             await SeedUnitsOfMeasurementAsync(context);
@@ -294,6 +296,38 @@ public static class DatabaseSeeder
         }
 
         context.AccessRights.AddRange(accessRights);
+        await context.SaveChangesAsync();
+    }
+
+    // Идемпотентный backfill: добавляет права для тех комбинаций (role, objectName), которых ещё нет в БД.
+    // Нужен потому, что AllObjectNames со временем расширяется (например, добавился UserActionLog при фиче
+    // «Журнал действий пользователей»), а старый seed работает только при пустой таблице — существующие БД
+    // оставались без прав на новые объекты, и в UI «Права доступа» эти строки нельзя было отредактировать.
+    private static async Task BackfillAccessRightsAsync(AppDbContext context)
+    {
+        var pmRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == nameof(UserRole.ProjectManager));
+        var observerRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == nameof(UserRole.Observer));
+
+        if (pmRole is null || observerRole is null)
+            return;
+
+        var existing = await context.AccessRights
+            .Select(r => new { r.RoleId, r.ObjectName })
+            .ToListAsync();
+        var existingSet = existing.Select(x => (x.RoleId, x.ObjectName)).ToHashSet();
+
+        var toAdd = new List<AccessRight>();
+        foreach (var obj in AccessControlConstants.AllObjectNames)
+        {
+            if (!existingSet.Contains((pmRole.Id, obj)))
+                toAdd.Add(new AccessRight { RoleId = pmRole.Id, ObjectName = obj, AccessLevel = AccessLevel.Edit });
+            if (!existingSet.Contains((observerRole.Id, obj)))
+                toAdd.Add(new AccessRight { RoleId = observerRole.Id, ObjectName = obj, AccessLevel = AccessLevel.Read });
+        }
+
+        if (toAdd.Count == 0) return;
+
+        context.AccessRights.AddRange(toAdd);
         await context.SaveChangesAsync();
     }
 }
