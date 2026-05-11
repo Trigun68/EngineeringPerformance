@@ -236,7 +236,7 @@ public sealed class PerformanceService : IPerformanceService
             zScore = (aggregatedFactEstimate.Value - normEstimate.Value) / normStdDev.Value;
         }
 
-        PerformanceInterpretation? interpretation = zScore.HasValue ? DetermineInterpretation(zScore.Value) : null;
+        PerformanceInterpretation? interpretation = PerformanceInterpretationHelper.GetInterpretation(zScore);
 
         result[rowIndex] = new PerformanceRowDto(
             WorkDirectionId: direction.Id,
@@ -258,16 +258,4 @@ public sealed class PerformanceService : IPerformanceService
         return (subtreeHours, subtreeWeightedEstimate);
     }
 
-    private static PerformanceInterpretation DetermineInterpretation(decimal zScore)
-    {
-        if (zScore < -1.0m)
-            return PerformanceInterpretation.Excellent;
-        if (zScore < -0.5m)
-            return PerformanceInterpretation.Good;
-        if (zScore <= 0.5m)
-            return PerformanceInterpretation.Satisfactory;
-        if (zScore <= 1.0m)
-            return PerformanceInterpretation.NeedsAttention;
-        return PerformanceInterpretation.Critical;
-    }
 }

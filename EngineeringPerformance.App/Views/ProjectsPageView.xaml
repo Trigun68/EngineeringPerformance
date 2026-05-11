@@ -484,29 +484,24 @@
                                 <dxg:GridControl x:Name="FactFacilityGrid" Grid.Column="0" ItemsSource="{Binding FactFacilityData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
-                                        <dxg:GridColumn FieldName="FacilityCode" Header="Шифр объекта" Width="1.2*" MinWidth="80" />
-                                        <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="4*" MinWidth="150" />
-                                        <dxg:GridColumn FieldName="BaseHours" Header="Базовый, ч" Width="2*" MinWidth="80">
+                                        <dxg:GridColumn FieldName="Code" Header="Код" Width="1.2*" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="Name" Header="Наименование" Width="4*" MinWidth="150" />
+                                        <dxg:GridColumn FieldName="FactLaborHours" Header="Факт.Трудоёмк., ч" Width="1.6*" MinWidth="100">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="OptimisticHours" Header="Оптимист., ч" Width="1.5*" MinWidth="80">
+                                        <dxg:GridColumn FieldName="ZScore" Header="Z-score" Width="1.2*" MinWidth="80">
                                             <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                                <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="PessimisticHours" Header="Пессимист., ч" Width="1.5*" MinWidth="80">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="Percentile" Header="Перцентиль" Width="1.2*" MinWidth="80" />
+                                        <dxg:GridColumn FieldName="Interpretation" Header="Интерпретация" Width="2.5*" MinWidth="140" />
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.TotalSummary>
-                                        <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Объектов: {0}" />
-                                        <dxg:GridSummaryItem FieldName="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
-                                        <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="Name" SummaryType="Count" DisplayFormat="Объектов: {0}" />
+                                        <dxg:GridSummaryItem FieldName="FactLaborHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView AllowEditing="False" AllowSorting="True"

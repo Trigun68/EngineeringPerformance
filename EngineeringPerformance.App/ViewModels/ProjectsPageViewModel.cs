@@ -63,7 +63,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _factVersionName = string.Empty;
     [ObservableProperty] private string _factVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
-    [ObservableProperty] private ObservableCollection<FacilityForecastItem> _factFacilityData = [];
+    [ObservableProperty] private ObservableCollection<FactFacilityRow> _factFacilityData = [];
     [ObservableProperty] private ObservableCollection<DetailForecastItem> _factDetailData = [];
 
     // Вкладка Сравнение версий
@@ -645,12 +645,20 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(s => new { s.WorkDirectionId, s.NormId })
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask);
+            await using var ctxLi = await _contextFactory.CreateDbContextAsync();
+            var liTask = ctxLi.ProjectLaborIntensities
+                .AsNoTracking()
+                .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+                .Select(li => new { li.DocumentationCode, li.WorkDirectionId, li.PlannedHours, li.ActualHours })
+                .ToListAsync();
+
+            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask, liTask);
             var data = perfTask.Result;
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
+            var laborIntensities = liTask.Result;
 
             // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
             var items = new ObservableCollection<PerformanceItem>();
@@ -678,9 +686,26 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             FactPerformanceData = items;
 
             // ── Вкладка «По объектам» ────────────────────────────────────────
+            // Z-score объекта = взвешенная по часам факта оценка.
+            // Связка: ProjectLaborIntensity.DocumentationCode ↔ ProjectPhysicalVolume.FacilityCode.
+            // Часы по направлению берём из LI, физ. объёмы — из PV (IsAssessment=true), нормы — из снапшота через PerformanceRowDto.
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
+
+            var hoursByFacilityDir = laborIntensities
+                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocumentationCode))
+                .GroupBy(li => (Code: li.DocumentationCode, Dir: li.WorkDirectionId!.Value))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
+
+            var hoursByFacility = laborIntensities
+                .Where(li => !string.IsNullOrEmpty(li.DocumentationCode))
+                .GroupBy(li => li.DocumentationCode)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
 
             var byFacility = physicalVolumes
                 .GroupBy(pv => (
@@ -689,36 +714,53 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .OrderBy(g => g.Key.Code)
                 .ThenBy(g => g.Key.Name);
 
-            var facilityResult = new List<FacilityForecastItem>();
+            var facilityResult = new List<FactFacilityRow>();
             foreach (var facilityGroup in byFacility)
             {
-                decimal baseH = 0m, optH = 0m, pesH = 0m;
-                foreach (var pv in facilityGroup)
+                var facilityCode = facilityGroup.Key.Code;
+
+                // Объёмы по направлениям внутри объекта (только IsAssessment=true с привязкой к группе ИИС).
+                var volumeByDir = facilityGroup
+                    .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true)
+                    .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+                    .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+
+                decimal weightedZ = 0m;
+                decimal weightSum = 0m;
+                foreach (var (dirId, vol) in volumeByDir)
                 {
-                    var dirId = pv.PhysicalVolume!.ClassifierId!.Value;
-                    if (!normByDirection.TryGetValue(dirId, out var norm))
-                        continue;
+                    if (vol <= 0) continue;
+                    if (!normByDirection.TryGetValue(dirId, out var norm)) continue;
+                    if (!norm.NormEstimate.HasValue || !norm.NormStdDev.HasValue || norm.NormStdDev.Value <= 0) continue;
+                    if (!hoursByFacilityDir.TryGetValue((facilityCode, dirId), out var dirHours) || dirHours <= 0) continue;
 
-                    var vol = pv.Quantity * pv.PhysicalVolume.Coefficient;
-                    var p   = norm.NormProductivity!.Value;
-                    var std = norm.NormStdDev ?? 0m;
+                    var factProd = dirHours / vol;
+                    if (factProd <= 0) continue;
+                    var factEstimate = (decimal)Math.Log((double)factProd);
+                    var zDir = (factEstimate - norm.NormEstimate.Value) / norm.NormStdDev.Value;
 
-                    baseH += vol * p;
-                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
-                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                    weightedZ += zDir * dirHours;
+                    weightSum += dirHours;
                 }
 
-                facilityResult.Add(new FacilityForecastItem
+                decimal? facilityZ = weightSum > 0 ? Math.Round(weightedZ / weightSum, 4) : null;
+                decimal? totalHours = hoursByFacility.TryGetValue(facilityCode, out var th) && th > 0
+                    ? Math.Round(th, 2)
+                    : null;
+                var interpretation = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
+
+                facilityResult.Add(new FactFacilityRow
                 {
-                    FacilityCode     = facilityGroup.Key.Code,
-                    FacilityName     = facilityGroup.Key.Name,
-                    BaseHours        = baseH > 0 ? Math.Round(baseH, 2) : null,
-                    OptimisticHours  = optH  > 0 ? Math.Round(optH,  2) : null,
-                    PessimisticHours = pesH  > 0 ? Math.Round(pesH,  2) : null,
+                    Code = facilityCode,
+                    Name = facilityGroup.Key.Name,
+                    FactLaborHours = totalHours,
+                    ZScore = facilityZ,
+                    Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
+                    Interpretation = interpretation?.ToRussian() ?? string.Empty,
                 });
             }
 
-            FactFacilityData = new ObservableCollection<FacilityForecastItem>(facilityResult);
+            FactFacilityData = new ObservableCollection<FactFacilityRow>(facilityResult);
 
             // ── Вкладка «Детально» ──────────────────────────────────────────
             var allPv = physicalVolumesAll
@@ -1172,10 +1214,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FactFacilityData
-                .Where(f => !f.IsTotal)
-                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .Select(f => new FactFacilityRowDto(f.Code, f.Name, f.FactLaborHours, f.ZScore, f.Percentile, f.Interpretation))
                 .ToList();
-            await _forecastExportService.ExportFacilityForecastToExcelAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
+            await _forecastExportService.ExportFactFacilityToExcelAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1208,10 +1249,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FactFacilityData
-                .Where(f => !f.IsTotal)
-                .Select(f => new FacilityForecastRowDto(f.FacilityCode, f.FacilityName, f.BaseHours, f.OptimisticHours, f.PessimisticHours))
+                .Select(f => new FactFacilityRowDto(f.Code, f.Name, f.FactLaborHours, f.ZScore, f.Percentile, f.Interpretation))
                 .ToList();
-            await _forecastExportService.ExportFacilityForecastToPdfAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
+            await _forecastExportService.ExportFactFacilityToPdfAsync(rows, SelectedProjectCode, FactVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1443,6 +1483,16 @@ public sealed class FacilityForecastItem
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
+}
+
+public sealed class FactFacilityRow
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public decimal? FactLaborHours { get; set; }
+    public decimal? ZScore { get; set; }
+    public string Percentile { get; set; } = string.Empty;
+    public string Interpretation { get; set; } = string.Empty;
 }
 
 public sealed class DetailGridState

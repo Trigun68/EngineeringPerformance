@@ -27,6 +27,12 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportFacilityForecastToPdfAsync(IReadOnlyList<FacilityForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildFacilityPdf(rows, projectCode, versionName, filePath));
 
+    public Task ExportFactFacilityToExcelAsync(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildFactFacilityExcel(rows, projectCode, versionName, filePath));
+
+    public Task ExportFactFacilityToPdfAsync(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildFactFacilityPdf(rows, projectCode, versionName, filePath));
+
     public Task ExportDetailForecastToExcelAsync(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildDetailExcel(rows, projectCode, versionName, filePath));
 
@@ -332,6 +338,132 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
             totalBase > 0 ? totalBase.ToString("N1") : "—",
             totalOpt  > 0 ? totalOpt.ToString("N1")  : "—",
             totalPes  > 0 ? totalPes.ToString("N1")  : "—",
+        ];
+        DrawPdfRow(gfx, margin, y, colW, totalVals, fontTotal, XBrushes.White, totalBg, 14);
+
+        doc.Save(filePath);
+    }
+
+
+
+    // ─── Excel «По объектам» (Оценка факта) ──────────────────────────────────
+
+    private static void BuildFactFacilityExcel(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("По объектам");
+
+        ws.Cell(1, 1).Value = $"Оценка факта по объектам: {projectCode} ({versionName})";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Range(1, 1, 1, 6).Merge();
+
+        var headers = new[] { "Код", "Наименование", "Факт.Трудоёмк., ч", "Z-score", "Перцентиль", "Интерпретация" };
+        WriteHeaderRow(ws, 2, headers);
+
+        var row = 3;
+        decimal totalHours = 0m;
+        foreach (var r in rows)
+        {
+            ws.Cell(row, 1).Value = r.Code;
+            ws.Cell(row, 2).Value = r.Name;
+            SetDecimal(ws.Cell(row, 3), r.FactLaborHours, "N2");
+            SetDecimal(ws.Cell(row, 4), r.ZScore, "N4");
+            ws.Cell(row, 5).Value = r.Percentile;
+            ws.Cell(row, 6).Value = r.Interpretation;
+            if (row % 2 == 0)
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+            totalHours += r.FactLaborHours ?? 0m;
+            row++;
+        }
+
+        ws.Cell(row, 1).Value = "ИТОГО";
+        ws.Cell(row, 2).Value = string.Empty;
+        SetDecimal(ws.Cell(row, 3), totalHours, "N2");
+        ws.Row(row).Style.Font.Bold = true;
+        ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        ws.Row(row).Style.Font.FontColor = XLColor.White;
+
+        var tableRange = ws.Range(2, 1, row, headers.Length);
+        tableRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        tableRange.Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+
+        ws.Column(1).Width = 14;
+        ws.Column(2).Width = 50;
+        ws.Column(6).Width = 38;
+        for (var c = 3; c <= 5; c++) ws.Column(c).AdjustToContents();
+        ws.SheetView.FreezeRows(2);
+
+        wb.SaveAs(filePath);
+    }
+
+    // ─── PDF «По объектам» (Оценка факта) ────────────────────────────────────
+
+    private static void BuildFactFacilityPdf(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        if (GlobalFontSettings.FontResolver is null)
+            GlobalFontSettings.FontResolver = new ForecastWindowsFontResolver();
+
+        var doc = new PdfDocument();
+        doc.Info.Title = $"Оценка факта по объектам: {projectCode}";
+
+        var page = doc.AddPage();
+        page.Orientation = PdfSharp.PageOrientation.Landscape;
+        var gfx = XGraphics.FromPdfPage(page);
+
+        var fontTitle  = new XFont("Arial", 13, XFontStyleEx.Bold);
+        var fontHeader = new XFont("Arial",  8, XFontStyleEx.Bold);
+        var fontBody   = new XFont("Arial",  7, XFontStyleEx.Regular);
+        var fontTotal  = new XFont("Arial",  8, XFontStyleEx.Bold);
+
+        var margin = 30.0;
+        var pageW  = page.Width.Point;
+        var y = margin;
+
+        gfx.DrawString($"Оценка факта по объектам: {projectCode} ({versionName})",
+            fontTitle, XBrushes.Black, new XRect(margin, y, pageW - margin * 2, 20), XStringFormats.TopLeft);
+        y += 24;
+        gfx.DrawString($"Дата формирования: {DateTime.Now:dd.MM.yyyy HH:mm}",
+            fontBody, XBrushes.Gray, new XRect(margin, y, pageW - margin * 2, 14), XStringFormats.TopLeft);
+        y += 20;
+
+        double[] colW = [70, 280, 90, 70, 80, 170];
+        string[] colH = ["Код", "Наименование", "Факт.Трудоёмк., ч", "Z-score", "Перцентиль", "Интерпретация"];
+
+        var hdrBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x2C, 0x3E, 0x50));
+        DrawPdfRow(gfx, margin, y, colW, colH, fontHeader, XBrushes.White, hdrBg, 14);
+        y += 14;
+
+        var bgLight = new XSolidBrush(XColor.FromArgb(0xFF, 0xF8, 0xFA, 0xFC));
+        decimal totalHours = 0m;
+        var rowIdx = 0;
+
+        foreach (var r in rows)
+        {
+            if (y + 12 > page.Height.Point - margin) break;
+            totalHours += r.FactLaborHours ?? 0m;
+
+            var bg = rowIdx % 2 == 0 ? XBrushes.White : bgLight;
+            string[] vals =
+            [
+                r.Code,
+                TruncatePdf(r.Name, 48),
+                r.FactLaborHours.HasValue ? r.FactLaborHours.Value.ToString("N2") : "—",
+                r.ZScore.HasValue         ? r.ZScore.Value.ToString("N4")         : "—",
+                r.Percentile,
+                TruncatePdf(r.Interpretation, 30),
+            ];
+            DrawPdfRow(gfx, margin, y, colW, vals, fontBody, XBrushes.Black, bg, 12);
+            y += 12;
+            rowIdx++;
+        }
+
+        var totalBg = new XSolidBrush(XColor.FromArgb(0xFF, 0x1E, 0x3A, 0x5F));
+        string[] totalVals =
+        [
+            "ИТОГО", string.Empty,
+            totalHours > 0 ? totalHours.ToString("N2") : "—",
+            string.Empty, string.Empty, string.Empty,
         ];
         DrawPdfRow(gfx, margin, y, colW, totalVals, fontTotal, XBrushes.White, totalBg, 14);
 
