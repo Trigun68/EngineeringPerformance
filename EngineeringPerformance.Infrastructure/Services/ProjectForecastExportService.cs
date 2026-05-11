@@ -33,6 +33,9 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
     public Task ExportFactFacilityToPdfAsync(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildFactFacilityPdf(rows, projectCode, versionName, filePath));
 
+    public Task ExportFactDetailToExcelAsync(IReadOnlyList<FactDetailRowDto> rows, string projectCode, string versionName, string filePath)
+        => Task.Run(() => BuildFactDetailExcel(rows, projectCode, versionName, filePath));
+
     public Task ExportDetailForecastToExcelAsync(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath)
         => Task.Run(() => BuildDetailExcel(rows, projectCode, versionName, filePath));
 
@@ -468,6 +471,106 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         DrawPdfRow(gfx, margin, y, colW, totalVals, fontTotal, XBrushes.White, totalBg, 14);
 
         doc.Save(filePath);
+    }
+
+
+
+    // ─── Excel «Детально» (Оценка факта) ─────────────────────────────────────
+
+    private static void BuildFactDetailExcel(IReadOnlyList<FactDetailRowDto> rows, string projectCode, string versionName, string filePath)
+    {
+        using var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("Детально");
+
+        ws.Cell(1, 1).Value = $"Оценка факта (детально): {projectCode} ({versionName})";
+        ws.Cell(1, 1).Style.Font.Bold = true;
+        ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Range(1, 1, 1, 21).Merge();
+
+        var headers = new[]
+        {
+            "Шифр объекта", "Наименование объекта",
+            "Тип привязки", "Комплект документов", "ID по каталогу", "TAG",
+            "ID работы", "Наименование работы", "Комментарий", "Описательная часть",
+            "Код ФО", "Наименование ФО",
+            "Группа ФО IIC", "Ед. изм.",
+            "Кол-во",
+            "Факт.Трудоёмк., ч", "Факт производит.", "Норм производит.",
+            "Z-score", "Перцентиль", "Интерпретация"
+        };
+        WriteHeaderRow(ws, 2, headers);
+
+        var row = 3;
+        decimal totalHours = 0m;
+        string? lastFacility = null;
+
+        foreach (var r in rows)
+        {
+            var facKey = r.FacilityCode + "|" + r.FacilityName;
+            if (facKey != lastFacility)
+            {
+                var hdr = string.IsNullOrEmpty(r.FacilityCode)
+                    ? r.FacilityName
+                    : $"{r.FacilityCode} — {r.FacilityName}";
+                ws.Cell(row, 1).Value = hdr;
+                ws.Range(row, 1, row, headers.Length).Merge();
+                ws.Row(row).Style.Font.Bold = true;
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
+                row++;
+                lastFacility = facKey;
+            }
+
+            ws.Cell(row, 1).Value = r.FacilityCode;
+            ws.Cell(row, 2).Value = r.FacilityName;
+            ws.Cell(row, 3).Value = r.BindingType;
+            ws.Cell(row, 4).Value = r.DocumentSet;
+            ws.Cell(row, 5).Value = r.CatalogId;
+            ws.Cell(row, 6).Value = r.Tag;
+            ws.Cell(row, 7).Value = r.WorkId;
+            ws.Cell(row, 8).Value = r.WorkName;
+            ws.Cell(row, 9).Value = r.WorkComment;
+            ws.Cell(row, 10).Value = r.EstimationBasis;
+            ws.Cell(row, 11).Value = r.PvCode;
+            ws.Cell(row, 12).Value = r.PvName;
+            ws.Cell(row, 13).Value = r.IicGroupName;
+            ws.Cell(row, 14).Value = r.IicUnitName;
+            ws.Cell(row, 15).Value = r.Quantity;
+            ws.Cell(row, 15).Style.NumberFormat.Format = "#,##0.00##";
+            ws.Cell(row, 15).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            SetDecimal(ws.Cell(row, 16), r.FactLaborHours, "N2");
+            SetDecimal(ws.Cell(row, 17), r.FactProductivity, "N4");
+            SetDecimal(ws.Cell(row, 18), r.NormProductivity, "N4");
+            SetDecimal(ws.Cell(row, 19), r.ZScore, "N4");
+            ws.Cell(row, 20).Value = r.Percentile;
+            ws.Cell(row, 21).Value = r.Interpretation;
+
+            if (row % 2 == 0)
+                ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+
+            totalHours += r.FactLaborHours ?? 0m;
+            row++;
+        }
+
+        ws.Cell(row, 1).Value = "ИТОГО";
+        ws.Range(row, 1, row, 15).Merge();
+        SetDecimal(ws.Cell(row, 16), totalHours, "N2");
+        ws.Row(row).Style.Font.Bold = true;
+        ws.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        ws.Row(row).Style.Font.FontColor = XLColor.White;
+
+        ws.Range(2, 1, row, headers.Length).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        ws.Range(2, 1, row, headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+
+        ws.Column(2).Width = 35;
+        ws.Column(8).Width = 30;
+        ws.Column(12).Width = 30;
+        ws.Column(13).Width = 25;
+        ws.Column(21).Width = 30;
+        for (var c = 1; c <= headers.Length; c++)
+            if (c != 2 && c != 8 && c != 12 && c != 13 && c != 21) ws.Column(c).AdjustToContents();
+        ws.SheetView.FreezeRows(2);
+
+        wb.SaveAs(filePath);
     }
 
 

@@ -64,7 +64,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _factVersionLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<PerformanceItem> _factPerformanceData = [];
     [ObservableProperty] private ObservableCollection<FactFacilityRow> _factFacilityData = [];
-    [ObservableProperty] private ObservableCollection<DetailForecastItem> _factDetailData = [];
+    [ObservableProperty] private ObservableCollection<FactDetailRow> _factDetailData = [];
 
     // Вкладка Сравнение версий
     [ObservableProperty] private int? _compareVersionAId;
@@ -763,12 +763,25 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             FactFacilityData = new ObservableCollection<FactFacilityRow>(facilityResult);
 
             // ── Вкладка «Детально» ──────────────────────────────────────────
+            // Часы факта распределяются пропорционально объёму внутри группы
+            // (FacilityCode, WorkDirectionId): factHours(ppv) = groupHours × volume(ppv)/groupVolume.
+            // Производительность и Z-score одинаковы для всех PPV одной группы — это не баг,
+            // а следствие того, что норма задаётся на направление, а не на отдельный физ. объём.
+            var groupVolumes = physicalVolumesAll
+                .Where(pv => pv.PhysicalVolume?.IsAssessment == true && pv.PhysicalVolume.ClassifierId.HasValue)
+                .GroupBy(pv => (
+                    Code: pv.FacilityCode ?? string.Empty,
+                    Dir:  pv.PhysicalVolume!.ClassifierId!.Value))
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
                 .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
 
-            var detailRows = new List<DetailForecastItem>();
+            var detailRows = new List<FactDetailRow>();
             foreach (var pv in allPv)
             {
                 var dirId = pv.PhysicalVolume?.ClassifierId;
@@ -776,16 +789,37 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
                 var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
                 var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
-                decimal? baseH = null, optH = null, pesH = null;
-                if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
+
+                decimal? factHours = null;
+                decimal? factProductivity = null;
+                decimal? zScore = null;
+                string percentile = "Н/Д";
+                string interpretationText = string.Empty;
+
+                if (isAssessment && dirId.HasValue && vol > 0)
                 {
-                    var std = norm.NormStdDev ?? 0m;
-                    baseH = Math.Round(vol * p, 2);
-                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
-                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                    var key = (Code: pv.FacilityCode ?? string.Empty, Dir: dirId.Value);
+                    if (groupVolumes.TryGetValue(key, out var groupVol)
+                        && groupVol > 0
+                        && hoursByFacilityDir.TryGetValue(key, out var groupHours)
+                        && groupHours > 0)
+                    {
+                        factHours = Math.Round(groupHours * (vol / groupVol), 2);
+                        factProductivity = Math.Round(groupHours / groupVol, 4);
+                        if (factProductivity > 0
+                            && norm?.NormEstimate is decimal ne
+                            && norm.NormStdDev is decimal nsd
+                            && nsd > 0)
+                        {
+                            var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
+                            zScore = Math.Round((factEstimate - ne) / nsd, 4);
+                            percentile = PerformancePercentileHelper.GetPercentile(zScore);
+                            interpretationText = PerformanceInterpretationHelper.GetInterpretation(zScore)?.ToRussian() ?? string.Empty;
+                        }
+                    }
                 }
 
-                detailRows.Add(new DetailForecastItem
+                detailRows.Add(new FactDetailRow
                 {
                     ProjectPhysicalVolumeId = pv.Id,
                     PhysicalVolumeId      = pv.PhysicalVolumeId,
@@ -802,20 +836,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     EstimationBasis       = pv.EstimationBasis ?? string.Empty,
                     PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
                     PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IsAssessment          = isAssessment ? "Да" : "Нет",
-                    Coefficient           = pv.PhysicalVolume?.Coefficient,
                     IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
                     IicUnitName           = norm?.NormUnitName ?? string.Empty,
-                    NormProductivity      = norm?.NormProductivity,
-                    NormStdDev            = norm?.NormStdDev,
                     Quantity              = pv.Quantity,
-                    BaseHours             = baseH,
-                    OptimisticHours       = optH,
-                    PessimisticHours      = pesH,
+                    FactLaborHours        = factHours,
+                    FactProductivity      = factProductivity,
+                    NormProductivity      = norm?.NormProductivity,
+                    ZScore                = zScore,
+                    Percentile            = percentile,
+                    Interpretation        = interpretationText,
                 });
             }
 
-            FactDetailData = new ObservableCollection<DetailForecastItem>(detailRows);
+            FactDetailData = new ObservableCollection<FactDetailRow>(detailRows);
             if (savedState is not null)
                 _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreFactDetailStateCallback?.Invoke(savedState),
@@ -1284,16 +1317,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = FactDetailData
-                .Where(r => !r.IsTotal)
-                .Select(r => new DetailForecastRowDto(
+                .Select(r => new FactDetailRowDto(
                     r.FacilityCode, r.FacilityName, r.BindingType, r.DocumentSet,
                     r.CatalogId, r.Tag, r.WorkId, r.WorkName, r.WorkComment,
-                    r.EstimationBasis, r.PvCode, r.PvName, r.IsAssessment,
-                    r.Coefficient, r.IicGroupName, r.IicUnitName,
-                    r.NormProductivity, r.NormStdDev, r.Quantity,
-                    r.BaseHours, r.OptimisticHours, r.PessimisticHours))
+                    r.EstimationBasis, r.PvCode, r.PvName,
+                    r.IicGroupName, r.IicUnitName, r.Quantity,
+                    r.FactLaborHours, r.FactProductivity, r.NormProductivity,
+                    r.ZScore, r.Percentile, r.Interpretation))
                 .ToList();
-            await _forecastExportService.ExportDetailForecastToExcelAsync(
+            await _forecastExportService.ExportFactDetailToExcelAsync(
                 rows, SelectedProjectCode, FactVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
@@ -1490,6 +1522,34 @@ public sealed class FactFacilityRow
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public decimal? FactLaborHours { get; set; }
+    public decimal? ZScore { get; set; }
+    public string Percentile { get; set; } = string.Empty;
+    public string Interpretation { get; set; } = string.Empty;
+}
+
+public sealed class FactDetailRow
+{
+    public int ProjectPhysicalVolumeId { get; set; }
+    public int PhysicalVolumeId { get; set; }
+    public int? NormId { get; set; }
+    public string FacilityCode { get; set; } = string.Empty;
+    public string FacilityName { get; set; } = string.Empty;
+    public string BindingType { get; set; } = string.Empty;
+    public string DocumentSet { get; set; } = string.Empty;
+    public string CatalogId { get; set; } = string.Empty;
+    public string Tag { get; set; } = string.Empty;
+    public string WorkId { get; set; } = string.Empty;
+    public string WorkName { get; set; } = string.Empty;
+    public string WorkComment { get; set; } = string.Empty;
+    public string EstimationBasis { get; set; } = string.Empty;
+    public string PvCode { get; set; } = string.Empty;
+    public string PvName { get; set; } = string.Empty;
+    public string IicGroupName { get; set; } = string.Empty;
+    public string IicUnitName { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public decimal? FactLaborHours { get; set; }
+    public decimal? FactProductivity { get; set; }
+    public decimal? NormProductivity { get; set; }
     public decimal? ZScore { get; set; }
     public string Percentile { get; set; } = string.Empty;
     public string Interpretation { get; set; } = string.Empty;
