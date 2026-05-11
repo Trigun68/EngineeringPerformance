@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-11, унификация lookup-комбобоксов в общий Style)
+- `EngineeringPerformance.App/App.xaml`: добавлен ресурс `Style x:Key="LookupComboBoxEdit" TargetType="dxe:ComboBoxEdit"` с 5 setter-ами (`IncrementalFiltering=True`, `FilterCondition=Contains`, `AutoComplete=True`, `ImmediatePopup=True`, `ValidateOnTextInput=False`). Подключён namespace `xmlns:dxe`. Стиль именованный (через `x:Key`) — применяется только там, где нужна фильтрация-по-набору, enum-комбобоксы остаются нетронутыми.
+- `EngineeringPerformance.App/Views/PhysicalVolumeEditWindow.xaml` (3 поля), `PhysicalVolumeQuickEditDialog.xaml` (1 поле), `LaborIntensityEditWindow.xaml` (2 поля), `IicWorkDirectionEditWindow.xaml` (2 поля), `IicWorkDirectionNormEditWindow.xaml` (1 поле), `ProjectPhysicalVolumeCreateDialog.xaml` (1 поле): 10 повторов 5-атрибутной связки заменены на одну строку `Style="{StaticResource LookupComboBoxEdit}"`. Уникальные биндинги (`ItemsSource`, `EditValue`/`SelectedItem`, `ValueMember`, `DisplayMember`, `NullText`) остаются в каждом контроле — стиль инкапсулирует только поведение фильтрации.
+- `docs/features/directory-search-and-lookup-filtering.md`: обновлён пример кода — теперь показывает применение `Style="{StaticResource LookupComboBoxEdit}"` вместо 5 атрибутов inline. Добавлено определение стиля и ссылка на `App.xaml`.
+
 ### Added (2026-05-10, документация по поиску в справочниках и фильтрации lookup-комбобоксов)
 - `docs/features/directory-search-and-lookup-filtering.md`: единый feature-doc — пользовательская инструкция (поиск над таблицей справочника + фильтрация-по-набору в lookup-полях карточек), таблица «где работает», техническое описание паттерна (5 атрибутов `IncrementalFiltering`+`FilterCondition`+`AutoComplete`+`ImmediatePopup`+`ValidateOnTextInput` на `dxe:ComboBoxEdit`), анти-паттерны (фейковый item «Не выбрано», `IsTextEditable="False"`, дефолтный `FilterCondition=StartsWith` с декоративными префиксами Display), список затронутых XAML-файлов и ссылки на DevExpress docs.
 

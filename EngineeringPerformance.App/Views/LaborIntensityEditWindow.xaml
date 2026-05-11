@@ -45,11 +45,7 @@
                                   EditValue="{Binding SelectedParentId}"
                                   ValueMember="Id"
                                   DisplayMember="DisplayText"
-                                  IncrementalFiltering="True"
-                                  FilterCondition="Contains"
-                                  AutoComplete="True"
-                                  ImmediatePopup="True"
-                                  ValidateOnTextInput="False"
+                                  Style="{StaticResource LookupComboBoxEdit}"
                                   Margin="0,0,0,8"
                                   NullText="Не выбран" />
 
@@ -59,11 +55,7 @@
                                   EditValue="{Binding SelectedIicWorkDirectionId}"
                                   ValueMember="Id"
                                   DisplayMember="DisplayText"
-                                  IncrementalFiltering="True"
-                                  FilterCondition="Contains"
-                                  AutoComplete="True"
-                                  ImmediatePopup="True"
-                                  ValidateOnTextInput="False"
+                                  Style="{StaticResource LookupComboBoxEdit}"
                                   Margin="0,0,0,8"
                                   NullText="Не выбрано" />
 

@@ -1,8 +1,8 @@
 # Поиск в справочниках и фильтрация lookup-комбобоксов
 
 **Статус:** ✅ Реализовано
-**Последнее обновление:** 2026-05-10
-**Связанные коммиты:** `19a4317`, `00dee2e`, `7a97ceb`, `6b98b07`
+**Последнее обновление:** 2026-05-11
+**Связанные коммиты:** `19a4317`, `00dee2e`, `7a97ceb`, `6b98b07`, `1d976be`, рефакторинг в `Style x:Key="LookupComboBoxEdit"`
 
 ## Что это и зачем
 
@@ -54,22 +54,30 @@
 ### Архитектура
 
 - **Поиск над таблицей справочника**: на `dxg:TreeListView` / `dxg:TableView` включены `ShowSearchPanelMode="Always"` и `SearchPanelHighlightResults="True"`. Это нативный механизм DevExpress, кода в VM не требуется.
-- **Фильтрация в lookup-комбобоксах**: на `dxe:ComboBoxEdit` включена связка из 5 атрибутов:
+- **Фильтрация в lookup-комбобоксах**: на `dxe:ComboBoxEdit` применяется именованный стиль `LookupComboBoxEdit` из `App.xaml`, который инкапсулирует 5 атрибутов поведения. Уникальные биндинги (`ItemsSource`, `EditValue`/`SelectedItem`, `ValueMember`, `DisplayMember`, `NullText`) задаются на месте:
 
 ```xml
 <dxe:ComboBoxEdit ItemsSource="{Binding Items}"
                   EditValue="{Binding SelectedId}"
                   ValueMember="Id"
                   DisplayMember="DisplayText"
-                  IncrementalFiltering="True"
-                  FilterCondition="Contains"
-                  AutoComplete="True"
-                  ImmediatePopup="True"
-                  ValidateOnTextInput="False"
+                  Style="{StaticResource LookupComboBoxEdit}"
                   NullText="Не выбрано" />
 ```
 
-### Зачем 5 атрибутов
+Определение стиля в `App.xaml`:
+
+```xml
+<Style x:Key="LookupComboBoxEdit" TargetType="dxe:ComboBoxEdit">
+    <Setter Property="IncrementalFiltering" Value="True" />
+    <Setter Property="FilterCondition" Value="Contains" />
+    <Setter Property="AutoComplete" Value="True" />
+    <Setter Property="ImmediatePopup" Value="True" />
+    <Setter Property="ValidateOnTextInput" Value="False" />
+</Style>
+```
+
+### Зачем 5 атрибутов в стиле
 
 | Атрибут | Назначение |
 |---|---|

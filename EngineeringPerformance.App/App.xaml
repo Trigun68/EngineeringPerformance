@@ -4,6 +4,7 @@
              xmlns:local="clr-namespace:EngineeringPerformance.App"
              xmlns:conv="clr-namespace:EngineeringPerformance.App.Converters"
              xmlns:dxg="http://schemas.devexpress.com/winfx/2008/xaml/grid"
+             xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
              Startup="Application_Startup"
              ShutdownMode="OnExplicitShutdown">
     <Application.Resources>
@@ -16,6 +17,17 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:InverseBooleanToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <conv:AnalysisDirectionToStringConverter x:Key="AnalysisDirectionToString" />
+
+        <!-- Унифицированный стиль lookup-комбобокса справочников: ввод текста + инкрементная фильтрация по подстроке.
+             Применяется ко всем lookup-полям карточек/диалогов, где список — справочник из БД.
+             Документация: docs/features/directory-search-and-lookup-filtering.md -->
+        <Style x:Key="LookupComboBoxEdit" TargetType="dxe:ComboBoxEdit">
+            <Setter Property="IncrementalFiltering" Value="True" />
+            <Setter Property="FilterCondition" Value="Contains" />
+            <Setter Property="AutoComplete" Value="True" />
+            <Setter Property="ImmediatePopup" Value="True" />
+            <Setter Property="ValidateOnTextInput" Value="False" />
+        </Style>
 
         <!-- Стиль строки итога в таблице прогноза -->
         <Style x:Key="ForecastRowStyle" TargetType="dxg:RowControl">

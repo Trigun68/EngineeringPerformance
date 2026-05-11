@@ -41,11 +41,7 @@
                                       EditValue="{Binding SelectedWorkDirectionId}"
                                       ValueMember="Id"
                                       DisplayMember="DisplayText"
-                                      IncrementalFiltering="True"
-                                      FilterCondition="Contains"
-                                      AutoComplete="True"
-                                      ImmediatePopup="True"
-                                      ValidateOnTextInput="False"
+                                      Style="{StaticResource LookupComboBoxEdit}"
                                       IsEnabled="{Binding AreLookupsReady}"
                                       Margin="0,0,0,8" />
 

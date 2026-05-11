@@ -41,11 +41,7 @@
                                   ItemsSource="{Binding ClassifierDisplayItems}"
                                   SelectedItem="{Binding SelectedClassifierItem}"
                                   DisplayMember="Display"
-                                  IncrementalFiltering="True"
-                                  FilterCondition="Contains"
-                                  AutoComplete="True"
-                                  ImmediatePopup="True"
-                                  ValidateOnTextInput="False"
+                                  Style="{StaticResource LookupComboBoxEdit}"
                                   Margin="0,0,0,8" />
 
                 <TextBlock Grid.Row="2" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
