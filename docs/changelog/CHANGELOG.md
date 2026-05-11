@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-11, Оценка факта — пустая трудоёмкость на вкладках «По объектам» и «Детально»)
+- `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadFactDataAsync`): `ProjectLaborIntensity.DocumentationCode` хранится как составной ключ `<тип документации>/<название>|<шифр объекта>-<суффикс>`, а `ProjectPhysicalVolume.FacilityCode` — чистый 6-символьный шифр. До фикса GroupBy по `DocumentationCode` давал 0 совпадений с `FacilityCode` → колонки `Факт.Трудоёмк., ч` на вкладках «По объектам» и «Детально» оставались пустыми, Z-score не считался. Добавлена локальная функция `ExtractFacilityCode`: берёт подстроку после первого `|`, затем до первого `-`, fallback — оригинал (обратная совместимость со старыми импортами без разделителя). `hoursByFacilityDir`/`hoursByFacility` теперь группируются по извлечённому `FacilityCode`. Диагностировано прямым запросом к dev-БД (3 fact-версии × 699–860 LI-строк → 0 совпадений по старому ключу).
+
 ### Added (2026-05-11, ISS-005 — контекстное меню Detail-сетки Fact + раздельные команды Fact/Plan, реализация)
 - `EngineeringPerformance.App/Views/ProjectsPageView.xaml` (`FactDetailGrid`): TableView получил `x:Name="FactDetailView"` — необходимо для подписки на событие `ShowGridMenu` из code-behind.
 - `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs`: добавлена подписка `FactDetailView.ShowGridMenu += OnFactDetailShowGridMenu` и обработчик, выводящий те же 6 пунктов (3 редактирования + разделитель + Удалить/Копировать/Добавить), что и Plan-меню. Привязан к Fact-командам VM, кнопка «Редактировать норму IIC» дисейблится при `NormId == null`.

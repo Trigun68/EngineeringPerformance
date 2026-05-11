@@ -658,7 +658,29 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var physicalVolumesAll = pvAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
-            var laborIntensities = liTask.Result;
+            var laborIntensitiesRaw = liTask.Result;
+            // Нормализация: DocumentationCode в LI хранится как составной ключ
+            // «<тип документации>/<название>|<шифр объекта>-<суффикс>», тогда как
+            // PV.FacilityCode — это чистый базовый шифр (например «3E0000»).
+            // Извлекаем шифр: берём подстроку после первого «|», затем до первого «-».
+            // Если разделителя «|» нет — используем оригинальное значение (обратная совместимость).
+            static string ExtractFacilityCode(string? code)
+            {
+                if (string.IsNullOrEmpty(code)) return string.Empty;
+                var pipeIdx = code.IndexOf('|');
+                var tail = pipeIdx >= 0 ? code[(pipeIdx + 1)..] : code;
+                var dashIdx = tail.IndexOf('-');
+                return (dashIdx >= 0 ? tail[..dashIdx] : tail).Trim();
+            }
+            var laborIntensities = laborIntensitiesRaw
+                .Select(li => new
+                {
+                    FacilityCode = ExtractFacilityCode(li.DocumentationCode),
+                    li.WorkDirectionId,
+                    li.PlannedHours,
+                    li.ActualHours,
+                })
+                .ToList();
 
             // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
             var items = new ObservableCollection<PerformanceItem>();
@@ -694,15 +716,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .ToDictionary(r => r.WorkDirectionId);
 
             var hoursByFacilityDir = laborIntensities
-                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocumentationCode))
-                .GroupBy(li => (Code: li.DocumentationCode, Dir: li.WorkDirectionId!.Value))
+                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.FacilityCode))
+                .GroupBy(li => (Code: li.FacilityCode, Dir: li.WorkDirectionId!.Value))
                 .ToDictionary(
                     g => g.Key,
                     g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
 
             var hoursByFacility = laborIntensities
-                .Where(li => !string.IsNullOrEmpty(li.DocumentationCode))
-                .GroupBy(li => li.DocumentationCode)
+                .Where(li => !string.IsNullOrEmpty(li.FacilityCode))
+                .GroupBy(li => li.FacilityCode)
                 .ToDictionary(
                     g => g.Key,
                     g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
