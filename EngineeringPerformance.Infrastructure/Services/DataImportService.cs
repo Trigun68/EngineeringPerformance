@@ -531,11 +531,12 @@ public sealed class DataImportService : IDataImportService
                 : $"{documentTypeName}|{brand}";
 
             // SQL Server unique-индекс на nvarchar — ограничение длины ~450 символов
-            // (DocumentationCode настроен как 100, см. ProjectLaborIntensityConfiguration).
-            // Подстраховка от превышения — обрезаем (теряется уникальность только в патологических случаях).
-            if (documentationCode.Length > 100)
+            // (DocumentationCode настроен как 450, см. ProjectLaborIntensityConfiguration).
+            // ISS-006: ранее лимит был 100 и схлопывал разные «тип+марка» по truncate
+            // (270+ строк имели префикс >100 символов, ~2 830 ч терялось при merge).
+            if (documentationCode.Length > 450)
             {
-                documentationCode = documentationCode[..100];
+                documentationCode = documentationCode[..450];
             }
 
             var entity = new ProjectLaborIntensity
@@ -557,21 +558,12 @@ public sealed class DataImportService : IDataImportService
         }
 
         // Схлопываем дубли по натуральному ключу (DocumentationCode, WorkDirectionId).
+        // ISS-006: на коллизии суммируем PlannedHours/ActualHours — это разные строки файла
+        // с одинаковым «тип+марка» (например, повторяющиеся документы по нескольким объектам),
+        // их часы должны складываться, а не затирать друг друга.
         // Строки с WorkDirectionId = NULL не схлопываются (уникальный индекс фильтрованный),
         // поэтому каждую такую запись оставляем как отдельную — иначе потеряем данные проекта.
-        var mergedByNaturalKey = new Dictionary<(string DocumentationCode, int WorkDirectionId), ProjectLaborIntensity>();
-        var unmatchedRows = new List<ProjectLaborIntensity>();
-        foreach (var entity in stagedRows)
-        {
-            if (entity.WorkDirectionId is int wdId)
-            {
-                mergedByNaturalKey[(entity.DocumentationCode, wdId)] = entity;
-            }
-            else
-            {
-                unmatchedRows.Add(entity);
-            }
-        }
+        var (mergedByNaturalKey, unmatchedRows) = MergeLaborRowsByNaturalKey(stagedRows);
 
         var totalToPersist = mergedByNaturalKey.Count + unmatchedRows.Count;
 
@@ -625,7 +617,7 @@ public sealed class DataImportService : IDataImportService
         }
         if (laborFileRowsAccepted > 0 && laborFileRowsAccepted != totalToPersist)
         {
-            details.Add($"В базу записано {totalToPersist} строк (одинаковые «тип документа + марка» в одной версии схлопываются до одной записи).");
+            details.Add($"В базу записано {totalToPersist} строк (дубли по «тип документа + марка» в одной версии суммируются по плановым и фактическим часам).");
         }
         if (rowsWithoutCatalogMatch > 0)
         {
@@ -801,6 +793,45 @@ public sealed class DataImportService : IDataImportService
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// ISS-006: схлопывает строки трудоёмкости по натуральному ключу
+    /// (DocumentationCode, WorkDirectionId) с суммированием плановых и фактических часов.
+    /// Строки с пустым WorkDirectionId возвращаются отдельным списком — фильтрованный
+    /// уникальный индекс пропускает их вне merge.
+    /// Public для модульного тестирования (см. DataImportServiceTests).
+    /// </summary>
+    public static (
+        Dictionary<(string DocumentationCode, int WorkDirectionId), ProjectLaborIntensity> Merged,
+        List<ProjectLaborIntensity> Unmatched)
+        MergeLaborRowsByNaturalKey(IEnumerable<ProjectLaborIntensity> rows)
+    {
+        var merged = new Dictionary<(string DocumentationCode, int WorkDirectionId), ProjectLaborIntensity>();
+        var unmatched = new List<ProjectLaborIntensity>();
+
+        foreach (var entity in rows)
+        {
+            if (entity.WorkDirectionId is int wdId)
+            {
+                var key = (entity.DocumentationCode, wdId);
+                if (merged.TryGetValue(key, out var existing))
+                {
+                    existing.PlannedHours += entity.PlannedHours;
+                    existing.ActualHours += entity.ActualHours;
+                }
+                else
+                {
+                    merged[key] = entity;
+                }
+            }
+            else
+            {
+                unmatched.Add(entity);
+            }
+        }
+
+        return (merged, unmatched);
     }
 
     private static string? GetCellValue(IXLRangeRow row, int columnNumber)

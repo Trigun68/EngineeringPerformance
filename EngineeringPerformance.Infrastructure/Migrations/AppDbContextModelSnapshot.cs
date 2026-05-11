@@ -710,8 +710,8 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.Property<string>("DocumentationCode")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<int?>("LaborIntensityId")
                         .HasColumnType("int");

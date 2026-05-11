@@ -63,4 +63,72 @@ public sealed class DataImportServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
+
+    /// <summary>
+    /// ISS-006: при импорте трудоёмкости несколько строк с одинаковыми
+    /// (DocumentationCode, WorkDirectionId) должны суммироваться по плановым
+    /// и фактическим часам, а не затирать друг друга.
+    /// </summary>
+    [Fact]
+    public void MergeLaborRowsByNaturalKey_DuplicateKey_SumsPlannedAndActualHours()
+    {
+        var rows = new[]
+        {
+            new ProjectLaborIntensity
+            {
+                DocumentationCode = "VS_04|3U0000-ОП-АТХ1",
+                WorkDirectionId = 7,
+                PlannedHours = 12.5m,
+                ActualHours = 3m,
+            },
+            new ProjectLaborIntensity
+            {
+                DocumentationCode = "VS_04|3U0000-ОП-АТХ1",
+                WorkDirectionId = 7,
+                PlannedHours = 8m,
+                ActualHours = 2m,
+            },
+            new ProjectLaborIntensity
+            {
+                DocumentationCode = "VS_04|3U0000-ОП-АТХ1",
+                WorkDirectionId = 7,
+                PlannedHours = 4.25m,
+                ActualHours = 0m,
+            },
+        };
+
+        var (merged, unmatched) = DataImportService.MergeLaborRowsByNaturalKey(rows);
+
+        merged.Should().HaveCount(1);
+        var entity = merged.Single().Value;
+        entity.PlannedHours.Should().Be(24.75m);
+        entity.ActualHours.Should().Be(5m);
+        unmatched.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// ISS-006: разные ключи остаются отдельными записями, а строки без WorkDirectionId
+    /// не схлопываются (попадают в unmatched).
+    /// </summary>
+    [Fact]
+    public void MergeLaborRowsByNaturalKey_DistinctKeys_KeepsRowsSeparate()
+    {
+        var rows = new[]
+        {
+            new ProjectLaborIntensity { DocumentationCode = "A", WorkDirectionId = 1, PlannedHours = 10m },
+            new ProjectLaborIntensity { DocumentationCode = "B", WorkDirectionId = 1, PlannedHours = 20m },
+            new ProjectLaborIntensity { DocumentationCode = "A", WorkDirectionId = 2, PlannedHours = 30m },
+            new ProjectLaborIntensity { DocumentationCode = "A", WorkDirectionId = null, PlannedHours = 40m },
+            new ProjectLaborIntensity { DocumentationCode = "A", WorkDirectionId = null, PlannedHours = 50m },
+        };
+
+        var (merged, unmatched) = DataImportService.MergeLaborRowsByNaturalKey(rows);
+
+        merged.Should().HaveCount(3);
+        merged[("A", 1)].PlannedHours.Should().Be(10m);
+        merged[("B", 1)].PlannedHours.Should().Be(20m);
+        merged[("A", 2)].PlannedHours.Should().Be(30m);
+        unmatched.Should().HaveCount(2);
+        unmatched.Sum(r => r.PlannedHours).Should().Be(90m);
+    }
 }
