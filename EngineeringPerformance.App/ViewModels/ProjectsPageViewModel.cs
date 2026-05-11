@@ -677,7 +677,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     DocSet = ExtractDocSet(li.DocumentationCode),
                     Tag = (string?)null, // Tag в LI на текущих данных всегда null; место под расширение, если появится
                     li.WorkDirectionId,
-                    Hours = li.ActualHours > 0 ? li.ActualHours : li.PlannedHours,
+                    // Часы для агрегации Факта берутся строго из PlannedHours (заявленные в файле
+                    // плановые часы по работе). Прежняя смесь `Actual > 0 ? Actual : Planned`
+                    // давала итог > файла на строках, где факт списан больше плана (для проекта 4 v2
+                    // это +755.84 ч к 61 725.40). Решено пользователем 2026-05-12: единый источник —
+                    // PlannedHours, фактическое списание (ActualHours) для агрегации не используется.
+                    Hours = li.PlannedHours,
                 })
                 .ToList();
 

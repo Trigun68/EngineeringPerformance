@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-12, Оценка факта — агрегация только по PlannedHours)
+- `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadFactDataAsync`, проекция `laborIntensities`): часы для агрегации Факта теперь берутся строго из `PlannedHours`. Прежняя смесь `ActualHours > 0 ? ActualHours : PlannedHours` давала итог больше файла (для проекта 4 v2: 62 481.24 вместо ожидаемых 61 725.40 — на 487 строках факт превышал план на суммарные +755.84 ч). Решено пользователем 2026-05-12 после фикса ISS-006: единый источник часов для всех вкладок Факта — заявленные в файле плановые часы. Фактическое списание (`ActualHours`) для агрегации не используется.
+
 ### Fixed (2026-05-11, ISS-006 — импорт LI: truncate 100→450 и суммирование на коллизии)
 - `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectLaborIntensityConfiguration.cs`: длина `DocumentationCode` поднята с `nvarchar(100)` до `nvarchar(450)`. 100 символов схлопывали разные «тип+марка» по truncate (267 строк файла имели префикс >100, ≈2 830 ч терялось при импорте). 450 безопасно для ключа уникального фильтрованного индекса SQL Server (900 байт ≤ 1700).
 - `EngineeringPerformance.Infrastructure/Migrations/20260511204756_ExpandLaborDocumentationCodeTo450.*` + `migrations/schema/016_ExpandLaborDocumentationCodeTo450.sql`: EF-миграция и legacy-SQL для расширения колонки на существующих БД.
