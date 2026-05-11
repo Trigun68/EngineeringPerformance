@@ -1,8 +1,9 @@
 # ISS-006: Импорт LI теряет часы из-за truncate DocumentationCode + затирающего merge
 
-**Статус:** 🟡 In progress (фикс реализован 2026-05-11, ожидает пере-импорта файла фактических данных и UI-подтверждения)
+**Статус:** ✅ Closed (2026-05-12)
 **Категория:** Bug / DataImport / LaborIntensity
 **Приоритет:** High
+**Коммиты:** `ec12444` (импорт), `aa4b668` (VM Факта), `f095484` (PerformanceService)
 
 ## Контекст
 Импорт трудоёмкости (`25-310 Трудоемкость прокта.xlsx`, проект 4, версия v2) недосчитывал **~3 122 ч planned** (≈ 2 830 эффективных) из 61 725 ч.
@@ -40,10 +41,9 @@
 - [x] Схема `ProjectLaborIntensities.DocumentationCode` расширена до `nvarchar(450)` (EF миграция + SQL-скрипт).
 - [x] `DataImportService` суммирует часы на коллизии по натуральному ключу, тесты зелёные.
 - [x] Сообщение пользователю отражает суммирование, а не «схлопывание».
-- [ ] После пере-импорта `25-310 Трудоемкость прокта.xlsx` в Факт v2:
-      `SELECT SUM(PlannedHours) FROM ProjectLaborIntensities WHERE ProjectId=4 AND ProjectAnalysisVersionId=2` = **61 725.40**
-      (сейчас 58 895.24).
-- [ ] В UI вкладка «Итого» Факта v2 отображает 61 725 ч плана.
+- [x] После пере-импорта `25-310 Трудоемкость прокта.xlsx` в Факт v2:
+      `SELECT SUM(PlannedHours) FROM ProjectLaborIntensities WHERE ProjectId=4 AND ProjectAnalysisVersionId=2` = **61 725.40** (проверено sqlcmd 2026-05-12).
+- [x] В UI вкладка «Итого» Факта v2 отображает 61 725 ч плана (после `f095484` — фикс PerformanceService).
 
 ## Файлы
 - `EngineeringPerformance.Infrastructure/Data/Configurations/ProjectLaborIntensityConfiguration.cs` — длина 450.

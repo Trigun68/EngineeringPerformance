@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Closed (2026-05-12, ISS-006 — импорт LI: подтверждено и закрыто)
+- `docs/issues/ISS-006-labor-import-truncate-loss.md`: статус 🟡 In progress → ✅ Closed. Все acceptance criteria выполнены: схема `nvarchar(450)`, импорт суммирует часы на коллизии, сообщение пользователю переписано, в БД `SUM(PlannedHours) = 61 725.40` (sqlcmd 2026-05-12 — точно совпадает с файлом), UI «Итого» Факта v2 показывает 61 725.40 после фикса `PerformanceService`. Удалён `tmp/ISS-006-handoff.md` — диагностика и план больше не нужны (вся информация в issue-карточке).
+
 ### Fixed (2026-05-12, Оценка факта — агрегация только по PlannedHours)
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadFactDataAsync`, проекция `laborIntensities`): часы для агрегации Факта теперь берутся строго из `PlannedHours`. Прежняя смесь `ActualHours > 0 ? ActualHours : PlannedHours` давала итог больше файла (для проекта 4 v2: 62 481.24 вместо ожидаемых 61 725.40 — на 487 строках факт превышал план на суммарные +755.84 ч). Решено пользователем 2026-05-12 после фикса ISS-006: единый источник часов для всех вкладок Факта — заявленные в файле плановые часы. Фактическое списание (`ActualHours`) для агрегации не используется.
 - `EngineeringPerformance.Infrastructure/Services/PerformanceService.cs` (`GetPerformanceDataAsync`, `hoursByDirection`): аналогичная правка для вкладки «Итого» и всех сценариев на базе `PerformanceService` (анализ версии, экспорт отчётов). Первая правка коснулась только «По объектам» и «Детально» — «Итого» строится из `_performanceService.GetPerformanceDataAsync`, где была вторая копия той же смеси. Теперь все три вкладки и отчёты Факта сходятся на одной сумме `Σ PlannedHours`.
