@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-11, вынесение save/restore состояния детальной сетки в helper)
+- `EngineeringPerformance.App/Views/DetailGridStateHelper.cs` (новый): статический класс с методами `Save(GridControl)` и `Restore(GridControl, DetailGridState)`. Содержит логику захвата `TopRowIndex` + `FocusedRowId` (`ProjectPhysicalVolumeId`) + `FocusedVisibleOffset` и восстановления вертикального скролла (focus и группы DevExpress восстанавливает сам через `RestoreStateOnSourceChange` в XAML).
+- `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs`: удалены приватные статические методы `SaveGridState`/`RestoreGridState` (~57 строк), вместо них в `OnDataContextChanged` делегаты `vm.Save*StateCallback`/`vm.Restore*StateCallback` напрямую вызывают `DetailGridStateHelper.Save/Restore`. Code-behind стал на ~57 строк короче, поведение не изменилось.
+- `docs/features/detail-grid-state-preservation.md`: обновлены ссылки на `DetailGridStateHelper.Save/Restore` и добавлен файл helper'а в раздел «Файлы».
+
 ### Changed (2026-05-11, унификация lookup-комбобоксов в общий Style)
 - `EngineeringPerformance.App/App.xaml`: добавлен ресурс `Style x:Key="LookupComboBoxEdit" TargetType="dxe:ComboBoxEdit"` с 5 setter-ами (`IncrementalFiltering=True`, `FilterCondition=Contains`, `AutoComplete=True`, `ImmediatePopup=True`, `ValidateOnTextInput=False`). Подключён namespace `xmlns:dxe`. Стиль именованный (через `x:Key`) — применяется только там, где нужна фильтрация-по-набору, enum-комбобоксы остаются нетронутыми.
 - `EngineeringPerformance.App/Views/PhysicalVolumeEditWindow.xaml` (3 поля), `PhysicalVolumeQuickEditDialog.xaml` (1 поле), `LaborIntensityEditWindow.xaml` (2 поля), `IicWorkDirectionEditWindow.xaml` (2 поля), `IicWorkDirectionNormEditWindow.xaml` (1 поле), `ProjectPhysicalVolumeCreateDialog.xaml` (1 поле): 10 повторов 5-атрибутной связки заменены на одну строку `Style="{StaticResource LookupComboBoxEdit}"`. Уникальные биндинги (`ItemsSource`, `EditValue`/`SelectedItem`, `ValueMember`, `DisplayMember`, `NullText`) остаются в каждом контроле — стиль инкапсулирует только поведение фильтрации.

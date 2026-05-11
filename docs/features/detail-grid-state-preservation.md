@@ -32,13 +32,13 @@
 
 ### Code-behind — фиксация скролла
 
-`ProjectsPageView.xaml.cs` устанавливает делегаты `Save*StateCallback` / `Restore*StateCallback` в `ProjectsPageViewModel`:
+`ProjectsPageView.xaml.cs` устанавливает делегаты `Save*StateCallback` / `Restore*StateCallback` в `ProjectsPageViewModel`, делегируя реализацию в `DetailGridStateHelper`:
 
-- `SaveGridState(grid)` — сохраняет:
+- `DetailGridStateHelper.Save(grid)` — сохраняет:
   - `TopRowIndex` (абсолютный),
   - `FocusedRowId` (ProjectPhysicalVolumeId сфокусированной строки),
   - `FocusedVisibleOffset` = визуальное расстояние от focused-строки до topmost-строки (в visible-индексах).
-- `RestoreGridState(grid, state)` — после смены `ItemsSource`:
+- `DetailGridStateHelper.Restore(grid, state)` — после смены `ItemsSource`:
   1. Если `FocusedRowId >= 0` — ищет визуальный индекс этой строки в новом снимке и ставит `TopRowIndex = visibleIndex - FocusedVisibleOffset`. Это «привязка к якорю»: focused-строка остаётся на той же высоте экрана.
   2. Если фокусной строки нет (была удалена) — fallback на абсолютный `TopRowIndex`.
 
@@ -87,5 +87,6 @@ public sealed class DetailGridState
 ## Файлы
 
 - View: `EngineeringPerformance.App/Views/ProjectsPageView.xaml` (строки 267–268 для Forecast, 554–555 для Fact)
-- Code-behind: `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs` (`SaveGridState`, `RestoreGridState`)
+- Code-behind: `EngineeringPerformance.App/Views/ProjectsPageView.xaml.cs` (wiring `Save/Restore*StateCallback` → `DetailGridStateHelper`)
+- Helper: `EngineeringPerformance.App/Views/DetailGridStateHelper.cs` (`Save`, `Restore` — статические методы)
 - VM: `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadForecastDataAsync`, `LoadFactDataAsync`, делегаты `Save*StateCallback` / `Restore*StateCallback`)

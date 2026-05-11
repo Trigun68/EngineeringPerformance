@@ -33,72 +33,14 @@ public partial class ProjectsPageView : UserControl
     {
         if (e.NewValue is ProjectsPageViewModel vm)
         {
-            vm.SaveDetailForecastStateCallback    = () => SaveGridState(DetailForecastGrid);
-            vm.RestoreDetailForecastStateCallback = s  => RestoreGridState(DetailForecastGrid, s);
-            vm.SaveFactDetailStateCallback        = () => SaveGridState(FactDetailGrid);
-            vm.RestoreFactDetailStateCallback     = s  => RestoreGridState(FactDetailGrid, s);
+            vm.SaveDetailForecastStateCallback    = () => DetailGridStateHelper.Save(DetailForecastGrid);
+            vm.RestoreDetailForecastStateCallback = s  => DetailGridStateHelper.Restore(DetailForecastGrid, s);
+            vm.SaveFactDetailStateCallback        = () => DetailGridStateHelper.Save(FactDetailGrid);
+            vm.RestoreFactDetailStateCallback     = s  => DetailGridStateHelper.Restore(FactDetailGrid, s);
         }
     }
 
     public void SetSettingsHelper(UserSettingsHelper helper) => _settingsHelper = helper;
-
-    private static DetailGridState SaveGridState(GridControl grid)
-    {
-        var tv = grid.View as TableView;
-        var state = new DetailGridState();
-        var topIndex = tv?.TopRowIndex ?? 0;
-        state.TopRowIndex = topIndex;
-        if (tv is not null)
-        {
-            var focusedRh = tv.FocusedRowHandle;
-            if (!grid.IsGroupRowHandle(focusedRh) && grid.GetRow(focusedRh) is DetailForecastItem focused)
-            {
-                state.FocusedRowId = focused.ProjectPhysicalVolumeId;
-                for (var i = 0; i < grid.VisibleRowCount; i++)
-                {
-                    if (grid.GetRowHandleByVisibleIndex(i) == focusedRh)
-                    {
-                        state.FocusedVisibleOffset = i - topIndex;
-                        break;
-                    }
-                }
-            }
-        }
-        return state;
-    }
-
-    private static void RestoreGridState(GridControl grid, DetailGridState state)
-    {
-        // Восстановление focus и раскрытия групп выполняет сам DevExpress благодаря
-        // RestoreStateOnSourceChange="True" + RestoreStateKeyFieldName в XAML.
-        // Здесь возвращаем только позицию скролла — её DevExpress не сохраняет при смене ItemsSource.
-        if (grid.View is not TableView tv) return;
-
-        var visibleCount = grid.VisibleRowCount;
-        if (visibleCount <= 0)
-        {
-            tv.TopRowIndex = 0;
-            return;
-        }
-
-        if (state.FocusedRowId >= 0)
-        {
-            for (var i = 0; i < visibleCount; i++)
-            {
-                var rh = grid.GetRowHandleByVisibleIndex(i);
-                if (!grid.IsGroupRowHandle(rh) && grid.GetRow(rh) is DetailForecastItem row
-                    && row.ProjectPhysicalVolumeId == state.FocusedRowId)
-                {
-                    tv.TopRowIndex = Math.Max(0, i - state.FocusedVisibleOffset);
-                    return;
-                }
-            }
-        }
-
-        // Фокусной строки нет в новом снимке (удалена/отфильтрована/перешла под другую группу) —
-        // откатываемся на сохранённый абсолютный TopRowIndex с clamp-ом к актуальному количеству строк.
-        tv.TopRowIndex = Math.Clamp(state.TopRowIndex, 0, visibleCount - 1);
-    }
 
     private GridControl[] GetAllGrids() =>
     [
