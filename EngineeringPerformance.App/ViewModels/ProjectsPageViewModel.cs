@@ -1477,6 +1477,134 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         await LogDetailEditAsync(UserActionType.PhysicalVolumeCreate, "ProjectPhysicalVolume", 0, description);
         await LoadForecastDataAsync(projectId, versionId, state);
     }
+
+    // ─── Контекстное меню «Детально» (Fact) ───────────────────────────────
+
+    [RelayCommand]
+    private async Task EditFactProjectPhysicalVolumeAsync(FactDetailRow? row)
+    {
+        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeQuickEditViewModel>();
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        vm.Prepare(row.ProjectPhysicalVolumeId, nomenclature, row.Quantity);
+
+        var window = _serviceProvider.GetRequiredService<Views.ProjectPhysicalVolumeQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        var state = SaveFactDetailStateCallback?.Invoke();
+        if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.PhysicalVolumeEdit, "ProjectPhysicalVolume", row.ProjectPhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+            await LoadFactDataAsync(pid, vid, state);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditFactPhysicalVolumeNomenclatureAsync(FactDetailRow? row)
+    {
+        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var state = SaveFactDetailStateCallback?.Invoke();
+
+        var vm = _serviceProvider.GetRequiredService<PhysicalVolumeQuickEditViewModel>();
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        vm.Prepare(row.PhysicalVolumeId, nomenclature, null, 1m, null);
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var pv = await ctx.PhysicalVolumes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PhysicalVolumeId);
+        if (pv is not null)
+            vm.Prepare(row.PhysicalVolumeId, nomenclature, pv.ClassifierId, pv.Coefficient, pv.IsAssessment);
+
+        var window = _serviceProvider.GetRequiredService<Views.PhysicalVolumeQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        _ = vm.LoadLookupsAsync();
+        if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.LaborIntensityEdit, "PhysicalVolume", row.PhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+            await LoadFactDataAsync(pid, vid, state);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditFactIicNormAsync(FactDetailRow? row)
+    {
+        if (row is null || row.NormId is not int normId) return;
+
+        var state = SaveFactDetailStateCallback?.Invoke();
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<IicNormQuickEditViewModel>();
+        await vm.PrepareAsync(normId);
+
+        var window = _serviceProvider.GetRequiredService<Views.IicNormQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.IicNormEdit, "IicWorkDirectionNorm", normId, $"ProjectId={pid}, VersionId={vid}");
+            await LoadFactDataAsync(pid, vid, state);
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteFactProjectPhysicalVolumeAsync(FactDetailRow? row)
+    {
+        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
+        var confirmed = await _confirmDialog.ShowAsync(
+            "Удалить строку",
+            $"Удалить выбранную строку?\n{nomenclature}",
+            "Удалить");
+        if (!confirmed) return;
+
+        var state = SaveFactDetailStateCallback?.Invoke();
+        try
+        {
+            await _ppvService.DeleteAsync(row.ProjectPhysicalVolumeId);
+        }
+        catch (Exception ex)
+        {
+            await _confirmDialog.ShowAsync(
+                "Ошибка удаления",
+                $"Не удалось удалить строку: {ex.Message}",
+                "OK", "OK");
+            return;
+        }
+        await LogDetailEditAsync(UserActionType.PhysicalVolumeDelete, "ProjectPhysicalVolume",
+            row.ProjectPhysicalVolumeId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadFactDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task CreateFactProjectPhysicalVolumeFromCopyAsync(FactDetailRow? row)
+    {
+        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        await ShowFactCreateDialogAsync(forCopy: true, source: row, pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task CreateFactProjectPhysicalVolumeAsync(FactDetailRow? _)
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        await ShowFactCreateDialogAsync(forCopy: false, source: null, pid, vid);
+    }
+
+    private async Task ShowFactCreateDialogAsync(bool forCopy, FactDetailRow? source, int projectId, int versionId)
+    {
+        _ppvCreateDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveFactDetailStateCallback?.Invoke();
+        var created = await _ppvCreateDialog.ShowAsync(forCopy, source, projectId, versionId);
+        if (!created) return;
+
+        var description = forCopy && source is not null
+            ? $"ProjectId={projectId}, VersionId={versionId}, copyOf={source.ProjectPhysicalVolumeId}"
+            : $"ProjectId={projectId}, VersionId={versionId}";
+        await LogDetailEditAsync(UserActionType.PhysicalVolumeCreate, "ProjectPhysicalVolume", 0, description);
+        await LoadFactDataAsync(projectId, versionId, state);
+    }
 }
 
 public sealed class ForecastPerformanceItem

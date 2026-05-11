@@ -26,6 +26,7 @@ public partial class ProjectsPageView : UserControl
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         DetailForecastView.ShowGridMenu += OnDetailForecastShowGridMenu;
+        FactDetailView.ShowGridMenu += OnFactDetailShowGridMenu;
         DataContextChanged += OnDataContextChanged;
     }
 
@@ -91,6 +92,52 @@ public partial class ProjectsPageView : UserControl
 
         var item6 = new BarButtonItem { Content = "Добавить строку" };
         item6.ItemClick += (_, _) => vm.CreateProjectPhysicalVolumeCommand.Execute(null);
+        e.MenuInfo.Menu.Items.Add(item6);
+    }
+
+    private void OnFactDetailShowGridMenu(object sender, GridMenuEventArgs e)
+    {
+        if (e.MenuInfo.MenuType != GridMenuType.RowCell) return;
+        if (DataContext is not ProjectsPageViewModel vm) return;
+
+        var rowHandle = FactDetailView.FocusedRowHandle;
+        var row = FactDetailGrid.GetRow(rowHandle) as FactDetailRow;
+        if (row is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
+        e.MenuInfo.Menu.Items.Clear();
+
+        var item1 = new BarButtonItem { Content = "Редактировать физ. объём" };
+        item1.ItemClick += (_, _) => vm.EditFactProjectPhysicalVolumeCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item1);
+
+        var item2 = new BarButtonItem { Content = "Редактировать номенклатуру физ. объёма" };
+        item2.ItemClick += (_, _) => vm.EditFactPhysicalVolumeNomenclatureCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item2);
+
+        var item3 = new BarButtonItem
+        {
+            Content = "Редактировать норму IIC",
+            IsEnabled = row.NormId.HasValue,
+        };
+        item3.ItemClick += (_, _) => vm.EditFactIicNormCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item3);
+
+        e.MenuInfo.Menu.Items.Add(new BarItemSeparator());
+
+        var item4 = new BarButtonItem { Content = "Удалить выбранную строку" };
+        item4.ItemClick += (_, _) => vm.DeleteFactProjectPhysicalVolumeCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item4);
+
+        var item5 = new BarButtonItem { Content = "Добавить строку копированием выбранной" };
+        item5.ItemClick += (_, _) => vm.CreateFactProjectPhysicalVolumeFromCopyCommand.Execute(row);
+        e.MenuInfo.Menu.Items.Add(item5);
+
+        var item6 = new BarButtonItem { Content = "Добавить строку" };
+        item6.ItemClick += (_, _) => vm.CreateFactProjectPhysicalVolumeCommand.Execute(null);
         e.MenuInfo.Menu.Items.Add(item6);
     }
 

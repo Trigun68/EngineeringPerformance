@@ -71,19 +71,54 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
         }
         else
         {
-            FacilityCode = null;
-            FacilityName = null;
-            BindingType = null;
-            DocumentSet = null;
-            CatalogId = null;
-            Tag = null;
-            WorkId = null;
-            WorkName = null;
-            WorkComment = null;
-            EstimationBasis = null;
-            Quantity = 0m;
-            SelectedPhysicalVolumeId = null;
+            ResetFields();
         }
+    }
+
+    public void Prepare(bool forCopy, FactDetailRow? source, int projectId, int versionId)
+    {
+        _projectId = projectId;
+        _versionId = versionId;
+        _forCopy = forCopy;
+        WindowTitle = forCopy ? "Добавить строку копированием выбранной" : "Добавить строку";
+        ErrorMessage = null;
+        IsLoading = true;
+
+        if (forCopy && source is not null)
+        {
+            FacilityCode = source.FacilityCode;
+            FacilityName = source.FacilityName;
+            BindingType = source.BindingType;
+            DocumentSet = source.DocumentSet;
+            CatalogId = source.CatalogId;
+            Tag = source.Tag;
+            WorkId = source.WorkId;
+            WorkName = source.WorkName;
+            WorkComment = source.WorkComment;
+            EstimationBasis = source.EstimationBasis;
+            Quantity = source.Quantity;
+            SelectedPhysicalVolumeId = source.PhysicalVolumeId;
+        }
+        else
+        {
+            ResetFields();
+        }
+    }
+
+    private void ResetFields()
+    {
+        FacilityCode = null;
+        FacilityName = null;
+        BindingType = null;
+        DocumentSet = null;
+        CatalogId = null;
+        Tag = null;
+        WorkId = null;
+        WorkName = null;
+        WorkComment = null;
+        EstimationBasis = null;
+        Quantity = 0m;
+        SelectedPhysicalVolumeId = null;
     }
 
     public async Task LoadLookupsAsync()

@@ -593,7 +593,8 @@
                                         <dxg:GridSummaryItem FieldName="FactLaborHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
-                                        <dxg:TableView AllowEditing="False" AllowSorting="True"
+                                        <dxg:TableView x:Name="FactDetailView"
+                                                       AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"

@@ -9,6 +9,7 @@ public interface IProjectPhysicalVolumeCreateDialogService
 {
     void SetOwnerWindow(Window owner);
     Task<bool> ShowAsync(bool forCopy, DetailForecastItem? source, int projectId, int versionId);
+    Task<bool> ShowAsync(bool forCopy, FactDetailRow? source, int projectId, int versionId);
 }
 
 public sealed class ProjectPhysicalVolumeCreateDialogService : IProjectPhysicalVolumeCreateDialogService
@@ -27,7 +28,18 @@ public sealed class ProjectPhysicalVolumeCreateDialogService : IProjectPhysicalV
     {
         var viewModel = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeCreateViewModel>();
         viewModel.Prepare(forCopy, source, projectId, versionId);
+        return await ShowInternalAsync(viewModel);
+    }
 
+    public async Task<bool> ShowAsync(bool forCopy, FactDetailRow? source, int projectId, int versionId)
+    {
+        var viewModel = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeCreateViewModel>();
+        viewModel.Prepare(forCopy, source, projectId, versionId);
+        return await ShowInternalAsync(viewModel);
+    }
+
+    private async Task<bool> ShowInternalAsync(ProjectPhysicalVolumeCreateViewModel viewModel)
+    {
         var window = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeCreateDialog>();
         window.DataContext = viewModel;
         window.Owner = _owner ?? Application.Current.MainWindow;

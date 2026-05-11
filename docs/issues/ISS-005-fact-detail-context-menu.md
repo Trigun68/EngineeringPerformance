@@ -1,8 +1,9 @@
 ﻿# ISS-005: Контекстное меню Detail-сетки Fact + раздельные команды Fact/Plan
 
-**Статус:** 🟡 Backlog
+**Статус:** ✅ Closed (2026-05-11)
 **Категория:** UX / ProjectsPage / DetailGrid
 **Приоритет:** Medium
+**Подход:** Вариант A — раздельные Fact-команды.
 
 ## Контекст
 На странице «Проекты» две Detail-сетки:
@@ -22,12 +23,12 @@
 Унифицировать поведение контекстного меню для Plan и Fact Detail-сеток, сохранив раздельные источники данных и колбэков состояния.
 
 ## Acceptance Criteria
-- [ ] На `FactDetailGrid` работает то же контекстное меню (6 пунктов: 3 редактирования, 3 CRUD), что и на `DetailForecastGrid`.
-- [ ] При запуске команды через Fact-меню — после успеха перезагружается `LoadFactDataAsync` (берётся `FactVersionId`), фокус и скролл `FactDetailGrid` сохраняются через `SaveFactDetailStateCallback`/`RestoreFactDetailStateCallback`.
-- [ ] При запуске команды через Plan-меню — поведение прежнее (`LoadForecastDataAsync`, `SaveDetailForecastStateCallback`).
-- [ ] Логирование в `UserActionLog` остаётся корректным (entityId, projectId, versionId соответствуют реальной версии, где произошло действие).
-- [ ] Кнопка «Редактировать норму IIC» дисейблится, если у строки нет `NormId` (как сейчас).
-- [ ] Сценарий «Добавить строку копированием выбранной» в Fact-версии корректно подставляет `FactVersionId` в новый `ProjectPhysicalVolume`.
+- [x] На `FactDetailGrid` работает то же контекстное меню (6 пунктов: 3 редактирования, 3 CRUD), что и на `DetailForecastGrid`.
+- [x] При запуске команды через Fact-меню — после успеха перезагружается `LoadFactDataAsync` (берётся `FactVersionId`), фокус и скролл `FactDetailGrid` сохраняются через `SaveFactDetailStateCallback`/`RestoreFactDetailStateCallback`.
+- [x] При запуске команды через Plan-меню — поведение прежнее (`LoadForecastDataAsync`, `SaveDetailForecastStateCallback`).
+- [x] Логирование в `UserActionLog` остаётся корректным (entityId, projectId, versionId соответствуют реальной версии, где произошло действие).
+- [x] Кнопка «Редактировать норму IIC» дисейблится, если у строки нет `NormId` (как сейчас).
+- [x] Сценарий «Добавить строку копированием выбранной» в Fact-версии корректно подставляет `FactVersionId` в новый `ProjectPhysicalVolume`.
 
 ## Возможные подходы
 **A. Раздельные команды (`EditFactProjectPhysicalVolumeCommand` и т. п.).**
