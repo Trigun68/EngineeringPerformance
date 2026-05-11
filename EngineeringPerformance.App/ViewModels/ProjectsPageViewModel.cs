@@ -660,6 +660,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 {
                     Id = row.WorkDirectionId,
                     ParentId = row.ParentId,
+                    Code = row.WorkDirectionCode,
                     Name = row.WorkDirectionName,
                     NormUnitName = row.NormUnitName ?? string.Empty,
                     FactPhysicalVolume = row.FactPhysicalVolume,
@@ -670,6 +671,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     NormEstimate = row.NormEstimate,
                     NormStdDev = row.NormStdDev,
                     ZScore = row.ZScore,
+                    Percentile = PerformancePercentileHelper.GetPercentile(row.ZScore),
                     Interpretation = row.Interpretation?.ToRussian() ?? string.Empty,
                 });
             }

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-11, шаг 1 — Итого Fact: новые колонки Код / Перцентиль)
+- `EngineeringPerformance.Core/Services/PerformancePercentileHelper.cs` (новый): статический helper `GetPercentile(decimal? z)` — текстовый перцентильный диапазон по таблице из «Справки» (логика идентична `ProjectAnalysisService.GetPercentile`, см. ProjectAnalysisService строки 160-186 до выноса). Шкала [-1, 1] линейно отображается на [0, 100], 10 равных корзин с шагом 0.2.
+- `EngineeringPerformance.Infrastructure/Services/ProjectAnalysisService.cs`: приватный `GetPercentile` стал тонким делегатом к `PerformancePercentileHelper.GetPercentile` — единственный источник истины.
+- `EngineeringPerformance.App/ViewModels/ProjectEditViewModel.cs` (`PerformanceItem`): добавлены поля `Code` и `Percentile`.
+- `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadFactDataAsync`): при маппинге `PerformanceRowDto` → `PerformanceItem` теперь заполняются `Code = row.WorkDirectionCode` и `Percentile = PerformancePercentileHelper.GetPercentile(row.ZScore)`.
+- `EngineeringPerformance.App/Views/ProjectsPageView.xaml` (Оценка факта → Итого, `FactPerformanceGrid`): набор колонок изменён на 9 строго по спецификации — `Код`, `Наименование`, `Ед. изм.`, `Факт Трудоёмк.`, `Факт производит.`, `Норм производит.`, `Оценка производ.` (Z-score), `Перцентиль`, `Интерпретация`. Удалена колонка `Факт ФО` (не входит в новый список). Расчёт Z-score не менялся — формула `(ln(FactProductivity) − ln(NormProductivity))/NormStdDev` уже корректна (подтверждено пользователем: `NormEstimate ≡ ln(NormProductivity)`).
+
 ### Changed (2026-05-11, «Журнал действий» вынесен в самостоятельную страницу, переупорядочен sidebar)
 - `EngineeringPerformance.App/ViewModels/MainViewModel.cs` (`BuildNavigation`): добавлен пункт «Журнал действий» (`viewName="UserActionLog"`, иконка 📜) перед «Настройки»; «Справка» перемещена после «Настройки». Итоговый порядок: Главная → Проекты → Справочники → Журнал действий → Настройки → Справка → Анализ проекта → Прогноз по проекту.
 - `EngineeringPerformance.App/ViewModels/SettingsPageViewModel.cs` (`BuildTabs`): удалена вкладка «Журнал действий» — теперь это самостоятельная страница, в `SettingsPage` остались только «Пользователи» и «Права пользователей».

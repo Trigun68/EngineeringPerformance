@@ -157,33 +157,8 @@ public sealed class ProjectAnalysisService : IProjectAnalysisService
         };
     }
 
-    private static string GetPercentile(decimal? permIndicator)
-    {
-        if (!permIndicator.HasValue)
-        {
-            return "Н/Д";
-        }
-
-        var z = permIndicator.Value;
-
-        // Диапазон PEPM [-1, 1] линейно отображается на перцентили [0, 100].
-        // Шаг 0.2 → 10 равных корзин; значения вне [-1, 1] клэмпятся к границам.
-        // Напоминание: меньший PEPM = более высокая производительность (меньше часов на единицу).
-        // Шкала перцентилей идёт в ту же сторону, что и PEPM: низкий PEPM = низкий перцентиль,
-        // что соответствует нижнему хвосту распределения Z по нормали.
-        if (z < -1.0m) return "0-й";
-        if (z < -0.8m) return "0-10-й";
-        if (z < -0.6m) return "10-20-й";
-        if (z < -0.4m) return "20-30-й";
-        if (z < -0.2m) return "30-40-й";
-        if (z < 0m) return "40-50-й";
-        if (z < 0.2m) return "50-60-й";
-        if (z < 0.4m) return "60-70-й";
-        if (z < 0.6m) return "70-80-й";
-        if (z < 0.8m) return "80-90-й";
-        if (z <= 1.0m) return "90-100-й";
-        return "100-й";
-    }
+    private static string GetPercentile(decimal? permIndicator) =>
+        EngineeringPerformance.Core.Services.PerformancePercentileHelper.GetPercentile(permIndicator);
 
     private static string GetStatus(decimal? permIndicator)
     {

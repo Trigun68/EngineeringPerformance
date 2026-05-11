@@ -747,6 +747,7 @@ public sealed class PerformanceItem
 {
     public int Id { get; set; }
     public int? ParentId { get; set; }
+    public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
 
     public string NormUnitName { get; set; } = string.Empty;
@@ -759,5 +760,6 @@ public sealed class PerformanceItem
     public decimal? NormEstimate { get; set; }
     public decimal? NormStdDev { get; set; }
     public decimal? ZScore { get; set; }
+    public string Percentile { get; set; } = string.Empty;
     public string Interpretation { get; set; } = string.Empty;
 }

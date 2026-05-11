@@ -429,13 +429,9 @@
                                 <dxg:GridControl x:Name="FactPerformanceGrid" Grid.Column="0" ItemsSource="{Binding FactPerformanceData}"
                                                  AutoGenerateColumns="None">
                                     <dxg:GridControl.Columns>
+                                        <dxg:GridColumn FieldName="Code" Header="Код" Width="80" />
                                         <dxg:GridColumn FieldName="Name" Header="Наименование" Width="200" />
-                                        <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="100" />
-                                        <dxg:GridColumn FieldName="FactPhysicalVolume" Header="Факт ФО" Width="90">
-                                            <dxg:GridColumn.EditSettings>
-                                                <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
-                                            </dxg:GridColumn.EditSettings>
-                                        </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="NormUnitName" Header="Ед. изм." Width="80" />
                                         <dxg:GridColumn FieldName="FactLaborHours" Header="Факт Трудоёмк." Width="100">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
@@ -451,11 +447,12 @@
                                                 <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
-                                        <dxg:GridColumn FieldName="ZScore" Header="Z-score" Width="80">
+                                        <dxg:GridColumn FieldName="ZScore" Header="Оценка производ." Width="90">
                                             <dxg:GridColumn.EditSettings>
                                                 <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
                                             </dxg:GridColumn.EditSettings>
                                         </dxg:GridColumn>
+                                        <dxg:GridColumn FieldName="Percentile" Header="Перцентиль" Width="90" />
                                         <dxg:GridColumn FieldName="Interpretation" Header="Интерпретация" Width="180" />
                                     </dxg:GridControl.Columns>
                                     <dxg:GridControl.View>
