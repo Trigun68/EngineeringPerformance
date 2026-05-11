@@ -80,8 +80,9 @@ public sealed partial class MainViewModel : ObservableObject
         AddIfAccessible(items, "\U0001F3E0", "Главная",            "Dashboard");
         AddIfAccessible(items, "\U0001F4C1", "Проекты",            "Projects");
         AddIfAccessible(items, "\U0001F4D6", "Справочники",        "References");
-        AddIfAccessible(items, "\U00002753", "Справка",            "HelpPage");
+        AddIfAccessible(items, "\U0001F4DC", "Журнал действий",    "UserActionLog");
         AddIfAccessible(items, "\U00002699", "Настройки",          "SettingsPage");
+        AddIfAccessible(items, "\U00002753", "Справка",            "HelpPage");
         AddIfAccessible(items, "\U0001F4CA", "Анализ проекта",     "Assessment");
         AddIfAccessible(items, "\U0001F52E", "Прогноз по проекту", "Planning");
 

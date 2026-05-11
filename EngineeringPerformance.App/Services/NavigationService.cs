@@ -139,6 +139,7 @@ public sealed class NavigationService : INavigationService
             "DataPage"                => (_serviceProvider.GetRequiredService<DataPageView>(),                 _serviceProvider.GetRequiredService<DataPageViewModel>()),
             "HelpPage"                => (_serviceProvider.GetRequiredService<InterpretationSettingsView>(),   _serviceProvider.GetRequiredService<InterpretationSettingsViewModel>()),
             "SettingsPage"            => (_serviceProvider.GetRequiredService<SettingsPageView>(),             _serviceProvider.GetRequiredService<SettingsPageViewModel>()),
+            "UserActionLog"           => (_serviceProvider.GetRequiredService<UserActionLogView>(),            _serviceProvider.GetRequiredService<UserActionLogViewModel>()),
             _                         => (null!, null)
         };
     }

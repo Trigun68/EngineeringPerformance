@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-11, «Журнал действий» вынесен в самостоятельную страницу, переупорядочен sidebar)
+- `EngineeringPerformance.App/ViewModels/MainViewModel.cs` (`BuildNavigation`): добавлен пункт «Журнал действий» (`viewName="UserActionLog"`, иконка 📜) перед «Настройки»; «Справка» перемещена после «Настройки». Итоговый порядок: Главная → Проекты → Справочники → Журнал действий → Настройки → Справка → Анализ проекта → Прогноз по проекту.
+- `EngineeringPerformance.App/ViewModels/SettingsPageViewModel.cs` (`BuildTabs`): удалена вкладка «Журнал действий» — теперь это самостоятельная страница, в `SettingsPage` остались только «Пользователи» и «Права пользователей».
+- `EngineeringPerformance.App/Services/NavigationService.cs`: в маршрут-таблицу `NavigateTo` добавлен кейс `"UserActionLog" => (UserActionLogView, UserActionLogViewModel)`. `UserActionLogView` и `UserActionLogViewModel` уже зарегистрированы в DI (`App.xaml.cs:416-417`) — дополнительной регистрации не потребовалось.
+- `EngineeringPerformance.Core/AccessControlConstants.cs`: `ObjectParent["UserActionLog"]` изменён с `"SettingsPage"` на `null`, так как объект теперь top-level. В матрице «Права пользователей» строка «Журнал действий пользователей» отрендерится не как дочерний пункт под «Настройки», а как самостоятельный пункт верхнего уровня.
+
 ### Fixed (2026-05-11, невозможность редактировать права «Журнала действий пользователей»)
 - `EngineeringPerformance.Infrastructure/Services/DatabaseSeeder.cs`: добавлен `BackfillAccessRightsAsync`, который вызывается в `SeedAsync`, если таблица `AccessRights` непуста. Идемпотентно добавляет недостающие пары `(RoleId, ObjectName)` для ролей `ProjectManager` (дефолт `AccessLevel.Edit`) и `Observer` (`AccessLevel.Read`) по всему списку `AccessControlConstants.AllObjectNames`. Корневая причина: старый seed-гард `if (!AccessRights.AnyAsync())` работал по принципу «всё или ничего» — когда в `AllObjectNames` добавили `UserActionLog` (фича журнала действий), у уже существующих БД таблица была не пуста, seed не перезапускался, и записей `(ProjectManager|Observer, "UserActionLog")` в БД не было. `AccessRightsViewModel.LoadAsync.FillCells` ищет по `_rightsMap[(ObjectName, RoleName)]` — не находил, и в строке «Журнал действий пользователей» не рисовал ни одного комбобокса для выбора уровня доступа. Проверка dev-БД: `ObjectName='UserActionLog'` → 0 строк до фикса; distinct `ObjectName` = 22 против 24 в `AllObjectNames`. После рестарта приложения backfill добавит недостающие записи автоматически.
 

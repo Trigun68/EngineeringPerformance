@@ -40,7 +40,7 @@ public static class AccessControlConstants
         ["HelpPage"]                    = null,
         ["SettingsPage"]               = null,
         ["Users"]                      = "SettingsPage",
-        ["UserActionLog"]              = "SettingsPage",
+        ["UserActionLog"]              = null,
     };
 
     private static readonly Dictionary<string, string> ObjectNameRussianDisplayNames = new()

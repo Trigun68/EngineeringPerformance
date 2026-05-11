@@ -44,7 +44,6 @@ public sealed partial class SettingsPageViewModel : ObservableObject
         {
             ("Пользователи", typeof(UsersWindow), typeof(UsersViewModel), "Users"),
             ("Права пользователей", typeof(AccessRightsWindow), typeof(AccessRightsViewModel), "Settings"),
-            ("Журнал действий", typeof(UserActionLogView), typeof(UserActionLogViewModel), "UserActionLog"),
         };
 
         foreach (var (name, viewType, viewModelType, accessObjectName) in tabConfigs)
