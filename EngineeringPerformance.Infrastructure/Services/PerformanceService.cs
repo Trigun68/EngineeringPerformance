@@ -99,8 +99,11 @@ public sealed class PerformanceService : IPerformanceService
             .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.QuantityInIicGroupUnits()));
 
-        // В Excel часто заполняют только «план» (PlannedHours); для таблицы производительности
-        // берём факт, а при нулевом факте — план по строке (как в ProjectForecastService для часов).
+        // Единый источник часов для агрегации производительности — PlannedHours
+        // (заявленные в файле плановые часы). Прежняя смесь `Actual > 0 ? Actual : Planned`
+        // давала итог больше файла на строках, где факт списан > плана (для проекта 4 v2 это
+        // было +755.84 ч к 61 725.40). Решено пользователем 2026-05-12 после фикса ISS-006:
+        // фактическое списание (`ActualHours`) для агрегации не используется.
         // Строки без привязки к направлению IIC (WorkDirectionId = NULL) пропускаем — для них
         // производительность в разрезе направлений неопределена.
         var hoursByDirection = laborIntensities
@@ -108,7 +111,7 @@ public sealed class PerformanceService : IPerformanceService
             .GroupBy(li => li.WorkDirectionId!.Value)
             .ToDictionary(
                 g => g.Key,
-                g => g.Sum(li => li.ActualHours > 0 ? li.ActualHours : li.PlannedHours));
+                g => g.Sum(li => li.PlannedHours));
 
         // Снимок гарантирует уникальность (ProjectAnalysisVersionId, WorkDirectionId)
         // через UX_AnalysisVersionSnapshots_Version_WorkDirection — никакого недетерминизма
