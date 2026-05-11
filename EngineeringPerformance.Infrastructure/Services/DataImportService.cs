@@ -219,15 +219,19 @@ public sealed class DataImportService : IDataImportService
         }
 
         var importTimestamp = iteration.ImportedAt;
-        var skippedNoEpCode = 0;
-        var skippedNotInCatalog = 0;
+        // ISS-007: помимо счётчиков сохраняем номера строк (и Quantity, и шифр-кандидат),
+        // чтобы вывести их в details. Это позволит пользователю быстро найти проблемные
+        // строки в файле и дозаполнить шифр ЕП. Пример: «Список работ 25-310.xlsx» —
+        // 3 строки без шифра у объекта 4Y0100 теряют 34.2 ч от общего объёма импорта.
+        var skippedNoEpCodeRows = new List<(int RowNumber, decimal Quantity)>();
+        var skippedNotInCatalogRows = new List<(int RowNumber, string Code, decimal Quantity)>();
 
         foreach (var row in rows)
         {
             var candidates = EnumerateCandidateEpCodesFromRow(row, columnMap, GetCellValue).ToList();
             if (candidates.Count == 0)
             {
-                skippedNoEpCode++;
+                skippedNoEpCodeRows.Add((row.RowNumber(), ParseDecimal(GetCellValue(row, columnMap.Quantity))));
                 continue;
             }
 
@@ -242,7 +246,7 @@ public sealed class DataImportService : IDataImportService
 
             if (physicalVolume is null)
             {
-                skippedNotInCatalog++;
+                skippedNotInCatalogRows.Add((row.RowNumber(), candidates[0], ParseDecimal(GetCellValue(row, columnMap.Quantity))));
                 _logger.LogWarning(
                     "Physical volume with code '{Code}' not found in catalog, skipping",
                     candidates[0]);
@@ -272,8 +276,8 @@ public sealed class DataImportService : IDataImportService
             var zeroDetails = BuildPhysicalVolumeZeroImportDetails(
                 rows.Count,
                 catalogCount,
-                skippedNoEpCode,
-                skippedNotInCatalog);
+                skippedNoEpCodeRows,
+                skippedNotInCatalogRows);
             return new DataImportResult(true, 0, null, iteration.Id, zeroDetails);
         }
 
@@ -318,29 +322,116 @@ public sealed class DataImportService : IDataImportService
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        return new DataImportResult(true, recordsImported, null, iteration.Id);
+        // ISS-007: даже при успешном импорте показываем пропущенные строки,
+        // чтобы пользователь видел, какие данные не попали в БД и мог дозаполнить
+        // шифр в файле. На реальных проектах потеря 0.001% незаметна в общем итоге,
+        // но конкретные «КИП-щиток без шифра» нужно разово обработать вручную.
+        var successDetails = BuildPhysicalVolumeImportDetails(recordsImported, skippedNoEpCodeRows, skippedNotInCatalogRows);
+        return new DataImportResult(true, recordsImported, null, iteration.Id, successDetails);
     }
 
     private static string BuildPhysicalVolumeZeroImportDetails(
         int dataRowCount,
         int catalogCodeCount,
-        int skippedNoEpCode,
-        int skippedNotInCatalog)
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
     {
-        return string.Join(
-            Environment.NewLine,
+        var parts = new List<string>
+        {
             "Импортировано строк: 0.",
             string.Empty,
             $"Строк данных в файле (после заголовка): {dataRowCount}.",
             $"Уникальных кодов в справочнике PhysicalVolumes: {catalogCodeCount}.",
-            $"Строк без распознанного шифра ЕП в ожидаемых колонках: {skippedNoEpCode}.",
-            $"Строк, где шифр не найден в справочнике: {skippedNotInCatalog}.",
-            string.Empty,
-            "Каждая строка файла сопоставляется с записью каталога по полю Code (шифр работы: БЭР вида 01-01-001-01 или КФО2 вида KQ.02.160).",
-            "Если много строк «без распознанного шифра», проверьте, что в ожидаемых колонках есть именно такие коды (а не только наименование), и что открыт лист «Список работ» с колонкой «Код по каталогу» / «Шифр по каталогу».",
-            "Если в базе только демонстрационные коды (например FO-001), а в файле — полные шифры БЭР или КФО2, совпадений не будет, пока в каталог не загружен полный перечень работ.",
-            "Проверьте справочник «Физические объёмы» в приложении или выполните миграцию с полными данными каталога.");
+            $"Строк без распознанного шифра ЕП в ожидаемых колонках: {skippedNoEpCodeRows.Count}.",
+            $"Строк, где шифр не найден в справочнике: {skippedNotInCatalogRows.Count}.",
+        };
+
+        AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
+
+        parts.Add(string.Empty);
+        parts.Add("Каждая строка файла сопоставляется с записью каталога по полю Code (шифр работы: БЭР вида 01-01-001-01 или КФО2 вида KQ.02.160).");
+        parts.Add("Если много строк «без распознанного шифра», проверьте, что в ожидаемых колонках есть именно такие коды (а не только наименование), и что открыт лист «Список работ» с колонкой «Код по каталогу» / «Шифр по каталогу».");
+        parts.Add("Если в базе только демонстрационные коды (например FO-001), а в файле — полные шифры БЭР или КФО2, совпадений не будет, пока в каталог не загружен полный перечень работ.");
+        parts.Add("Проверьте справочник «Физические объёмы» в приложении или выполните миграцию с полными данными каталога.");
+
+        return string.Join(Environment.NewLine, parts);
     }
+
+    /// <summary>
+    /// ISS-007: details для успешного импорта PV. Если пропущенных строк нет — возвращает null
+    /// (тогда UI не показывает дополнительное окно деталей). Если есть — выводит сводку
+    /// и список номеров строк с Quantity, чтобы пользователь нашёл их в файле и дозаполнил шифр.
+    /// </summary>
+    private static string? BuildPhysicalVolumeImportDetails(
+        int recordsImported,
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
+    {
+        if (skippedNoEpCodeRows.Count == 0 && skippedNotInCatalogRows.Count == 0)
+        {
+            return null;
+        }
+
+        var parts = new List<string>
+        {
+            $"Импортировано строк: {recordsImported}.",
+            string.Empty,
+            $"Пропущено строк без распознанного шифра ЕП: {skippedNoEpCodeRows.Count} (Σ Кол-во = {FormatTotalQuantity(skippedNoEpCodeRows.Sum(x => x.Quantity))}).",
+            $"Пропущено строк с шифром, не найденным в справочнике: {skippedNotInCatalogRows.Count} (Σ Кол-во = {FormatTotalQuantity(skippedNotInCatalogRows.Sum(x => x.Quantity))}).",
+        };
+
+        AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
+
+        parts.Add(string.Empty);
+        parts.Add("Проверьте перечисленные строки в файле «Список работ»: в колонке «ID по каталогу» / «Шифр работ» должен быть код БЭР (01-01-001-01) или КФО2 (KQ.02.160). После заполнения шифров повторите импорт.");
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static void AppendSkippedRowDetails(
+        List<string> parts,
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
+    {
+        // Лимит вывода списка: первые 50 строк каждого типа. На реальных проектах больше — это
+        // патология файла; даже 50 хватает, чтобы заметить системную проблему. Полный список
+        // остаётся в логах (LogWarning per row для not-in-catalog).
+        const int maxRowsToList = 50;
+
+        if (skippedNoEpCodeRows.Count > 0)
+        {
+            parts.Add(string.Empty);
+            parts.Add("Строки без шифра ЕП (номер строки Excel, Кол-во по BoQ):");
+            foreach (var (rowNumber, quantity) in skippedNoEpCodeRows.Take(maxRowsToList))
+            {
+                parts.Add($"  • строка {rowNumber}: Кол-во = {FormatQuantity(quantity)}");
+            }
+            if (skippedNoEpCodeRows.Count > maxRowsToList)
+            {
+                parts.Add($"  … и ещё {skippedNoEpCodeRows.Count - maxRowsToList} строк (см. лог приложения).");
+            }
+        }
+
+        if (skippedNotInCatalogRows.Count > 0)
+        {
+            parts.Add(string.Empty);
+            parts.Add("Строки с шифром, не найденным в справочнике (номер строки Excel, шифр, Кол-во):");
+            foreach (var (rowNumber, code, quantity) in skippedNotInCatalogRows.Take(maxRowsToList))
+            {
+                parts.Add($"  • строка {rowNumber}: шифр «{code}», Кол-во = {FormatQuantity(quantity)}");
+            }
+            if (skippedNotInCatalogRows.Count > maxRowsToList)
+            {
+                parts.Add($"  … и ещё {skippedNotInCatalogRows.Count - maxRowsToList} строк (см. лог приложения).");
+            }
+        }
+    }
+
+    private static string FormatQuantity(decimal value) =>
+        value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static string FormatTotalQuantity(decimal value) =>
+        value.ToString("N4", CultureInfo.InvariantCulture);
 
     private async Task<DataImportResult> ImportLaborIntensitiesAsync(int projectId, int versionId, string filePath, string description, bool addMissingToCatalog)
     {

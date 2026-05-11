@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added (2026-05-12, Импорт PV — детализация пропущенных строк в сообщении)
+- `EngineeringPerformance.Infrastructure/Services/DataImportService.cs` (`ImportPhysicalVolumesAsync`): счётчики `skippedNoEpCode`/`skippedNotInCatalog` заменены на списки `(RowNumber, Quantity)` и `(RowNumber, Code, Quantity)`. После успешного импорта формируется `details`-сообщение с номерами пропущенных строк Excel, шифрами-кандидатами и потерянным Кол-вом по BoQ (первые 50 строк каждого типа). Раньше пользователь видел только итоговое число записей и не знал, какие конкретные строки файла потерялись. Для `Список работ 25-310.xlsx` (проект 4) теперь будет показано: «Пропущено 3 строки без шифра ЕП (Σ = 34.2)» с перечнем номеров 11633, 11639, 11648.
+- `EngineeringPerformance.Infrastructure/Services/DataImportService.cs`: добавлены private static helpers `BuildPhysicalVolumeImportDetails` (для успешного импорта, возвращает `null` если пропущенных строк нет), `AppendSkippedRowDetails` (общий вывод списка для нулевого и успешного путей), `FormatQuantity`/`FormatTotalQuantity`. Сигнатура `BuildPhysicalVolumeZeroImportDetails` обновлена под новые списки.
+
 ### Closed (2026-05-12, ISS-006 — импорт LI: подтверждено и закрыто)
 - `docs/issues/ISS-006-labor-import-truncate-loss.md`: статус 🟡 In progress → ✅ Closed. Все acceptance criteria выполнены: схема `nvarchar(450)`, импорт суммирует часы на коллизии, сообщение пользователю переписано, в БД `SUM(PlannedHours) = 61 725.40` (sqlcmd 2026-05-12 — точно совпадает с файлом), UI «Итого» Факта v2 показывает 61 725.40 после фикса `PerformanceService`. Удалён `tmp/ISS-006-handoff.md` — диагностика и план больше не нужны (вся информация в issue-карточке).
 
