@@ -723,174 +723,21 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             }
             FactPerformanceData = items;
 
-            // ── Вкладка «По объектам» ────────────────────────────────────────
-            // Связка: LI.DocumentSet (хвост DocumentationCode после «|») ↔ PV.DocumentSet.
-            // Распределение: внутри (DocSet, Direction) часы LI делятся между PPV
-            // пропорционально объёму (Quantity × Coefficient) только assessment-строк.
-            // Часы листового объекта «По объектам» = Σ часов составляющих его PPV.
-            // PPV без DocumentSet или с несовпадающим DocSet → не получают часов, и эти часы LI
-            // показываются отдельной строкой «(пусто)» внизу списка.
+            // ── Вкладки «Детально» и «По объектам» ────────────────────────
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
                 .ToDictionary(r => r.WorkDirectionId);
 
-            var hoursByDocSetDir = laborIntensities
-                .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocSet))
-                .GroupBy(li => (Set: li.DocSet, Dir: li.WorkDirectionId!.Value))
-                .ToDictionary(g => g.Key, g => g.Sum(li => li.Hours));
-
-            // Объёмы PV (assessment) по (DocSet, Direction) — знаменатель для пропорции.
-            var docSetVolumes = physicalVolumesAll
-                .Where(pv => pv.PhysicalVolume?.IsAssessment == true
-                          && pv.PhysicalVolume.ClassifierId.HasValue
-                          && !string.IsNullOrEmpty(pv.DocumentSet))
-                .GroupBy(pv => (
-                    Set: pv.DocumentSet!,
-                    Dir: pv.PhysicalVolume!.ClassifierId!.Value))
-                .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
-
-            // Сначала строим «Детально» (рассчитываем factHours по каждому PPV),
-            // затем агрегируем суммы факт-часов в «По объектам» по FacilityCode.
-            var allPv = physicalVolumesAll
-                .OrderBy(pv => pv.FacilityCode ?? string.Empty)
-                .ThenBy(pv => pv.FacilityName ?? string.Empty)
-                .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
-
-            var detailRows = new List<FactDetailRow>();
-            decimal totalMatchedHours = 0m;
-            foreach (var pv in allPv)
-            {
-                var dirId = pv.PhysicalVolume?.ClassifierId;
-                PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
-
-                var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
-                var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
-
-                decimal? factHours = null;
-                decimal? factProductivity = null;
-                decimal? zScore = null;
-                string percentile = "Н/Д";
-                string interpretationText = string.Empty;
-
-                if (isAssessment && dirId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.DocumentSet))
-                {
-                    var key = (Set: pv.DocumentSet!, Dir: dirId.Value);
-                    if (docSetVolumes.TryGetValue(key, out var setVol)
-                        && setVol > 0
-                        && hoursByDocSetDir.TryGetValue(key, out var setHours)
-                        && setHours > 0)
-                    {
-                        factHours = Math.Round(setHours * (vol / setVol), 2);
-                        totalMatchedHours += factHours.Value;
-                        factProductivity = Math.Round(setHours / setVol, 4);
-                        if (factProductivity > 0
-                            && norm?.NormEstimate is decimal ne
-                            && norm.NormStdDev is decimal nsd
-                            && nsd > 0)
-                        {
-                            var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
-                            zScore = Math.Round((factEstimate - ne) / nsd, 4);
-                            percentile = PerformancePercentileHelper.GetPercentile(zScore);
-                            interpretationText = PerformanceInterpretationHelper.GetInterpretation(zScore)?.ToRussian() ?? string.Empty;
-                        }
-                    }
-                }
-
-                detailRows.Add(new FactDetailRow
-                {
-                    ProjectPhysicalVolumeId = pv.Id,
-                    PhysicalVolumeId      = pv.PhysicalVolumeId,
-                    NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
-                    FacilityCode          = pv.FacilityCode ?? string.Empty,
-                    FacilityName          = pv.FacilityName ?? string.Empty,
-                    BindingType           = pv.BindingType ?? string.Empty,
-                    DocumentSet           = pv.DocumentSet ?? string.Empty,
-                    CatalogId             = pv.CatalogId ?? string.Empty,
-                    Tag                   = pv.Tag ?? string.Empty,
-                    WorkId                = pv.WorkId ?? string.Empty,
-                    WorkName              = pv.WorkName ?? string.Empty,
-                    WorkComment           = pv.WorkComment ?? string.Empty,
-                    EstimationBasis       = pv.EstimationBasis ?? string.Empty,
-                    PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
-                    PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
-                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
-                    IicUnitName           = norm?.NormUnitName ?? string.Empty,
-                    Quantity              = pv.Quantity,
-                    FactLaborHours        = factHours,
-                    FactProductivity      = factProductivity,
-                    NormProductivity      = norm?.NormProductivity,
-                    ZScore                = zScore,
-                    Percentile            = percentile,
-                    Interpretation        = interpretationText,
-                });
-            }
-
-            // ── Агрегация «По объектам» из detailRows ──────────────────────
-            // Группировка по FacilityCode (дедуп FacilityName), сумма factHours,
-            // Z-score = взвешенная по часам (часы одинаковы для всех PPV одного DocSet+Direction,
-            // поэтому фактически усреднение идёт по направлениям внутри объекта).
-            var facilityResult = detailRows
-                .Where(r => !string.IsNullOrEmpty(r.FacilityCode))
-                .GroupBy(r => r.FacilityCode)
-                .OrderBy(g => g.Key)
-                .Select(g =>
-                {
-                    var first = g.First();
-                    var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
-                    decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
-                        ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
-                        : (decimal?)null;
-                    decimal? facilityZ = null;
-                    if (hoursRows.Count > 0)
-                    {
-                        var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
-                        if (sumHours > 0)
-                        {
-                            var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
-                            facilityZ = Math.Round(weighted / sumHours, 4);
-                        }
-                    }
-                    var interp = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
-                    return new FactFacilityRow
-                    {
-                        Code = g.Key,
-                        Name = first.FacilityName,
-                        FactLaborHours = totalHours,
-                        ZScore = facilityZ,
-                        Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
-                        Interpretation = interp?.ToRussian() ?? string.Empty,
-                    };
-                })
-                .ToList();
-
-            // ── Строка «(пусто)»: не идентифицированная трудоёмкость ────────
-            // Вся сумма LI минус то, что удалось распределить по PPV через DocSet.
-            // Попадают сюда: часы LI без DocumentSet; часы с DocSet, которому в PV
-            // нет ни одной assessment-строки; остатки округлений.
-            var totalLiHours = laborIntensities.Sum(li => li.Hours);
-            var unmatchedHours = Math.Round(totalLiHours - totalMatchedHours, 2);
-            if (unmatchedHours > 0)
-            {
-                facilityResult.Add(new FactFacilityRow
-                {
-                    Code = string.Empty,
-                    Name = "(пусто)",
-                    FactLaborHours = unmatchedHours,
-                    ZScore = null,
-                    Percentile = "Н/Д",
-                    Interpretation = string.Empty,
-                });
-                detailRows.Add(new FactDetailRow
-                {
-                    ProjectPhysicalVolumeId = 0,
-                    FacilityName = "(пусто)",
-                    FactLaborHours = unmatchedHours,
-                });
-            }
-
-            FactFacilityData = new ObservableCollection<FactFacilityRow>(facilityResult);
+            var (detailRows, facilityRows) = ComputeFactRows(
+                physicalVolumesAll,
+                laborIntensities,
+                normByDirection,
+                snapshotNormIdByDirection,
+                classifierMap);
 
             FactDetailData = new ObservableCollection<FactDetailRow>(detailRows);
+            FactFacilityData = new ObservableCollection<FactFacilityRow>(facilityRows);
+
             if (savedState is not null)
                 _ = System.Windows.Application.Current.Dispatcher.BeginInvoke(
                     () => RestoreFactDetailStateCallback?.Invoke(savedState),
@@ -1038,6 +885,176 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     }
 
     /// <summary>
+    /// Вычисляет детальные строки и строки по объектам на основе физических объёмов и трудоёмкости.
+    /// Связка: LI.DocumentSet (хвост DocumentationCode после «|») ↔ PV.DocumentSet.
+    /// Распределение: внутри (DocSet, Direction) часы LI делятся между PPV
+    /// пропорционально объёму (Quantity × Coefficient) только assessment-строк.
+    /// </summary>
+    private static (List<FactDetailRow> DetailRows, List<FactFacilityRow> FacilityRows) ComputeFactRows(
+        List<ProjectPhysicalVolume> physicalVolumesAll,
+        IEnumerable<dynamic> laborIntensities,
+        Dictionary<int, PerformanceRowDto> normByDirection,
+        Dictionary<int, int> snapshotNormIdByDirection,
+        Dictionary<int, IicWorkDirection> classifierMap)
+    {
+        var hoursByDocSetDir = laborIntensities
+            .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocSet))
+            .GroupBy(li => (Set: li.DocSet, Dir: li.WorkDirectionId!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(li => li.Hours));
+
+        // Объёмы PV (assessment) по (DocSet, Direction) — знаменатель для пропорции.
+        var docSetVolumes = physicalVolumesAll
+            .Where(pv => pv.PhysicalVolume?.IsAssessment == true
+                      && pv.PhysicalVolume.ClassifierId.HasValue
+                      && !string.IsNullOrEmpty(pv.DocumentSet))
+            .GroupBy(pv => (
+                Set: pv.DocumentSet!,
+                Dir: pv.PhysicalVolume!.ClassifierId!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+
+        // Сначала строим «Детально» (рассчитываем factHours по каждому PPV),
+        // затем агрегируем суммы факт-часов в «По объектам» по FacilityCode.
+        var allPv = physicalVolumesAll
+            .OrderBy(pv => pv.FacilityCode ?? string.Empty)
+            .ThenBy(pv => pv.FacilityName ?? string.Empty)
+            .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+
+        var detailRows = new List<FactDetailRow>();
+        decimal totalMatchedHours = 0m;
+        foreach (var pv in allPv)
+        {
+            var dirId = pv.PhysicalVolume?.ClassifierId;
+            PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
+
+            var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
+            var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+
+            decimal? factHours = null;
+            decimal? factProductivity = null;
+            decimal? zScore = null;
+            string percentile = "Н/Д";
+            string interpretationText = string.Empty;
+
+            if (isAssessment && dirId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.DocumentSet))
+            {
+                var key = (Set: pv.DocumentSet!, Dir: dirId.Value);
+                if (docSetVolumes.TryGetValue(key, out var setVol)
+                    && setVol > 0
+                    && hoursByDocSetDir.TryGetValue(key, out var setHours)
+                    && setHours > 0)
+                {
+                    factHours = Math.Round(setHours * (vol / setVol), 2);
+                    totalMatchedHours += factHours.Value;
+                    factProductivity = Math.Round(setHours / setVol, 4);
+                    if (factProductivity > 0
+                        && norm?.NormEstimate is decimal ne
+                        && norm.NormStdDev is decimal nsd
+                        && nsd > 0)
+                    {
+                        var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
+                        zScore = Math.Round((factEstimate - ne) / nsd, 4);
+                        percentile = PerformancePercentileHelper.GetPercentile(zScore);
+                        interpretationText = PerformanceInterpretationHelper.GetInterpretation(zScore)?.ToRussian() ?? string.Empty;
+                    }
+                }
+            }
+
+            detailRows.Add(new FactDetailRow
+            {
+                ProjectPhysicalVolumeId = pv.Id,
+                PhysicalVolumeId      = pv.PhysicalVolumeId,
+                NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
+                FacilityCode          = pv.FacilityCode ?? string.Empty,
+                FacilityName          = pv.FacilityName ?? string.Empty,
+                BindingType           = pv.BindingType ?? string.Empty,
+                DocumentSet           = pv.DocumentSet ?? string.Empty,
+                CatalogId             = pv.CatalogId ?? string.Empty,
+                Tag                   = pv.Tag ?? string.Empty,
+                WorkId                = pv.WorkId ?? string.Empty,
+                WorkName              = pv.WorkName ?? string.Empty,
+                WorkComment           = pv.WorkComment ?? string.Empty,
+                EstimationBasis       = pv.EstimationBasis ?? string.Empty,
+                PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
+                PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
+                IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
+                IicUnitName           = norm?.NormUnitName ?? string.Empty,
+                Quantity              = pv.Quantity,
+                FactLaborHours        = factHours,
+                FactProductivity      = factProductivity,
+                NormProductivity      = norm?.NormProductivity,
+                ZScore                = zScore,
+                Percentile            = percentile,
+                Interpretation        = interpretationText,
+            });
+        }
+
+        // ── Агрегация «По объектам» из detailRows ──────────────────────
+        // Группировка по FacilityCode (дедуп FacilityName), сумма factHours,
+        // Z-score = взвешенная по часам (часы одинаковы для всех PPV одного DocSet+Direction,
+        // поэтому фактически усреднение идёт по направлениям внутри объекта).
+        var facilityResult = detailRows
+            .Where(r => !string.IsNullOrEmpty(r.FacilityCode))
+            .GroupBy(r => r.FacilityCode)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var first = g.First();
+                var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
+                decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
+                    ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
+                    : (decimal?)null;
+                decimal? facilityZ = null;
+                if (hoursRows.Count > 0)
+                {
+                    var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
+                    if (sumHours > 0)
+                    {
+                        var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
+                        facilityZ = Math.Round(weighted / sumHours, 4);
+                    }
+                }
+                var interp = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
+                return new FactFacilityRow
+                {
+                    Code = g.Key,
+                    Name = first.FacilityName,
+                    FactLaborHours = totalHours,
+                    ZScore = facilityZ,
+                    Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
+                    Interpretation = interp?.ToRussian() ?? string.Empty,
+                };
+            })
+            .ToList();
+
+        // ── Строка «(пусто)»: не идентифицированная трудоёмкость ────────
+        // Вся сумма LI минус то, что удалось распределить по PPV через DocSet.
+        // Попадают сюда: часы LI без DocumentSet; часы с DocSet, которому в PV
+        // нет ни одной assessment-строки; остатки округлений.
+        var totalLiHours = laborIntensities.Sum(li => li.Hours);
+        var unmatchedHours = Math.Round(totalLiHours - totalMatchedHours, 2);
+        if (unmatchedHours > 0)
+        {
+            facilityResult.Add(new FactFacilityRow
+            {
+                Code = string.Empty,
+                Name = "(пусто)",
+                FactLaborHours = unmatchedHours,
+                ZScore = null,
+                Percentile = "Н/Д",
+                Interpretation = string.Empty,
+            });
+            detailRows.Add(new FactDetailRow
+            {
+                ProjectPhysicalVolumeId = 0,
+                FacilityName = "(пусто)",
+                FactLaborHours = unmatchedHours,
+            });
+        }
+
+        return (detailRows, facilityResult);
+    }
+
+    /// <summary>
     /// Загружает данные факта для одной версии (для сравнения версий).
     /// </summary>
     private async Task<(List<FactDetailRow> Detail, List<FactFacilityRow> Facility)> LoadFactDataForCompareAsync(
@@ -1087,154 +1104,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             })
             .ToList();
 
-        // Расчёт через дублирование логики из LoadFactDataAsync
         var normByDirection = perfData
             .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
             .ToDictionary(r => r.WorkDirectionId);
 
-        var hoursByDocSetDir = laborIntensities
-            .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocSet))
-            .GroupBy(li => (Set: li.DocSet, Dir: li.WorkDirectionId!.Value))
-            .ToDictionary(g => g.Key, g => g.Sum(li => li.Hours));
-
-        var docSetVolumes = physicalVolumesAll
-            .Where(pv => pv.PhysicalVolume?.IsAssessment == true
-                      && pv.PhysicalVolume.ClassifierId.HasValue
-                      && !string.IsNullOrEmpty(pv.DocumentSet))
-            .GroupBy(pv => (Set: pv.DocumentSet!, Dir: pv.PhysicalVolume!.ClassifierId!.Value))
-            .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
-
-        var allPv = physicalVolumesAll
-            .OrderBy(pv => pv.FacilityCode ?? string.Empty)
-            .ThenBy(pv => pv.FacilityName ?? string.Empty)
-            .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
-
-        var detailRows = new List<FactDetailRow>();
-        decimal totalMatchedHours = 0m;
-
-        foreach (var pv in allPv)
-        {
-            var dirId = pv.PhysicalVolume?.ClassifierId;
-            PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
-
-            var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
-            var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
-
-            decimal? factHours = null;
-            decimal? factProductivity = null;
-            decimal? zScore = null;
-            string percentile = "Н/Д";
-            string interpretationText = string.Empty;
-
-            if (isAssessment && dirId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.DocumentSet))
-            {
-                var key = (Set: pv.DocumentSet!, Dir: dirId.Value);
-                if (docSetVolumes.TryGetValue(key, out var setVol)
-                    && setVol > 0
-                    && hoursByDocSetDir.TryGetValue(key, out var setHours)
-                    && setHours > 0)
-                {
-                    factHours = Math.Round(setHours * (vol / setVol), 2);
-                    totalMatchedHours += factHours.Value;
-                    factProductivity = Math.Round(setHours / setVol, 4);
-                    if (factProductivity > 0
-                        && norm?.NormEstimate is decimal ne
-                        && norm.NormStdDev is decimal nsd
-                        && nsd > 0)
-                    {
-                        var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
-                        zScore = Math.Round((factEstimate - ne) / nsd, 4);
-                        percentile = PerformancePercentileHelper.GetPercentile(zScore);
-                        interpretationText = PerformanceInterpretationHelper.GetInterpretation(zScore)?.ToRussian() ?? string.Empty;
-                    }
-                }
-            }
-
-            detailRows.Add(new FactDetailRow
-            {
-                ProjectPhysicalVolumeId = pv.Id,
-                PhysicalVolumeId = pv.PhysicalVolumeId,
-                NormId = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
-                FacilityCode = pv.FacilityCode ?? string.Empty,
-                FacilityName = pv.FacilityName ?? string.Empty,
-                BindingType = pv.BindingType ?? string.Empty,
-                DocumentSet = pv.DocumentSet ?? string.Empty,
-                CatalogId = pv.CatalogId ?? string.Empty,
-                Tag = pv.Tag ?? string.Empty,
-                WorkId = pv.WorkId ?? string.Empty,
-                WorkName = pv.WorkName ?? string.Empty,
-                WorkComment = pv.WorkComment ?? string.Empty,
-                EstimationBasis = pv.EstimationBasis ?? string.Empty,
-                PvCode = pv.PhysicalVolume?.Code ?? string.Empty,
-                PvName = pv.PhysicalVolume?.Name ?? string.Empty,
-                IicGroupName = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
-                IicUnitName = norm?.NormUnitName ?? string.Empty,
-                Quantity = pv.Quantity,
-                FactLaborHours = factHours,
-                FactProductivity = factProductivity,
-                NormProductivity = norm?.NormProductivity,
-                ZScore = zScore,
-                Percentile = percentile,
-                Interpretation = interpretationText,
-            });
-        }
-
-        var facilityResult = detailRows
-            .Where(r => !string.IsNullOrEmpty(r.FacilityCode))
-            .GroupBy(r => r.FacilityCode)
-            .OrderBy(g => g.Key)
-            .Select(g =>
-            {
-                var first = g.First();
-                var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
-                decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
-                    ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
-                    : (decimal?)null;
-                decimal? facilityZ = null;
-                if (hoursRows.Count > 0)
-                {
-                    var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
-                    if (sumHours > 0)
-                    {
-                        var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
-                        facilityZ = Math.Round(weighted / sumHours, 4);
-                    }
-                }
-                var interp = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
-                return new FactFacilityRow
-                {
-                    Code = g.Key,
-                    Name = first.FacilityName,
-                    FactLaborHours = totalHours,
-                    ZScore = facilityZ,
-                    Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
-                    Interpretation = interp?.ToRussian() ?? string.Empty,
-                };
-            })
-            .ToList();
-
-        var totalLiHours = laborIntensities.Sum(li => li.Hours);
-        var unmatchedHours = Math.Round(totalLiHours - totalMatchedHours, 2);
-        if (unmatchedHours > 0)
-        {
-            facilityResult.Add(new FactFacilityRow
-            {
-                Code = string.Empty,
-                Name = "(пусто)",
-                FactLaborHours = unmatchedHours,
-                ZScore = null,
-                Percentile = "Н/Д",
-                Interpretation = string.Empty,
-            });
-            detailRows.Add(new FactDetailRow
-            {
-                ProjectPhysicalVolumeId = 0,
-                FacilityName = "(пусто)",
-                FactLaborHours = unmatchedHours,
-            });
-        }
-
-        return (detailRows, facilityResult);
+        return ComputeFactRows(
+            physicalVolumesAll,
+            laborIntensities,
+            normByDirection,
+            snapshotNormIdByDirection,
+            classifierMap);
     }
 
     [RelayCommand]
