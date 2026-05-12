@@ -74,8 +74,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private string _compareVersionBName = string.Empty;
     [ObservableProperty] private string _compareVersionBLabel = string.Empty;
     [ObservableProperty] private ObservableCollection<VersionCompareRow> _compareRows = [];
-    [ObservableProperty] private ObservableCollection<FacilityForecastItem> _compareFacilityData = [];
-    [ObservableProperty] private ObservableCollection<DetailForecastItem> _compareDetailData = [];
+    [ObservableProperty] private ObservableCollection<VersionCompareFacilityRow> _compareFacilityData = [];
+    [ObservableProperty] private ObservableCollection<VersionCompareDetailRow> _compareDetailData = [];
 
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private bool _isLoading;
@@ -1025,6 +1025,206 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         return result;
     }
 
+    /// <summary>
+    /// Загружает данные факта для одной версии (для сравнения версий).
+    /// </summary>
+    private async Task<(List<FactDetailRow> Detail, List<FactFacilityRow> Facility)> LoadFactDataForCompareAsync(
+        int projectId,
+        int versionId)
+    {
+        var perfData = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
+
+        await using var ctxCl = await _contextFactory.CreateDbContextAsync();
+        var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
+            .ToDictionaryAsync(c => c.Id);
+
+        await using var ctx = await _contextFactory.CreateDbContextAsync();
+        var physicalVolumesAll = await ctx.ProjectPhysicalVolumes
+            .AsNoTracking()
+            .Include(pv => pv.PhysicalVolume)
+            .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
+        var snapshotNormIdByDirection = await ctxSnap.AnalysisVersionSnapshots
+            .AsNoTracking()
+            .Where(s => s.ProjectAnalysisVersionId == versionId)
+            .Select(s => new { s.WorkDirectionId, s.NormId })
+            .ToDictionaryAsync(s => s.WorkDirectionId, s => s.NormId);
+
+        await using var ctxLi = await _contextFactory.CreateDbContextAsync();
+        var laborIntensitiesRaw = await ctxLi.ProjectLaborIntensities
+            .AsNoTracking()
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .Select(li => new { li.DocumentationCode, li.WorkDirectionId, li.PlannedHours })
+            .ToListAsync();
+
+        static string ExtractDocSet(string? code)
+        {
+            if (string.IsNullOrEmpty(code)) return string.Empty;
+            var pipeIdx = code.IndexOf('|');
+            return pipeIdx >= 0 ? code[(pipeIdx + 1)..].Trim() : string.Empty;
+        }
+
+        var laborIntensities = laborIntensitiesRaw
+            .Select(li => new
+            {
+                DocSet = ExtractDocSet(li.DocumentationCode),
+                li.WorkDirectionId,
+                Hours = li.PlannedHours,
+            })
+            .ToList();
+
+        // Расчёт через дублирование логики из LoadFactDataAsync
+        var normByDirection = perfData
+            .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
+            .ToDictionary(r => r.WorkDirectionId);
+
+        var hoursByDocSetDir = laborIntensities
+            .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocSet))
+            .GroupBy(li => (Set: li.DocSet, Dir: li.WorkDirectionId!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(li => li.Hours));
+
+        var docSetVolumes = physicalVolumesAll
+            .Where(pv => pv.PhysicalVolume?.IsAssessment == true
+                      && pv.PhysicalVolume.ClassifierId.HasValue
+                      && !string.IsNullOrEmpty(pv.DocumentSet))
+            .GroupBy(pv => (Set: pv.DocumentSet!, Dir: pv.PhysicalVolume!.ClassifierId!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+
+        var allPv = physicalVolumesAll
+            .OrderBy(pv => pv.FacilityCode ?? string.Empty)
+            .ThenBy(pv => pv.FacilityName ?? string.Empty)
+            .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+
+        var detailRows = new List<FactDetailRow>();
+        decimal totalMatchedHours = 0m;
+
+        foreach (var pv in allPv)
+        {
+            var dirId = pv.PhysicalVolume?.ClassifierId;
+            PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
+
+            var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
+            var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+
+            decimal? factHours = null;
+            decimal? factProductivity = null;
+            decimal? zScore = null;
+            string percentile = "Н/Д";
+            string interpretationText = string.Empty;
+
+            if (isAssessment && dirId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.DocumentSet))
+            {
+                var key = (Set: pv.DocumentSet!, Dir: dirId.Value);
+                if (docSetVolumes.TryGetValue(key, out var setVol)
+                    && setVol > 0
+                    && hoursByDocSetDir.TryGetValue(key, out var setHours)
+                    && setHours > 0)
+                {
+                    factHours = Math.Round(setHours * (vol / setVol), 2);
+                    totalMatchedHours += factHours.Value;
+                    factProductivity = Math.Round(setHours / setVol, 4);
+                    if (factProductivity > 0
+                        && norm?.NormEstimate is decimal ne
+                        && norm.NormStdDev is decimal nsd
+                        && nsd > 0)
+                    {
+                        var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
+                        zScore = Math.Round((factEstimate - ne) / nsd, 4);
+                        percentile = PerformancePercentileHelper.GetPercentile(zScore);
+                        interpretationText = PerformanceInterpretationHelper.GetInterpretation(zScore)?.ToRussian() ?? string.Empty;
+                    }
+                }
+            }
+
+            detailRows.Add(new FactDetailRow
+            {
+                ProjectPhysicalVolumeId = pv.Id,
+                PhysicalVolumeId = pv.PhysicalVolumeId,
+                NormId = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
+                FacilityCode = pv.FacilityCode ?? string.Empty,
+                FacilityName = pv.FacilityName ?? string.Empty,
+                BindingType = pv.BindingType ?? string.Empty,
+                DocumentSet = pv.DocumentSet ?? string.Empty,
+                CatalogId = pv.CatalogId ?? string.Empty,
+                Tag = pv.Tag ?? string.Empty,
+                WorkId = pv.WorkId ?? string.Empty,
+                WorkName = pv.WorkName ?? string.Empty,
+                WorkComment = pv.WorkComment ?? string.Empty,
+                EstimationBasis = pv.EstimationBasis ?? string.Empty,
+                PvCode = pv.PhysicalVolume?.Code ?? string.Empty,
+                PvName = pv.PhysicalVolume?.Name ?? string.Empty,
+                IicGroupName = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
+                IicUnitName = norm?.NormUnitName ?? string.Empty,
+                Quantity = pv.Quantity,
+                FactLaborHours = factHours,
+                FactProductivity = factProductivity,
+                NormProductivity = norm?.NormProductivity,
+                ZScore = zScore,
+                Percentile = percentile,
+                Interpretation = interpretationText,
+            });
+        }
+
+        var facilityResult = detailRows
+            .Where(r => !string.IsNullOrEmpty(r.FacilityCode))
+            .GroupBy(r => r.FacilityCode)
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var first = g.First();
+                var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
+                decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
+                    ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
+                    : (decimal?)null;
+                decimal? facilityZ = null;
+                if (hoursRows.Count > 0)
+                {
+                    var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
+                    if (sumHours > 0)
+                    {
+                        var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
+                        facilityZ = Math.Round(weighted / sumHours, 4);
+                    }
+                }
+                var interp = PerformanceInterpretationHelper.GetInterpretation(facilityZ);
+                return new FactFacilityRow
+                {
+                    Code = g.Key,
+                    Name = first.FacilityName,
+                    FactLaborHours = totalHours,
+                    ZScore = facilityZ,
+                    Percentile = PerformancePercentileHelper.GetPercentile(facilityZ),
+                    Interpretation = interp?.ToRussian() ?? string.Empty,
+                };
+            })
+            .ToList();
+
+        var totalLiHours = laborIntensities.Sum(li => li.Hours);
+        var unmatchedHours = Math.Round(totalLiHours - totalMatchedHours, 2);
+        if (unmatchedHours > 0)
+        {
+            facilityResult.Add(new FactFacilityRow
+            {
+                Code = string.Empty,
+                Name = "(пусто)",
+                FactLaborHours = unmatchedHours,
+                ZScore = null,
+                Percentile = "Н/Д",
+                Interpretation = string.Empty,
+            });
+            detailRows.Add(new FactDetailRow
+            {
+                ProjectPhysicalVolumeId = 0,
+                FacilityName = "(пусто)",
+                FactLaborHours = unmatchedHours,
+            });
+        }
+
+        return (detailRows, facilityResult);
+    }
+
     [RelayCommand]
     private async Task ImportFactPhysicalVolumesAsync()
     {
@@ -1130,6 +1330,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var dataA = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidA));
             var dataB = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidB));
 
+            // ── Вкладка «Итого» ──────────────────────────────────────────────
             var dictA = dataA.ToDictionary(r => r.WorkDirectionId);
             var dictB = dataB.ToDictionary(r => r.WorkDirectionId);
             var allIds = dictA.Keys.Union(dictB.Keys).ToList();
@@ -1154,6 +1355,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
             CompareRows = items;
+
+            // ── Вкладки «По объектам» и «Детально» ───────────────────────────
+            // Загружаем данные факта для обеих версий последовательно (правило из памяти)
+            var (detailA, facilityA) = await LoadFactDataForCompareAsync(pid, vidA);
+            var (detailB, facilityB) = await LoadFactDataForCompareAsync(pid, vidB);
+
+            // Объединяем данные через методы слияния
+            var compareFacilityRows = BuildCompareFacilityRows(facilityA, facilityB);
+            var compareDetailRows = BuildCompareDetailRows(detailA, detailB);
+
+            // Сохраняем в коллекции (пока без фильтрации)
+            CompareFacilityData = new ObservableCollection<VersionCompareFacilityRow>(compareFacilityRows);
+            CompareDetailData = new ObservableCollection<VersionCompareDetailRow>(compareDetailRows);
         }
         catch (Exception ex)
         {
