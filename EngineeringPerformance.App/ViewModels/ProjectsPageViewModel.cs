@@ -1231,6 +1231,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             {
                 dictA.TryGetValue(id, out var a);
                 dictB.TryGetValue(id, out var b);
+
+                // Хотя бы одно из значений должно существовать (id из Union ключей)
+                if (a is null && b is null)
+                {
+                    continue; // Пропускаем невалидные записи
+                }
+
                 var row = a ?? b!;
                 var zDelta = (b?.ZScore ?? a?.ZScore) - (a?.ZScore ?? b?.ZScore);
                 items.Add(new VersionCompareRow
@@ -1265,7 +1272,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Ошибка сравнения: {ex.Message}";
+            ErrorMessage = $"Ошибка загрузки данных сравнения: {ex.Message}\n\nStack trace:\n{ex.StackTrace}";
         }
         finally
         {
