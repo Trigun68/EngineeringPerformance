@@ -20,4 +20,7 @@ public static class PerformanceInterpretationExtensions
         PerformanceInterpretation.Critical => "Критически низкая производительность",
         _ => interpretation.ToString(),
     };
+
+    public static string ToRussian(this PerformanceInterpretation? interpretation) =>
+        interpretation.HasValue ? interpretation.Value.ToRussian() : string.Empty;
 }
