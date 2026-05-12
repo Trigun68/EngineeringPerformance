@@ -76,6 +76,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [ObservableProperty] private ObservableCollection<VersionCompareRow> _compareRows = [];
     [ObservableProperty] private ObservableCollection<VersionCompareFacilityRow> _compareFacilityData = [];
     [ObservableProperty] private ObservableCollection<VersionCompareDetailRow> _compareDetailData = [];
+    [ObservableProperty] private bool _compareShowOnlyDifferences;
+    [ObservableProperty] private bool _hasCompareData;
+
+    // Полные данные для фильтрации
+    private List<VersionCompareRow> _compareRowsFull = [];
+    private List<VersionCompareFacilityRow> _compareFacilityFull = [];
+    private List<VersionCompareDetailRow> _compareDetailFull = [];
 
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private bool _isLoading;
@@ -193,6 +200,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         CompareRows = [];
         CompareFacilityData = [];
         CompareDetailData = [];
+        CompareShowOnlyDifferences = false;
+        HasCompareData = false;
+        _compareRowsFull = [];
+        _compareFacilityFull = [];
+        _compareDetailFull = [];
 
         await LoadDeviationAsync(projectId);
     }
@@ -1365,9 +1377,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var compareFacilityRows = BuildCompareFacilityRows(facilityA, facilityB);
             var compareDetailRows = BuildCompareDetailRows(detailA, detailB);
 
-            // Сохраняем в коллекции (пока без фильтрации)
-            CompareFacilityData = new ObservableCollection<VersionCompareFacilityRow>(compareFacilityRows);
-            CompareDetailData = new ObservableCollection<VersionCompareDetailRow>(compareDetailRows);
+            // Сохраняем полные данные и применяем фильтр
+            _compareRowsFull = items.ToList();
+            _compareFacilityFull = compareFacilityRows;
+            _compareDetailFull = compareDetailRows;
+            HasCompareData = true;
+            ApplyCompareFilter();
         }
         catch (Exception ex)
         {
@@ -1379,7 +1394,98 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
     }
 
-    // ─── Отчёты ───────────────────────────────────────────────────────────
+    partial void OnCompareShowOnlyDifferencesChanged(bool value) => ApplyCompareFilter();
+
+    private void ApplyCompareFilter()
+    {
+        if (!HasCompareData) return;
+
+        CompareRows = new ObservableCollection<VersionCompareRow>(
+            FilterCompareRows(_compareRowsFull, CompareShowOnlyDifferences));
+        CompareFacilityData = new ObservableCollection<VersionCompareFacilityRow>(
+            FilterCompareFacility(_compareFacilityFull, CompareShowOnlyDifferences));
+        CompareDetailData = new ObservableCollection<VersionCompareDetailRow>(
+            FilterCompareDetail(_compareDetailFull, CompareShowOnlyDifferences));
+    }
+
+    private static List<VersionCompareRow> FilterCompareRows(
+        List<VersionCompareRow> rows,
+        bool showOnlyDifferences)
+    {
+        if (!showOnlyDifferences) return rows;
+
+        // Для TreeList нужно сохранить иерархию: показываем узел, если у него есть видимые потомки
+        var visible = new HashSet<int>();
+
+        // Сначала находим все листья с различиями
+        foreach (var row in rows)
+        {
+            var isIdentical = Math.Round(row.ZScoreA ?? 0m, 4) == Math.Round(row.ZScoreB ?? 0m, 4)
+                           && row.InterpretationA == row.InterpretationB;
+            if (!isIdentical)
+            {
+                visible.Add(row.Id);
+            }
+        }
+
+        // Затем добавляем всех предков видимых узлов
+        bool changed;
+        do
+        {
+            changed = false;
+            foreach (var row in rows)
+            {
+                if (visible.Contains(row.Id) && row.ParentId.HasValue && !visible.Contains(row.ParentId.Value))
+                {
+                    visible.Add(row.ParentId.Value);
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        return rows.Where(r => visible.Contains(r.Id)).ToList();
+    }
+
+    private static List<VersionCompareFacilityRow> FilterCompareFacility(
+        List<VersionCompareFacilityRow> rows,
+        bool showOnlyDifferences)
+    {
+        if (!showOnlyDifferences) return rows;
+
+        return rows.Where(r =>
+        {
+            // Оба null = идентично (скрыть)
+            if (!r.FactLaborHoursA.HasValue && !r.FactLaborHoursB.HasValue) return false;
+
+            // Проверяем идентичность
+            var hoursIdentical = Math.Round(r.FactLaborHoursA ?? 0m, 2) == Math.Round(r.FactLaborHoursB ?? 0m, 2);
+            var zScoreIdentical = Math.Round(r.ZScoreA ?? 0m, 4) == Math.Round(r.ZScoreB ?? 0m, 4);
+
+            return !(hoursIdentical && zScoreIdentical);
+        }).ToList();
+    }
+
+    private static List<VersionCompareDetailRow> FilterCompareDetail(
+        List<VersionCompareDetailRow> rows,
+        bool showOnlyDifferences)
+    {
+        if (!showOnlyDifferences) return rows;
+
+        return rows.Where(r =>
+        {
+            // Строки с Presence != "A+B" всегда (отсутствие = отклонение)
+            if (r.Presence != "A+B") return true;
+
+            // Проверяем идентичность
+            var quantityIdentical = Math.Round(r.QuantityA ?? 0m, 4) == Math.Round(r.QuantityB ?? 0m, 4);
+            var hoursIdentical = Math.Round(r.FactLaborHoursA ?? 0m, 2) == Math.Round(r.FactLaborHoursB ?? 0m, 2);
+            var prodIdentical = Math.Round(r.FactProductivityA ?? 0m, 4) == Math.Round(r.FactProductivityB ?? 0m, 4);
+
+            return !(quantityIdentical && hoursIdentical && prodIdentical);
+        }).ToList();
+    }
+
+    // ─── Отчёты ───────────────────────────────────────────────────────
 
     [RelayCommand]
     private async Task ExportFactAnalysisToExcelAsync()
