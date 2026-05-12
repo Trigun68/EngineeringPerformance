@@ -894,6 +894,137 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
     }
 
+    /// <summary>
+    /// Объединяет данные по объектам из двух версий для сравнения.
+    /// </summary>
+    private static List<VersionCompareFacilityRow> BuildCompareFacilityRows(
+        IReadOnlyList<FactFacilityRow> facilityA,
+        IReadOnlyList<FactFacilityRow> facilityB)
+    {
+        var dictA = facilityA.ToDictionary(f => f.Code);
+        var dictB = facilityB.ToDictionary(f => f.Code);
+        var allCodes = dictA.Keys.Union(dictB.Keys).OrderBy(c => c);
+
+        var result = new List<VersionCompareFacilityRow>();
+        foreach (var code in allCodes)
+        {
+            var hasA = dictA.TryGetValue(code, out var rowA);
+            var hasB = dictB.TryGetValue(code, out var rowB);
+
+            var hoursA = rowA?.FactLaborHours;
+            var hoursB = rowB?.FactLaborHours;
+            var hoursDelta = (hoursA.HasValue && hoursB.HasValue) ? hoursB.Value - hoursA.Value : (decimal?)null;
+
+            var zScoreA = rowA?.ZScore;
+            var zScoreB = rowB?.ZScore;
+            var zDelta = (zScoreA.HasValue && zScoreB.HasValue) ? zScoreB.Value - zScoreA.Value : (decimal?)null;
+
+            result.Add(new VersionCompareFacilityRow
+            {
+                FacilityCode = code,
+                FacilityName = rowB?.Name ?? rowA?.Name ?? string.Empty,
+                FactLaborHoursA = hoursA,
+                FactLaborHoursB = hoursB,
+                HoursDelta = hoursDelta,
+                ZScoreA = zScoreA,
+                ZScoreB = zScoreB,
+                ZDelta = zDelta,
+                InterpretationA = rowA?.Interpretation ?? string.Empty,
+                InterpretationB = rowB?.Interpretation ?? string.Empty,
+            });
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Объединяет детальные данные из двух версий для сравнения.
+    /// Ключ объединения: (FacilityCode, DocumentSet, PvCode, WorkId).
+    /// </summary>
+    private static List<VersionCompareDetailRow> BuildCompareDetailRows(
+        IReadOnlyList<FactDetailRow> detailA,
+        IReadOnlyList<FactDetailRow> detailB)
+    {
+        // Группируем по ключу и суммируем (на случай дубликатов)
+        var groupedA = detailA
+            .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
+            .Select(g => new
+            {
+                Key = g.Key,
+                First = g.First(),
+                Quantity = g.Sum(d => d.Quantity),
+                FactLaborHours = g.Sum(d => d.FactLaborHours ?? 0m),
+                FactProductivity = g.Where(d => d.FactProductivity.HasValue).Average(d => d.FactProductivity!.Value)
+            })
+            .ToDictionary(x => x.Key);
+
+        var groupedB = detailB
+            .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
+            .Select(g => new
+            {
+                Key = g.Key,
+                First = g.First(),
+                Quantity = g.Sum(d => d.Quantity),
+                FactLaborHours = g.Sum(d => d.FactLaborHours ?? 0m),
+                FactProductivity = g.Where(d => d.FactProductivity.HasValue).Average(d => d.FactProductivity!.Value)
+            })
+            .ToDictionary(x => x.Key);
+
+        var allKeys = groupedA.Keys.Union(groupedB.Keys)
+            .OrderBy(k => k.FacilityCode)
+            .ThenBy(k => k.DocumentSet)
+            .ThenBy(k => k.PvCode)
+            .ThenBy(k => k.WorkId);
+
+        var result = new List<VersionCompareDetailRow>();
+        foreach (var key in allKeys)
+        {
+            var hasA = groupedA.TryGetValue(key, out var rowA);
+            var hasB = groupedB.TryGetValue(key, out var rowB);
+
+            var quantityA = hasA ? (decimal?)rowA!.Quantity : null;
+            var quantityB = hasB ? (decimal?)rowB!.Quantity : null;
+            var quantityDelta = (quantityA.HasValue && quantityB.HasValue) ? quantityB.Value - quantityA.Value : (decimal?)null;
+
+            var hoursA = hasA && rowA!.FactLaborHours > 0 ? (decimal?)Math.Round(rowA.FactLaborHours, 2) : null;
+            var hoursB = hasB && rowB!.FactLaborHours > 0 ? (decimal?)Math.Round(rowB.FactLaborHours, 2) : null;
+            var hoursDelta = (hoursA.HasValue && hoursB.HasValue) ? hoursB.Value - hoursA.Value : (decimal?)null;
+
+            var prodA = hasA ? (decimal?)rowA!.FactProductivity : null;
+            var prodB = hasB ? (decimal?)rowB!.FactProductivity : null;
+            var prodDelta = (prodA.HasValue && prodB.HasValue) ? prodB.Value - prodA.Value : (decimal?)null;
+
+            var presence = (hasA && hasB) ? "A+B" : hasA ? "только A" : "только B";
+
+            var refRow = rowB?.First ?? rowA?.First;
+
+            result.Add(new VersionCompareDetailRow
+            {
+                FacilityCode = key.FacilityCode,
+                FacilityName = refRow?.FacilityName ?? string.Empty,
+                DocumentSet = key.DocumentSet,
+                PvCode = key.PvCode,
+                PvName = refRow?.PvName ?? string.Empty,
+                WorkId = key.WorkId,
+                WorkName = refRow?.WorkName ?? string.Empty,
+                QuantityA = quantityA,
+                QuantityB = quantityB,
+                QuantityDelta = quantityDelta,
+                FactLaborHoursA = hoursA,
+                FactLaborHoursB = hoursB,
+                HoursDelta = hoursDelta,
+                FactProductivityA = prodA,
+                FactProductivityB = prodB,
+                ProductivityDelta = prodDelta,
+                IicGroupName = refRow?.IicGroupName ?? string.Empty,
+                IicUnitName = refRow?.IicUnitName ?? string.Empty,
+                Presence = presence,
+            });
+        }
+
+        return result;
+    }
+
     [RelayCommand]
     private async Task ImportFactPhysicalVolumesAsync()
     {
@@ -1663,6 +1794,48 @@ public sealed class VersionCompareRow
     public decimal? ZDelta { get; set; }
     public string InterpretationA { get; set; } = string.Empty;
     public string InterpretationB { get; set; } = string.Empty;
+}
+
+public sealed class VersionCompareFacilityRow
+{
+    public string FacilityCode { get; set; } = string.Empty;
+    public string FacilityName { get; set; } = string.Empty;
+    public decimal? FactLaborHoursA { get; set; }
+    public decimal? FactLaborHoursB { get; set; }
+    public decimal? HoursDelta { get; set; }
+    public decimal? ZScoreA { get; set; }
+    public decimal? ZScoreB { get; set; }
+    public decimal? ZDelta { get; set; }
+    public string InterpretationA { get; set; } = string.Empty;
+    public string InterpretationB { get; set; } = string.Empty;
+}
+
+public sealed class VersionCompareDetailRow
+{
+    public string FacilityCode { get; set; } = string.Empty;
+    public string FacilityName { get; set; } = string.Empty;
+    public string DocumentSet { get; set; } = string.Empty;
+    public string PvCode { get; set; } = string.Empty;
+    public string PvName { get; set; } = string.Empty;
+    public string WorkId { get; set; } = string.Empty;
+    public string WorkName { get; set; } = string.Empty;
+
+    public decimal? QuantityA { get; set; }
+    public decimal? QuantityB { get; set; }
+    public decimal? QuantityDelta { get; set; }
+
+    public decimal? FactLaborHoursA { get; set; }
+    public decimal? FactLaborHoursB { get; set; }
+    public decimal? HoursDelta { get; set; }
+
+    public decimal? FactProductivityA { get; set; }
+    public decimal? FactProductivityB { get; set; }
+    public decimal? ProductivityDelta { get; set; }
+
+    public string IicGroupName { get; set; } = string.Empty;
+    public string IicUnitName { get; set; } = string.Empty;
+
+    public string Presence { get; set; } = string.Empty;
 }
 
 public sealed class FacilityForecastItem
