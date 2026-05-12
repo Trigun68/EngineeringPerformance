@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed (2026-05-13, Оценка факта — NullReferenceException в IicWorkDirectionDisplayUnit.ResolveUnitName)
+- `EngineeringPerformance.Infrastructure/Data/IicWorkDirectionDisplayUnit.cs` (`ResolveUnitName`): исправлен `NullReferenceException` при обработке единиц измерения направлений ИИС. Прежняя реализация `string.IsNullOrWhiteSpace(u?.Name) ? null : u.Name.Trim()` вызывала `Trim()` на потенциально `null` значении `u.Name`, если `u` не был `null`, но `u.Name` был `null`. Новая реализация использует pattern matching `u?.Name is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null`, что гарантирует безопасный вызов `Trim()` только на не-null строках. Ошибка проявлялась при загрузке проекта и версии анализа факта в методе `PerformanceService.GetPerformanceDataAsync` → `BuildHierarchy` → `ResolveUnitName`: «Ошибка загрузки данных оценки: Object reference not set to an instance of an object».
+- `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`LoadFactDataAsync`): улучшена обработка ошибок — теперь выводится полный stack trace для диагностики `NullReferenceException`. Добавлена проверка на `null` для результата `perfTask` с явным исключением `InvalidOperationException("Performance data is null")`.
+
 ### Fixed (2026-05-13, Оценка факта — NullReferenceException при вызове ToRussian на nullable enum)
 - `EngineeringPerformance.Core/Enums/PerformanceInterpretation.cs`: добавлена перегрузка extension method `ToRussian(this PerformanceInterpretation?)` для nullable типа. Прежняя реализация имела только перегрузку для не-nullable `PerformanceInterpretation`, что приводило к `NullReferenceException` при вызове `row.Interpretation?.ToRussian()` в `LoadFactDataAsync` (строка 721) и `ComputeFactRows` (строка 957), когда `Interpretation` имел значение, но компилятор не мог корректно обработать nullable value type. Новая перегрузка возвращает `string.Empty` для `null` и делегирует вызов основному методу для значений. Ошибка проявлялась при загрузке проекта и версии анализа факта: «Ошибка загрузки данных оценки: Object reference not set to an instance of an object».
 

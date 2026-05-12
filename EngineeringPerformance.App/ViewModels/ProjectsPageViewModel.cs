@@ -665,7 +665,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .ToListAsync();
 
             await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask, liTask);
-            var data = perfTask.Result;
+            var data = perfTask.Result ?? throw new InvalidOperationException("Performance data is null");
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
@@ -745,7 +745,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Ошибка загрузки данных оценки: {ex.Message}";
+            ErrorMessage = $"Ошибка загрузки данных оценки: {ex.Message}\n\nStack trace:\n{ex.StackTrace}";
         }
         finally
         {

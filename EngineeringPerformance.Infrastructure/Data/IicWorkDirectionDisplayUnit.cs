@@ -11,7 +11,7 @@ public static class IicWorkDirectionDisplayUnit
         IReadOnlyDictionary<int, IicWorkDirection> byId)
     {
         var u = ResolveUnit(direction, byId);
-        return string.IsNullOrWhiteSpace(u?.Name) ? null : u.Name.Trim();
+        return u?.Name is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
     }
 
     public static int? ResolveUnitId(
