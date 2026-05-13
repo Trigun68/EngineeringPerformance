@@ -80,22 +80,29 @@ public sealed partial class PhysicalVolumeQuickEditViewModel : ObservableObject
     {
         ClassifierDisplayItems.Clear();
         ClassifierDisplayItems.Add(new ClassifierDisplayItem { Id = null, Display = "Не выбрано" });
+        var byId = classifiers.ToDictionary(c => c.Id);
         var byParent = classifiers.OrderBy(c => c.Code).ToLookup(c => c.ParentId);
         var visited = new HashSet<int>();
         foreach (var root in byParent[null])
-            Append(root, byParent, 0, visited);
+            Append(root, byParent, byId, 0, visited);
     }
 
-    private void Append(IicWorkDirection item, ILookup<int?, IicWorkDirection> byParent, int depth, HashSet<int> visited)
+    private void Append(
+        IicWorkDirection item,
+        ILookup<int?, IicWorkDirection> byParent,
+        IReadOnlyDictionary<int, IicWorkDirection> byId,
+        int depth,
+        HashSet<int> visited)
     {
         if (!visited.Add(item.Id)) return;
+        var nameWithUnit = IicWorkDirectionDisplayUnit.FormatNameWithResolvedUnit(item, byId);
         ClassifierDisplayItems.Add(new ClassifierDisplayItem
         {
             Id = item.Id,
-            Display = new string(' ', depth * 3) + (depth > 0 ? "└ " : "") + $"{item.Code} {item.Name}",
+            Display = new string(' ', depth * 3) + (depth > 0 ? "└ " : "") + $"{item.Code} {nameWithUnit}",
         });
         foreach (var child in byParent[item.Id])
-            Append(child, byParent, depth + 1, visited);
+            Append(child, byParent, byId, depth + 1, visited);
     }
 
     [RelayCommand]

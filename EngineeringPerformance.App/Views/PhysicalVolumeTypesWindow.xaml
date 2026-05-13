@@ -35,7 +35,9 @@
         <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem}"
                          AutoGenerateColumns="None"
-                         MouseDoubleClick="GridControl_MouseDoubleClick">
+                         MouseDoubleClick="GridControl_MouseDoubleClick"
+                         RestoreStateOnSourceChange="True"
+                         RestoreStateKeyFieldName="Id">
             <dxg:GridControl.Columns>
                 <dxg:GridColumn FieldName="Name" Header="Наименование" />
                 <dxg:GridColumn FieldName="Description" Header="Описание" />

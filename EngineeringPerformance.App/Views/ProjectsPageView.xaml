@@ -264,6 +264,7 @@
 
                                 <dxg:GridControl x:Name="DetailForecastGrid" Grid.Column="0" ItemsSource="{Binding DetailForecastData}"
                                                  AutoGenerateColumns="None"
+                                                 AllowLiveDataShaping="True"
                                                  RestoreStateOnSourceChange="True"
                                                  RestoreStateKeyFieldName="ProjectPhysicalVolumeId">
                                     <dxg:GridControl.Columns>
@@ -324,13 +325,21 @@
                                         <dxg:GridSummaryItem FieldName="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
                                         <dxg:GridSummaryItem FieldName="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
+                                    <!-- Групповые итоги: см. DevExpress «Group Summary», TableView.GroupSummaryDisplayMode=AlignByColumns — значения в строке группы под теми же колонками, в т.ч. при свёрнутой группе. -->
+                                    <dxg:GridControl.GroupSummary>
+                                        <dxg:GridSummaryItem FieldName="FacilityName" ShowInColumn="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
+                                        <dxg:GridSummaryItem FieldName="BaseHours" ShowInColumn="BaseHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="OptimisticHours" ShowInColumn="OptimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                        <dxg:GridSummaryItem FieldName="PessimisticHours" ShowInColumn="PessimisticHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    </dxg:GridControl.GroupSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView x:Name="DetailForecastView"
                                                        AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"
-                                                       ShowTotalSummary="True" />
+                                                       ShowTotalSummary="True"
+                                                       GroupSummaryDisplayMode="AlignByColumns" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 
@@ -548,6 +557,7 @@
 
                                 <dxg:GridControl x:Name="FactDetailGrid" Grid.Column="0" ItemsSource="{Binding FactDetailData}"
                                                  AutoGenerateColumns="None"
+                                                 AllowLiveDataShaping="True"
                                                  RestoreStateOnSourceChange="True"
                                                  RestoreStateKeyFieldName="ProjectPhysicalVolumeId">
                                     <dxg:GridControl.Columns>
@@ -597,13 +607,18 @@
                                         <dxg:GridSummaryItem FieldName="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
                                         <dxg:GridSummaryItem FieldName="FactLaborHours" SummaryType="Sum" DisplayFormat="N2" />
                                     </dxg:GridControl.TotalSummary>
+                                    <dxg:GridControl.GroupSummary>
+                                        <dxg:GridSummaryItem FieldName="FacilityName" ShowInColumn="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
+                                        <dxg:GridSummaryItem FieldName="FactLaborHours" ShowInColumn="FactLaborHours" SummaryType="Sum" DisplayFormat="N2" />
+                                    </dxg:GridControl.GroupSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TableView x:Name="FactDetailView"
                                                        AllowEditing="False" AllowSorting="True"
                                                        NavigationStyle="Row"
                                                        ShowIndicator="False"
                                                        ShowVerticalLines="False"
-                                                       ShowTotalSummary="True" />
+                                                       ShowTotalSummary="True"
+                                                       GroupSummaryDisplayMode="AlignByColumns" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 
@@ -753,7 +768,8 @@
                         <dx:DXTabItem Header="По объектам">
                             <dxg:GridControl x:Name="CompareFacilityGrid" Margin="0,8,0,0"
                                              ItemsSource="{Binding CompareFacilityData}"
-                                             AutoGenerateColumns="None">
+                                             AutoGenerateColumns="None"
+                                             AllowLiveDataShaping="True">
                                 <dxg:GridControl.Columns>
                                     <dxg:GridColumn FieldName="FacilityCode" Header="Код" Width="80" />
                                     <dxg:GridColumn FieldName="FacilityName" Header="Наименование" Width="200" />
@@ -814,12 +830,19 @@
                                     <dxg:GridSummaryItem FieldName="FactLaborHoursB" SummaryType="Sum" DisplayFormat="N2" />
                                     <dxg:GridSummaryItem FieldName="HoursDelta" SummaryType="Sum" DisplayFormat="N2" />
                                 </dxg:GridControl.TotalSummary>
+                                <dxg:GridControl.GroupSummary>
+                                    <dxg:GridSummaryItem FieldName="FacilityName" ShowInColumn="FacilityName" SummaryType="Count" DisplayFormat="Объектов: {0}" />
+                                    <dxg:GridSummaryItem FieldName="FactLaborHoursA" ShowInColumn="FactLaborHoursA" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="FactLaborHoursB" ShowInColumn="FactLaborHoursB" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="HoursDelta" ShowInColumn="HoursDelta" SummaryType="Sum" DisplayFormat="N2" />
+                                </dxg:GridControl.GroupSummary>
                                 <dxg:GridControl.View>
                                     <dxg:TableView AllowEditing="False" AllowSorting="True"
                                                    NavigationStyle="Row"
                                                    ShowIndicator="False"
                                                    ShowVerticalLines="False"
-                                                   ShowTotalSummary="True" />
+                                                   ShowTotalSummary="True"
+                                                   GroupSummaryDisplayMode="AlignByColumns" />
                                 </dxg:GridControl.View>
                             </dxg:GridControl>
                         </dx:DXTabItem>
@@ -828,7 +851,8 @@
                         <dx:DXTabItem Header="Детально">
                             <dxg:GridControl x:Name="CompareDetailGrid" Margin="0,8,0,0"
                                              ItemsSource="{Binding CompareDetailData}"
-                                             AutoGenerateColumns="None">
+                                             AutoGenerateColumns="None"
+                                             AllowLiveDataShaping="True">
                                 <dxg:GridControl.Columns>
                                     <dxg:GridColumn FieldName="FacilityCode" Header="Код объекта" Width="90" />
                                     <dxg:GridColumn FieldName="FacilityName" Header="Наименование объекта" Width="150" />
@@ -892,12 +916,19 @@
                                     <dxg:GridSummaryItem FieldName="FactLaborHoursB" SummaryType="Sum" DisplayFormat="N2" />
                                     <dxg:GridSummaryItem FieldName="HoursDelta" SummaryType="Sum" DisplayFormat="N2" />
                                 </dxg:GridControl.TotalSummary>
+                                <dxg:GridControl.GroupSummary>
+                                    <dxg:GridSummaryItem FieldName="FacilityName" ShowInColumn="FacilityName" SummaryType="Count" DisplayFormat="Строк: {0}" />
+                                    <dxg:GridSummaryItem FieldName="FactLaborHoursA" ShowInColumn="FactLaborHoursA" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="FactLaborHoursB" ShowInColumn="FactLaborHoursB" SummaryType="Sum" DisplayFormat="N2" />
+                                    <dxg:GridSummaryItem FieldName="HoursDelta" ShowInColumn="HoursDelta" SummaryType="Sum" DisplayFormat="N2" />
+                                </dxg:GridControl.GroupSummary>
                                 <dxg:GridControl.View>
                                     <dxg:TableView AllowEditing="False" AllowSorting="True"
                                                    NavigationStyle="Row"
                                                    ShowIndicator="False"
                                                    ShowVerticalLines="False"
-                                                   ShowTotalSummary="True" />
+                                                   ShowTotalSummary="True"
+                                                   GroupSummaryDisplayMode="AlignByColumns" />
                                 </dxg:GridControl.View>
                             </dxg:GridControl>
                         </dx:DXTabItem>

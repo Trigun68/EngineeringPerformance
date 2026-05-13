@@ -44,7 +44,9 @@
         <!-- Data Grid -->
         <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem}"
-                         AutoGenerateColumns="None">
+                         AutoGenerateColumns="None"
+                         RestoreStateOnSourceChange="True"
+                         RestoreStateKeyFieldName="Id">
             <dxg:GridControl.Columns>
                 <dxg:GridColumn FieldName="Name" Header="Наименование" />
                 <dxg:GridColumn FieldName="IsArchived" Header="Архив" Width="60" />

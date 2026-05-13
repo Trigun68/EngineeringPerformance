@@ -242,6 +242,7 @@ public sealed partial class PhysicalVolumeEditViewModel : ObservableObject
         if (classifiers.Count == 0)
             return;
 
+        var byId = classifiers.ToDictionary(c => c.Id);
         var childrenByParent = classifiers
             .OrderBy(c => c.Code)
             .ToLookup(c => c.ParentId);
@@ -249,13 +250,14 @@ public sealed partial class PhysicalVolumeEditViewModel : ObservableObject
         var visited = new HashSet<int>();
         foreach (var root in childrenByParent[null])
         {
-            AppendClassifier(root, childrenByParent, depth: 0, visited);
+            AppendClassifier(root, childrenByParent, byId, depth: 0, visited);
         }
     }
 
     private void AppendClassifier(
         IicWorkDirection item,
         ILookup<int?, IicWorkDirection> childrenByParent,
+        IReadOnlyDictionary<int, IicWorkDirection> byId,
         int depth,
         HashSet<int> visited)
     {
@@ -264,15 +266,16 @@ public sealed partial class PhysicalVolumeEditViewModel : ObservableObject
 
         var indent = new string(' ', depth * 3);
         var prefix = depth > 0 ? "└ " : string.Empty;
+        var nameWithUnit = IicWorkDirectionDisplayUnit.FormatNameWithResolvedUnit(item, byId);
         ClassifierDisplayItems.Add(new ClassifierDisplayItem
         {
             Id = item.Id,
-            Display = $"{indent}{prefix}{item.Code} {item.Name}",
+            Display = $"{indent}{prefix}{item.Code} {nameWithUnit}",
         });
 
         foreach (var child in childrenByParent[item.Id])
         {
-            AppendClassifier(child, childrenByParent, depth + 1, visited);
+            AppendClassifier(child, childrenByParent, byId, depth + 1, visited);
         }
     }
 

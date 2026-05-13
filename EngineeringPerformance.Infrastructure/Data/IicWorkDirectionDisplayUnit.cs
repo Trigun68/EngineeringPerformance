@@ -38,4 +38,17 @@ public static class IicWorkDirectionDisplayUnit
 
         return direction.Unit;
     }
+
+    /// <summary>
+    /// Наименование группы ИИС для UI: «Имя (ед. изм.)», единица — унаследованная по дереву справочника.
+    /// </summary>
+    public static string FormatNameWithResolvedUnit(
+        IicWorkDirection direction,
+        IReadOnlyDictionary<int, IicWorkDirection> byId)
+    {
+        var unitName = ResolveUnitName(direction, byId);
+        return string.IsNullOrWhiteSpace(unitName)
+            ? direction.Name
+            : $"{direction.Name} ({unitName})";
+    }
 }

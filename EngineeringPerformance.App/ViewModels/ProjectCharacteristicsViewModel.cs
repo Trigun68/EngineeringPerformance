@@ -12,6 +12,14 @@ public sealed partial class ProjectCharacteristicsViewModel : DirectoryViewModel
     {
     }
 
+    protected override void ApplyRefreshedItem(ProjectCharacteristic existing, ProjectCharacteristic updated)
+    {
+        base.ApplyRefreshedItem(existing, updated);
+        existing.Options.Clear();
+        foreach (var option in updated.Options)
+            existing.Options.Add(option);
+    }
+
     [RelayCommand]
     private async Task CreateAndEditAsync()
     {

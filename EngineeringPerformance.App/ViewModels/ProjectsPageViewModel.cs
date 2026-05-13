@@ -684,18 +684,15 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 return pipeIdx >= 0 ? code[(pipeIdx + 1)..].Trim() : string.Empty;
             }
             var laborIntensities = laborIntensitiesRaw
-                .Select(li => new
-                {
-                    DocSet = ExtractDocSet(li.DocumentationCode),
-                    Tag = (string?)null, // Tag в LI на текущих данных всегда null; место под расширение, если появится
+                .Select(li => new FactLaborIntensityRow(
+                    ExtractDocSet(li.DocumentationCode),
                     li.WorkDirectionId,
                     // Часы для агрегации Факта берутся строго из PlannedHours (заявленные в файле
                     // плановые часы по работе). Прежняя смесь `Actual > 0 ? Actual : Planned`
                     // давала итог > файла на строках, где факт списан больше плана (для проекта 4 v2
                     // это +755.84 ч к 61 725.40). Решено пользователем 2026-05-12: единый источник —
                     // PlannedHours, фактическое списание (ActualHours) для агрегации не используется.
-                    Hours = li.PlannedHours,
-                })
+                    li.PlannedHours))
                 .ToList();
 
             // ── Вкладка «Итого»: иерархия направлений (текущая логика) ──────
@@ -892,7 +889,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     /// </summary>
     private static (List<FactDetailRow> DetailRows, List<FactFacilityRow> FacilityRows) ComputeFactRows(
         List<ProjectPhysicalVolume> physicalVolumesAll,
-        IEnumerable<dynamic> laborIntensities,
+        IReadOnlyList<FactLaborIntensityRow> laborIntensities,
         Dictionary<int, PerformanceRowDto> normByDirection,
         Dictionary<int, int> snapshotNormIdByDirection,
         Dictionary<int, IicWorkDirection> classifierMap)
@@ -1096,12 +1093,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
 
         var laborIntensities = laborIntensitiesRaw
-            .Select(li => new
-            {
-                DocSet = ExtractDocSet(li.DocumentationCode),
+            .Select(li => new FactLaborIntensityRow(
+                ExtractDocSet(li.DocumentationCode),
                 li.WorkDirectionId,
-                Hours = li.PlannedHours,
-            })
+                li.PlannedHours))
             .ToList();
 
         var normByDirection = perfData
@@ -1973,6 +1968,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         await LoadFactDataAsync(projectId, versionId, state);
     }
 }
+
+/// <summary>
+/// Срез строки трудоёмкости для расчёта факта (DocumentSet + направление + часы).
+/// Раньше использовался <c>IEnumerable&lt;dynamic&gt;</c>: при boxing значение <c>int?</c> с данными
+/// превращалось в <c>int</c>, и вызов <c>WorkDirectionId.HasValue</c> в <see cref="ComputeFactRows"/> падал в рантайме.
+/// </summary>
+internal sealed record FactLaborIntensityRow(string DocSet, int? WorkDirectionId, decimal Hours);
 
 public sealed class ForecastPerformanceItem
 {

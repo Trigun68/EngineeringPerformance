@@ -747,6 +747,7 @@ public sealed class PerformanceItem
 {
     public int Id { get; set; }
     public int? ParentId { get; set; }
+    /// <summary>Код направления ИИС (для грида «Итого» на странице проектов).</summary>
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
 
@@ -760,6 +761,7 @@ public sealed class PerformanceItem
     public decimal? NormEstimate { get; set; }
     public decimal? NormStdDev { get; set; }
     public decimal? ZScore { get; set; }
+    /// <summary>Текст перцентиля по Z-score (страница проектов / оценка факта).</summary>
     public string Percentile { get; set; } = string.Empty;
     public string Interpretation { get; set; } = string.Empty;
 }

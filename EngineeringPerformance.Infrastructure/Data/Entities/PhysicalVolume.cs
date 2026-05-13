@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations.Schema;
 using EngineeringPerformance.Core.Models;
 
 namespace EngineeringPerformance.Infrastructure.Data;
@@ -28,6 +29,7 @@ public sealed class PhysicalVolume : DirectoryItem, INotifyPropertyChanged
         Raise(nameof(VolumeType));
         Raise(nameof(ClassifierId));
         Raise(nameof(Classifier));
+        Raise(nameof(ClassifierNameWithUnit));
         Raise(nameof(IsAssessment));
         Raise(nameof(Coefficient));
         Raise(nameof(DocumentSet));
@@ -69,6 +71,10 @@ public sealed class PhysicalVolume : DirectoryItem, INotifyPropertyChanged
     public PhysicalVolumeType VolumeType { get; set; } = null!;
 
     public IicWorkDirection? Classifier { get; set; }
+
+    /// <summary>Классификатор для грида: наименование группы ИИС и ед. изм. по правилам справочника ИИС.</summary>
+    [NotMapped]
+    public string ClassifierNameWithUnit { get; set; } = string.Empty;
 
     public UnitOfMeasurement? Unit { get; set; }
 }

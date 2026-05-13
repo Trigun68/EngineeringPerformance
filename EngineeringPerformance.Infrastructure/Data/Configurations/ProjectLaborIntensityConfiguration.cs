@@ -11,12 +11,9 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
 
         builder.HasKey(li => li.Id);
 
-        // ISS-006: длина 100 → 450 — короткий лимит схлопывал разные «тип+марка»
-        // в один натуральный ключ и терял часы при импорте.
-        // 450 — безопасный потолок для уникального индекса SQL Server (≤ 1700 байт ключа).
         builder.Property(li => li.DocumentationCode)
             .IsRequired()
-            .HasMaxLength(450);
+            .HasMaxLength(100);
 
         builder.Property(li => li.PlannedHours)
             .HasPrecision(18, 4);

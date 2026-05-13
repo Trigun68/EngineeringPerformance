@@ -82,7 +82,7 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
         existing.ModifiedAt = updated.ModifiedAt;
     }
 
-    /// <summary>Обновляет строки без <see cref="ObservableCollection{T}.Clear"/> — дерево и таблицы сохраняют разворот и фокус. Заменяет существующий экземпляр через индексатор, чтобы DevExpress GridControl/TreeListView гарантированно перерисовали изменённые ячейки (сущности справочников не реализуют INotifyPropertyChanged).</summary>
+    /// <summary>Обновляет строки без <see cref="ObservableCollection{T}.Clear"/> — дерево и таблицы сохраняют разворот и фокус. Копирует поля в существующий объект строки через <see cref="ApplyRefreshedItem"/> (тот же CLR-инстанс в коллекции), чтобы DevExpress TreeListView не сбрасывал раскрытие узлов; подключается в паре с <c>RestoreStateOnSourceChange</c> на гриде.</summary>
     protected void MergeItemsPreservingReferences(IReadOnlyList<T> fresh)
     {
         if (fresh.Count == 0)
@@ -103,7 +103,7 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
                 continue;
             }
 
-            Items[i] = updated;
+            ApplyRefreshedItem(row, updated);
         }
 
         var existingIds = Items.Select(x => x.Id).ToHashSet();
@@ -302,16 +302,15 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
 
     protected virtual void RefreshItemInCollection(T item)
     {
-        var idx = -1;
         for (var i = 0; i < Items.Count; i++)
         {
-            if (Items[i].Id == item.Id) { idx = i; break; }
-        }
-        if (idx < 0) return;
+            if (Items[i].Id != item.Id) continue;
 
-        var wasSelected = ReferenceEquals(SelectedItem, Items[idx]);
-        Items[idx] = item;
-        if (wasSelected) SelectedItem = item;
+            var wasSelected = ReferenceEquals(SelectedItem, Items[i]);
+            ApplyRefreshedItem(Items[i], item);
+            if (wasSelected) SelectedItem = Items[i];
+            return;
+        }
     }
 
     public async Task RefreshItemFromServiceAsync(int itemId)

@@ -28,6 +28,20 @@ public sealed partial class LaborIntensitiesViewModel : DirectoryViewModelBase<L
         await base.ReloadFromDatabaseAsync();
     }
 
+    protected override void ApplyRefreshedItem(LaborIntensity existing, LaborIntensity updated)
+    {
+        base.ApplyRefreshedItem(existing, updated);
+        existing.Code = updated.Code;
+        existing.DocumentTypeName = updated.DocumentTypeName;
+        existing.NormPpr = updated.NormPpr;
+        existing.NormOpr = updated.NormOpr;
+        existing.NormPd = updated.NormPd;
+        existing.NormRd = updated.NormRd;
+        existing.IicWorkDirectionId = updated.IicWorkDirectionId;
+        existing.Techas = updated.Techas;
+        existing.IicWorkDirection = updated.IicWorkDirection;
+    }
+
     [RelayCommand]
     private async Task CreateAndEditAsync()
     {

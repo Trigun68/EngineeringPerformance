@@ -63,7 +63,7 @@
                           SelectedItem="{Binding SelectedClassifierItem}"
                           DisplayMember="Display"
                           IsEnabled="{Binding AreLookupsReady}"
-                          Style="{StaticResource LookupComboBoxEdit}"
+                          IsTextEditable="False"
                           Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="5" Grid.Column="0" Text="Родитель" VerticalAlignment="Center" Margin="0,0,8,8" />
@@ -72,7 +72,7 @@
                           SelectedItem="{Binding SelectedParentItem}"
                           DisplayMember="Display"
                           IsEnabled="{Binding AreLookupsReady}"
-                          Style="{StaticResource LookupComboBoxEdit}"
+                          IsTextEditable="False"
                           Margin="0,0,0,8" />
 
         <TextBlock Grid.Row="6" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
@@ -90,7 +90,7 @@
                           SelectedItem="{Binding SelectedUnit}"
                           DisplayMember="Name"
                           IsEnabled="{Binding AreLookupsReady}"
-                          Style="{StaticResource LookupComboBoxEdit}"
+                          IsTextEditable="False"
                           NullText="Не выбрано"
                           Margin="0,0,0,8" />
 

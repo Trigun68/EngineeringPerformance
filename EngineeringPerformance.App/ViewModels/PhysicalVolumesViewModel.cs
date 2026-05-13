@@ -84,6 +84,7 @@ public sealed partial class PhysicalVolumesViewModel : DirectoryViewModelBase<Ph
         existing.VolumeType = updated.VolumeType;
         existing.ClassifierId = updated.ClassifierId;
         existing.Classifier = updated.Classifier;
+        existing.ClassifierNameWithUnit = updated.ClassifierNameWithUnit;
         existing.UnitId = updated.UnitId;
         existing.Unit = updated.Unit;
         existing.IsAssessment = updated.IsAssessment;
@@ -204,6 +205,9 @@ public sealed partial class PhysicalVolumesViewModel : DirectoryViewModelBase<Ph
                         && unitById.TryGetValue(item.UnitId.Value, out var u)
                 ? u
                 : null;
+            item.ClassifierNameWithUnit = item.Classifier is { } cl
+                ? IicWorkDirectionDisplayUnit.FormatNameWithResolvedUnit(cl, classifierById)
+                : string.Empty;
         }
     }
 

@@ -32,7 +32,9 @@
         <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem}"
                          AutoGenerateColumns="None"
-                         MouseDoubleClick="GridControl_MouseDoubleClick">
+                         MouseDoubleClick="GridControl_MouseDoubleClick"
+                         RestoreStateOnSourceChange="True"
+                         RestoreStateKeyFieldName="Id">
             <dxg:GridControl.Columns>
                 <dxg:GridColumn FieldName="Code" Header="Код" Width="100" />
                 <dxg:GridColumn FieldName="Name" Header="Группа" Width="250" />
@@ -48,9 +50,7 @@
                                   ParentFieldName="ParentId"
                                   AllowEditing="False"
                                   NavigationStyle="Row"
-                                  AutoExpandAllNodes="False"
-                                  ShowSearchPanelMode="Always"
-                                  SearchPanelHighlightResults="True" />
+                                  AutoExpandAllNodes="False" />
             </dxg:GridControl.View>
         </dxg:GridControl>
     </Grid>

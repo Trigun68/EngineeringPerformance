@@ -41,7 +41,7 @@
                                       EditValue="{Binding SelectedWorkDirectionId}"
                                       ValueMember="Id"
                                       DisplayMember="DisplayText"
-                                      Style="{StaticResource LookupComboBoxEdit}"
+                                      IsTextEditable="False"
                                       IsEnabled="{Binding AreLookupsReady}"
                                       Margin="0,0,0,8" />
 

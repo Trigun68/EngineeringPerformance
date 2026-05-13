@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added (2026-05-13, Локализация контекстных меню GridControl)
+- `EngineeringPerformance.App/Localization/RussianGridControlLocalizer.cs` + регистрация в `App.xaml.cs`: русские строки встроенных меню `GridControl` (сортировка, группировка, фильтры, итоги, выбор столбцов и др.). Пункты условного форматирования не переопределяются через устаревшие `GridControlStringId` — при необходимости отдельно подключается `ConditionalFormattingLocalizer`.
+
+### Changed (2026-05-13, Номенклатура ФО — классификатор с единицей измерения ИИС)
+- Колонка «Классификатор» и списки выбора классификатора: отображение `Наименование (ед. изм.)` по правилам `IicWorkDirectionDisplayUnit.FormatNameWithResolvedUnit`; поле `PhysicalVolume.ClassifierNameWithUnit` (`[NotMapped]`) для грида; обогащение в `PhysicalVolumesViewModel`.
+
+### Changed (2026-05-13, Проекты — групповые итоги при группировке)
+- Вкладки «Детально» (прогноз, факт, сравнение версий) и «По объектам» в сравнении версий: `GridControl.GroupSummary` с теми же агрегатами, что `TotalSummary`; `TableView.GroupSummaryDisplayMode="AlignByColumns"`; явный `ShowInColumn`; `AllowLiveDataShaping="True"` (см. DevExpress WPF — Group Summary).
+
+### Fixed (2026-05-13, Справочники — сброс разворота дерева после сохранения)
+- `DirectoryViewModelBase.MergeItemsPreservingReferences`: вместо замены элемента коллекции новым экземпляром из БД (`Items[i] = updated`) данные переносятся в **тот же** объект строки через `ApplyRefreshedItem` — TreeListView сохраняет раскрытие узлов и фокус при `ReloadFromDatabaseAsync` после редактирования.
+- `DirectoryViewModelBase.RefreshItemInCollection`: то же для точечного обновления строки (после диалога).
+- Дополнены `ApplyRefreshedItem` для полей навигации: `IicWorkDirection` (`Unit`), `LaborIntensity` (код, нормы, связь с IIC), `ProjectAnalysisVersion` (`Description`, `PhysicalVolumeType`, `Project`), `ProjectCharacteristic` (коллекция `Options`).
+- На `GridControl` окон справочников включены `RestoreStateOnSourceChange="True"` и `RestoreStateKeyFieldName="Id"` (паттерн как в `docs/features/detail-grid-state-preservation.md`, DevExpress WPF).
+
 ### Fixed (2026-05-13, Сравнение версий — NullReferenceException при объединении данных)
 - `EngineeringPerformance.App/ViewModels/ProjectsPageViewModel.cs` (`RunCompareAsync`): исправлен `NullReferenceException` при загрузке данных сравнения версий. Прежняя реализация использовала небезопасную конструкцию `var row = a ?? b!;` без проверки на случай, когда оба значения `a` и `b` равны `null`. Добавлена явная проверка `if (a is null && b is null) continue;` для пропуска невалидных записей. Улучшена обработка ошибок — теперь выводится полный stack trace для диагностики. Ошибка проявлялась при выборе версий для сравнения на вкладке «Сравнение версий»: «Ошибка загрузки данных сравнения: Object reference not set to an instance of an object».
 

@@ -1,5 +1,6 @@
 using System.Windows;
 using DevExpress.Xpf.Core;
+using EngineeringPerformance.App.Localization;
 using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.ViewModels;
 using EngineeringPerformance.App.Views;
@@ -21,6 +22,12 @@ public partial class App : Application
 {
     private IHost? _host;
     private UserDto? _currentUser;
+
+    static App()
+    {
+        // Русские подписи встроенных меню GridControl (ПКМ по заголовку столбца, панель групп и т.д.)
+        DevExpress.Xpf.Grid.GridControlLocalizer.Active = new RussianGridControlLocalizer();
+    }
 
     private async void Application_Startup(object sender, StartupEventArgs e)
     {

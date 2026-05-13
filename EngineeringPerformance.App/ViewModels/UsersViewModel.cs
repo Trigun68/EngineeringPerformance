@@ -24,19 +24,6 @@ public sealed partial class UsersViewModel : DirectoryViewModelBase<User>
         existing.IsActive = updated.IsActive;
     }
 
-    protected override void RefreshItemInCollection(User item)
-    {
-        for (var i = 0; i < Items.Count; i++)
-        {
-            if (Items[i].Id != item.Id) continue;
-
-            var wasSelected = ReferenceEquals(SelectedItem, Items[i]);
-            Items[i] = item;
-            if (wasSelected) SelectedItem = item;
-            return;
-        }
-    }
-
     [RelayCommand]
     private async Task EditItemAsync()
     {

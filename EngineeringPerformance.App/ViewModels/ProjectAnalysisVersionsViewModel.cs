@@ -18,8 +18,11 @@ public sealed partial class ProjectAnalysisVersionsViewModel : DirectoryViewMode
         base.ApplyRefreshedItem(existing, updated);
         existing.ProjectId = updated.ProjectId;
         existing.VersionName = updated.VersionName;
+        existing.Description = updated.Description;
         existing.Direction = updated.Direction;
         existing.PhysicalVolumeTypeId = updated.PhysicalVolumeTypeId;
+        existing.PhysicalVolumeType = updated.PhysicalVolumeType;
+        existing.Project = updated.Project;
     }
 
     [RelayCommand]

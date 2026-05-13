@@ -35,6 +35,7 @@ public sealed partial class IicWorkDirectionsViewModel : DirectoryViewModelBase<
         existing.Code = updated.Code;
         existing.Description = updated.Description;
         existing.UnitId = updated.UnitId;
+        existing.Unit = updated.Unit;
     }
 
     [RelayCommand]

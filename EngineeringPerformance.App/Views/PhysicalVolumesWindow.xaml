@@ -57,13 +57,15 @@
         <dxg:GridControl Grid.Row="2" ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem}"
                          AutoGenerateColumns="None"
-                         MouseDoubleClick="GridControl_MouseDoubleClick">
+                         MouseDoubleClick="GridControl_MouseDoubleClick"
+                         RestoreStateOnSourceChange="True"
+                         RestoreStateKeyFieldName="Id">
             <dxg:GridControl.Columns>
                 <dxg:GridColumn FieldName="Code" Header="Код" Width="120" />
                 <dxg:GridColumn FieldName="Name" Header="Наименование" Width="300" />
                 <dxg:GridColumn FieldName="Description" Header="Описание" Width="200" />
                 <dxg:GridColumn FieldName="VolumeType.Name" Header="Тип" Width="100" />
-                <dxg:GridColumn FieldName="Classifier.Name" Header="Классификатор" Width="150" />
+                <dxg:GridColumn FieldName="ClassifierNameWithUnit" Header="Классификатор" Width="220" />
                 <dxg:GridColumn FieldName="Unit.Name" Header="Ед. изм." Width="100" />
                 <dxg:GridColumn FieldName="Coefficient" Header="Коэффициент" Width="100" />
                 <dxg:GridColumn FieldName="IsAssessment" Header="Оценка" Width="80" />
