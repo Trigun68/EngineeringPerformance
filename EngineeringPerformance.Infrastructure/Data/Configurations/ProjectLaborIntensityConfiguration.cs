@@ -11,9 +11,10 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
 
         builder.HasKey(li => li.Id);
 
+        // Должно совпадать с миграцией ExpandLaborDocumentationCodeTo450 (импорт TF, длинные составные коды).
         builder.Property(li => li.DocumentationCode)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(450);
 
         builder.Property(li => li.PlannedHours)
             .HasPrecision(18, 4);

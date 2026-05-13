@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -103,7 +104,12 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
                 continue;
             }
 
-            ApplyRefreshedItem(row, updated);
+            // Для сущностей без INPC мутация свойств не триггерит перерисовку строки в гриде.
+            // В этом случае заменяем элемент коллекции целиком.
+            if (row is INotifyPropertyChanged)
+                ApplyRefreshedItem(row, updated);
+            else
+                Items[i] = updated;
         }
 
         var existingIds = Items.Select(x => x.Id).ToHashSet();
@@ -246,7 +252,7 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
     }
 
     [RelayCommand]
-    private async Task RefreshAsync() => await LoadSafeAsync();
+    private async Task RefreshAsync() => await ReloadFromDatabaseAsync();
 
     [RelayCommand]
     private async Task DeleteItemAsync()
@@ -307,7 +313,11 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
             if (Items[i].Id != item.Id) continue;
 
             var wasSelected = ReferenceEquals(SelectedItem, Items[i]);
-            ApplyRefreshedItem(Items[i], item);
+            if (Items[i] is INotifyPropertyChanged)
+                ApplyRefreshedItem(Items[i], item);
+            else
+                Items[i] = item;
+
             if (wasSelected) SelectedItem = Items[i];
             return;
         }

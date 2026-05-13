@@ -9,7 +9,7 @@ Console.WriteLine("=== Engineering Performance — Database Initializer ===");
 Console.WriteLine();
 
 var connectionString = GetConnectionString();
-Console.WriteLine($"Connection string: {MaskConnectionString(connectionString)}");
+Console.WriteLine($"Connection string: {ConnectionStringMasking.MaskForDisplay(connectionString)}");
 Console.WriteLine();
 
 var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
@@ -120,22 +120,6 @@ static string GetConnectionString()
         return envVar;
 
     return new AppSettings().ConnectionString;
-}
-
-static string MaskConnectionString(string cs)
-{
-    var parts = cs.Split(';');
-    return string.Join(";", parts.Select(p =>
-    {
-        var trimmed = p.TrimStart();
-        if (trimmed.StartsWith("Password=", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("Pwd=", StringComparison.OrdinalIgnoreCase))
-        {
-            var eq = p.IndexOf('=');
-            return eq >= 0 ? p.Substring(0, eq + 1) + "***" : p;
-        }
-        return p;
-    }));
 }
 
 static async Task PrintSummaryAsync(AppDbContext context)

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-14, Главная — порядок контента и размер диаграммы)
+- `ProjectDashboardView`: убрана плитка «Активные проекты»; сверху диаграмма σ (ширина ~80% от прежней), под ней подпись и блок методологии.
+- `ProjectDashboardViewModel`: упрощён до `LoadAsync` без запросов к БД.
+
+### Fixed (2026-05-14, EF Core — PendingModelChangesWarning при старте)
+- `ProjectLaborIntensityConfiguration`: `DocumentationCode` снова `HasMaxLength(450)` в соответствии с миграцией `ExpandLaborDocumentationCodeTo450` и снимком модели. Ранее в fluent оставалось 100 — модель расходилась с БД, `MigrateAsync` в EF Core 10 выдавал `PendingModelChangesWarning` как ошибку и блокировал запуск.
+
+### Added (2026-05-14, Главная — методология и диаграмма σ)
+- `ProjectDashboardView.xaml`: секция «Методология оценки проектов» (Z-score, норма из снимка версии, пороги интерпретации), изображение `Assets/standard-deviation-interpretation.png` (шкала ±1σ); `ScrollViewer` для прокрутки длинного контента.
+- `docs/ui/dashboard.md`: описание новых элементов главной страницы.
+
+### Added (2026-05-13, P1: кеш ИИС + безопасность)
+- `IPerformanceService.InvalidateWorkDirectionHierarchyCache` + реализация в `PerformanceService`: сброс процессного кеша дерева направлений ИИС.
+- `IicWorkDirectionDirectoryCacheDecorator`: при `Invalidate` / `Upsert` / `Remove` кеша направлений ИИС вызывается сброс кеша производительности; регистрация в `App.xaml.cs` поверх `DirectoryCache<IicWorkDirection>`.
+- `ConnectionStringMasking.MaskForDisplay` — маскирование пароля в строке подключения для консоли/логов; `DbInitializer` переведён на неё вместо локального дубля.
+- `docs/security/security-notes.md` — краткий аудит и рекомендации.
+
+### Changed (2026-05-13, P1: инициализация БД при старте)
+- `App.xaml.cs` (`InitializeDatabaseAsync`): сбой **миграций** — модальное сообщение, `Log.Fatal`, завершение запуска (`Shutdown(1)`); сбой **сидирования** — `Log.Error`, диалог «Продолжить?» (по умолчанию «Нет» = выход).
+
+### Changed (2026-05-13, Безопасность: журнал входа)
+- `AuthenticationService.LoginAsync`: при неверном пароле описание в `UserActionLog` без имени пользователя в тексте (`Invalid password`).
+
 ### Added (2026-05-13, Локализация контекстных меню GridControl)
 - `EngineeringPerformance.App/Localization/RussianGridControlLocalizer.cs` + регистрация в `App.xaml.cs`: русские строки встроенных меню `GridControl` (сортировка, группировка, фильтры, итоги, выбор столбцов и др.). Пункты условного форматирования не переопределяются через устаревшие `GridControlStringId` — при необходимости отдельно подключается `ConditionalFormattingLocalizer`.
 

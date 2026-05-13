@@ -18,6 +18,9 @@ public sealed class PerformanceService : IPerformanceService
         _contextFactory = contextFactory;
     }
 
+    /// <inheritdoc />
+    public void InvalidateWorkDirectionHierarchyCache() => _workDirectionsCache = null;
+
     private async Task<List<IicWorkDirection>> GetWorkDirectionsAsync()
     {
         if (_workDirectionsCache is not null)

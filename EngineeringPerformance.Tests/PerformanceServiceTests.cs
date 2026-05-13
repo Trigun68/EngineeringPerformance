@@ -70,6 +70,30 @@ public sealed class PerformanceServiceTests
         indices[10].Should().BeLessThan(indices[12]);
     }
 
+    [Fact]
+    public async Task InvalidateWorkDirectionHierarchyCache_ReloadsIicTreeFromDatabase()
+    {
+        var factory = CreateFactory();
+        await SeedHierarchyAsync(factory);
+
+        var service = new PerformanceService(factory);
+        await service.GetPerformanceDataAsync(1, 1);
+
+        await using (var ctx = await factory.CreateDbContextAsync())
+        {
+            ctx.IicWorkDirections.Add(new IicWorkDirection { Id = 13, Name = "leaf-C", Code = "C", ParentId = 10 });
+            await ctx.SaveChangesAsync();
+        }
+
+        var beforeInvalidate = await service.GetPerformanceDataAsync(1, 1);
+        beforeInvalidate.Should().NotContain(r => r.WorkDirectionId == 13);
+
+        service.InvalidateWorkDirectionHierarchyCache();
+
+        var afterInvalidate = await service.GetPerformanceDataAsync(1, 1);
+        afterInvalidate.Should().Contain(r => r.WorkDirectionId == 13);
+    }
+
     /// <summary>
     /// Z-score родительского узла должен пересчитываться по агрегированной FactEstimate,
     /// а NormEstimate/NormStdDev брать строго из снимка норм (никаких вычислений сверху).

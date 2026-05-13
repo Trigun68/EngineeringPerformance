@@ -29,10 +29,8 @@ public sealed partial class UsersViewModel : DirectoryViewModelBase<User>
     {
         if (SelectedItem is null) return;
 
-        var itemId = SelectedItem.Id;
         if (OpenEditWindow is not null)
             await OpenEditWindow(SelectedItem);
-        await RefreshItemFromServiceAsync(itemId);
     }
 
     [RelayCommand]
@@ -40,8 +38,5 @@ public sealed partial class UsersViewModel : DirectoryViewModelBase<User>
     {
         if (OpenEditWindow is not null)
             await OpenEditWindow(null);
-
-        if (SelectedItem?.Id is int id && id > 0)
-            await RefreshItemFromServiceAsync(id);
     }
 }

@@ -40,13 +40,19 @@ public static class IicWorkDirectionDisplayUnit
     }
 
     /// <summary>
-    /// Наименование группы ИИС для UI: «Имя (ед. изм.)», единица — унаследованная по дереву справочника.
+    /// Наименование группы ИИС для UI: «Имя (ед. изм.)».
+    /// Для номенклатуры ФО сначала берется ед. изм. самой выбранной группы IIC,
+    /// и только если она не заполнена — наследуется от предков по дереву IIC.
     /// </summary>
     public static string FormatNameWithResolvedUnit(
         IicWorkDirection direction,
         IReadOnlyDictionary<int, IicWorkDirection> byId)
     {
-        var unitName = ResolveUnitName(direction, byId);
+        var ownUnitName = direction.Unit?.Name is string ownName && !string.IsNullOrWhiteSpace(ownName)
+            ? ownName.Trim()
+            : null;
+        var unitName = ownUnitName ?? ResolveUnitName(direction, byId);
+
         return string.IsNullOrWhiteSpace(unitName)
             ? direction.Name
             : $"{direction.Name} ({unitName})";

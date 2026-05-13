@@ -5,6 +5,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Services;
 
+/// <summary>
+/// Идемпотентное заполнение БД ролями, демо-пользователями, справочниками и тестовыми проектами.
+/// </summary>
+/// <remarks>
+/// Безопасность: при первом создании пользователей задаются пароли по умолчанию (см. метод <c>SeedUsersAsync</c>).
+/// В эксплуатации их необходимо сменить сразу после первого входа; учётные данные не предназначены для продакшена «как есть».
+/// </remarks>
 public static class DatabaseSeeder
 {
     /// <summary>

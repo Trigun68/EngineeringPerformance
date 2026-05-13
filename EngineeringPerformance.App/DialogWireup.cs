@@ -78,7 +78,16 @@ internal sealed class DialogWireup
         svc.SetOwnerWindow(_owner);
         var vm = _services.GetRequiredService<UsersViewModel>();
         vm.OwnerWindow = _owner;
-        vm.OpenEditWindow = async user => await svc.ShowEditDialogAsync(user);
+        vm.OpenEditWindow = async user =>
+        {
+            if (!await svc.ShowEditDialogAsync(user))
+                return;
+
+            if (user?.Id > 0)
+                await vm.RefreshItemFromServiceAsync(user.Id);
+            else
+                await vm.ReloadFromDatabaseAsync();
+        };
         _resetActions.Add(vm.Reset);
     }
 

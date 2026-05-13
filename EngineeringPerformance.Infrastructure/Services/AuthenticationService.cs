@@ -89,7 +89,8 @@ public sealed class AuthenticationService : IAuthenticationService
 
         if (user.PasswordHash is null || !VerifyPassword(password, user.PasswordHash))
         {
-            await _actionLog.LogAsync(user.Id, UserActionType.LoginFailed, description: $"Wrong password for «{username}»");
+            // В журнал БД — без имени пользователя в тексте (снижение утечки в экспорте при расследованиях).
+            await _actionLog.LogAsync(user.Id, UserActionType.LoginFailed, description: "Invalid password");
             throw new AuthenticationException("Invalid credentials");
         }
 

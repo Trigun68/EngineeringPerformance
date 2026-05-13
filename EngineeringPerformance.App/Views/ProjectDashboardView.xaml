@@ -8,39 +8,51 @@
         </Grid.RowDefinitions>
 
         <TextBlock Grid.Row="0" Text="Главная" FontSize="22" FontWeight="SemiBold"
-                   Foreground="#2C3E50" Margin="0,0,0,20" />
+                   Foreground="#2C3E50" Margin="0,0,0,16" />
 
-        <!-- Сетка плиток-индикаторов. Сегодня одна — активные проекты. -->
-        <UniformGrid Grid.Row="1" Columns="3" VerticalAlignment="Top">
-            <Border Background="#FFFFFF" CornerRadius="12" Padding="28,24" Margin="0,0,16,16"
-                    BorderBrush="#E2E8F0" BorderThickness="1">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Opacity="0.08" />
-                </Border.Effect>
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <!-- Сначала диаграмма (~80% от прежнего max 880 → 704) -->
+                <TextBlock Text="Интерпретация стандартного отклонения (σ)"
+                           FontSize="15" FontWeight="SemiBold" Foreground="#475569" Margin="0,0,0,10" />
 
-                    <StackPanel Grid.Row="0" Orientation="Horizontal">
-                        <Border Width="44" Height="44" CornerRadius="10" Background="#E8F4FD" Margin="0,0,12,0">
-                            <TextBlock Text="📁" FontSize="22"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <TextBlock Text="Активные проекты" FontSize="14" FontWeight="SemiBold"
-                                   Foreground="#64748B" VerticalAlignment="Center" />
+                <Border Background="#FFFFFF" CornerRadius="10" Padding="12" HorizontalAlignment="Left"
+                        BorderBrush="#E2E8F0" BorderThickness="1" MaxWidth="736">
+                    <Image Source="pack://application:,,,/Assets/standard-deviation-interpretation.png"
+                           Stretch="Uniform"
+                           MaxWidth="704"
+                           HorizontalAlignment="Left"
+                           SnapsToDevicePixels="True"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                </Border>
+
+                <TextBlock Text="Рисунок: распределение значения в диапазоне от −1σ до +1σ; цветовая шкала соответствует положению относительно среднего (0)."
+                           FontSize="12" Foreground="#94A3B8" Margin="0,10,0,20" TextWrapping="Wrap" MaxWidth="736" />
+
+                <!-- Описание методологии под рисунком -->
+                <TextBlock Text="Методология оценки проектов"
+                           FontSize="18" FontWeight="SemiBold" Foreground="#2C3E50" Margin="0,0,0,12" />
+
+                <Border Background="#F8FAFC" CornerRadius="10" Padding="20,18" Margin="0,0,0,24"
+                        BorderBrush="#E2E8F0" BorderThickness="1" MaxWidth="736">
+                    <StackPanel>
+                        <TextBlock TextWrapping="Wrap" Foreground="#334155" FontSize="14" LineHeight="22"
+                                   Margin="0,0,0,14">
+                            <Run FontWeight="SemiBold" Text="Базовая идея. " />
+                            <Run Text="Фактическая производительность по направлению ИИС сравнивается с нормативом, зафиксированным в снимке версии анализа. Для сопоставимости используется логарифм фактической производительности (часы на единицу объёма в единицах группы ИИС) — «оценка факта»; норма задаётся оценкой и стандартным отклонением нормы по тому же масштабу." />
+                        </TextBlock>
+                        <TextBlock TextWrapping="Wrap" Foreground="#334155" FontSize="14" LineHeight="22"
+                                   Margin="0,0,0,14">
+                            <Run FontWeight="SemiBold" Text="Z-score. " />
+                            <Run Text="Величина Z = (оценка факта − оценка нормы) / σ нормы показывает, на сколько стандартных отклонений факт отклоняется от нормы. В приложении меньшее Z (в сторону отрицательных значений) соответствует меньшим часам на единицу объёма, то есть более высокой производительности относительно нормы." />
+                        </TextBlock>
+                        <TextBlock TextWrapping="Wrap" Foreground="#334155" FontSize="14" LineHeight="22">
+                            <Run FontWeight="SemiBold" Text="Интерпретация в системе. " />
+                            <Run Text="Категории на вкладках анализа и в отчётах выводятся по порогам Z: Z &lt; −1 — отличная производительность; −1 ≤ Z &lt; −0,5 — хорошая; −0,5 ≤ Z ≤ 0,5 — удовлетворительная; 0,5 &lt; Z ≤ 1 — требует внимания; Z &gt; 1 — критически низкая производительность. Рисунок выше иллюстрирует положение значения в диапазоне ±1σ относительно нуля (среднее нормы)." />
+                        </TextBlock>
                     </StackPanel>
-
-                    <TextBlock Grid.Row="1" Text="{Binding ActiveProjectsCount}"
-                               FontSize="64" FontWeight="Bold" Foreground="#2980B9"
-                               Margin="0,16,0,0" />
-
-                    <TextBlock Grid.Row="2" Text="Проекты в работе"
-                               FontSize="13" Foreground="#94A3B8" Margin="0,4,0,0" />
-                </Grid>
-            </Border>
-        </UniformGrid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

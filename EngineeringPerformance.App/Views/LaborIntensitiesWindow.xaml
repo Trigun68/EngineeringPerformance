@@ -58,9 +58,11 @@
                                   AutoExpandAllNodes="False"
                                   ShowSearchPanelMode="Always"
                                   SearchPanelHighlightResults="True"
+                                  ShowGridMenu="TreeListView_ShowGridMenu"
                                   AllowDragDrop="True"
                                   DropRecord="TreeListView_DropRecord"
-                                  CompleteRecordDragDrop="TreeListView_CompleteRecordDragDrop" />
+                                  CompleteRecordDragDrop="TreeListView_CompleteRecordDragDrop">
+                </dxg:TreeListView>
             </dxg:GridControl.View>
         </dxg:GridControl>
     </Grid>

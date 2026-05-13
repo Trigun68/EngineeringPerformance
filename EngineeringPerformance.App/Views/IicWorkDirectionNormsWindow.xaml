@@ -46,11 +46,13 @@
                 <dxg:GridColumn FieldName="EffectiveTo" Header="Действует по" Width="120" />
             </dxg:GridControl.Columns>
             <dxg:GridControl.View>
-                <dxg:TreeListView KeyFieldName="Id"
+                <dxg:TreeListView x:Name="TreeListView"
+                                  KeyFieldName="Id"
                                   ParentFieldName="ParentId"
                                   AllowEditing="False"
                                   NavigationStyle="Row"
-                                  AutoExpandAllNodes="False" />
+                                  AutoExpandAllNodes="False"
+                                  ShowGridMenu="TreeListView_ShowGridMenu" />
             </dxg:GridControl.View>
         </dxg:GridControl>
     </Grid>

@@ -97,7 +97,12 @@ public partial class App : Application
 
         await _host.StartAsync();
 
-        await InitializeDatabaseAsync();
+        if (!await InitializeDatabaseAsync())
+        {
+            splashWindow.Close();
+            Shutdown(1);
+            return;
+        }
 
         if (_host.Services.GetRequiredService<IAppSettings>().AutoLoginEnabled)
             _currentUser = await TryAutoLoginAsync();
@@ -119,33 +124,58 @@ public partial class App : Application
         await ShowMainWindowAsync();
     }
 
-    private async Task InitializeDatabaseAsync()
+    /// <returns><c>false</c> — критическая ошибка (миграции или отказ после сидирования); запуск прервать.</returns>
+    private async Task<bool> InitializeDatabaseAsync()
     {
-        try
+        await using var scope = _host!.Services.CreateAsyncScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        // Шаг 1: миграции. На проде можно отключить переменной EP_SKIP_MIGRATIONS=true.
+        var skipMigrations = string.Equals(
+            Environment.GetEnvironmentVariable("EP_SKIP_MIGRATIONS"),
+            "true", StringComparison.OrdinalIgnoreCase);
+
+        if (!skipMigrations)
         {
-            await using var scope = _host!.Services.CreateAsyncScope();
-            var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            await using var context = await contextFactory.CreateDbContextAsync();
-
-            // Шаг 1: миграции. Отдельный try/catch — миграция не должна автоматически
-            // запускаться без согласия пользователя на проде, поэтому управляется флагом окружения.
-            // По умолчанию (Dev/локальная разработка) — применяется.
-            var skipMigrations = string.Equals(
-                Environment.GetEnvironmentVariable("EP_SKIP_MIGRATIONS"),
-                "true", StringComparison.OrdinalIgnoreCase);
-
-            if (!skipMigrations)
+            try
             {
                 await DatabaseSeeder.MigrateAsync(context);
             }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "EF Core migrations failed");
+                MessageBox.Show(
+                    "Не удалось применить миграции базы данных. Приложение будет закрыто. Подробности — в логах.\n\n"
+                    + ex.Message,
+                    "Критическая ошибка БД",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                return false;
+            }
+        }
 
-            // Шаг 2: сидинг (идемпотентен).
+        // Шаг 2: сидинг (идемпотентен). Сбой не всегда блокирует вход (например, частично заполненная БД).
+        try
+        {
             await DatabaseSeeder.SeedAsync(context);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Database seeding failed, will continue with login");
+            Log.Error(ex, "Database seeding failed");
+            var proceed = MessageBox.Show(
+                "Не удалось выполнить начальное заполнение БД (сидирование). Дальнейшая работа может быть некорректной.\n\n"
+                + ex.Message
+                + "\n\nПродолжить запуск?",
+                "Ошибка сидирования",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (proceed != MessageBoxResult.Yes)
+                return false;
         }
+
+        return true;
     }
 
     private async Task<UserDto?> TryAutoLoginAsync()
@@ -286,6 +316,13 @@ public partial class App : Application
         services.AddSingleton<IProjectAnalysisVersionCopyService, ProjectAnalysisVersionCopyService>();
 
         services.AddSingleton(typeof(IDirectoryCache<>), typeof(DirectoryCache<>));
+        // Кеш направлений ИИС синхронизирует сброс с PerformanceService (процессный кеш дерева).
+        services.AddSingleton(sp =>
+            new DirectoryCache<IicWorkDirection>(sp.GetRequiredService<IDirectoryService<IicWorkDirection>>()));
+        services.AddSingleton<IDirectoryCache<IicWorkDirection>>(sp =>
+            new IicWorkDirectionDirectoryCacheDecorator(
+                sp.GetRequiredService<DirectoryCache<IicWorkDirection>>(),
+                sp.GetRequiredService<IPerformanceService>()));
 
         services.AddSingleton<IicWorkDirectionNormService>();
         services.AddSingleton<IRegisterService<IicWorkDirectionNorm>>(sp => sp.GetRequiredService<IicWorkDirectionNormService>());
