@@ -71,6 +71,7 @@ public sealed class DataImportService : IDataImportService
             {
                 DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description),
                 DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, addMissingLaborToCatalog),
+                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description),
                 _ => new DataImportResult(false, 0, $"Unsupported import type: {dataType}", 0),
             };
         }
@@ -308,6 +309,172 @@ public sealed class DataImportService : IDataImportService
         // но конкретные «КИП-щиток без шифра» нужно разово обработать вручную.
         var successDetails = BuildPhysicalVolumeImportDetails(recordsImported, skippedNoEpCodeRows, skippedNotInCatalogRows);
         return new DataImportResult(true, recordsImported, null, iteration.Id, successDetails);
+    }
+
+    private async Task<DataImportResult> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        await ClearEquipmentDataForVersionAsync(context, projectId, versionId);
+
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = DataImportType.Equipment,
+            Description = description,
+            SourceFileName = Path.GetFileName(filePath),
+            ImportedAt = DateTime.UtcNow,
+        };
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+
+        using var workbook = new XLWorkbook(filePath);
+        var worksheet = GetEquipmentImportWorksheet(workbook);
+
+        if (!TryResolveEquipmentImportLayout(worksheet, out var columnMap, out var firstDataRowNumber))
+        {
+            await transaction.CommitAsync();
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            return new DataImportResult(
+                true,
+                0,
+                null,
+                iteration.Id,
+                "Импортировано строк: 0." + Environment.NewLine + Environment.NewLine
+                + "Выбранный лист не содержит шапки «Наименование по каталогу» или данных для чтения.");
+        }
+
+        var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? firstDataRowNumber - 1;
+        var catalogRows = await context.Equipments.AsNoTracking().ToListAsync();
+        var nameLookup = EquipmentImportCatalogMatcher.BuildNameLookup(catalogRows);
+        var pendingCatalogCreates = new List<Equipment>();
+        var autoCreatedCount = 0;
+        var importTimestamp = iteration.ImportedAt;
+        var newEntities = new List<ProjectEquipment>();
+
+        for (var rowNumber = firstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
+        {
+            var row = worksheet.Row(rowNumber);
+            if (!EquipmentImportRowHasData(row, columnMap))
+                continue;
+
+            var catalogName = GetWorksheetCellString(worksheet, rowNumber, columnMap.CatalogName)?.Trim();
+            if (string.IsNullOrWhiteSpace(catalogName))
+                continue;
+
+            var (equipment, created) = EquipmentImportCatalogMatcher.ResolveOrCreate(
+                catalogName, nameLookup, pendingCatalogCreates);
+            if (created)
+                autoCreatedCount++;
+
+            newEntities.Add(BuildProjectEquipmentFromImportRow(
+                row, columnMap, projectId, versionId, equipment, importTimestamp));
+        }
+
+        if (newEntities.Count == 0)
+        {
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return new DataImportResult(
+                true,
+                0,
+                null,
+                iteration.Id,
+                EquipmentImportCatalogMatcher.BuildImportSummary(0, autoCreatedCount));
+        }
+
+        if (pendingCatalogCreates.Count > 0)
+        {
+            context.Equipments.AddRange(pendingCatalogCreates);
+        }
+
+        context.ProjectEquipments.AddRange(newEntities);
+        iteration.RecordCount = newEntities.Count;
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        var details = EquipmentImportCatalogMatcher.BuildImportSummary(newEntities.Count, autoCreatedCount);
+        return new DataImportResult(true, newEntities.Count, null, iteration.Id, details);
+    }
+
+    private static bool EquipmentImportRowHasData(IXLRow row, EquipmentColumnMap map)
+    {
+        return !string.IsNullOrWhiteSpace(row.Cell(map.CatalogName).GetString())
+               || !string.IsNullOrWhiteSpace(row.Cell(map.Quantity).GetString());
+    }
+
+    private static ProjectEquipment BuildProjectEquipmentFromImportRow(
+        IXLRow row,
+        EquipmentColumnMap map,
+        int projectId,
+        int versionId,
+        Equipment equipment,
+        DateTime importTimestamp)
+    {
+        var fbsSource = row.Cell(map.FacilitySource).GetString()?.Trim();
+        var (facilityCode, facilityName) = SplitEquipmentFbs(fbsSource);
+
+        return new ProjectEquipment
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            Equipment = equipment,
+            CreatedAt = importTimestamp,
+            Quantity = ParseDecimal(row.Cell(map.Quantity).GetString()),
+            QuantityInWork = ParseNullableDecimal(row.Cell(map.QuantityInWork).GetString()),
+            PositionNumber = TruncateEquipmentField(row.Cell(map.PositionNumber).GetString(), 50),
+            FacilityCode = facilityCode,
+            FacilityName = facilityName,
+            DocumentSet = TruncateEquipmentField(row.Cell(map.DocumentSet).GetString(), 100),
+            DiagramNumber = TruncateEquipmentField(row.Cell(map.DiagramNumber).GetString(), 200),
+            ShortName = TruncateEquipmentField(row.Cell(map.ShortName).GetString(), 1000),
+            CatalogName = TruncateEquipmentField(row.Cell(map.CatalogName).GetString(), 1000),
+            TypeMark = TruncateEquipmentField(row.Cell(map.TypeMark).GetString(), 200),
+            CatalogId = TruncateEquipmentField(row.Cell(map.CatalogId).GetString(), 100),
+            Tag = TruncateEquipmentField(row.Cell(map.Tag).GetString(), 100),
+            FullEquipmentId = TruncateEquipmentField(row.Cell(map.FullEquipmentId).GetString(), 100),
+            SupplyStandard = TruncateEquipmentField(row.Cell(map.SupplyStandard).GetString(), 200),
+            OlReference = TruncateEquipmentField(row.Cell(map.OlReference).GetString(), 200),
+            EstimationBasis = TruncateEquipmentField(row.Cell(map.EstimationBasis).GetString(), 2000),
+        };
+    }
+
+    private static (string? Code, string? Name) SplitEquipmentFbs(string? fbs)
+    {
+        if (string.IsNullOrWhiteSpace(fbs))
+            return (null, null);
+
+        var idx = fbs.IndexOf(" - ", StringComparison.Ordinal);
+        if (idx <= 0)
+        {
+            var t = fbs.Trim();
+            return (TruncateEquipmentField(t, 100), TruncateEquipmentField(t, 500));
+        }
+
+        return (
+            TruncateEquipmentField(fbs[..idx].Trim(), 100),
+            TruncateEquipmentField(fbs[(idx + 3)..].Trim(), 500));
+    }
+
+    private static string? TruncateEquipmentField(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static decimal? ParseNullableDecimal(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return ParseDecimal(value);
     }
 
     private static string BuildPhysicalVolumeZeroImportDetails(
@@ -963,6 +1130,156 @@ public sealed class DataImportService : IDataImportService
         return workbook.Worksheets.Count > 0
             ? workbook.Worksheet(1)
             : throw new InvalidOperationException("В книге Excel нет листов с данными.");
+    }
+
+    private static IXLWorksheet GetEquipmentImportWorksheet(XLWorkbook workbook)
+    {
+        IXLWorksheet? best = null;
+        long bestScore = -1;
+
+        foreach (var ws in workbook.Worksheets)
+        {
+            if (ws.RangeUsed() is null)
+                continue;
+
+            var score = ScoreWorksheetForEquipmentImport(ws);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = ws;
+            }
+        }
+
+        return best ?? GetFirstWorksheetWithData(workbook);
+    }
+
+    private static long ScoreWorksheetForEquipmentImport(IXLWorksheet ws)
+    {
+        var used = ws.RangeUsed();
+        if (used is null)
+            return -1;
+
+        long score = (long)used.RowCount() * used.ColumnCount();
+
+        if (TryFindEquipmentHeaderRow(ws, out _))
+            score += 50_000_000L;
+
+        var name = ws.Name;
+        if (name.Contains("оборуд", StringComparison.OrdinalIgnoreCase))
+            score += 5_000_000L;
+
+        return score;
+    }
+
+    private static bool TryResolveEquipmentImportLayout(
+        IXLWorksheet worksheet,
+        out EquipmentColumnMap columnMap,
+        out int firstDataRowNumber)
+    {
+        columnMap = default;
+        firstDataRowNumber = 4;
+
+        if (worksheet.RangeUsed() is null)
+            return false;
+
+        if (!TryFindEquipmentHeaderRow(worksheet, out var headerRow))
+            return false;
+
+        if (!TryBuildEquipmentColumnMap(worksheet, headerRow, out columnMap))
+            return false;
+
+        firstDataRowNumber = headerRow + 1;
+        return true;
+    }
+
+    private static bool TryFindEquipmentHeaderRow(IXLWorksheet worksheet, out int headerRow)
+    {
+        headerRow = 0;
+        var lastRow = Math.Min(worksheet.LastRowUsed()?.RowNumber() ?? 0, 15);
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var lastCol = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+            for (var col = 1; col <= lastCol; col++)
+            {
+                var text = GetWorksheetCellString(worksheet, row, col);
+                if (text is not null
+                    && text.Contains("Наименование по каталогу", StringComparison.OrdinalIgnoreCase))
+                {
+                    headerRow = row;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryBuildEquipmentColumnMap(IXLWorksheet worksheet, int headerRow, out EquipmentColumnMap map)
+    {
+        map = default;
+        var lastCol = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+        var columns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (var col = 1; col <= lastCol; col++)
+        {
+            var text = GetWorksheetCellString(worksheet, headerRow, col)?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+
+            columns.TryAdd(text, col);
+        }
+
+        if (!columns.TryGetValue("Наименование по каталогу", out var catalogNameCol))
+            return false;
+
+        map = new EquipmentColumnMap
+        {
+            PositionNumber = FindEquipmentColumn(columns, "№ позиции в основном списке", 1),
+            FacilitySource = FindEquipmentColumn(columns, "FBS (Code and Title of Facility)", 3),
+            DocumentSet = FindEquipmentColumn(columns, "Комплект документов", 4),
+            DiagramNumber = FindEquipmentColumn(
+                columns,
+                "Диаграмма No / PFD No / P&ID No/ Datasheet No",
+                5),
+            ShortName = FindEquipmentColumn(columns, "Наименование краткое", 6),
+            CatalogName = catalogNameCol,
+            TypeMark = FindEquipmentColumn(columns, "Тип/Марка оборудования", 8),
+            CatalogId = FindEquipmentColumn(columns, "ID по каталогу", 9),
+            Tag = FindEquipmentColumn(columns, "TAG", 10),
+            FullEquipmentId = FindEquipmentColumn(columns, "ID обор. полный", 11),
+            SupplyStandard = FindEquipmentColumn(columns, "Стандарт на поставку", 12),
+            OlReference = FindEquipmentColumn(columns, "ОЛ", 13),
+            Quantity = FindEquipmentColumn(columns, "Всего, (ед)", 14),
+            QuantityInWork = FindEquipmentColumn(columns, "В работе, (ед)", 15),
+            EstimationBasis = FindEquipmentColumn(columns, "Базис оценки", 16),
+        };
+
+        return true;
+    }
+
+    private static int FindEquipmentColumn(IReadOnlyDictionary<string, int> columns, string header, int fallback)
+    {
+        return columns.TryGetValue(header, out var col) ? col : fallback;
+    }
+
+    private readonly struct EquipmentColumnMap
+    {
+        public int PositionNumber { get; init; }
+        public int FacilitySource { get; init; }
+        public int DocumentSet { get; init; }
+        public int DiagramNumber { get; init; }
+        public int ShortName { get; init; }
+        public int CatalogName { get; init; }
+        public int TypeMark { get; init; }
+        public int CatalogId { get; init; }
+        public int Tag { get; init; }
+        public int FullEquipmentId { get; init; }
+        public int SupplyStandard { get; init; }
+        public int OlReference { get; init; }
+        public int Quantity { get; init; }
+        public int QuantityInWork { get; init; }
+        public int EstimationBasis { get; init; }
     }
 
     /// <summary>
@@ -1747,11 +2064,6 @@ public sealed class DataImportService : IDataImportService
         };
     }
 
-    /// <summary>
-    /// Удаляет ВСЕ записи ФО и связанные итерации импорта для указанной версии проекта.
-    /// Вызывается в начале нового импорта (режим «замена»): каждый новый импорт
-    /// полностью заменяет предыдущие данные, что исключает дубли и устаревшие итерации.
-    /// </summary>
     private static async Task ClearPhysicalVolumeDataForVersionAsync(AppDbContext context, int projectId, int versionId)
     {
         var existingVolumes = await context.ProjectPhysicalVolumes
@@ -1775,6 +2087,34 @@ public sealed class DataImportService : IDataImportService
         }
 
         if (existingVolumes.Count > 0 || existingIterations.Count > 0)
+        {
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task ClearEquipmentDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        if (existing.Count > 0)
+        {
+            context.ProjectEquipments.RemoveRange(existing);
+        }
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.Equipment)
+            .ToListAsync();
+
+        if (existingIterations.Count > 0)
+        {
+            context.DataImportIterations.RemoveRange(existingIterations);
+        }
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
         {
             await context.SaveChangesAsync();
         }
