@@ -28,9 +28,12 @@ public sealed partial class IterationDeleteDialogViewModel : ObservableObject
     [ObservableProperty] private IterationItem? _selectedIteration;
     [ObservableProperty] private string? _errorMessage;
 
-    public string WindowTitle => DataType == DataImportType.PhysicalVolume
-        ? "Удаление итерации физических объёмов"
-        : "Удаление итерации трудоёмкости";
+    public string WindowTitle => DataType switch
+    {
+        DataImportType.PhysicalVolume => "Удаление итерации физических объёмов",
+        DataImportType.Equipment => "Удаление итерации данных оборудования",
+        _ => "Удаление итерации трудоёмкости",
+    };
 
     public IterationDeleteDialogViewModel(
         IDataImportService importService,
@@ -87,9 +90,12 @@ public sealed partial class IterationDeleteDialogViewModel : ObservableObject
             var userId = _currentUser.User?.Id;
             if (userId is not null)
             {
-                var actionType = DataType == DataImportType.PhysicalVolume
-                    ? UserActionType.PhysicalVolumeDelete
-                    : UserActionType.LaborIntensityDelete;
+                var actionType = DataType switch
+                {
+                    DataImportType.PhysicalVolume => UserActionType.PhysicalVolumeDelete,
+                    DataImportType.Equipment => UserActionType.EquipmentDelete,
+                    _ => UserActionType.LaborIntensityDelete,
+                };
                 var desc = $"ProjectId={ProjectId}, VersionId={VersionId}, importedAt={iterationToDelete.ImportedAt:O}, rows={iterationToDelete.RecordCount}";
                 await _actionLog.LogAsync(userId.Value, actionType, entityType: "ProjectAnalysisVersion", entityId: VersionId, description: desc);
             }

@@ -26,13 +26,19 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private DataImportResult? _importResult;
 
-    public string WindowTitle => DataType == DataImportType.PhysicalVolume
-        ? "Импорт физических объёмов"
-        : "Импорт трудоёмкости";
+    public string WindowTitle => DataType switch
+    {
+        DataImportType.PhysicalVolume => "Импорт физических объёмов",
+        DataImportType.Equipment => "Импорт данных оборудования",
+        _ => "Импорт трудоёмкости",
+    };
 
-    public string DataTypeDisplayText => DataType == DataImportType.PhysicalVolume
-        ? "Физические объёмы"
-        : "Трудоёмкость";
+    public string DataTypeDisplayText => DataType switch
+    {
+        DataImportType.PhysicalVolume => "Физические объёмы",
+        DataImportType.Equipment => "Оборудование",
+        _ => "Трудоёмкость",
+    };
 
     public DataImportDialogViewModel(
         IDataImportService importService,
@@ -61,12 +67,13 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
     {
         var dialog = new OpenFileDialog
         {
-            Filter = DataType == DataImportType.PhysicalVolume
-                ? "Excel files (*.xlsx;*.xls)|*.xlsx;*.xls|All files (*.*)|*.*"
-                : "Excel files (*.xlsx;*.xls)|*.xlsx;*.xls|All files (*.*)|*.*",
-            Title = DataType == DataImportType.PhysicalVolume
-                ? "Выберите файл с физическими объёмами"
-                : "Выберите файл с трудоёмкостью",
+            Filter = "Excel files (*.xlsx;*.xls)|*.xlsx;*.xls|All files (*.*)|*.*",
+            Title = DataType switch
+            {
+                DataImportType.PhysicalVolume => "Выберите файл с физическими объёмами",
+                DataImportType.Equipment => "Выберите файл с данными оборудования",
+                _ => "Выберите файл с трудоёмкостью",
+            },
         };
 
         if (dialog.ShowDialog() == true)
@@ -177,9 +184,12 @@ public sealed partial class DataImportDialogViewModel : ObservableObject
                 var userId = _currentUser.User?.Id;
                 if (userId is not null)
                 {
-                    var actionType = DataType == DataImportType.PhysicalVolume
-                        ? UserActionType.PhysicalVolumeImport
-                        : UserActionType.LaborIntensityImport;
+                    var actionType = DataType switch
+                    {
+                        DataImportType.PhysicalVolume => UserActionType.PhysicalVolumeImport,
+                        DataImportType.Equipment => UserActionType.EquipmentImport,
+                        _ => UserActionType.LaborIntensityImport,
+                    };
                     var desc = $"ProjectId={ProjectId}, VersionId={VersionId}, rows={ImportResult.RecordsImported}, file={Path.GetFileName(SelectedFilePath)}";
                     await _actionLog.LogAsync(userId.Value, actionType, entityType: "ProjectAnalysisVersion", entityId: VersionId, description: desc);
                 }

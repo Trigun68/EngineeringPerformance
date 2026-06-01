@@ -120,10 +120,26 @@
                             </Button>
                             <Button Command="{Binding DeletePlanPhysicalVolumesCommand}"
                                     IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
-                                    Height="32" Padding="10,0" ToolTip="Удалить физические объёмы">
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Удалить физические объёмы">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Удалить ФО" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding ImportPlanEquipmentCommand}"
+                                    IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Импорт данных оборудования">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="Импорт оборуд." VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding DeletePlanEquipmentCommand}"
+                                    IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                    Height="32" Padding="10,0" ToolTip="Удалить данные оборудования">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="Удалить оборуд." VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -346,10 +362,18 @@
                                 <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
                                     <Button Command="{Binding ExportDetailForecastToExcelCommand}"
                                             IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
-                                            Margin="0,0,0,0" Width="160" Height="36" ToolTip="Экспорт в Excel">
+                                            Margin="0,0,0,6" Width="160" Height="36" ToolTip="Экспорт в Excel">
                                         <StackPanel Orientation="Horizontal">
                                             <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
                                             <TextBlock Text="Экспорт Excel" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Command="{Binding ExportDetailForecastSummaryTableCommand}"
+                                            IsEnabled="{Binding PlanVersionId, Converter={StaticResource NullToBool}}"
+                                            Margin="0,0,0,0" Width="160" Height="36" ToolTip="Сводная таблица по объектам и группам IIC">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                            <TextBlock Text="Сводная таблица" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
@@ -403,6 +427,22 @@
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
                                     <TextBlock Text="Удалить ФО" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding ImportFactEquipmentCommand}"
+                                    IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Импорт данных оборудования">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="Импорт оборуд." VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Command="{Binding DeleteFactEquipmentCommand}"
+                                    IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                    Height="32" Padding="10,0" Margin="0,0,6,0" ToolTip="Удалить данные оборудования">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                    <TextBlock Text="Удалить оборуд." VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Command="{Binding ImportLaborIntensitiesCommand}"
@@ -470,17 +510,18 @@
                                     </dxg:GridControl.TotalSummary>
                                     <dxg:GridControl.View>
                                         <dxg:TreeListView AllowEditing="False" AllowSorting="False"
-                                                          NavigationStyle="Row"
-                                                          KeyFieldName="Id" ParentFieldName="ParentId"
-                                                          AutoWidth="True" ShowIndicator="False"
-                                                          ShowVerticalLines="False"
-                                                          ShowTotalSummary="True" />
+                                                      NavigationStyle="Row"
+                                                      KeyFieldName="Id" ParentFieldName="ParentId"
+                                                      AutoWidth="False" ShowIndicator="False"
+                                                      ShowVerticalLines="False"
+                                                      ShowTotalSummary="True" />
                                     </dxg:GridControl.View>
                                 </dxg:GridControl>
 
                                 <StackPanel Grid.Column="1" Orientation="Vertical" Margin="8,0,0,0" VerticalAlignment="Top">
                                     <Button Content="📊 Анализ версии" Command="{Binding OpenVersionAnalysisCommand}"
                                             IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            ToolTip="Открывает экран «Анализ версии проекта» для выбранной версии факта. Версии плана — только из карточки проекта."
                                             Background="#3498DB" Foreground="Black" BorderThickness="0"
                                             Width="160" Height="36" Cursor="Hand" />
                                 </StackPanel>
@@ -645,6 +686,7 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="8" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
@@ -684,14 +726,34 @@
                         </StackPanel>
                     </Grid>
 
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Command="{Binding ImportCompareEquipmentCommand}"
+                                IsEnabled="{Binding CompareVersionAId, Converter={StaticResource NullToBool}}"
+                                Height="32" Padding="10,0" Margin="0,0,6,0"
+                                ToolTip="Импорт данных оборудования (версия А)">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="/Assets/icons8-microsoft-excel-2019-48.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                <TextBlock Text="Импорт оборуд." VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding DeleteCompareEquipmentCommand}"
+                                IsEnabled="{Binding CompareVersionAId, Converter={StaticResource NullToBool}}"
+                                Height="32" Padding="10,0" ToolTip="Удалить данные оборудования (версия А)">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="/Assets/icons8-delete-96.png" Width="16" Height="16" Margin="0,0,6,0" />
+                                <TextBlock Text="Удалить оборуд." VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
                     <!-- Чек-бокс «Показывать различия» -->
-                    <CheckBox Grid.Row="1" Content="Показывать различия"
+                    <CheckBox Grid.Row="2" Content="Показывать различия"
                               IsChecked="{Binding CompareShowOnlyDifferences}"
                               IsEnabled="{Binding HasCompareData}"
                               Margin="0,8,0,0" />
 
                     <!-- Внутренние вкладки -->
-                    <dx:DXTabControl Grid.Row="3">
+                    <dx:DXTabControl Grid.Row="4">
 
                         <!-- Вкладка: Итого -->
                         <dx:DXTabItem Header="Итого">
@@ -758,7 +820,7 @@
                                     <dxg:TreeListView AllowEditing="False" AllowSorting="False"
                                                       NavigationStyle="Row"
                                                       KeyFieldName="Id" ParentFieldName="ParentId"
-                                                      AutoWidth="True" ShowIndicator="False"
+                                                      AutoWidth="False" ShowIndicator="False"
                                                       ShowVerticalLines="False" />
                                 </dxg:GridControl.View>
                             </dxg:GridControl>
@@ -949,12 +1011,14 @@
                                 <TextBlock Text="Оценка факта" FontWeight="SemiBold" FontSize="14"
                                            Foreground="#1A5276" Margin="0,0,0,8" />
                                 <TextBlock Foreground="#5D6D7E" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12">
-                                    Отчёт по производительности: физ. объёмы, трудоёмкость, Z-score по направлениям ИИС.
-                                    Требуется выбранная версия факта на вкладке «Оценка факта».
+                                    Отчёт по производительности: физ. объёмы, трудоёмкость, Z-score по направлениям IIC.
+                                    На странице «Проекты» доступен только для версии факта (вкладка «Оценка факта»).
+                                    Для версии плана откройте карточку проекта → «Анализ версии проекта».
                                 </TextBlock>
                                 <StackPanel Orientation="Horizontal">
                                     <Button Command="{Binding OpenVersionAnalysisCommand}"
                                             IsEnabled="{Binding FactVersionId, Converter={StaticResource NullToBool}}"
+                                            ToolTip="Экран «Анализ версии проекта» — только выбранная версия факта. Для плана используйте карточку проекта."
                                             Background="#3498DB" Foreground="Black" BorderThickness="0"
                                             Padding="12,8" Margin="0,0,8,0" Cursor="Hand">
                                         <StackPanel Orientation="Horizontal">

@@ -275,12 +275,14 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             await using var ctxCl = await _contextFactory.CreateDbContextAsync();
             var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
+                .Include(d => d.Unit)
                 .ToDictionaryAsync(c => c.Id);
 
             await using var ctx = await _contextFactory.CreateDbContextAsync();
             var pvTask = ctx.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
+                    .ThenInclude(p => p!.Unit)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId
                              && pv.PhysicalVolume!.IsAssessment == true
@@ -291,6 +293,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var pvAllTask = ctx2.ProjectPhysicalVolumes
                 .AsNoTracking()
                 .Include(pv => pv.PhysicalVolume)
+                    .ThenInclude(p => p!.Unit)
                 .Where(pv => pv.ProjectId == projectId
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
@@ -308,6 +311,18 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var physicalVolumesAll = pvAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
+
+            // Ед. изм. для «Итого» — из справочника групп ФО IIC.
+            // Сначала берём собственную ед. изм. группы (Unit.Name), как в окне справочника IicWorkDirections.
+            // Только если у группы нет своей ед. изм. — наследуем от ближайшего предка вверх по дереву.
+            string ResolveIicGroupUnitName(int workDirectionId)
+            {
+                if (workDirectionId < 0 || !classifierMap.TryGetValue(workDirectionId, out var dir))
+                    return string.Empty;
+                if (dir.Unit?.Name is string ownName && !string.IsNullOrWhiteSpace(ownName))
+                    return ownName.Trim();
+                return IicWorkDirectionDisplayUnit.ResolveUnitName(dir, classifierMap) ?? string.Empty;
+            }
 
             // ── Вкладка «Итого»: иерархия направлений ──────────────────────
             var childrenByParent = data
@@ -346,7 +361,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     Code = row.WorkDirectionCode,
                     Name = row.WorkDirectionName,
                     DisplayName = indent + row.WorkDirectionName,
-                    NormUnitName = row.NormUnitName ?? string.Empty,
+                    NormUnitName = ResolveIicGroupUnitName(row.WorkDirectionId),
                     FactPhysicalVolume = row.FactPhysicalVolume,
                     NormProductivity = row.NormProductivity,
                     BaseHours = ownBase,
@@ -377,7 +392,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     Id = row.WorkDirectionId,
                     Name = $"Итого: {row.WorkDirectionName}",
                     DisplayName = indent + $"Итого: {row.WorkDirectionName}",
-                    NormUnitName = row.NormUnitName ?? string.Empty,
+                    NormUnitName = ResolveIicGroupUnitName(row.WorkDirectionId),
                     FactPhysicalVolume = null,
                     NormProductivity = null,
                     BaseHours = aggBase > 0 ? aggBase : null,
@@ -433,7 +448,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 });
             }
 
-            ForecastData = new ObservableCollection<ForecastPerformanceItem>(result);
+            // Итоги только для корневых элементов (Level=0) и общий итог (Level=-1)
+            ForecastData = new ObservableCollection<ForecastPerformanceItem>(
+                result.Where(r => !r.IsTotal || r.Level <= 0));
 
             // ── Вкладка «По объектам»: агрегат по FacilityCode ─────────────
             var normByDirection = data
@@ -505,6 +522,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 {
                     ProjectPhysicalVolumeId = pv.Id,
                     PhysicalVolumeId      = pv.PhysicalVolumeId,
+                    ClassifierId          = pv.PhysicalVolume?.ClassifierId,
                     NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid) ? nid : null,
                     FacilityCode          = pv.FacilityCode ?? string.Empty,
                     FacilityName          = pv.FacilityName ?? string.Empty,
@@ -520,8 +538,10 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
                     IsAssessment          = isAssessment ? "Да" : "Нет",
                     Coefficient           = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl) ? $"{cl.Code} {cl.Name}" : string.Empty,
-                    IicUnitName           = norm?.NormUnitName ?? string.Empty,
+                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl)
+                        ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(cl, classifierMap)
+                        : string.Empty,
+                    IicUnitName           = IicWorkDirectionDisplayUnit.ResolvePhysicalVolumeUnitName(pv.PhysicalVolume) ?? string.Empty,
                     NormProductivity      = norm?.NormProductivity,
                     NormStdDev            = norm?.NormStdDev,
                     Quantity              = pv.Quantity,
@@ -562,6 +582,24 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
         SetDialogOwners();
         var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result) await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task ImportPlanEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.Equipment);
+        if (result is { Success: true }) await LoadForecastDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task DeletePlanEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.Equipment);
         if (result) await LoadForecastDataAsync(pid, vid);
     }
 
@@ -723,7 +761,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             // ── Вкладки «Детально» и «По объектам» ────────────────────────
             var normByDirection = data
                 .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
-                .ToDictionary(r => r.WorkDirectionId);
+                .GroupBy(r => r.WorkDirectionId)
+                .ToDictionary(g => g.Key, g => g.First());
 
             var (detailRows, facilityRows) = ComputeFactRows(
                 physicalVolumesAll,
@@ -757,8 +796,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IReadOnlyList<FactFacilityRow> facilityA,
         IReadOnlyList<FactFacilityRow> facilityB)
     {
-        var dictA = facilityA.ToDictionary(f => f.Code);
-        var dictB = facilityB.ToDictionary(f => f.Code);
+        var dictA = facilityA
+            .GroupBy(f => f.Code)
+            .ToDictionary(g => g.Key, g => g.First());
+        var dictB = facilityB
+            .GroupBy(f => f.Code)
+            .ToDictionary(g => g.Key, g => g.First());
         var allCodes = dictA.Keys.Union(dictB.Keys).OrderBy(c => c);
 
         var result = new List<VersionCompareFacilityRow>();
@@ -801,30 +844,35 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IReadOnlyList<FactDetailRow> detailA,
         IReadOnlyList<FactDetailRow> detailB)
     {
+        static decimal? AverageProductivity(IEnumerable<FactDetailRow> rows)
+        {
+            var values = rows
+                .Where(d => d.FactProductivity.HasValue)
+                .Select(d => d.FactProductivity!.Value)
+                .ToList();
+            return values.Count > 0 ? values.Average() : null;
+        }
+
         // Группируем по ключу и суммируем (на случай дубликатов)
         var groupedA = detailA
             .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
-            .Select(g => new
-            {
-                Key = g.Key,
-                First = g.First(),
-                Quantity = g.Sum(d => d.Quantity),
-                FactLaborHours = g.Sum(d => d.FactLaborHours ?? 0m),
-                FactProductivity = g.Where(d => d.FactProductivity.HasValue).Average(d => d.FactProductivity!.Value)
-            })
-            .ToDictionary(x => x.Key);
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    First: g.First(),
+                    Quantity: g.Sum(d => d.Quantity),
+                    FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
+                    FactProductivity: AverageProductivity(g)));
 
         var groupedB = detailB
             .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
-            .Select(g => new
-            {
-                Key = g.Key,
-                First = g.First(),
-                Quantity = g.Sum(d => d.Quantity),
-                FactLaborHours = g.Sum(d => d.FactLaborHours ?? 0m),
-                FactProductivity = g.Where(d => d.FactProductivity.HasValue).Average(d => d.FactProductivity!.Value)
-            })
-            .ToDictionary(x => x.Key);
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    First: g.First(),
+                    Quantity: g.Sum(d => d.Quantity),
+                    FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
+                    FactProductivity: AverageProductivity(g)));
 
         var allKeys = groupedA.Keys.Union(groupedB.Keys)
             .OrderBy(k => k.FacilityCode)
@@ -846,13 +894,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var hoursB = hasB && rowB!.FactLaborHours > 0 ? (decimal?)Math.Round(rowB.FactLaborHours, 2) : null;
             var hoursDelta = (hoursA.HasValue && hoursB.HasValue) ? hoursB.Value - hoursA.Value : (decimal?)null;
 
-            var prodA = hasA ? (decimal?)rowA!.FactProductivity : null;
-            var prodB = hasB ? (decimal?)rowB!.FactProductivity : null;
+            var prodA = hasA ? rowA!.FactProductivity : null;
+            var prodB = hasB ? rowB!.FactProductivity : null;
             var prodDelta = (prodA.HasValue && prodB.HasValue) ? prodB.Value - prodA.Value : (decimal?)null;
 
             var presence = (hasA && hasB) ? "A+B" : hasA ? "только A" : "только B";
 
-            var refRow = rowB?.First ?? rowA?.First;
+            var refRow = hasB ? rowB.First : hasA ? rowA.First : null;
 
             result.Add(new VersionCompareDetailRow
             {
@@ -1101,7 +1149,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         var normByDirection = perfData
             .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
-            .ToDictionary(r => r.WorkDirectionId);
+            .GroupBy(r => r.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First());
 
         return ComputeFactRows(
             physicalVolumesAll,
@@ -1126,6 +1175,24 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
         SetDialogOwners();
         var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.PhysicalVolume);
+        if (result) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task ImportFactEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.Equipment);
+        if (result is { Success: true }) await LoadFactDataAsync(pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task DeleteFactEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.Equipment);
         if (result) await LoadFactDataAsync(pid, vid);
     }
 
@@ -1177,6 +1244,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
+        // Разрешены и план, и факт — без фильтра по направлению
         var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName);
         if (versionId is not int vid) return;
         CompareVersionAId = vid;
@@ -1192,6 +1260,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
+        // Разрешены и план, и факт — без фильтра по направлению
         var versionId = await _versionPickerDialog.ShowPickerAsync(pid, SelectedProjectName);
         if (versionId is not int vid) return;
         CompareVersionBId = vid;
@@ -1200,6 +1269,24 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         CompareVersionBName = ver?.VersionName ?? string.Empty;
         CompareVersionBLabel = BuildVersionLabel(ver);
         await RunCompareAsync();
+    }
+
+    [RelayCommand]
+    private async Task ImportCompareEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || CompareVersionAId is not int vid) return;
+        SetDialogOwners();
+        var result = await _dataImportDialog.ShowImportDialogAsync(pid, vid, DataImportType.Equipment);
+        if (result is { Success: true }) await RunCompareAsync();
+    }
+
+    [RelayCommand]
+    private async Task DeleteCompareEquipmentAsync()
+    {
+        if (SelectedProjectId is not int pid || CompareVersionAId is not int vid) return;
+        SetDialogOwners();
+        var result = await _iterationDeleteDialog.ShowDeleteDialogAsync(pid, vid, DataImportType.Equipment);
+        if (result) await RunCompareAsync();
     }
 
     private async Task RunCompareAsync()
@@ -1213,12 +1300,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         {
             IsLoading = true;
             ErrorMessage = null;
-            var dataA = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidA));
-            var dataB = await Task.Run(() => _performanceService.GetPerformanceDataAsync(pid, vidB));
+            var dataA = await _performanceService.GetPerformanceDataAsync(pid, vidA);
+            var dataB = await _performanceService.GetPerformanceDataAsync(pid, vidB);
 
             // ── Вкладка «Итого» ──────────────────────────────────────────────
-            var dictA = dataA.ToDictionary(r => r.WorkDirectionId);
-            var dictB = dataB.ToDictionary(r => r.WorkDirectionId);
+            var dictA = dataA
+                .GroupBy(r => r.WorkDirectionId)
+                .ToDictionary(g => g.Key, g => g.First());
+            var dictB = dataB
+                .GroupBy(r => r.WorkDirectionId)
+                .ToDictionary(g => g.Key, g => g.First());
             var allIds = dictA.Keys.Union(dictB.Keys).ToList();
 
             var items = new ObservableCollection<VersionCompareRow>();
@@ -1227,14 +1318,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 dictA.TryGetValue(id, out var a);
                 dictB.TryGetValue(id, out var b);
 
-                // Хотя бы одно из значений должно существовать (id из Union ключей)
                 if (a is null && b is null)
-                {
-                    continue; // Пропускаем невалидные записи
-                }
+                    continue;
 
                 var row = a ?? b!;
-                var zDelta = (b?.ZScore ?? a?.ZScore) - (a?.ZScore ?? b?.ZScore);
+                decimal? zDelta = a?.ZScore.HasValue == true && b?.ZScore.HasValue == true
+                    ? b.ZScore - a.ZScore
+                    : null;
                 items.Add(new VersionCompareRow
                 {
                     Id = row.WorkDirectionId,
@@ -1267,7 +1357,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Ошибка загрузки данных сравнения: {ex.Message}\n\nStack trace:\n{ex.StackTrace}";
+            var root = ex.InnerException ?? ex;
+            ErrorMessage = $"Ошибка ({root.GetType().Name}): {root.Message}";
         }
         finally
         {
@@ -1455,11 +1546,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
             var rows = ForecastData
-                .Select(r => new ForecastSummaryRowDto(
-                    r.Code, r.Name, r.DisplayName, r.NormUnitName,
-                    r.FactPhysicalVolume, r.NormProductivity,
-                    r.BaseHours, r.OptimisticHours, r.PessimisticHours,
-                    r.IsTotal, r.Level))
+                .Select(static r => r.ToExportDto())
                 .ToList();
             await _forecastExportService.ExportForecastSummaryToExcelAsync(rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
@@ -1567,16 +1654,75 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             ErrorMessage = null;
             var rows = DetailForecastData
                 .Where(r => !r.IsTotal)
-                .Select(r => new DetailForecastRowDto(
-                    r.FacilityCode, r.FacilityName, r.BindingType, r.DocumentSet,
-                    r.CatalogId, r.Tag, r.WorkId, r.WorkName, r.WorkComment,
-                    r.EstimationBasis, r.PvCode, r.PvName, r.IsAssessment,
-                    r.Coefficient, r.IicGroupName, r.IicUnitName,
-                    r.NormProductivity, r.NormStdDev, r.Quantity,
-                    r.BaseHours, r.OptimisticHours, r.PessimisticHours))
+                .Select(static r => r.ToExportDto())
                 .ToList();
             await _forecastExportService.ExportDetailForecastToExcelAsync(
                 rows, SelectedProjectCode, PlanVersionName, dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Ошибка экспорта: {ex.Message}";
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ExportDetailForecastSummaryTableAsync()
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сводная таблица прогноза",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"СводнаяТаблица_{SelectedProjectCode}_{PlanVersionName}.xlsx",
+            DefaultExt = "xlsx",
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            IsLoading = true;
+            ErrorMessage = null;
+
+            await using var ctx = await _contextFactory.CreateDbContextAsync();
+            var directions = await ctx.IicWorkDirections.AsNoTracking()
+                .Include(d => d.Unit)
+                .Where(d => !d.IsArchived)
+                .OrderBy(d => d.SortOrder)
+                .ThenBy(d => d.Name)
+                .Select(d => new IicDirectionNodeDto(
+                    d.Id,
+                    d.ParentId,
+                    d.Name,
+                    d.Code,
+                    d.SortOrder,
+                    d.Unit != null ? d.Unit.Name : null))
+                .ToListAsync();
+
+            var inputRows = DetailForecastData
+                .Where(r => !r.IsTotal)
+                .Select(r => new DetailForecastSummaryInputRow(
+                    r.FacilityCode,
+                    r.FacilityName,
+                    r.ClassifierId,
+                    r.Quantity,
+                    r.Coefficient,
+                    r.BaseHours))
+                .ToList();
+
+            var table = DetailForecastSummaryTableBuilder.Build(
+                inputRows,
+                directions,
+                SelectedProjectCode,
+                PlanVersionName);
+
+            await _forecastExportService.ExportDetailForecastSummaryTableToExcelAsync(table, dlg.FileName);
             MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
@@ -1990,6 +2136,13 @@ public sealed class ForecastPerformanceItem
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
     public int Level { get; set; }
+
+    /// <summary>Строка для Excel/PDF — те же значения, что в колонках грида «Итого» (прогноз).</summary>
+    public ForecastSummaryRowDto ToExportDto() => new(
+        Code, Name, DisplayName, NormUnitName,
+        FactPhysicalVolume, NormProductivity,
+        BaseHours, OptimisticHours, PessimisticHours,
+        IsTotal, Level);
 }
 
 public sealed class VersionCompareRow
@@ -2105,6 +2258,7 @@ public sealed class DetailForecastItem
 {
     public int ProjectPhysicalVolumeId { get; set; }
     public int PhysicalVolumeId { get; set; }
+    public int? ClassifierId { get; set; }
     public int? NormId { get; set; }
     public string FacilityCode { get; set; } = string.Empty;
     public string FacilityName { get; set; } = string.Empty;
@@ -2129,4 +2283,13 @@ public sealed class DetailForecastItem
     public decimal? OptimisticHours { get; set; }
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
+
+    /// <summary>Строка для Excel — те же значения, что в колонках грида «Детально» (прогноз).</summary>
+    public DetailForecastRowDto ToExportDto() => new(
+        FacilityCode, FacilityName, BindingType, DocumentSet,
+        CatalogId, Tag, WorkId, WorkName, WorkComment,
+        EstimationBasis, PvCode, PvName, IsAssessment,
+        Coefficient, IicGroupName, IicUnitName,
+        NormProductivity, NormStdDev, Quantity,
+        BaseHours, OptimisticHours, PessimisticHours);
 }
