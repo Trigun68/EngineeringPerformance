@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations.Schema;
 using EngineeringPerformance.Core.Models;
 
 namespace EngineeringPerformance.Infrastructure.Data;
@@ -7,6 +8,29 @@ namespace EngineeringPerformance.Infrastructure.Data;
 public sealed class Equipment : DirectoryItem, INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>После точечного обновления строки в гриде — уведомить биндинги.</summary>
+    public void NotifyRowRefreshed()
+    {
+        var handler = PropertyChanged;
+        if (handler is null)
+            return;
+
+        void Raise(string name) => handler(this, new PropertyChangedEventArgs(name));
+
+        Raise(nameof(Name));
+        Raise(nameof(Description));
+        Raise(nameof(ClassifierId));
+        Raise(nameof(Classifier));
+        Raise(nameof(ClassifierNameWithUnit));
+        Raise(nameof(IsAssessment));
+        Raise(nameof(Coefficient));
+        Raise(nameof(ParentId));
+        Raise(nameof(SortOrder));
+        Raise(nameof(IsArchived));
+        Raise(nameof(CreatedAt));
+        Raise(nameof(ModifiedAt));
+    }
 
     public string Description { get; set; } = string.Empty;
 
@@ -26,4 +50,8 @@ public sealed class Equipment : DirectoryItem, INotifyPropertyChanged
     public ICollection<ProjectEquipment> ProjectEquipments { get; set; } = [];
 
     public IicWorkDirection? Classifier { get; set; }
+
+    /// <summary>Классификатор для грида: код и наименование группы IIC с ед. изм.</summary>
+    [NotMapped]
+    public string ClassifierNameWithUnit { get; set; } = string.Empty;
 }

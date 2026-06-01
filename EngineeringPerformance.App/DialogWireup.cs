@@ -33,6 +33,7 @@ internal sealed class DialogWireup
         WireUsers();
         WireProjects();
         WirePhysicalVolumes();
+        WireEquipments();
         WirePhysicalVolumeTypes();
         WireIicWorkDirections();
         WireProjectAnalysisVersions();
@@ -45,6 +46,15 @@ internal sealed class DialogWireup
     /// <summary>Регистрирует Reset-обработчики на закрытие главного окна (A3).</summary>
     public void RegisterResetOnClose()
     {
+        _owner.Closing += (_, _) =>
+        {
+            try
+            {
+                _services.GetRequiredService<ProjectsPageView>().FlushGridLayoutsForShutdown();
+            }
+            catch { /* shutting down */ }
+        };
+
         _owner.Closed += (_, _) =>
         {
             foreach (var action in _resetActions)
@@ -61,6 +71,7 @@ internal sealed class DialogWireup
         _services.GetRequiredService<UsersViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<ProjectsViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<PhysicalVolumesViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<EquipmentsViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<PhysicalVolumeTypesViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<IicWorkDirectionsViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<ProjectAnalysisVersionsViewModel>().SettingsHelper = helper;
@@ -112,6 +123,21 @@ internal sealed class DialogWireup
         var svc = _services.GetRequiredService<IPhysicalVolumeEditDialogService>();
         svc.SetOwnerWindow(_owner);
         var vm = _services.GetRequiredService<PhysicalVolumesViewModel>();
+        vm.OwnerWindow = _owner;
+        vm.OpenEditWindow = async item =>
+        {
+            var savedId = await svc.ShowEditDialogAsync(item);
+            if (savedId is int id)
+                await vm.RefreshSingleItemAsync(id);
+        };
+        _resetActions.Add(vm.Reset);
+    }
+
+    private void WireEquipments()
+    {
+        var svc = _services.GetRequiredService<IEquipmentEditDialogService>();
+        svc.SetOwnerWindow(_owner);
+        var vm = _services.GetRequiredService<EquipmentsViewModel>();
         vm.OwnerWindow = _owner;
         vm.OpenEditWindow = async item =>
         {

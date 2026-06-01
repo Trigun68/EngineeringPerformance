@@ -193,6 +193,7 @@ public abstract partial class DirectoryViewModelBase<T> : ObservableObject, ILoa
                 "User" => "Пользователи",
                 "Project" => "Проекты",
                 "PhysicalVolume" => "Номенклатура физических объёмов",
+                "Equipment" => "Номенклатура оборудования",
                 "PhysicalVolumeType" => "Виды справочников физ. объёмов",
                 "IicWorkDirection" => "Группы физ. объёмов (IIC)",
                 "LaborIntensity" => "Трудоёмкость",

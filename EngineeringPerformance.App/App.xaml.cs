@@ -261,6 +261,7 @@ public partial class App : Application
         try
         {
             var pvCache = _host!.Services.GetRequiredService<IDirectoryCache<PhysicalVolume>>();
+            var equipmentCache = _host.Services.GetRequiredService<IDirectoryCache<Equipment>>();
             var pvTypeCache = _host.Services.GetRequiredService<IDirectoryCache<PhysicalVolumeType>>();
             var classifierCache = _host.Services.GetRequiredService<IDirectoryCache<IicWorkDirection>>();
             var unitCache = _host.Services.GetRequiredService<IDirectoryCache<UnitOfMeasurement>>();
@@ -269,7 +270,8 @@ public partial class App : Application
                 pvTypeCache.GetAllAsync(),
                 classifierCache.GetAllAsync(),
                 unitCache.GetAllAsync(),
-                pvCache.GetAllAsync());
+                pvCache.GetAllAsync(),
+                equipmentCache.GetAllAsync());
         }
         catch (Exception ex)
         {
@@ -301,6 +303,8 @@ public partial class App : Application
         services.AddSingleton<PhysicalVolumeDirectoryService>();
         services.AddSingleton<IDirectoryService<PhysicalVolume>>(sp => sp.GetRequiredService<PhysicalVolumeDirectoryService>());
         services.AddSingleton<IPhysicalVolumeLookupService>(sp => sp.GetRequiredService<PhysicalVolumeDirectoryService>());
+        services.AddSingleton<EquipmentDirectoryService>();
+        services.AddSingleton<IDirectoryService<Equipment>>(sp => sp.GetRequiredService<EquipmentDirectoryService>());
         services.AddSingleton<IicWorkDirectionDirectoryService>();
         services.AddSingleton<IDirectoryService<IicWorkDirection>>(sp => sp.GetRequiredService<IicWorkDirectionDirectoryService>());
         services.AddSingleton<IIicWorkDirectionLookupService>(sp => sp.GetRequiredService<IicWorkDirectionDirectoryService>());
@@ -372,6 +376,11 @@ public partial class App : Application
         services.AddTransient<PhysicalVolumeEditViewModel>();
         services.AddTransient<PhysicalVolumeEditWindow>();
         services.AddSingleton<IPhysicalVolumeEditDialogService, PhysicalVolumeEditDialogService>();
+        services.AddSingleton<EquipmentsViewModel>();
+        services.AddTransient<EquipmentsWindow>();
+        services.AddTransient<EquipmentEditViewModel>();
+        services.AddTransient<EquipmentEditWindow>();
+        services.AddSingleton<IEquipmentEditDialogService, EquipmentEditDialogService>();
         services.AddSingleton<PhysicalVolumeTypesViewModel>();
         services.AddTransient<PhysicalVolumeTypesWindow>();
         services.AddTransient<PhysicalVolumeTypeEditViewModel>();

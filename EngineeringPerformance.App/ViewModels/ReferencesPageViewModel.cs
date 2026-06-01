@@ -44,6 +44,7 @@ public sealed partial class ReferencesPageViewModel : ObservableObject
         {
             ("Виды справочников физ. объёмов", typeof(PhysicalVolumeTypesWindow), typeof(PhysicalVolumeTypesViewModel), "PhysicalVolumeTypes"),
             ("Номенклатура физических объёмов", typeof(PhysicalVolumesWindow), typeof(PhysicalVolumesViewModel), "PhysicalVolumes"),
+            ("Номенклатура оборудования", typeof(EquipmentsWindow), typeof(EquipmentsViewModel), "Equipment"),
             ("Трудоёмкость", typeof(LaborIntensitiesWindow), typeof(LaborIntensitiesViewModel), "LaborIntensities"),
             ("Группы физ. объёмов (IIC)", typeof(IicWorkDirectionsWindow), typeof(IicWorkDirectionsViewModel), "IicWorkDirections"),
             ("Нормы ИИС", typeof(IicWorkDirectionNormsWindow), typeof(IicWorkDirectionNormsViewModel), "IicWorkDirectionNorms"),
