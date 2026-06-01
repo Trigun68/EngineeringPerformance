@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Changed (2026-05-20, Навигация — убраны отдельные страницы анализа и прогноза)
+- `MainViewModel.BuildNavigation`: из бокового меню удалены пункты «Анализ проекта» и «Прогноз по проекту». Сценарии доступны на вкладках **Проекты → Прогнозирование / Оценка факта**.
+
+### Fixed (2026-05-20, Сравнение версий — ошибка при выборе отчётов по факту)
+- `PerformanceService.GetPerformanceDataAsync`: словарь норм строится по `WorkDirectionId` из снимка версии (`AnalysisVersionSnapshot`), а не из `Norm.WorkDirectionId`. В справочнике могут быть несколько норм с одним направлением — прежний `ToDictionary(n => n.WorkDirectionId)` выбрасывал `ArgumentException` при сравнении версий «факт 1» и «факт 3».
+- `ProjectsPageViewModel`: выбор версий A/B только среди отчётов с направлением `AnalysisDirection.Fact`; `RunCompareAsync` — `GroupBy` по `WorkDirectionId`, корректный расчёт `ZDelta`; `BuildCompareFacilityRows` / `BuildCompareDetailRows` — безопасное объединение при дубликатах ключей и пустой производительности (`AverageProductivity` без `Average()` на пустой последовательности).
+- Тест: `PerformanceServiceTests.GetPerformanceData_DuplicateNormWorkDirectionIdsInCatalog_DoesNotThrow`.
+
+### Changed (2026-05-14, Прогноз → Итого — ед. изм. группы IIC и Excel)
+- `LoadForecastDataAsync`: колонка «Ед. изм.» на вкладке «Итого» — `IicWorkDirectionDisplayUnit.ResolveUnitName` по справочнику групп ФО IIC (`classifierMap`), а не `NormUnitName` из `PerformanceService`.
+- `ForecastPerformanceItem.ToExportDto()` — экспорт сводки прогноза в Excel использует те же значения, что грид.
+
+### Changed (2026-05-14, Прогноз → Детально — ед. изм. в таблице и Excel)
+- `LoadForecastDataAsync`: «Ед. изм.» — `PhysicalVolume.Unit`; «Группа ФО IIC» — `IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit`.
+- `DetailForecastItem.ToExportDto()` — экспорт Excel берёт те же `IicGroupName`/`IicUnitName`, что грид (без отдельной логики).
+- Тесты: `IicWorkDirectionDisplayUnitTests`.
+
 ### Changed (2026-05-14, Главная — порядок контента и размер диаграммы)
 - `ProjectDashboardView`: убрана плитка «Активные проекты»; сверху диаграмма σ (ширина ~80% от прежней), под ней подпись и блок методологии.
 - `ProjectDashboardViewModel`: упрощён до `LoadAsync` без запросов к БД.

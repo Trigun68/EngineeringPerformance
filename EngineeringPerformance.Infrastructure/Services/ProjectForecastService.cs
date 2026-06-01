@@ -46,6 +46,12 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
+        var equipmentRows = await context.ProjectEquipments
+            .AsNoTracking()
+            .Include(e => e.Equipment)
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
         // V2-B.1: forecast строится на снимке норм версии. Раньше runtime-фильтр
         // по EffectiveFrom/EffectiveTo + g.First() давал недетерминированный выбор
         // нормы при перекрытиях; теперь снимок уникален по (Version, WorkDirection).
@@ -70,6 +76,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.PhysicalVolume.IsAssessment == true)
             .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.QuantityInIicGroupUnits()));
+
+        EquipmentVolumeAggregator.MergeInto(volumeByDirection, equipmentRows);
 
         if (nodePlannedTotalsByWorkDirectionId is not null)
         {

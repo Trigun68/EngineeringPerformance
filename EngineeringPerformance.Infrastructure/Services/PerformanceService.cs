@@ -52,6 +52,7 @@ public sealed class PerformanceService : IPerformanceService
         await using var ctx1 = await _contextFactory.CreateDbContextAsync();
         await using var ctx3 = await _contextFactory.CreateDbContextAsync();
         await using var ctx4 = await _contextFactory.CreateDbContextAsync();
+        await using var ctxEquip = await _contextFactory.CreateDbContextAsync();
 
         var workDirectionsTask = GetWorkDirectionsAsync();
 
@@ -66,32 +67,38 @@ public sealed class PerformanceService : IPerformanceService
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
+        var equipmentTask = ctxEquip.ProjectEquipments
+            .AsNoTracking()
+            .Include(e => e.Equipment)
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
         var laborIntensitiesTask = ctx4.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
-        await Task.WhenAll(workDirectionsTask, versionExistsTask, physicalVolumesTask, laborIntensitiesTask);
+        await Task.WhenAll(workDirectionsTask, versionExistsTask, physicalVolumesTask, equipmentTask, laborIntensitiesTask);
 
         var workDirections = workDirectionsTask.Result;
         var versionExists = versionExistsTask.Result;
         var physicalVolumes = physicalVolumesTask.Result;
+        var equipmentRows = equipmentTask.Result;
         var laborIntensities = laborIntensitiesTask.Result;
 
-        List<IicWorkDirectionNorm> snapshotNorms;
+        IReadOnlyList<AnalysisVersionSnapshot> snapshots;
         if (versionExists)
         {
             await using var ctx5 = await _contextFactory.CreateDbContextAsync();
-            snapshotNorms = await ctx5.AnalysisVersionSnapshots
+            snapshots = await ctx5.AnalysisVersionSnapshots
                 .AsNoTracking()
                 .Where(s => s.ProjectAnalysisVersionId == versionId)
                 .Include(s => s.Norm)
-                .Select(s => s.Norm)
                 .ToListAsync();
         }
         else
         {
-            snapshotNorms = new List<IicWorkDirectionNorm>();
+            snapshots = Array.Empty<AnalysisVersionSnapshot>();
         }
 
         var directionById = workDirections.ToDictionary(d => d.Id);
@@ -101,6 +108,8 @@ public sealed class PerformanceService : IPerformanceService
             .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.PhysicalVolume.IsAssessment == true)
             .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.QuantityInIicGroupUnits()));
+
+        EquipmentVolumeAggregator.MergeInto(volumeByDirection, equipmentRows);
 
         // Единый источник часов для агрегации производительности — PlannedHours
         // (заявленные в файле плановые часы). Прежняя смесь `Actual > 0 ? Actual : Planned`
@@ -116,11 +125,12 @@ public sealed class PerformanceService : IPerformanceService
                 g => g.Key,
                 g => g.Sum(li => li.PlannedHours));
 
-        // Снимок гарантирует уникальность (ProjectAnalysisVersionId, WorkDirectionId)
-        // через UX_AnalysisVersionSnapshots_Version_WorkDirection — никакого недетерминизма
-        // и группировки «бери самую свежую» больше не нужно.
-        var normByDirection = snapshotNorms
-            .ToDictionary(n => n.WorkDirectionId);
+        // Ключ — WorkDirectionId из снимка (UX_AnalysisVersionSnapshots_Version_WorkDirection),
+        // а не из Norm: в справочнике может быть несколько норм с одним WorkDirectionId.
+        var normByDirection = snapshots
+            .Where(s => s.Norm is not null)
+            .GroupBy(s => s.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First().Norm!);
 
         var rootDirections = workDirections.Where(d => !d.ParentId.HasValue).ToList();
         var result = new List<PerformanceRowDto>();
@@ -133,7 +143,8 @@ public sealed class PerformanceService : IPerformanceService
 
         var unallocatedPhysicalVolume = physicalVolumes
             .Where(pv => pv.PhysicalVolume is not null && !pv.PhysicalVolume.ClassifierId.HasValue && pv.PhysicalVolume.IsAssessment == true)
-            .Sum(pv => pv.QuantityInIicGroupUnits());
+            .Sum(pv => pv.QuantityInIicGroupUnits())
+            + EquipmentVolumeAggregator.SumUnallocatedAssessmentVolume(equipmentRows);
 
         result.Add(new PerformanceRowDto(
             WorkDirectionId: PerformanceRowDto.UnallocatedPhysicalVolumeWorkDirectionId,
@@ -150,17 +161,18 @@ public sealed class PerformanceService : IPerformanceService
             NormEstimate: null,
             NormStdDev: null,
             ZScore: null,
-            Interpretation: null));
+            Interpretation: null,
+            SubtreeHours: null));
 
         return result;
     }
 
     /// <summary>
     /// Рекурсивно строит иерархию направлений, добавляя в <paramref name="result"/> строки в pre-order.
-    /// Возвращает агрегированные по поддереву (часы, сумма «оценка × часы»), используемые для
+    /// Возвращает агрегированные по поддереву (часы для оценки, сумма «оценка × часы»), используемые для
     /// средне-взвешенной фактической оценки родителей (вес = трудозатраты элемента).
     /// </summary>
-    private static (decimal SubtreeHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
+    private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
         IicWorkDirection direction,
         int level,
         ILookup<int, IicWorkDirection> parentIdLookup,
@@ -196,7 +208,7 @@ public sealed class PerformanceService : IPerformanceService
 
         // Собственный вклад узла в средне-взвешенную оценку поддерева:
         // включаем только когда оценка по узлу определена и вес (часы) положительный.
-        decimal subtreeHours = (ownFactEstimate.HasValue && factHours > 0) ? factHours : 0m;
+        decimal subtreeEstimateHours = (ownFactEstimate.HasValue && factHours > 0) ? factHours : 0m;
         decimal subtreeWeightedEstimate = (ownFactEstimate.HasValue && factHours > 0)
             ? ownFactEstimate.Value * factHours
             : 0m;
@@ -209,7 +221,7 @@ public sealed class PerformanceService : IPerformanceService
         var children = parentIdLookup[direction.Id];
         foreach (var child in children)
         {
-            var (childHours, childWeighted) = BuildHierarchy(
+            var (childEstimateHours, childWeighted) = BuildHierarchy(
                 child,
                 level + 1,
                 parentIdLookup,
@@ -219,14 +231,14 @@ public sealed class PerformanceService : IPerformanceService
                 directionById,
                 result,
                 visited);
-            subtreeHours += childHours;
+            subtreeEstimateHours += childEstimateHours;
             subtreeWeightedEstimate += childWeighted;
         }
 
         // Агрегированная фактическая оценка по узлу: средне-взвешенное по часам.
         // Для листьев совпадает с собственной оценкой; для родителей — учитывает потомков.
-        decimal? aggregatedFactEstimate = subtreeHours > 0
-            ? subtreeWeightedEstimate / subtreeHours
+        decimal? aggregatedFactEstimate = subtreeEstimateHours > 0
+            ? subtreeWeightedEstimate / subtreeEstimateHours
             : ownFactEstimate;
 
         normByDirection.TryGetValue(direction.Id, out var norm);
@@ -259,9 +271,10 @@ public sealed class PerformanceService : IPerformanceService
             NormEstimate: normEstimate,
             NormStdDev: normStdDev,
             ZScore: zScore,
-            Interpretation: interpretation);
+            Interpretation: interpretation,
+            SubtreeHours: subtreeEstimateHours > 0 ? subtreeEstimateHours : null);
 
-        return (subtreeHours, subtreeWeightedEstimate);
+        return (subtreeEstimateHours, subtreeWeightedEstimate);
     }
 
 }

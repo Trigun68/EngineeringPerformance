@@ -298,6 +298,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
 
+            await using var ctxEq = await _contextFactory.CreateDbContextAsync();
+            var equipmentAllTask = ctxEq.ProjectEquipments
+                .AsNoTracking()
+                .Include(e => e.Equipment)
+                .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+                .ToListAsync();
+
             await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
             var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
                 .AsNoTracking()
@@ -305,10 +312,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(s => new { s.WorkDirectionId, s.NormId })
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask);
+            await Task.WhenAll(perfTask, pvTask, pvAllTask, equipmentAllTask, snapshotMapTask);
             var data = perfTask.Result;
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
+            var equipmentAll = equipmentAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
 
@@ -478,6 +486,24 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     var p   = norm.NormProductivity!.Value;
                     var std = norm.NormStdDev ?? 0m;
 
+                    baseH += vol * p;
+                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
+                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                }
+
+                foreach (var eq in equipmentAll.Where(e =>
+                             (e.FacilityCode ?? string.Empty) == facilityGroup.Key.Code
+                             && (e.FacilityName ?? string.Empty) == facilityGroup.Key.Name))
+                {
+                    var dirId = eq.Equipment?.ClassifierId;
+                    if (eq.Equipment?.IsAssessment != true || !dirId.HasValue)
+                        continue;
+                    if (!normByDirection.TryGetValue(dirId.Value, out var norm))
+                        continue;
+
+                    var vol = eq.QuantityInIicGroupUnits();
+                    var p = norm.NormProductivity!.Value;
+                    var std = norm.NormStdDev ?? 0m;
                     baseH += vol * p;
                     optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
                     pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
@@ -688,6 +714,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                              && pv.ProjectAnalysisVersionId == versionId)
                 .ToListAsync();
 
+            await using var ctxEq = await _contextFactory.CreateDbContextAsync();
+            var equipmentAllTask = ctxEq.ProjectEquipments
+                .AsNoTracking()
+                .Include(e => e.Equipment)
+                .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+                .ToListAsync();
+
             await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
             var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
                 .AsNoTracking()
@@ -702,10 +735,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 .Select(li => new { li.DocumentationCode, li.WorkDirectionId, li.PlannedHours, li.ActualHours })
                 .ToListAsync();
 
-            await Task.WhenAll(perfTask, pvTask, pvAllTask, snapshotMapTask, liTask);
+            await Task.WhenAll(perfTask, pvTask, pvAllTask, equipmentAllTask, snapshotMapTask, liTask);
             var data = perfTask.Result ?? throw new InvalidOperationException("Performance data is null");
             var physicalVolumes = pvTask.Result;
             var physicalVolumesAll = pvAllTask.Result;
+            var equipmentAll = equipmentAllTask.Result;
             var snapshotNormIdByDirection = snapshotMapTask.Result
                 .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
             var laborIntensitiesRaw = liTask.Result;
@@ -766,6 +800,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
             var (detailRows, facilityRows) = ComputeFactRows(
                 physicalVolumesAll,
+                equipmentAll,
                 laborIntensities,
                 normByDirection,
                 snapshotNormIdByDirection,
@@ -937,6 +972,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     /// </summary>
     private static (List<FactDetailRow> DetailRows, List<FactFacilityRow> FacilityRows) ComputeFactRows(
         List<ProjectPhysicalVolume> physicalVolumesAll,
+        List<ProjectEquipment> equipmentAll,
         IReadOnlyList<FactLaborIntensityRow> laborIntensities,
         Dictionary<int, PerformanceRowDto> normByDirection,
         Dictionary<int, int> snapshotNormIdByDirection,
@@ -1033,6 +1069,43 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             });
         }
 
+        foreach (var eq in equipmentAll
+                     .OrderBy(e => e.FacilityCode ?? string.Empty)
+                     .ThenBy(e => e.FacilityName ?? string.Empty)
+                     .ThenBy(e => e.Equipment?.Name ?? string.Empty))
+        {
+            var dirId = eq.Equipment?.ClassifierId;
+            PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var ndEq)
+                ? ndEq
+                : null;
+            var isAssessment = eq.Equipment?.IsAssessment == true;
+            var vol = eq.QuantityInIicGroupUnits();
+            decimal? factHours = null;
+            if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
+                factHours = Math.Round(vol * p, 2);
+
+            detailRows.Add(new FactDetailRow
+            {
+                ProjectPhysicalVolumeId = 0,
+                PhysicalVolumeId = 0,
+                NormId = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nidEq) ? nidEq : null,
+                FacilityCode = eq.FacilityCode ?? string.Empty,
+                FacilityName = eq.FacilityName ?? string.Empty,
+                DocumentSet = eq.DocumentSet ?? string.Empty,
+                CatalogId = eq.CatalogId ?? string.Empty,
+                Tag = eq.Tag ?? string.Empty,
+                PvCode = eq.CatalogId ?? string.Empty,
+                PvName = eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                IicGroupName = dirId is int cidEq && classifierMap.TryGetValue(cidEq, out var clEq)
+                    ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(clEq, classifierMap)
+                    : string.Empty,
+                IicUnitName = norm?.NormUnitName ?? string.Empty,
+                Quantity = eq.Quantity,
+                FactLaborHours = factHours,
+                NormProductivity = norm?.NormProductivity,
+            });
+        }
+
         // ── Агрегация «По объектам» из detailRows ──────────────────────
         // Группировка по FacilityCode (дедуп FacilityName), сумма factHours,
         // Z-score = взвешенная по часам (часы одинаковы для всех PPV одного DocSet+Direction,
@@ -1119,6 +1192,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
+        await using var ctxEq = await _contextFactory.CreateDbContextAsync();
+        var equipmentAll = await ctxEq.ProjectEquipments
+            .AsNoTracking()
+            .Include(e => e.Equipment)
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
         await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
         var snapshotNormIdByDirection = await ctxSnap.AnalysisVersionSnapshots
             .AsNoTracking()
@@ -1154,6 +1234,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         return ComputeFactRows(
             physicalVolumesAll,
+            equipmentAll,
             laborIntensities,
             normByDirection,
             snapshotNormIdByDirection,
