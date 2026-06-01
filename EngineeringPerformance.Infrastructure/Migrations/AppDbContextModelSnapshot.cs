@@ -134,6 +134,66 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.ToTable("DataImportIterations", (string)null);
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.Equipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ClassifierId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal?>("Coefficient")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
+
+                    b.Property<bool?>("IsAssessment")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("ParentId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClassifierId");
+
+                    b.HasIndex("IsArchived");
+
+                    b.HasIndex("IsAssessment");
+
+                    b.HasIndex("Name");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("IsArchived", "ParentId", "SortOrder");
+
+                    b.ToTable("Equipments", (string)null);
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", b =>
                 {
                     b.Property<int>("Id")
@@ -689,6 +749,106 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.ToTable("ProjectCharacteristicSelections", (string)null);
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.ProjectEquipment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CatalogId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("CatalogName")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DiagramNumber")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("DocumentSet")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("EquipmentId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EstimationBasis")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("FacilityCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FacilityName")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("FullEquipmentId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("ModifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("OlReference")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("PositionNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<int>("ProjectAnalysisVersionId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProjectId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal?>("QuantityInWork")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<string>("ShortName")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("SupplyStandard")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Tag")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TypeMark")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EquipmentId");
+
+                    b.HasIndex("FacilityCode");
+
+                    b.HasIndex("ProjectAnalysisVersionId");
+
+                    b.HasIndex("ProjectId");
+
+                    b.ToTable("ProjectEquipments", (string)null);
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.ProjectLaborIntensity", b =>
                 {
                     b.Property<int>("Id")
@@ -751,9 +911,7 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.HasIndex("WorkDirectionId");
 
-                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId", "DocumentationCode", "WorkDirectionId")
-                        .IsUnique()
-                        .HasFilter("[WorkDirectionId] IS NOT NULL");
+                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId");
 
                     b.ToTable("ProjectLaborIntensities", (string)null);
                 });
@@ -887,8 +1045,7 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId", "PhysicalVolumeId", "FacilityCode", "FacilityName", "WorkId")
-                        .IsUnique();
+                    b.HasIndex("ProjectAnalysisVersionId", "ProjectId", "PhysicalVolumeId");
 
                     b.ToTable("ProjectPhysicalVolumes", (string)null);
                 });
@@ -1190,6 +1347,23 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.Navigation("ProjectAnalysisVersion");
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.Equipment", b =>
+                {
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", "Classifier")
+                        .WithMany()
+                        .HasForeignKey("ClassifierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.Equipment", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Classifier");
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", b =>
                 {
                     b.HasOne("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", "Parent")
@@ -1330,6 +1504,33 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.Navigation("Project");
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.ProjectEquipment", b =>
+                {
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.Equipment", "Equipment")
+                        .WithMany("ProjectEquipments")
+                        .HasForeignKey("EquipmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.ProjectAnalysisVersion", "ProjectAnalysisVersion")
+                        .WithMany("Equipments")
+                        .HasForeignKey("ProjectAnalysisVersionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Equipment");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("ProjectAnalysisVersion");
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.ProjectLaborIntensity", b =>
                 {
                     b.HasOne("EngineeringPerformance.Infrastructure.Data.LaborIntensity", "LaborIntensity")
@@ -1449,6 +1650,13 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.Equipment", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("ProjectEquipments");
+                });
+
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", b =>
                 {
                     b.Navigation("Children");
@@ -1477,6 +1685,8 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.ProjectAnalysisVersion", b =>
                 {
+                    b.Navigation("Equipments");
+
                     b.Navigation("ImportIterations");
 
                     b.Navigation("LaborIntensities");

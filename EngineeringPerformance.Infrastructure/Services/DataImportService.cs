@@ -37,6 +37,18 @@ public sealed class DataImportService : IDataImportService
         @"\b[A-Z]{2}\.\d{2}\.\d{3}\b",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Ключ слияния строк при импорте ФО: одна позиция каталога + объект + WorkId
+    /// = одна запись в <c>ProjectPhysicalVolumes</c>.
+    /// Соответствует расширенному уникальному индексу:
+    /// <c>(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId, FacilityCode, FacilityName, WorkId)</c>.
+    /// </summary>
+    private readonly record struct PvRowKey(
+        int PhysicalVolumeId,
+        string FacilityCode,
+        string FacilityName,
+        string WorkId);
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<DataImportService> _logger;
 
@@ -175,6 +187,10 @@ public sealed class DataImportService : IDataImportService
         await using var context = await _contextFactory.CreateDbContextAsync();
         await using var transaction = await context.Database.BeginTransactionAsync();
 
+        // Режим «замена»: удаляем все предыдущие данные ФО для данной версии проекта,
+        // чтобы каждый импорт был полным пересозданием без дублей и без сворачивания строк.
+        await ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
+
         var iteration = new DataImportIteration
         {
             ProjectId = projectId,
@@ -189,8 +205,6 @@ public sealed class DataImportService : IDataImportService
 
         var physicalVolumeRows = await context.PhysicalVolumes.AsNoTracking().ToListAsync();
         var physicalVolumes = BuildCodeLookup(physicalVolumeRows, "PhysicalVolumes");
-
-        var mergedByVolumeId = new Dictionary<int, PhysicalVolumeImportDraft>();
 
         using var workbook = new XLWorkbook(filePath);
         var worksheet = GetPhysicalVolumeImportWorksheet(workbook);
@@ -221,10 +235,11 @@ public sealed class DataImportService : IDataImportService
         var importTimestamp = iteration.ImportedAt;
         // ISS-007: помимо счётчиков сохраняем номера строк (и Quantity, и шифр-кандидат),
         // чтобы вывести их в details. Это позволит пользователю быстро найти проблемные
-        // строки в файле и дозаполнить шифр ЕП. Пример: «Список работ 25-310.xlsx» —
-        // 3 строки без шифра у объекта 4Y0100 теряют 34.2 ч от общего объёма импорта.
+        // строки в файле и дозаполнить шифр ЕП.
         var skippedNoEpCodeRows = new List<(int RowNumber, decimal Quantity)>();
         var skippedNotInCatalogRows = new List<(int RowNumber, string Code, decimal Quantity)>();
+        // Каждая строка файла — отдельная запись в БД, без сворачивания.
+        var newEntities = new List<ProjectPhysicalVolume>(rows.Count);
 
         foreach (var row in rows)
         {
@@ -254,20 +269,12 @@ public sealed class DataImportService : IDataImportService
                 continue;
             }
 
-            var pvId = physicalVolume.Id;
             var draft = PhysicalVolumeImportDraft.FromRow(row, columnMap, ParseDecimal, GetCellValue, physicalVolume);
-
-            if (mergedByVolumeId.TryGetValue(pvId, out var existing))
-            {
-                existing.MergeFrom(draft);
-            }
-            else
-            {
-                mergedByVolumeId[pvId] = draft;
-            }
+            draft.ApplyTruncation();
+            newEntities.Add(draft.ToNewEntity(projectId, versionId, physicalVolume.Id, importTimestamp));
         }
 
-        if (mergedByVolumeId.Count == 0)
+        if (newEntities.Count == 0)
         {
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
@@ -284,40 +291,13 @@ public sealed class DataImportService : IDataImportService
         var pvById = physicalVolumeRows.ToDictionary(pv => pv.Id);
         await BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
             context,
-            mergedByVolumeId.Keys,
+            newEntities.Select(e => e.PhysicalVolumeId).Distinct(),
             pvById);
 
-        var volumeIds = mergedByVolumeId.Keys.ToList();
-        var existingInDb = await context.ProjectPhysicalVolumes
-            .Where(p => p.ProjectId == projectId
-                     && p.ProjectAnalysisVersionId == versionId
-                     && volumeIds.Contains(p.PhysicalVolumeId))
-            .ToDictionaryAsync(p => p.PhysicalVolumeId);
-
-        foreach (var (physicalVolumeId, draft) in mergedByVolumeId)
-        {
-            draft.ApplyTruncation();
-
-            if (existingInDb.TryGetValue(physicalVolumeId, out var entity))
-            {
-                draft.ApplyTo(entity);
-                // CreatedAt синхронизируется с ImportedAt итерации, чтобы удаление этой
-                // итерации (фильтр по pv.CreatedAt == importedAt) корректно откатывало
-                // и вновь созданные, и обновлённые строки — иначе при повторном импорте
-                // образуется «итерация-фантом»: часть записей не привязывается к ней.
-                entity.CreatedAt = importTimestamp;
-                entity.ModifiedAt = importTimestamp;
-            }
-            else
-            {
-                var newEntity = draft.ToNewEntity(projectId, versionId, physicalVolumeId, importTimestamp);
-                context.ProjectPhysicalVolumes.Add(newEntity);
-            }
-        }
-
+        context.ProjectPhysicalVolumes.AddRange(newEntities);
         await context.SaveChangesAsync();
 
-        var recordsImported = mergedByVolumeId.Count;
+        var recordsImported = newEntities.Count;
         iteration.RecordCount = recordsImported;
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
@@ -438,6 +418,9 @@ public sealed class DataImportService : IDataImportService
         await using var context = await _contextFactory.CreateDbContextAsync();
         await using var transaction = await context.Database.BeginTransactionAsync();
 
+        // Удаляем все предыдущие данные трудоёмкости для этой версии (стратегия: очистка + вставка)
+        await ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
+
         var iteration = new DataImportIteration
         {
             ProjectId = projectId,
@@ -474,17 +457,12 @@ public sealed class DataImportService : IDataImportService
         }
 
         var importTimestamp = iteration.ImportedAt;
-        // Staged: накапливаем сущности до первого SaveChanges, чтобы сохранить идентичный паттерн с импортом ФО.
-        // Ключ уникальности в памяти — (DocumentationCode, WorkDirectionId) с поддержкой NULL направления.
-        var stagedRows = new List<ProjectLaborIntensity>();
+        // Накапливаем строки для массовой вставки (без группировок — построчно, как в импорте ФО)
+        var newEntities = new List<ProjectLaborIntensity>();
         var laborFileRowsAccepted = 0;
         var rowsWithoutCatalogMatch = 0;
         var rowsWithoutDirection = 0;
         var newCatalogEntriesCreated = 0;
-        // Имена, не получившие соответствия. Отдельные множества для разных причин:
-        // (а) типа документа нет в справочнике; (б) есть, но без привязки к IIC.
-        // Возвращаем их в details, чтобы пользователь мог скопировать список и завести
-        // недостающие позиции в каталоге без поиска по логам/Excel.
         var unmatchedDocTypes = new SortedSet<string>(StringComparer.Ordinal);
         var docTypesWithoutDirection = new SortedSet<string>(StringComparer.Ordinal);
 
@@ -644,60 +622,18 @@ public sealed class DataImportService : IDataImportService
                 CreatedAt = importTimestamp,
             };
 
-            stagedRows.Add(entity);
+            newEntities.Add(entity);
             laborFileRowsAccepted++;
         }
 
-        // Схлопываем дубли по натуральному ключу (DocumentationCode, WorkDirectionId).
-        // ISS-006: на коллизии суммируем PlannedHours/ActualHours — это разные строки файла
-        // с одинаковым «тип+марка» (например, повторяющиеся документы по нескольким объектам),
-        // их часы должны складываться, а не затирать друг друга.
-        // Строки с WorkDirectionId = NULL не схлопываются (уникальный индекс фильтрованный),
-        // поэтому каждую такую запись оставляем как отдельную — иначе потеряем данные проекта.
-        var (mergedByNaturalKey, unmatchedRows) = MergeLaborRowsByNaturalKey(stagedRows);
-
-        var totalToPersist = mergedByNaturalKey.Count + unmatchedRows.Count;
-
-        if (mergedByNaturalKey.Count > 0)
+        // Массовая вставка всех строк без группировок (построчно, как в импорте ФО)
+        if (newEntities.Count > 0)
         {
-            var existingInDb = await context.ProjectLaborIntensities
-                .Where(li => li.ProjectId == projectId
-                          && li.ProjectAnalysisVersionId == versionId
-                          && li.WorkDirectionId != null)
-                .ToDictionaryAsync(li => (li.DocumentationCode, li.WorkDirectionId!.Value));
-
-            foreach (var entity in mergedByNaturalKey.Values)
-            {
-                var key = (entity.DocumentationCode, entity.WorkDirectionId!.Value);
-                if (existingInDb.TryGetValue(key, out var tracked))
-                {
-                    tracked.PlannedHours = entity.PlannedHours;
-                    tracked.ActualHours = entity.ActualHours;
-                    tracked.Brand = entity.Brand;
-                    tracked.Notes = entity.Notes;
-                    tracked.LaborIntensityId = entity.LaborIntensityId;
-                    // Как при импорте физ. объёмов: привязываем строку к итерации для отката.
-                    tracked.CreatedAt = importTimestamp;
-                    tracked.ModifiedAt = importTimestamp;
-                }
-                else
-                {
-                    context.ProjectLaborIntensities.Add(entity);
-                }
-            }
-        }
-
-        foreach (var entity in unmatchedRows)
-        {
-            context.ProjectLaborIntensities.Add(entity);
-        }
-
-        if (totalToPersist > 0)
-        {
+            context.ProjectLaborIntensities.AddRange(newEntities);
             await context.SaveChangesAsync();
         }
 
-        iteration.RecordCount = totalToPersist;
+        iteration.RecordCount = newEntities.Count;
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
 
@@ -705,10 +641,6 @@ public sealed class DataImportService : IDataImportService
         if (newCatalogEntriesCreated > 0)
         {
             details.Add($"В справочник «Трудоёмкость» добавлено {newCatalogEntriesCreated} новых позиций из файла (без привязки к направлению IIC и без норм — проверьте карточки в справочнике).");
-        }
-        if (laborFileRowsAccepted > 0 && laborFileRowsAccepted != totalToPersist)
-        {
-            details.Add($"В базу записано {totalToPersist} строк (дубли по «тип документа + марка» в одной версии суммируются по плановым и фактическим часам).");
         }
         if (rowsWithoutCatalogMatch > 0)
         {
@@ -724,7 +656,28 @@ public sealed class DataImportService : IDataImportService
         }
 
         var detailsText = details.Count > 0 ? string.Join(Environment.NewLine + Environment.NewLine, details) : null;
-        return new DataImportResult(true, totalToPersist, null, iteration.Id, detailsText);
+        return new DataImportResult(true, newEntities.Count, null, iteration.Id, detailsText);
+    }
+
+    /// <summary>Удаляет все записи трудоёмкости и итерации импорта для указанной версии проекта.</summary>
+    private static async Task ClearLaborIntensityDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectLaborIntensities
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+        if (existing.Count > 0)
+            context.ProjectLaborIntensities.RemoveRange(existing);
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.LaborIntensity)
+            .ToListAsync();
+        if (existingIterations.Count > 0)
+            context.DataImportIterations.RemoveRange(existingIterations);
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
+            await context.SaveChangesAsync();
     }
 
     /// <summary>Описание раскладки колонок в листе трудоёмкости после авто-детекции по заголовку.</summary>
@@ -771,7 +724,8 @@ public sealed class DataImportService : IDataImportService
                     continue;
                 }
 
-                var t = text.Trim();
+                // Нормализуем «ё» → «е» для устойчивого сравнения русскоязычных заголовков
+                var t = text.Trim().Replace('ё', 'е').Replace('Ё', 'Е');
                 if (directionCol < 0 && t.Contains("проектного направления", StringComparison.OrdinalIgnoreCase))
                 {
                     directionCol = c;
@@ -779,19 +733,27 @@ public sealed class DataImportService : IDataImportService
                 }
                 else if (docTypeCol < 0 && (
                     t.Contains("тип документа", StringComparison.OrdinalIgnoreCase)
-                    || t.Contains("типа документа", StringComparison.OrdinalIgnoreCase)))
+                    || t.Contains("типа документа", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("вида документов", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("вид документов", StringComparison.OrdinalIgnoreCase)))
                 {
                     docTypeCol = c;
                     headerHits++;
                 }
-                else if (plannedCol < 0 && t.Contains("плановая трудоемкость", StringComparison.OrdinalIgnoreCase))
+                else if (plannedCol < 0 && (
+                    t.Contains("плановая трудоемкость", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("плановой трудоем", StringComparison.OrdinalIgnoreCase)
+                    || (t.Contains("плановой", StringComparison.OrdinalIgnoreCase)
+                        && t.Contains("труд", StringComparison.OrdinalIgnoreCase))))
                 {
                     plannedCol = c;
                     headerHits++;
                 }
                 else if (actualCol < 0 && (
                     t.Contains("фактически списано", StringComparison.OrdinalIgnoreCase)
-                    || t.Contains("фактическая трудоемкость", StringComparison.OrdinalIgnoreCase)))
+                    || t.Contains("фактическая трудоемкость", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("фактической работы", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("фактической трудоем", StringComparison.OrdinalIgnoreCase)))
                 {
                     actualCol = c;
                     headerHits++;
@@ -1086,7 +1048,8 @@ public sealed class DataImportService : IDataImportService
         if (TryFindSpisokRabotHeaderRow(worksheet, out var headerRow))
         {
             var epCol = TryFindEpCatalogColumnIndex(worksheet, headerRow) ?? 6;
-            columnMap = PhysicalVolumeColumnMap.FromEpCatalogColumn(epCol);
+            var qtyCol = TryFindQuantityColumnIndex(worksheet, headerRow);
+            columnMap = PhysicalVolumeColumnMap.FromEpCatalogColumn(epCol, qtyCol);
             firstDataRowNumber = headerRow + 1;
             return true;
         }
@@ -1163,6 +1126,39 @@ public sealed class DataImportService : IDataImportService
             }
 
             if (IsSpisokCatalogHeaderText(text))
+            {
+                return c;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Ищет колонку «Кол-во по BoQ» / «Количество» в строке заголовка.
+    /// Возвращает номер колонки или <c>null</c>, если не найдено.
+    /// </summary>
+    private static int? TryFindQuantityColumnIndex(IXLWorksheet worksheet, int headerRow)
+    {
+        var used = worksheet.RangeUsed();
+        if (used is null)
+        {
+            return null;
+        }
+
+        var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+        for (var c = 1; c <= lastCol; c++)
+        {
+            var text = GetWorksheetCellString(worksheet, headerRow, c);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var t = text.Trim();
+            if (t.Contains("кол-во", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("BoQ", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("количество", StringComparison.OrdinalIgnoreCase))
             {
                 return c;
             }
@@ -1395,8 +1391,10 @@ public sealed class DataImportService : IDataImportService
 
         /// <summary>
         /// Сдвиг всех колонок относительно стандартной F (6): для вариантов файла с доп. колонками.
+        /// <paramref name="overrideQuantityColumn"/> позволяет передать колонку «Кол-во»,
+        /// найденную по заголовку, вместо расчётного смещения <c>e + 11</c>.
         /// </summary>
-        public static PhysicalVolumeColumnMap FromEpCatalogColumn(int epCol)
+        public static PhysicalVolumeColumnMap FromEpCatalogColumn(int epCol, int? overrideQuantityColumn = null)
         {
             var e = epCol < 4 ? 6 : epCol;
 
@@ -1411,7 +1409,7 @@ public sealed class DataImportService : IDataImportService
                 WorkId = e + 2,
                 WorkName = e + 3,
                 WorkComment = e + 4,
-                Quantity = e + 11,
+                Quantity = overrideQuantityColumn ?? e + 11,
                 EstimationBasis = e + 12,
                 SplitFacilityFromFbs = true,
             };
@@ -1682,6 +1680,21 @@ public sealed class DataImportService : IDataImportService
         }
     }
 
+    /// <summary>
+    /// Нормализует строковое поле для использования в качестве части ключа словаря:
+    /// обрезает до <paramref name="maxLength"/> символов и заменяет <c>null</c> пустой строкой.
+    /// Совпадает с тем, что сохранится в БД после <c>ApplyTruncation()</c>.
+    /// </summary>
+    private static string TruncateKey(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
     private static decimal ParseDecimal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -1729,8 +1742,42 @@ public sealed class DataImportService : IDataImportService
         {
             DataImportType.PhysicalVolume => await DeletePhysicalVolumeRecordsAsync(context, projectId, versionId, importedAt),
             DataImportType.LaborIntensity => await DeleteLaborIntensityRecordsAsync(context, projectId, versionId, importedAt),
+            DataImportType.Equipment => await DeleteEquipmentRecordsAsync(context, projectId, versionId, importedAt),
             _ => 0,
         };
+    }
+
+    /// <summary>
+    /// Удаляет ВСЕ записи ФО и связанные итерации импорта для указанной версии проекта.
+    /// Вызывается в начале нового импорта (режим «замена»): каждый новый импорт
+    /// полностью заменяет предыдущие данные, что исключает дубли и устаревшие итерации.
+    /// </summary>
+    private static async Task ClearPhysicalVolumeDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existingVolumes = await context.ProjectPhysicalVolumes
+            .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        if (existingVolumes.Count > 0)
+        {
+            context.ProjectPhysicalVolumes.RemoveRange(existingVolumes);
+        }
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.PhysicalVolume)
+            .ToListAsync();
+
+        if (existingIterations.Count > 0)
+        {
+            context.DataImportIterations.RemoveRange(existingIterations);
+        }
+
+        if (existingVolumes.Count > 0 || existingIterations.Count > 0)
+        {
+            await context.SaveChangesAsync();
+        }
     }
 
     private static async Task<int> DeletePhysicalVolumeRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
@@ -1767,8 +1814,24 @@ public sealed class DataImportService : IDataImportService
         return records.Count;
     }
 
+    private static async Task<int> DeleteEquipmentRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId
+                     && e.ProjectAnalysisVersionId == versionId
+                     && e.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectEquipments.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
     /// <summary>
-    /// Aggregates rows that share the same catalog code (same <see cref="PhysicalVolume"/> id) before save.
     /// Unique index: (ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId).
     /// </summary>
     private sealed class PhysicalVolumeImportDraft

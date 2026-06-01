@@ -15,10 +15,12 @@ public sealed class AppDbContext : DbContext
     public DbSet<ProjectAnalysisVersion> ProjectAnalysisVersions => Set<ProjectAnalysisVersion>();
     public DbSet<PhysicalVolumeType> PhysicalVolumeTypes => Set<PhysicalVolumeType>();
     public DbSet<PhysicalVolume> PhysicalVolumes => Set<PhysicalVolume>();
+    public DbSet<Equipment> Equipments => Set<Equipment>();
     public DbSet<IicWorkDirection> IicWorkDirections => Set<IicWorkDirection>();
     public DbSet<IicWorkDirectionNorm> IicWorkDirectionNorms => Set<IicWorkDirectionNorm>();
     public DbSet<UnitOfMeasurement> UnitsOfMeasurement => Set<UnitOfMeasurement>();
     public DbSet<ProjectPhysicalVolume> ProjectPhysicalVolumes => Set<ProjectPhysicalVolume>();
+    public DbSet<ProjectEquipment> ProjectEquipments => Set<ProjectEquipment>();
     public DbSet<ProjectLaborIntensity> ProjectLaborIntensities => Set<ProjectLaborIntensity>();
     public DbSet<ProjectPermission> ProjectPermissions => Set<ProjectPermission>();
     public DbSet<AccessRight> AccessRights => Set<AccessRight>();
@@ -39,10 +41,12 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ProjectAnalysisVersionConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeTypeConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeConfiguration());
+        modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());
         modelBuilder.ApplyConfiguration(new UnitOfMeasurementConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectPhysicalVolumeConfiguration());
+        modelBuilder.ApplyConfiguration(new ProjectEquipmentConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectLaborIntensityConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectPermissionConfiguration());
         modelBuilder.ApplyConfiguration(new AccessRightConfiguration());

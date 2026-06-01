@@ -28,6 +28,8 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
 
     public ICollection<ProjectPhysicalVolume> PhysicalVolumes { get; set; } = [];
 
+    public ICollection<ProjectEquipment> Equipments { get; set; } = [];
+
     public ICollection<ProjectLaborIntensity> LaborIntensities { get; set; } = [];
 
     public ICollection<DataImportIteration> ImportIterations { get; set; } = [];
