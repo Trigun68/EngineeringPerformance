@@ -4,5 +4,5 @@
   <Project Path="EngineeringPerformance.Infrastructure/EngineeringPerformance.Infrastructure.csproj" />
   <Project Path="EngineeringPerformance.Api/EngineeringPerformance.Api.csproj" />
   <Project Path="EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.Tests.csproj" />
-  <Project Path="../tests/EngineeringPerformance.Tests/EngineeringPerformance.Tests.csproj" />
+  <Project Path="EngineeringPerformance.Infrastructure.Tests/EngineeringPerformance.Infrastructure.Tests.csproj" />
 </Solution>
