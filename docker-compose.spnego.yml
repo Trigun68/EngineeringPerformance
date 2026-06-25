@@ -1,0 +1,49 @@
+# SPNEGO / Kerberos SSO профиль для production
+# Использование: docker compose -f docker-compose.yml -f docker-compose.spnego.yml up
+#
+# Требования:
+# - keytab файл с SPN (Service Principal Name) для HTTP/hostname
+# - krb5.conf с настройками домена
+# - PROXY_TRUSTED_SECRET для валидации X-Trusted-Proxy-Token
+#
+# Подготовка keytab:
+#   ktpass /princ HTTP/eng-perf.domain@DOMAIN /mapuser spnego_svc@domain /pass * /out http.keytab
+
+services:
+  frontend:
+    image: nginx:alpine
+    container_name: ep-frontend-spnego
+    volumes:
+      # Keytab для SPNEGO аутентификации
+      - ${KEYTAB_PATH:?KEYTAB_PATH is required}:/etc/nginx/http.keytab:ro
+      # Kerberos конфигурация
+      - ${KRB5_CONF_PATH:-/etc/krb5.conf}:/etc/krb5.conf:ro
+      # SPNEGO-enabled nginx конфиг
+      - ./nginx.conf.spnego:/etc/nginx/nginx.conf:ro
+      # Статика фронтенда
+      - ./client/dist:/usr/share/nginx/html:ro
+    ports:
+      - "${WEB_PORT:-443}:443"
+    environment:
+      - PROXY_TRUSTED_SECRET=${PROXY_TRUSTED_SECRET:?PROXY_TRUSTED_SECRET is required for SPNEGO}
+    networks:
+      - internal
+      - tech-lab24-edge
+    depends_on:
+      - backend
+
+  backend:
+    environment:
+      # Принимаем Windows-аутентификацию через X-Remote-User
+      - Spnego__Enabled=true
+      - Spnego__TrustedProxySecret=${PROXY_TRUSTED_SECRET}
+      # Отключаем fallback к форме логина в production
+      - DevWindowsAuth__SimulatedWindowsUser=
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+  tech-lab24-edge:
+    external: true

@@ -1,6 +1,6 @@
+using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Directories;
-using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Export;
 using Microsoft.AspNetCore.Authorization;
@@ -8,32 +8,26 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringPerformance.Api.Controllers;
 
+/// <summary>
+/// Контроллер для управления справочниками (directories).
+/// Права доступа проверяются через [DirectoryPermission] — унифицированный подход с [HasPermission].
+/// </summary>
 [ApiController]
 [Route("api/directories")]
 [Authorize]
 public sealed class DirectoriesController : ControllerBase
 {
     private readonly IDirectoryFacade _directories;
-    private readonly ICurrentUserService _currentUser;
-    private readonly IPermissionService _permissions;
 
-    public DirectoriesController(
-        IDirectoryFacade directories,
-        ICurrentUserService currentUser,
-        IPermissionService permissions)
+    public DirectoriesController(IDirectoryFacade directories)
     {
         _directories = directories;
-        _currentUser = currentUser;
-        _permissions = permissions;
     }
 
     [HttpGet("{resource}/export.xlsx")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<IActionResult> ExportExcel(string resource, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var items = await _directories.ListAsync(resource, includeArchived: true, cancellationToken);
         var columns = new List<ReferenceExcelExporter.ColumnDef>
         {
@@ -49,29 +43,23 @@ public sealed class DirectoriesController : ControllerBase
     }
 
     [HttpGet("{resource}")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<ActionResult<IReadOnlyList<DirectoryEntryDto>>> List(
         string resource,
         [FromQuery] bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var items = await _directories.ListAsync(resource, includeArchived, cancellationToken);
         return Ok(items);
     }
 
     [HttpGet("{resource}/tree")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<ActionResult<IReadOnlyList<DirectoryTreeNodeDto>>> Tree(
         string resource,
         [FromQuery] bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         try
         {
             var tree = await _directories.GetTreeAsync(resource, includeArchived, cancellationToken);
@@ -84,182 +72,120 @@ public sealed class DirectoriesController : ControllerBase
     }
 
     [HttpGet("{resource}/children")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<ActionResult<IReadOnlyList<DirectoryEntryDto>>> Children(
         string resource,
         [FromQuery] int? parentId,
         [FromQuery] bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var items = await _directories.GetChildrenAsync(resource, parentId, includeArchived, cancellationToken);
         return Ok(items);
     }
 
     [HttpGet("{resource}/{id:int}")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<ActionResult<DirectoryEntryDto>> GetById(string resource, int id, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var item = await _directories.GetByIdAsync(resource, id, cancellationToken);
         return item is null ? NotFound() : Ok(item);
     }
 
     [HttpPost("{resource}")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<ActionResult<DirectoryEntryDto>> Create(
         string resource,
         [FromBody] DirectoryWriteRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required.");
-
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var created = await _directories.CreateAsync(resource, request, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { resource, id = created.Id }, created);
     }
 
     [HttpPut("{resource}/{id:int}")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<ActionResult<DirectoryEntryDto>> Update(
         string resource,
         int id,
         [FromBody] DirectoryWriteRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required.");
-
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var updated = await _directories.UpdateAsync(resource, id, request, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpPatch("{resource}/{id:int}/sort-order")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<IActionResult> UpdateSortOrder(
         string resource,
         int id,
         [FromBody] SortOrderRequest request,
         CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var ok = await _directories.UpdateSortOrderAsync(resource, id, request, cancellationToken);
         return ok ? NoContent() : NotFound();
     }
 
     [HttpPost("{resource}/{id:int}/archive")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<IActionResult> Archive(string resource, int id, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var ok = await _directories.ArchiveAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
     }
 
     [HttpPost("{resource}/{id:int}/unarchive")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<IActionResult> Unarchive(string resource, int id, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var ok = await _directories.UnarchiveAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
     }
 
     [HttpDelete("{resource}/{id:int}")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<IActionResult> Delete(string resource, int id, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync(resource, AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var ok = await _directories.DeleteAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
     }
 
     [HttpGet("project-characteristics/{id:int}/options")]
+    [DirectoryPermission(AccessLevel.Read)]
     public async Task<ActionResult<IReadOnlyList<CharacteristicOptionDto>>> GetOptions(int id, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync("project-characteristics", AccessLevel.Read, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var options = await _directories.GetCharacteristicOptionsAsync(id, cancellationToken);
         return Ok(options);
     }
 
     [HttpPost("project-characteristics/{id:int}/options")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<ActionResult<CharacteristicOptionDto>> CreateOption(
         int id,
         [FromBody] CharacteristicOptionWriteRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required.");
-
-        var denied = await EnsureAccessAsync("project-characteristics", AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var created = await _directories.CreateCharacteristicOptionAsync(id, request, cancellationToken);
         return CreatedAtAction(nameof(GetOptions), new { id }, created);
     }
 
     [HttpPut("project-characteristics/{id:int}/options/{optionId:int}")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<ActionResult<CharacteristicOptionDto>> UpdateOption(
         int id,
         int optionId,
         [FromBody] CharacteristicOptionWriteRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return BadRequest("Name is required.");
-
-        var denied = await EnsureAccessAsync("project-characteristics", AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var updated = await _directories.UpdateCharacteristicOptionAsync(id, optionId, request, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpDelete("project-characteristics/{id:int}/options/{optionId:int}")]
+    [DirectoryPermission(AccessLevel.Edit)]
     public async Task<IActionResult> DeleteOption(int id, int optionId, CancellationToken cancellationToken)
     {
-        var denied = await EnsureAccessAsync("project-characteristics", AccessLevel.Edit, cancellationToken);
-        if (denied is not null)
-            return denied;
-
         var ok = await _directories.DeleteCharacteristicOptionAsync(id, optionId, cancellationToken);
         return ok ? NoContent() : NotFound();
-    }
-
-    private async Task<ActionResult?> EnsureAccessAsync(string resource, AccessLevel level, CancellationToken cancellationToken)
-    {
-        if (!DirectoryResourceCatalog.TryGet(resource, out var meta))
-            return NotFound();
-
-        if (_currentUser.UserId is not int userId)
-            return Unauthorized();
-
-        if (!await _permissions.HasAccessAsync(userId, meta.Permission, level, cancellationToken))
-            return Forbid();
-
-        return null;
     }
 }
