@@ -1,0 +1,106 @@
+using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Domain.Enums;
+
+namespace EngineeringPerformance.Application.Services;
+
+/// <summary>Входные данные для расчёта иерархии производительности (без EF).</summary>
+public sealed record PerformanceCalculationInput(
+    bool VersionExists,
+    IReadOnlyList<WorkDirectionCalculationNode> WorkDirections,
+    IReadOnlyList<PhysicalVolumeCalculationLine> PhysicalVolumes,
+    IReadOnlyList<EquipmentCalculationLine> Equipment,
+    IReadOnlyList<LaborIntensityCalculationLine> LaborIntensities,
+    IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection);
+
+public sealed record WorkDirectionCalculationNode(
+    int Id,
+    int? ParentId,
+    string Name,
+    string Code,
+    string? NormUnitName);
+
+public sealed record PhysicalVolumeCalculationLine(
+    int? ClassifierId,
+    bool IsAssessment,
+    decimal Quantity,
+    decimal Coefficient);
+
+public sealed record EquipmentCalculationLine(
+    int? ClassifierId,
+    bool IsAssessment,
+    decimal Quantity,
+    decimal Coefficient);
+
+public sealed record LaborIntensityCalculationLine(
+    int? WorkDirectionId,
+    decimal PlannedHours);
+
+public sealed record NormCalculationSnapshot(
+    decimal? Performance,
+    decimal? Estimate,
+    decimal? StandardDeviation);
+
+/// <summary>Вход для распределения LI по строкам факта (порт ComputeFactRows).</summary>
+public sealed record FactAssessmentCalculationInput(
+    IReadOnlyList<FactPhysicalVolumeLine> PhysicalVolumes,
+    IReadOnlyList<FactEquipmentLine> Equipment,
+    IReadOnlyList<FactLaborIntensityLine> LaborIntensities,
+    IReadOnlyDictionary<int, PerformanceRowDto> NormByDirection,
+    IReadOnlyDictionary<int, ClassifierDisplayNode> ClassifierMap);
+
+public sealed record FactPhysicalVolumeLine(
+    string FacilityCode,
+    string FacilityName,
+    string DocumentSet,
+    string WorkId,
+    string WorkName,
+    string PvCode,
+    string PvName,
+    int? ClassifierId,
+    bool IsAssessment,
+    decimal Quantity,
+    decimal Coefficient);
+
+public sealed record FactEquipmentLine(
+    string FacilityCode,
+    string FacilityName,
+    string DocumentSet,
+    string PvCode,
+    string PvName,
+    int? ClassifierId,
+    bool IsAssessment,
+    decimal Quantity,
+    decimal Coefficient);
+
+public sealed record FactLaborIntensityLine(
+    string DocSet,
+    int? WorkDirectionId,
+    decimal Hours);
+
+public sealed record ClassifierDisplayNode(int Id, string Code, string Name, string? UnitName);
+
+public sealed record FactAssessmentDetailRowDto(
+    string FacilityCode,
+    string FacilityName,
+    string DocumentSet,
+    string PvCode,
+    string PvName,
+    string WorkId,
+    string WorkName,
+    string IicGroupName,
+    string IicUnitName,
+    decimal Quantity,
+    decimal? FactLaborHours,
+    decimal? FactProductivity,
+    decimal? ZScore);
+
+public sealed record FactAssessmentFacilityRowDto(
+    string Code,
+    string Name,
+    decimal? FactLaborHours,
+    decimal? ZScore,
+    string Interpretation);
+
+public sealed record FactAssessmentCalculationResult(
+    IReadOnlyList<FactAssessmentDetailRowDto> Detail,
+    IReadOnlyList<FactAssessmentFacilityRowDto> Facility);

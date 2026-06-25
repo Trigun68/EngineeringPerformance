@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>EngineeringPerformance.Domain</RootNamespace>
+    <AssemblyName>EngineeringPerformance.Domain</AssemblyName>
+  </PropertyGroup>
+</Project>

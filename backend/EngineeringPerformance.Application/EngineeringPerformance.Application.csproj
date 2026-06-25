@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>EngineeringPerformance.Application</RootNamespace>
+    <AssemblyName>EngineeringPerformance.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EngineeringPerformance.Domain\EngineeringPerformance.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,2525 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+using ClosedXML.Excel;
+using EngineeringPerformance.Application.Import;
+using EngineeringPerformance.Domain.Enums;
+
+using EngineeringPerformance.Infrastructure.Persistence;
+using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Application.Auth;
+using EngineeringPerformance.Infrastructure.Projects;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace EngineeringPerformance.Infrastructure.Import;
+
+public sealed partial class ProjectExcelDataImportService : IProjectImportService
+{
+    /// <summary>Типичный шифр ЕП в «Список работ»: 01-01-001-01 (как в справочнике).</summary>
+    private static readonly Regex CatalogEpCodePattern = new(
+        @"^\d{2}-\d{2}-\d{3}-\d{2}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>Тот же шифр с допуском по длине сегментов (поиск колонки в файле).</summary>
+    private static readonly Regex CatalogEpCodeLoosePattern = new(
+        @"^\d{1,2}-\d{1,2}-\d{1,4}-\d{1,4}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>Первый шифр внутри текста ячейки (например «13-06-001-01 — Установка…»).</summary>
+    private static readonly Regex CatalogEpCodeEmbeddedPattern = new(
+        @"\d{1,2}-\d{1,2}-\d{1,4}-\d{1,4}",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    /// <summary>Шифр КФО2 в каталоге (см. миграции KFO2): KQ.02.160.</summary>
+    private static readonly Regex CatalogKfoEpCodeLoosePattern = new(
+        @"^[A-Z]{2}\.\d{2}\.\d{3}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    /// <summary>Первый шифр КФО2 внутри ячейки (код и наименование в одной колонке).</summary>
+    private static readonly Regex CatalogKfoEpCodeEmbeddedPattern = new(
+        @"\b[A-Z]{2}\.\d{2}\.\d{3}\b",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Ключ слияния строк при импорте ФО: одна позиция каталога + объект + WorkId
+    /// = одна запись в <c>ProjectPhysicalVolumes</c>.
+    /// Соответствует расширенному уникальному индексу:
+    /// <c>(ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId, FacilityCode, FacilityName, WorkId)</c>.
+    /// </summary>
+    private readonly record struct PvRowKey(
+        int PhysicalVolumeId,
+        string FacilityCode,
+        string FacilityName,
+        string WorkId);
+
+    private readonly record struct PvCatalogRow(int Id, string Code, string Name, int? ClassifierId, int? ParentId);
+
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly ILogger<ProjectExcelDataImportService> _logger;
+
+    private async Task<DataImportResultDto> ImportFromFileAsync(int projectId, int versionId, DataImportType dataType, string filePath, string description, bool addMissingLaborToCatalog = false)
+    {
+        if (!File.Exists(filePath))
+        {
+            return new DataImportResultDto(false, 0, $"File not found: {filePath}", 0);
+        }
+
+        try
+        {
+            return dataType switch
+            {
+                DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description),
+                DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, addMissingLaborToCatalog),
+                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description),
+                _ => new DataImportResultDto(false, 0, $"Unsupported import type: {dataType}", 0),
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Excel import failed for project {ProjectId}, version {VersionId}, type {DataType}", projectId, versionId, dataType);
+            return new DataImportResultDto(false, 0, FormatImportExceptionMessage(ex), 0);
+        }
+    }
+
+    private async Task<LaborImportPreviewDto> PreviewLaborImportAsync(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            return new LaborImportPreviewDto(Array.Empty<string>(), 0);
+        }
+
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        var laborCatalogRows = await context.LaborIntensities.AsNoTracking().ToListAsync();
+        var knownDocTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var li in laborCatalogRows)
+        {
+            var key = (li.DocumentTypeName ?? string.Empty).Trim();
+            if (key.Length > 0)
+            {
+                knownDocTypes.Add(key);
+            }
+        }
+
+        using var workbook = new XLWorkbook(filePath);
+        var worksheet = GetLaborIntensityImportWorksheet(workbook);
+        if (worksheet.RangeUsed() is null)
+        {
+            return new LaborImportPreviewDto(Array.Empty<string>(), 0);
+        }
+
+        if (!TryResolveLaborIntensityImportLayout(worksheet, out var layout))
+        {
+            return new LaborImportPreviewDto(Array.Empty<string>(), 0);
+        }
+
+        var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? 0;
+        var unmatched = new SortedSet<string>(StringComparer.Ordinal);
+        var totalDataRows = 0;
+
+        for (var rowNumber = layout.FirstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
+        {
+            if (!LaborIntensityImportRowHasAnyData(worksheet, rowNumber, layout))
+            {
+                continue;
+            }
+
+            var documentTypeName = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+            if (string.IsNullOrWhiteSpace(documentTypeName))
+            {
+                continue;
+            }
+
+            totalDataRows++;
+            if (!knownDocTypes.Contains(documentTypeName))
+            {
+                unmatched.Add(documentTypeName);
+            }
+        }
+
+        return new LaborImportPreviewDto(unmatched.ToList(), totalDataRows);
+    }
+
+    private Task<DataImportResultDto> ImportFromApiAsync(int projectId, int versionId, DataImportType dataType, string apiEndpoint, string description)
+    {
+        return Task.FromResult(new DataImportResultDto(false, 0, "API import not yet implemented", 0));
+    }
+
+    private async Task<IReadOnlyList<DataImportIterationInfoDto>> GetImportIterationsCoreAsync(
+        int projectId, int versionId, DataImportType dataType, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.DataImportIterations
+            .AsNoTracking()
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == dataType)
+            .OrderByDescending(i => i.ImportedAt)
+            .Select(i => new DataImportIterationInfoDto(i.ImportedAt, i.RecordCount, i.Description, i.SourceFileName))
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<int> DeleteIterationCoreAsync(
+        int projectId, int versionId, DataImportType dataType, DateTime importedAt, CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        var iteration = await context.DataImportIterations
+            .FirstOrDefaultAsync(i => i.ProjectId == projectId
+                                   && i.ProjectAnalysisVersionId == versionId
+                                   && i.DataType == dataType
+                                   && i.ImportedAt == importedAt);
+
+        if (iteration is null)
+        {
+            return 0;
+        }
+
+        var deletedRecords = await DeleteImportedRecordsAsync(context, dataType, projectId, versionId, importedAt);
+
+        context.DataImportIterations.Remove(iteration);
+        await context.SaveChangesAsync();
+
+        await transaction.CommitAsync();
+        return deletedRecords;
+    }
+
+    private async Task<DataImportResultDto> ImportPhysicalVolumesAsync(int projectId, int versionId, string filePath, string description)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        // Режим «замена»: удаляем все предыдущие данные ФО для данной версии проекта,
+        // чтобы каждый импорт был полным пересозданием без дублей и без сворачивания строк.
+        await ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
+
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = DataImportType.PhysicalVolume,
+            Description = description,
+            SourceFileName = Path.GetFileName(filePath),
+            ImportedAt = DateTime.UtcNow,
+        };
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+
+        var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, versionId);
+        var physicalVolumeRows = isKfo
+            ? await context.PhysicalVolumesKfo.AsNoTracking()
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .ToListAsync()
+            : await context.PhysicalVolumesBer.AsNoTracking()
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .ToListAsync();
+        var catalogName = isKfo ? "PhysicalVolumesKfo" : "PhysicalVolumesBer";
+        var physicalVolumes = BuildCodeLookup(physicalVolumeRows, catalogName);
+
+        using var workbook = new XLWorkbook(filePath);
+        var worksheet = GetPhysicalVolumeImportWorksheet(workbook);
+
+        if (!TryResolvePhysicalVolumeImportLayout(worksheet, out var columnMap, out var firstDataRowNumber))
+        {
+            await transaction.CommitAsync();
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            var emptySheetDetails =
+                "Импортировано строк: 0." + Environment.NewLine + Environment.NewLine
+                + "Выбранный лист не содержит заполненного диапазона (нет данных для чтения).";
+            return new DataImportResultDto(true, 0, null, iteration.Id, emptySheetDetails);
+        }
+
+        var rows = EnumeratePhysicalVolumeDataRows(worksheet, firstDataRowNumber).ToList();
+        if (rows.Count == 0)
+        {
+            await transaction.CommitAsync();
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            var noDataRowsDetails =
+                "Импортировано строк: 0." + Environment.NewLine + Environment.NewLine
+                + "После строки заголовка не найдено ни одной строки с данными. Проверьте, что открыт нужный лист «Список работ» и что в файле есть шапка с текстом вроде «ID по каталогу» / «Код по каталогу».";
+            return new DataImportResultDto(true, 0, null, iteration.Id, noDataRowsDetails);
+        }
+
+        var importTimestamp = iteration.ImportedAt;
+        // ISS-007: помимо счётчиков сохраняем номера строк (и Quantity, и шифр-кандидат),
+        // чтобы вывести их в details. Это позволит пользователю быстро найти проблемные
+        // строки в файле и дозаполнить шифр ЕП.
+        var skippedNoEpCodeRows = new List<(int RowNumber, decimal Quantity)>();
+        var skippedNotInCatalogRows = new List<(int RowNumber, string Code, decimal Quantity)>();
+        // Каждая строка файла — отдельная запись в БД, без сворачивания.
+        var newEntities = new List<ProjectPhysicalVolume>(rows.Count);
+
+        foreach (var row in rows)
+        {
+            var candidates = EnumerateCandidateEpCodesFromRow(row, columnMap, GetCellValue).ToList();
+            if (candidates.Count == 0)
+            {
+                skippedNoEpCodeRows.Add((row.RowNumber(), ParseDecimal(GetCellValue(row, columnMap.Quantity))));
+                continue;
+            }
+
+            PvCatalogRow? catalogRow = null;
+            foreach (var candidate in candidates)
+            {
+                if (TryResolvePhysicalVolume(physicalVolumes, candidate, out var resolved))
+                {
+                    catalogRow = resolved;
+                    break;
+                }
+            }
+
+            if (catalogRow is null)
+            {
+                skippedNotInCatalogRows.Add((row.RowNumber(), candidates[0], ParseDecimal(GetCellValue(row, columnMap.Quantity))));
+                _logger.LogWarning(
+                    "Physical volume with code '{Code}' not found in catalog, skipping",
+                    candidates[0]);
+
+                continue;
+            }
+
+            var draft = PhysicalVolumeImportDraft.FromRow(row, columnMap, ParseDecimal, GetCellValue, catalogRow.Value);
+            draft.ApplyTruncation();
+            newEntities.Add(draft.ToNewEntity(projectId, versionId, catalogRow.Value.Id, isKfo, importTimestamp));
+        }
+
+        if (newEntities.Count == 0)
+        {
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            var catalogCount = physicalVolumes.Count;
+            var zeroDetails = BuildPhysicalVolumeZeroImportDetails(
+                rows.Count,
+                catalogCount,
+                skippedNoEpCodeRows,
+                skippedNotInCatalogRows);
+            return new DataImportResultDto(true, 0, null, iteration.Id, zeroDetails);
+        }
+
+        var pvById = physicalVolumeRows.ToDictionary(pv => pv.Id);
+        await BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
+            context,
+            newEntities.Select(e => e.PhysicalVolumeKfoId ?? e.PhysicalVolumeBerId).Where(id => id.HasValue).Select(id => id!.Value).Distinct(),
+            pvById,
+            isKfo);
+
+        context.ProjectPhysicalVolumes.AddRange(newEntities);
+        await context.SaveChangesAsync();
+
+        var recordsImported = newEntities.Count;
+        iteration.RecordCount = recordsImported;
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        // ISS-007: даже при успешном импорте показываем пропущенные строки,
+        // чтобы пользователь видел, какие данные не попали в БД и мог дозаполнить
+        // шифр в файле. На реальных проектах потеря 0.001% незаметна в общем итоге,
+        // но конкретные «КИП-щиток без шифра» нужно разово обработать вручную.
+        var successDetails = BuildPhysicalVolumeImportDetails(recordsImported, skippedNoEpCodeRows, skippedNotInCatalogRows);
+        return new DataImportResultDto(true, recordsImported, null, iteration.Id, successDetails);
+    }
+
+    private async Task<DataImportResultDto> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description)
+    {
+        // Один DbContext + одна транзакция на весь импорт (Replace/Upsert, skip ошибок ≠ rollback).
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = DataImportType.Equipment,
+            Description = description,
+            SourceFileName = Path.GetFileName(filePath),
+            ImportedAt = DateTime.UtcNow,
+        };
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+
+        // ClosedXML: using предотвращает утечки памяти Workbook/Worksheet.
+        using var workbook = new XLWorkbook(filePath);
+        var worksheet = GetEquipmentImportWorksheet(workbook);
+
+        if (!TryResolveEquipmentImportLayout(worksheet, out var columnMap, out var firstDataRowNumber))
+        {
+            await transaction.CommitAsync();
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            return new DataImportResultDto(
+                true,
+                0,
+                null,
+                iteration.Id,
+                "Импортировано строк: 0." + Environment.NewLine + Environment.NewLine
+                + "Выбранный лист не содержит шапки «Наименование по каталогу» или данных для чтения.");
+        }
+
+        var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? firstDataRowNumber - 1;
+        var catalogRows = await context.Equipments.AsNoTracking().ToListAsync();
+        var units = await context.UnitsOfMeasurement.AsNoTracking().ToListAsync();
+        var (catalogLookup, ambiguousKeys, duplicateKeyCount) =
+            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, _logger);
+        if (duplicateKeyCount > 0)
+        {
+            _logger.LogWarning(
+                "Equipment import: catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                duplicateKeyCount);
+        }
+
+        var pendingCatalogCreates = new List<Equipment>();
+        var autoCreatedCount = 0;
+        var skippedDuplicateCount = 0;
+        var skippedDuplicateRows = new List<(int RowNumber, string Name, string Unit)>();
+        var importTimestamp = iteration.ImportedAt;
+        var rowInputs = new List<EquipmentImportReplaceProcessor.RowInput>();
+        var dictionaryValidator = new EquipmentImportDictionaryValidator(_dictionaryService);
+        var dictionaryColumnFlags = new EquipmentImportDictionaryValidator.EquipmentDictionaryColumnFlags(
+            columnMap.HasUnitIdColumn,
+            columnMap.HasDirectionIdColumn,
+            columnMap.HasNormTypeColumn);
+        var dictionaryErrors = new List<ImportRowErrorDto>();
+
+        for (var rowNumber = firstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
+        {
+            var row = worksheet.Row(rowNumber);
+            if (!EquipmentImportRowHasData(row, columnMap))
+                continue;
+
+            var catalogName = GetWorksheetCellString(worksheet, rowNumber, columnMap.CatalogName)?.Trim();
+            if (string.IsNullOrWhiteSpace(catalogName))
+            {
+                rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
+                    rowNumber,
+                    TryParseEquipmentRowId(row, columnMap),
+                    new ProjectEquipment(),
+                    IsValid: false));
+                continue;
+            }
+
+            var dictionaryRefs = ParseEquipmentDictionaryRefs(row, columnMap);
+            var validationError = await dictionaryValidator.ValidateRowAsync(
+                rowNumber,
+                dictionaryRefs,
+                dictionaryColumnFlags);
+            if (validationError is not null)
+            {
+                dictionaryErrors.Add(validationError);
+                continue;
+            }
+
+            var rawUnitName = row.Cell(columnMap.UnitDimension).GetString()?.Trim() ?? string.Empty;
+            var unitId = dictionaryRefs.UnitId
+                         ?? EquipmentUnitNameMatcher.ResolveUnitId(rawUnitName, units);
+
+            var resolveResult = EquipmentImportCatalogMatcher.ResolveOrCreate(
+                catalogName,
+                unitId,
+                catalogLookup,
+                ambiguousKeys,
+                pendingCatalogCreates);
+
+            if (resolveResult.SkippedDuplicate)
+            {
+                skippedDuplicateCount++;
+                skippedDuplicateRows.Add((rowNumber, catalogName, rawUnitName));
+                rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
+                    rowNumber,
+                    TryParseEquipmentRowId(row, columnMap),
+                    new ProjectEquipment(),
+                    IsValid: false));
+                _logger.LogWarning(
+                    "Equipment import row {Row}: skipped duplicate catalog key Name='{Name}', Unit='{Unit}' (UnitId={UnitId})",
+                    rowNumber,
+                    catalogName,
+                    rawUnitName,
+                    unitId);
+                continue;
+            }
+
+            if (resolveResult.Created)
+                autoCreatedCount++;
+
+            if (dictionaryRefs.DirectionId is int directionId)
+                resolveResult.Equipment.ClassifierId = directionId;
+
+            var draft = BuildProjectEquipmentFromImportRow(
+                row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp);
+
+            rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
+                rowNumber,
+                TryParseEquipmentRowId(row, columnMap),
+                draft,
+                IsValid: true));
+        }
+
+        if (pendingCatalogCreates.Count > 0)
+            context.Equipments.AddRange(pendingCatalogCreates);
+
+        // Replace-стратегия: upsert по Id / натуральному ключу; ошибки строк — в RowErrors, транзакция коммитится.
+        var replaceResult = await EquipmentImportReplaceProcessor.ApplyAsync(
+            context,
+            projectId,
+            versionId,
+            rowInputs,
+            _logger);
+
+        var allErrors = dictionaryErrors
+            .Concat(replaceResult.Errors)
+            .Concat(skippedDuplicateRows.Select(s => new ImportRowErrorDto(
+                s.RowNumber,
+                $"Duplicate catalog key: {s.Name} ({s.Unit})")))
+            .ToList();
+
+        await context.SaveChangesAsync();
+        iteration.RecordCount = replaceResult.ProcessedCount;
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        var details = EquipmentImportCatalogMatcher.BuildImportSummary(
+            replaceResult.ProcessedCount,
+            autoCreatedCount,
+            skippedDuplicateCount,
+            skippedDuplicateRows);
+
+        return new DataImportResultDto(
+            true,
+            replaceResult.ProcessedCount,
+            null,
+            iteration.Id,
+            details,
+            allErrors);
+    }
+
+    private static int? TryParseEquipmentRowId(IXLRow row, EquipmentColumnMap map)
+    {
+        if (map.RowId <= 0)
+            return null;
+
+        var text = row.Cell(map.RowId).GetString()?.Trim();
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0
+            ? id
+            : null;
+    }
+
+    private static bool EquipmentImportRowHasData(IXLRow row, EquipmentColumnMap map)
+    {
+        return !string.IsNullOrWhiteSpace(row.Cell(map.CatalogName).GetString())
+               || !string.IsNullOrWhiteSpace(row.Cell(map.Quantity).GetString());
+    }
+
+    private static ProjectEquipment BuildProjectEquipmentFromImportRow(
+        IXLRow row,
+        EquipmentColumnMap map,
+        int projectId,
+        int versionId,
+        Equipment equipment,
+        DateTime importTimestamp)
+    {
+        var fbsSource = row.Cell(map.FacilitySource).GetString()?.Trim();
+        var (facilityCode, facilityName) = SplitEquipmentFbs(fbsSource);
+
+        return new ProjectEquipment
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            Equipment = equipment,
+            CreatedAt = importTimestamp,
+            Quantity = ParseDecimal(row.Cell(map.Quantity).GetString()),
+            QuantityInWork = ParseNullableDecimal(row.Cell(map.QuantityInWork).GetString()),
+            PositionNumber = TruncateEquipmentField(row.Cell(map.PositionNumber).GetString(), 50),
+            FacilityCode = facilityCode,
+            FacilityName = facilityName,
+            DocumentSet = TruncateEquipmentField(row.Cell(map.DocumentSet).GetString(), 100),
+            DiagramNumber = TrimEquipmentField(row.Cell(map.DiagramNumber).GetString()),
+            ShortName = TrimEquipmentField(row.Cell(map.ShortName).GetString()),
+            CatalogName = TrimEquipmentField(row.Cell(map.CatalogName).GetString()),
+            TypeMark = TrimEquipmentField(row.Cell(map.TypeMark).GetString()),
+            CatalogId = TruncateEquipmentField(row.Cell(map.CatalogId).GetString(), 100),
+            Tag = TruncateEquipmentField(row.Cell(map.Tag).GetString(), 100),
+            FullEquipmentId = TruncateEquipmentField(row.Cell(map.FullEquipmentId).GetString(), 100),
+            SupplyStandard = TrimEquipmentField(row.Cell(map.SupplyStandard).GetString()),
+            OlReference = TrimEquipmentField(row.Cell(map.OlReference).GetString()),
+            EstimationBasis = TrimEquipmentField(row.Cell(map.EstimationBasis).GetString()),
+        };
+    }
+
+    private static (string? Code, string? Name) SplitEquipmentFbs(string? fbs)
+    {
+        if (string.IsNullOrWhiteSpace(fbs))
+            return (null, null);
+
+        var idx = fbs.IndexOf(" - ", StringComparison.Ordinal);
+        if (idx <= 0)
+        {
+            var t = fbs.Trim();
+            return (TruncateEquipmentField(t, 100), TrimEquipmentField(t));
+        }
+
+        return (
+            TruncateEquipmentField(fbs[..idx].Trim(), 100),
+            TrimEquipmentField(fbs[(idx + 3)..].Trim()));
+    }
+
+    private static string? TrimEquipmentField(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
+    }
+
+    private static string? TruncateEquipmentField(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
+    }
+
+    private static decimal? ParseNullableDecimal(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return ParseDecimal(value);
+    }
+
+    private static string BuildPhysicalVolumeZeroImportDetails(
+        int dataRowCount,
+        int catalogCodeCount,
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
+    {
+        var parts = new List<string>
+        {
+            "Импортировано строк: 0.",
+            string.Empty,
+            $"Строк данных в файле (после заголовка): {dataRowCount}.",
+            $"Уникальных кодов в справочнике PhysicalVolumes: {catalogCodeCount}.",
+            $"Строк без распознанного шифра ЕП в ожидаемых колонках: {skippedNoEpCodeRows.Count}.",
+            $"Строк, где шифр не найден в справочнике: {skippedNotInCatalogRows.Count}.",
+        };
+
+        AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
+
+        parts.Add(string.Empty);
+        parts.Add("Каждая строка файла сопоставляется с записью каталога по полю Code (шифр работы: БЭР вида 01-01-001-01 или КФО2 вида KQ.02.160).");
+        parts.Add("Если много строк «без распознанного шифра», проверьте, что в ожидаемых колонках есть именно такие коды (а не только наименование), и что открыт лист «Список работ» с колонкой «Код по каталогу» / «Шифр по каталогу».");
+        parts.Add("Если в базе только демонстрационные коды (например FO-001), а в файле — полные шифры БЭР или КФО2, совпадений не будет, пока в каталог не загружен полный перечень работ.");
+        parts.Add("Проверьте справочник «Физические объёмы» в приложении или выполните миграцию с полными данными каталога.");
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    /// <summary>
+    /// ISS-007: details для успешного импорта PV. Если пропущенных строк нет — возвращает null
+    /// (тогда UI не показывает дополнительное окно деталей). Если есть — выводит сводку
+    /// и список номеров строк с Quantity, чтобы пользователь нашёл их в файле и дозаполнил шифр.
+    /// </summary>
+    private static string? BuildPhysicalVolumeImportDetails(
+        int recordsImported,
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
+    {
+        if (skippedNoEpCodeRows.Count == 0 && skippedNotInCatalogRows.Count == 0)
+        {
+            return null;
+        }
+
+        var parts = new List<string>
+        {
+            $"Импортировано строк: {recordsImported}.",
+            string.Empty,
+            $"Пропущено строк без распознанного шифра ЕП: {skippedNoEpCodeRows.Count} (Σ Кол-во = {FormatTotalQuantity(skippedNoEpCodeRows.Sum(x => x.Quantity))}).",
+            $"Пропущено строк с шифром, не найденным в справочнике: {skippedNotInCatalogRows.Count} (Σ Кол-во = {FormatTotalQuantity(skippedNotInCatalogRows.Sum(x => x.Quantity))}).",
+        };
+
+        AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
+
+        parts.Add(string.Empty);
+        parts.Add("Проверьте перечисленные строки в файле «Список работ»: в колонке «ID по каталогу» / «Шифр работ» должен быть код БЭР (01-01-001-01) или КФО2 (KQ.02.160). После заполнения шифров повторите импорт.");
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private static void AppendSkippedRowDetails(
+        List<string> parts,
+        IReadOnlyList<(int RowNumber, decimal Quantity)> skippedNoEpCodeRows,
+        IReadOnlyList<(int RowNumber, string Code, decimal Quantity)> skippedNotInCatalogRows)
+    {
+        // Лимит вывода списка: первые 50 строк каждого типа. На реальных проектах больше — это
+        // патология файла; даже 50 хватает, чтобы заметить системную проблему. Полный список
+        // остаётся в логах (LogWarning per row для not-in-catalog).
+        const int maxRowsToList = 50;
+
+        if (skippedNoEpCodeRows.Count > 0)
+        {
+            parts.Add(string.Empty);
+            parts.Add("Строки без шифра ЕП (номер строки Excel, Кол-во по BoQ):");
+            foreach (var (rowNumber, quantity) in skippedNoEpCodeRows.Take(maxRowsToList))
+            {
+                parts.Add($"  • строка {rowNumber}: Кол-во = {FormatQuantity(quantity)}");
+            }
+            if (skippedNoEpCodeRows.Count > maxRowsToList)
+            {
+                parts.Add($"  … и ещё {skippedNoEpCodeRows.Count - maxRowsToList} строк (см. лог приложения).");
+            }
+        }
+
+        if (skippedNotInCatalogRows.Count > 0)
+        {
+            parts.Add(string.Empty);
+            parts.Add("Строки с шифром, не найденным в справочнике (номер строки Excel, шифр, Кол-во):");
+            foreach (var (rowNumber, code, quantity) in skippedNotInCatalogRows.Take(maxRowsToList))
+            {
+                parts.Add($"  • строка {rowNumber}: шифр «{code}», Кол-во = {FormatQuantity(quantity)}");
+            }
+            if (skippedNotInCatalogRows.Count > maxRowsToList)
+            {
+                parts.Add($"  … и ещё {skippedNotInCatalogRows.Count - maxRowsToList} строк (см. лог приложения).");
+            }
+        }
+    }
+
+    private static string FormatQuantity(decimal value) =>
+        value.ToString("0.####", CultureInfo.InvariantCulture);
+
+    private static string FormatTotalQuantity(decimal value) =>
+        value.ToString("N4", CultureInfo.InvariantCulture);
+
+    private async Task<DataImportResultDto> ImportLaborIntensitiesAsync(int projectId, int versionId, string filePath, string description, bool addMissingToCatalog)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var transaction = await context.Database.BeginTransactionAsync();
+
+        // Удаляем все предыдущие данные трудоёмкости для этой версии (стратегия: очистка + вставка)
+        await ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
+
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = DataImportType.LaborIntensity,
+            Description = description,
+            SourceFileName = Path.GetFileName(filePath),
+            ImportedAt = DateTime.UtcNow,
+        };
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+
+        // Справочник «Трудоёмкость» — единственный источник связи:
+        // (1) DocumentTypeName из Excel-строки проекта → LaborIntensity,
+        // (2) LaborIntensity.IicWorkDirectionId → ProjectLaborIntensity.WorkDirectionId.
+        // Никакого авто-создания направлений (TF-NNN) или каталога из файла проекта
+        // больше не происходит: это приводило к появлению мусорных записей
+        // (направлений/типов документа), не согласованных с главным справочником.
+        var laborCatalogRows = await context.LaborIntensities.ToListAsync();
+        var laborByDocumentType = new Dictionary<string, LaborIntensity>(StringComparer.OrdinalIgnoreCase);
+        foreach (var li in laborCatalogRows)
+        {
+            var key = (li.DocumentTypeName ?? string.Empty).Trim();
+            if (key.Length == 0)
+            {
+                continue;
+            }
+
+            // При коллизиях DocumentTypeName приоритет у первой встретившейся «активной» (не архив) записи.
+            if (!laborByDocumentType.ContainsKey(key) || (laborByDocumentType[key].IsArchived && !li.IsArchived))
+            {
+                laborByDocumentType[key] = li;
+            }
+        }
+
+        var importTimestamp = iteration.ImportedAt;
+        // Накапливаем строки для массовой вставки (без группировок — построчно, как в импорте ФО)
+        var newEntities = new List<ProjectLaborIntensity>();
+        var laborFileRowsAccepted = 0;
+        var rowsWithoutCatalogMatch = 0;
+        var rowsWithoutDirection = 0;
+        var newCatalogEntriesCreated = 0;
+        var unmatchedDocTypes = new SortedSet<string>(StringComparer.Ordinal);
+        var docTypesWithoutDirection = new SortedSet<string>(StringComparer.Ordinal);
+
+        using var workbook = new XLWorkbook(filePath);
+        var worksheet = GetLaborIntensityImportWorksheet(workbook);
+
+        if (worksheet.RangeUsed() is null)
+        {
+            await transaction.CommitAsync();
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            return new DataImportResultDto(true, 0, null, iteration.Id);
+        }
+
+        if (!TryResolveLaborIntensityImportLayout(worksheet, out var layout))
+        {
+            await transaction.RollbackAsync();
+            return new DataImportResultDto(false, 0,
+                "Не удалось определить структуру файла трудоёмкости. Ожидаются колонки: «Наименование проектного направления», «Наименование типа документа TF», «Сумма Плановая трудоемкость, чч».",
+                iteration.Id);
+        }
+
+        var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? 0;
+
+        // Опциональное авто-пополнение справочника «Трудоёмкость» отсутствующими
+        // «Типами документа» (ответ пользователя «Да» на запрос из UI). Новые позиции
+        // создаются корневыми (без Parent), без привязки к IIC и норм — это
+        // промежуточные карточки, которые после импорта администратор каталога
+        // может отредактировать (проставить направление/нормы) через справочник.
+        if (addMissingToCatalog)
+        {
+            var docTypesInFile = new SortedSet<string>(StringComparer.Ordinal);
+            for (var rowNumber = layout.FirstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
+            {
+                if (!LaborIntensityImportRowHasAnyData(worksheet, rowNumber, layout))
+                {
+                    continue;
+                }
+
+                var name = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    docTypesInFile.Add(name);
+                }
+            }
+
+            var created = 0;
+            foreach (var docType in docTypesInFile)
+            {
+                if (laborByDocumentType.ContainsKey(docType))
+                {
+                    continue;
+                }
+
+                // Code: ограничение длины 100 (см. LaborIntensityConfiguration). В качестве
+                // шифра берём сам «Тип документа» — это наиболее узнаваемая подсказка для
+                // последующего ручного редактирования. Уникальность Code не требуется.
+                var code = docType.Length <= 100 ? docType : docType[..100];
+                var name = docType.Length <= 500 ? docType : docType[..500];
+
+                var newCatalogItem = new LaborIntensity
+                {
+                    Code = code,
+                    Name = name,
+                    DocumentTypeName = name,
+                    IsArchived = false,
+                    SortOrder = 0,
+                    CreatedAt = importTimestamp,
+                };
+                context.LaborIntensities.Add(newCatalogItem);
+                laborByDocumentType[docType] = newCatalogItem;
+                created++;
+            }
+
+            if (created > 0)
+            {
+                // SaveChangesAsync — чтобы у новых LaborIntensity появились Id, иначе
+                // ProjectLaborIntensity.LaborIntensityId будет привязан к 0.
+                await context.SaveChangesAsync();
+                _logger.LogInformation(
+                    "Labor import: auto-created {Count} catalog entries for unmatched DocumentTypeName",
+                    created);
+            }
+
+            newCatalogEntriesCreated = created;
+        }
+
+        // Pivot/итоги-строки в файлах TF: общие суммы без типа документа. Пропускаем.
+        for (var rowNumber = layout.FirstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
+        {
+            if (!LaborIntensityImportRowHasAnyData(worksheet, rowNumber, layout))
+            {
+                continue;
+            }
+
+            var documentTypeName = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+            if (string.IsNullOrWhiteSpace(documentTypeName))
+            {
+                continue;
+            }
+
+            // Разрешаем тип документа через справочник «Трудоёмкость». Направление берём из
+            // найденной позиции каталога (LaborIntensity.IicWorkDirectionId). Если тип не найден
+            // или в каталоге нет направления — строка принимается с NULL-привязкой, но
+            // фиксируется счётчиком для последующей диагностики в интерфейсе.
+            LaborIntensity? laborItem = null;
+            laborByDocumentType.TryGetValue(documentTypeName, out laborItem);
+
+            if (laborItem is null)
+            {
+                rowsWithoutCatalogMatch++;
+                unmatchedDocTypes.Add(documentTypeName);
+            }
+            else if (laborItem.IicWorkDirectionId is null)
+            {
+                rowsWithoutDirection++;
+                docTypesWithoutDirection.Add(documentTypeName);
+            }
+
+            var brand = layout.BrandColumn > 0
+                ? GetWorksheetCellString(worksheet, rowNumber, layout.BrandColumn)?.Trim()
+                : null;
+            var plannedHours = ParseDecimal(GetWorksheetCellString(worksheet, rowNumber, layout.PlannedHoursColumn));
+            var actualHours = layout.ActualHoursColumn > 0
+                ? ParseDecimal(GetWorksheetCellString(worksheet, rowNumber, layout.ActualHoursColumn))
+                : 0m;
+            var notes = layout.NotesColumn > 0
+                ? GetWorksheetCellString(worksheet, rowNumber, layout.NotesColumn)?.Trim()
+                : null;
+
+            // DocumentationCode формируем из (DocumentTypeName, Brand): одинаковый тип документа
+            // для разных «марок» (3U0000-ОП-АТХ1 vs 4L0000-…) — это разные строки в файле и в БД.
+            var documentationCode = string.IsNullOrWhiteSpace(brand)
+                ? documentTypeName
+                : $"{documentTypeName}|{brand}";
+
+            // SQL Server unique-индекс на nvarchar — ограничение длины ~450 символов
+            // (DocumentationCode настроен как 450, см. ProjectLaborIntensityConfiguration).
+            // ISS-006: ранее лимит был 100 и схлопывал разные «тип+марка» по truncate
+            // (270+ строк имели префикс >100 символов, ~2 830 ч терялось при merge).
+            if (documentationCode.Length > 450)
+            {
+                documentationCode = documentationCode[..450];
+            }
+
+            var entity = new ProjectLaborIntensity
+            {
+                ProjectId = projectId,
+                ProjectAnalysisVersionId = versionId,
+                DocumentationCode = documentationCode,
+                WorkDirectionId = laborItem?.IicWorkDirectionId,
+                LaborIntensityId = laborItem?.Id,
+                PlannedHours = plannedHours,
+                ActualHours = actualHours,
+                Brand = brand,
+                Notes = notes,
+                CreatedAt = importTimestamp,
+            };
+
+            newEntities.Add(entity);
+            laborFileRowsAccepted++;
+        }
+
+        // Массовая вставка всех строк без группировок (построчно, как в импорте ФО)
+        if (newEntities.Count > 0)
+        {
+            context.ProjectLaborIntensities.AddRange(newEntities);
+            await context.SaveChangesAsync();
+        }
+
+        iteration.RecordCount = newEntities.Count;
+        await context.SaveChangesAsync();
+        await transaction.CommitAsync();
+
+        var details = new List<string>();
+        if (newCatalogEntriesCreated > 0)
+        {
+            details.Add($"В справочник «Трудоёмкость» добавлено {newCatalogEntriesCreated} новых позиций из файла (без привязки к направлению IIC и без норм — проверьте карточки в справочнике).");
+        }
+        if (rowsWithoutCatalogMatch > 0)
+        {
+            details.Add($"Для {rowsWithoutCatalogMatch} строк файла «Тип документа» не найден в справочнике «Трудоёмкость»: записи сохранены без привязки (WorkDirectionId/LaborIntensityId = NULL).");
+            details.Add("Не найдены в справочнике (" + unmatchedDocTypes.Count + "):" + Environment.NewLine
+                        + string.Join(Environment.NewLine, unmatchedDocTypes));
+        }
+        if (rowsWithoutDirection > 0)
+        {
+            details.Add($"Для {rowsWithoutDirection} строк позиция справочника «Трудоёмкость» найдена, но у неё не задано направление работ IIC: записи сохранены без привязки к направлению.");
+            details.Add("Без привязки к направлению (" + docTypesWithoutDirection.Count + "):" + Environment.NewLine
+                        + string.Join(Environment.NewLine, docTypesWithoutDirection));
+        }
+
+        var detailsText = details.Count > 0 ? string.Join(Environment.NewLine + Environment.NewLine, details) : null;
+        return new DataImportResultDto(true, newEntities.Count, null, iteration.Id, detailsText);
+    }
+
+    /// <summary>Удаляет все записи трудоёмкости и итерации импорта для указанной версии проекта.</summary>
+    private static async Task ClearLaborIntensityDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectLaborIntensities
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+        if (existing.Count > 0)
+            context.ProjectLaborIntensities.RemoveRange(existing);
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.LaborIntensity)
+            .ToListAsync();
+        if (existingIterations.Count > 0)
+            context.DataImportIterations.RemoveRange(existingIterations);
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
+            await context.SaveChangesAsync();
+    }
+
+    /// <summary>Описание раскладки колонок в листе трудоёмкости после авто-детекции по заголовку.</summary>
+    private readonly record struct LaborIntensityImportLayout(
+        int FirstDataRowNumber,
+        int WorkDirectionColumn,
+        int DocumentTypeColumn,
+        int PlannedHoursColumn,
+        int ActualHoursColumn,
+        int BrandColumn,
+        int NotesColumn);
+
+    /// <summary>
+    /// Определяет строку заголовка и индексы колонок в листе трудоёмкости.
+    /// Поддержан формат «Труд проектов» (с заголовками «Наименование типа документа TF» и
+    /// «Наименование проектного направления»). Для совместимости со старыми шаблонами без
+    /// заголовков возвращает «легаси»-раскладку: A=шифр, C=марка, D=направление, E=план, F=факт, G=примечание.
+    /// </summary>
+    private static bool TryResolveLaborIntensityImportLayout(
+        IXLWorksheet worksheet,
+        out LaborIntensityImportLayout layout)
+    {
+        layout = default;
+        var used = worksheet.RangeUsed();
+        if (used is null)
+        {
+            return false;
+        }
+
+        var firstRow = used.FirstRow().RowNumber();
+        var lastSearchRow = Math.Min(used.LastRow().RowNumber(), firstRow + 30);
+        var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+
+        for (var r = firstRow; r <= lastSearchRow; r++)
+        {
+            int directionCol = -1, docTypeCol = -1, plannedCol = -1, actualCol = -1, brandCol = -1, notesCol = -1;
+            var headerHits = 0;
+
+            for (var c = 1; c <= lastCol; c++)
+            {
+                var text = GetWorksheetCellString(worksheet, r, c);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                // Нормализуем «ё» → «е» для устойчивого сравнения русскоязычных заголовков
+                var t = text.Trim().Replace('ё', 'е').Replace('Ё', 'Е');
+                if (directionCol < 0 && t.Contains("проектного направления", StringComparison.OrdinalIgnoreCase))
+                {
+                    directionCol = c;
+                    headerHits++;
+                }
+                else if (docTypeCol < 0 && (
+                    t.Contains("тип документа", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("типа документа", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("вида документов", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("вид документов", StringComparison.OrdinalIgnoreCase)))
+                {
+                    docTypeCol = c;
+                    headerHits++;
+                }
+                else if (plannedCol < 0 && (
+                    t.Contains("плановая трудоемкость", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("плановой трудоем", StringComparison.OrdinalIgnoreCase)
+                    || (t.Contains("плановой", StringComparison.OrdinalIgnoreCase)
+                        && t.Contains("труд", StringComparison.OrdinalIgnoreCase))))
+                {
+                    plannedCol = c;
+                    headerHits++;
+                }
+                else if (actualCol < 0 && (
+                    t.Contains("фактически списано", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("фактическая трудоемкость", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("фактической работы", StringComparison.OrdinalIgnoreCase)
+                    || t.Contains("фактической трудоем", StringComparison.OrdinalIgnoreCase)))
+                {
+                    actualCol = c;
+                    headerHits++;
+                }
+                else if (brandCol < 0 && t.Equals("марка", StringComparison.OrdinalIgnoreCase))
+                {
+                    brandCol = c;
+                    headerHits++;
+                }
+                else if (notesCol < 0 && t.Contains("примечан", StringComparison.OrdinalIgnoreCase))
+                {
+                    notesCol = c;
+                    headerHits++;
+                }
+            }
+
+            // Минимально достаточный набор: направление + тип документа + плановые часы.
+            if (directionCol > 0 && docTypeCol > 0 && plannedCol > 0)
+            {
+                layout = new LaborIntensityImportLayout(
+                    FirstDataRowNumber: r + 1,
+                    WorkDirectionColumn: directionCol,
+                    DocumentTypeColumn: docTypeCol,
+                    PlannedHoursColumn: plannedCol,
+                    ActualHoursColumn: actualCol > 0 ? actualCol : -1,
+                    BrandColumn: brandCol > 0 ? brandCol : -1,
+                    NotesColumn: notesCol > 0 ? notesCol : -1);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Выбирает лист импорта трудоёмкости. Приоритет — лист с именем «Труд проектов»;
+    /// затем имена со словом «труд»; иначе первый непустой лист.
+    /// </summary>
+    private static IXLWorksheet GetLaborIntensityImportWorksheet(XLWorkbook workbook)
+    {
+        IXLWorksheet? exact = null;
+        IXLWorksheet? partial = null;
+
+        foreach (var ws in workbook.Worksheets)
+        {
+            if (ws.RangeUsed() is null)
+            {
+                continue;
+            }
+
+            if (ws.Name.Equals("Труд проектов", StringComparison.OrdinalIgnoreCase))
+            {
+                exact = ws;
+                break;
+            }
+
+            if (partial is null && ws.Name.Contains("труд", StringComparison.OrdinalIgnoreCase))
+            {
+                partial = ws;
+            }
+        }
+
+        return exact ?? partial ?? GetFirstWorksheetWithData(workbook);
+    }
+
+    /// <summary>Проверяет, есть ли в строке импорта трудоёмкости хоть одно значимое поле.</summary>
+    private static bool LaborIntensityImportRowHasAnyData(IXLWorksheet worksheet, int rowNumber, LaborIntensityImportLayout layout)
+    {
+        Span<int> cols = stackalloc int[]
+        {
+            layout.WorkDirectionColumn,
+            layout.DocumentTypeColumn,
+            layout.PlannedHoursColumn,
+            layout.ActualHoursColumn,
+            layout.BrandColumn,
+            layout.NotesColumn,
+        };
+
+        foreach (var c in cols)
+        {
+            if (c <= 0)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(GetWorksheetCellString(worksheet, rowNumber, c)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// ISS-006: схлопывает строки трудоёмкости по натуральному ключу
+    /// (DocumentationCode, WorkDirectionId) с суммированием плановых и фактических часов.
+    /// Строки с пустым WorkDirectionId возвращаются отдельным списком — фильтрованный
+    /// уникальный индекс пропускает их вне merge.
+    /// Public для модульного тестирования (см. DataImportServiceTests).
+    /// </summary>
+    public static (
+        Dictionary<(string DocumentationCode, int WorkDirectionId), ProjectLaborIntensity> Merged,
+        List<ProjectLaborIntensity> Unmatched)
+        MergeLaborRowsByNaturalKey(IEnumerable<ProjectLaborIntensity> rows)
+    {
+        var merged = new Dictionary<(string DocumentationCode, int WorkDirectionId), ProjectLaborIntensity>();
+        var unmatched = new List<ProjectLaborIntensity>();
+
+        foreach (var entity in rows)
+        {
+            if (entity.WorkDirectionId is int wdId)
+            {
+                var key = (entity.DocumentationCode, wdId);
+                if (merged.TryGetValue(key, out var existing))
+                {
+                    existing.PlannedHours += entity.PlannedHours;
+                    existing.ActualHours += entity.ActualHours;
+                }
+                else
+                {
+                    merged[key] = entity;
+                }
+            }
+            else
+            {
+                unmatched.Add(entity);
+            }
+        }
+
+        return (merged, unmatched);
+    }
+
+    private static string? GetCellValue(IXLRangeRow row, int columnNumber)
+    {
+        return GetWorksheetCellString(row.Worksheet, row.RowNumber(), columnNumber);
+    }
+
+    /// <summary>
+    /// Возвращает текст ячейки; для объединённых областей — значение из первой ячейки диапазона (как в Excel).
+    /// </summary>
+    private static string? GetWorksheetCellString(IXLWorksheet sheet, int rowNumber, int columnNumber)
+    {
+        var cell = sheet.Cell(rowNumber, columnNumber);
+        if (!cell.IsEmpty())
+        {
+            return CellValueToString(cell);
+        }
+
+        if (cell.IsMerged())
+        {
+            var merged = cell.MergedRange();
+            var first = merged.FirstCell();
+            if (!first.IsEmpty())
+            {
+                return CellValueToString(first);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// ClosedXML 0.104+: cell values are <see cref="XLCellValue"/>; <see cref="IXLCell.GetValue{T}"/> throws on mismatch.
+    /// </summary>
+    private static string? CellValueToString(IXLCell cell)
+    {
+        var v = cell.Value;
+        if (v.IsBlank)
+        {
+            return null;
+        }
+
+        if (v.IsText)
+        {
+            return v.GetText().Trim();
+        }
+
+        if (v.IsNumber)
+        {
+            return v.GetNumber().ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (v.IsBoolean)
+        {
+            return v.GetBoolean().ToString();
+        }
+
+        if (v.IsDateTime)
+        {
+            return v.GetDateTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        return v.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static IXLWorksheet GetFirstWorksheetWithData(XLWorkbook workbook)
+    {
+        foreach (var ws in workbook.Worksheets)
+        {
+            if (ws.RangeUsed() is not null)
+            {
+                return ws;
+            }
+        }
+
+        return workbook.Worksheets.Count > 0
+            ? workbook.Worksheet(1)
+            : throw new InvalidOperationException("В книге Excel нет листов с данными.");
+    }
+
+    private static IXLWorksheet GetEquipmentImportWorksheet(XLWorkbook workbook)
+    {
+        IXLWorksheet? best = null;
+        long bestScore = -1;
+
+        foreach (var ws in workbook.Worksheets)
+        {
+            if (ws.RangeUsed() is null)
+                continue;
+
+            var score = ScoreWorksheetForEquipmentImport(ws);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = ws;
+            }
+        }
+
+        return best ?? GetFirstWorksheetWithData(workbook);
+    }
+
+    private static long ScoreWorksheetForEquipmentImport(IXLWorksheet ws)
+    {
+        var used = ws.RangeUsed();
+        if (used is null)
+            return -1;
+
+        long score = (long)used.RowCount() * used.ColumnCount();
+
+        if (TryFindEquipmentHeaderRow(ws, out _))
+            score += 50_000_000L;
+
+        var name = ws.Name;
+        if (name.Contains("оборуд", StringComparison.OrdinalIgnoreCase))
+            score += 5_000_000L;
+
+        return score;
+    }
+
+    private static bool TryResolveEquipmentImportLayout(
+        IXLWorksheet worksheet,
+        out EquipmentColumnMap columnMap,
+        out int firstDataRowNumber)
+    {
+        columnMap = default;
+        firstDataRowNumber = 4;
+
+        if (worksheet.RangeUsed() is null)
+            return false;
+
+        if (!TryFindEquipmentHeaderRow(worksheet, out var headerRow))
+            return false;
+
+        if (!TryBuildEquipmentColumnMap(worksheet, headerRow, out columnMap))
+            return false;
+
+        firstDataRowNumber = headerRow + 1;
+        return true;
+    }
+
+    private static bool TryFindEquipmentHeaderRow(IXLWorksheet worksheet, out int headerRow)
+    {
+        headerRow = 0;
+        var lastRow = Math.Min(worksheet.LastRowUsed()?.RowNumber() ?? 0, 15);
+
+        for (var row = 1; row <= lastRow; row++)
+        {
+            var lastCol = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+            for (var col = 1; col <= lastCol; col++)
+            {
+                var text = GetWorksheetCellString(worksheet, row, col);
+                if (text is not null
+                    && text.Contains("Наименование по каталогу", StringComparison.OrdinalIgnoreCase))
+                {
+                    headerRow = row;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryBuildEquipmentColumnMap(IXLWorksheet worksheet, int headerRow, out EquipmentColumnMap map)
+    {
+        map = default;
+        var lastCol = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+        var columns = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (var col = 1; col <= lastCol; col++)
+        {
+            var text = GetWorksheetCellString(worksheet, headerRow, col)?.Trim();
+            if (string.IsNullOrWhiteSpace(text))
+                continue;
+
+            columns.TryAdd(text, col);
+        }
+
+        if (!columns.TryGetValue("Наименование по каталогу", out var catalogNameCol))
+            return false;
+
+        map = new EquipmentColumnMap
+        {
+            RowId = FindEquipmentColumn(columns, "Id", -1),
+            PositionNumber = FindEquipmentColumn(columns, "№ позиции в основном списке", 1),
+            FacilitySource = FindEquipmentColumn(columns, "FBS (Code and Title of Facility)", 3),
+            DocumentSet = FindEquipmentColumn(columns, "Комплект документов", 4),
+            DiagramNumber = FindEquipmentColumn(
+                columns,
+                "Диаграмма No / PFD No / P&ID No/ Datasheet No",
+                5),
+            ShortName = FindEquipmentColumn(columns, "Наименование краткое", 6),
+            CatalogName = catalogNameCol,
+            TypeMark = FindEquipmentColumn(columns, "Тип/Марка оборудования", 8),
+            CatalogId = FindEquipmentColumn(columns, "ID по каталогу", 9),
+            Tag = FindEquipmentColumn(columns, "TAG", 10),
+            FullEquipmentId = FindEquipmentColumn(columns, "ID обор. полный", 11),
+            SupplyStandard = FindEquipmentColumn(columns, "Стандарт на поставку", 12),
+            OlReference = FindEquipmentColumn(columns, "ОЛ", 13),
+            Quantity = FindEquipmentColumn(columns, "Всего, (ед)", 14),
+            QuantityInWork = FindEquipmentColumn(columns, "В работе, (ед)", 15),
+            EstimationBasis = FindEquipmentColumn(columns, "Базис оценки", 16),
+            UnitDimension = FindEquipmentColumn(columns, "Размерность", 18),
+            UnitId = FindEquipmentColumn(columns, "UnitId", -1),
+            DirectionId = FindEquipmentColumn(columns, "DirectionId", -1),
+            NormType = FindEquipmentColumn(columns, "NormType", -1),
+        };
+
+        return true;
+    }
+
+    private static int FindEquipmentColumn(IReadOnlyDictionary<string, int> columns, string header, int fallback)
+    {
+        return columns.TryGetValue(header, out var col) ? col : fallback;
+    }
+
+    private static EquipmentImportDictionaryValidator.EquipmentDictionaryRefs ParseEquipmentDictionaryRefs(
+        IXLRow row,
+        EquipmentColumnMap map)
+    {
+        return new EquipmentImportDictionaryValidator.EquipmentDictionaryRefs(
+            TryParseOptionalEquipmentInt(row, map.UnitId),
+            TryParseOptionalEquipmentInt(row, map.DirectionId),
+            map.NormType > 0 ? row.Cell(map.NormType).GetString()?.Trim() : null);
+    }
+
+    private static int? TryParseOptionalEquipmentInt(IXLRow row, int columnIndex)
+    {
+        if (columnIndex <= 0)
+            return null;
+
+        var text = row.Cell(columnIndex).GetString()?.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value > 0
+            ? value
+            : null;
+    }
+
+    private readonly struct EquipmentColumnMap
+    {
+        public int RowId { get; init; }
+
+        public int PositionNumber { get; init; }
+        public int FacilitySource { get; init; }
+        public int DocumentSet { get; init; }
+        public int DiagramNumber { get; init; }
+        public int ShortName { get; init; }
+        public int CatalogName { get; init; }
+        public int TypeMark { get; init; }
+        public int CatalogId { get; init; }
+        public int Tag { get; init; }
+        public int FullEquipmentId { get; init; }
+        public int SupplyStandard { get; init; }
+        public int OlReference { get; init; }
+        public int Quantity { get; init; }
+        public int QuantityInWork { get; init; }
+        public int EstimationBasis { get; init; }
+        public int UnitDimension { get; init; }
+        public int UnitId { get; init; }
+        public int DirectionId { get; init; }
+        public int NormType { get; init; }
+
+        public bool HasUnitIdColumn => UnitId > 0;
+        public bool HasDirectionIdColumn => DirectionId > 0;
+        public bool HasNormTypeColumn => NormType > 0;
+    }
+
+    /// <summary>
+    /// Выбирает лист: приоритет у листа с шапкой «каталог» или с колонкой кодов ЕП; иначе — «Список работ» и размер.
+    /// </summary>
+    private static IXLWorksheet GetPhysicalVolumeImportWorksheet(XLWorkbook workbook)
+    {
+        IXLWorksheet? best = null;
+        long bestScore = -1;
+
+        foreach (var ws in workbook.Worksheets)
+        {
+            var used = ws.RangeUsed();
+            if (used is null)
+            {
+                continue;
+            }
+
+            var score = ScoreWorksheetForPhysicalVolumeImport(ws);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = ws;
+            }
+        }
+
+        return best ?? GetFirstWorksheetWithData(workbook);
+    }
+
+    private static long ScoreWorksheetForPhysicalVolumeImport(IXLWorksheet ws)
+    {
+        var used = ws.RangeUsed();
+        if (used is null)
+        {
+            return -1;
+        }
+
+        long score = (long)used.RowCount() * used.ColumnCount();
+
+        if (TryFindSpisokRabotHeaderRow(ws, out _))
+        {
+            score += 50_000_000L;
+        }
+
+        if (TryDetectEpCodeColumnByData(ws, out _, out _))
+        {
+            score += 25_000_000L;
+        }
+
+        var name = ws.Name;
+        if (name.Contains("список", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("Spisok", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 5_000_000L;
+        }
+
+        if (name.Contains("вариант", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 500_000L;
+        }
+
+        if (name.Contains("работ", StringComparison.OrdinalIgnoreCase))
+        {
+            score += 100_000L;
+        }
+
+        return score;
+    }
+
+    private static bool TryResolvePhysicalVolumeImportLayout(
+        IXLWorksheet worksheet,
+        out PhysicalVolumeColumnMap columnMap,
+        out int firstDataRowNumber)
+    {
+        columnMap = default;
+        firstDataRowNumber = 2;
+
+        if (worksheet.RangeUsed() is null)
+        {
+            return false;
+        }
+
+        if (TryFindSpisokRabotHeaderRow(worksheet, out var headerRow))
+        {
+            var epCol = TryFindEpCatalogColumnIndex(worksheet, headerRow) ?? 6;
+            var qtyCol = TryFindQuantityColumnIndex(worksheet, headerRow);
+            columnMap = PhysicalVolumeColumnMap.FromEpCatalogColumn(epCol, qtyCol);
+            firstDataRowNumber = headerRow + 1;
+            return true;
+        }
+
+        if (TryDetectEpCodeColumnByData(worksheet, out var epFromData, out var firstDataRow))
+        {
+            columnMap = PhysicalVolumeColumnMap.FromEpCatalogColumn(epFromData);
+            firstDataRowNumber = firstDataRow;
+            return true;
+        }
+
+        var sheetName = worksheet.Name;
+        if (sheetName.Contains("список", StringComparison.OrdinalIgnoreCase)
+            || sheetName.Contains("Spisok", StringComparison.OrdinalIgnoreCase)
+            || sheetName.Contains("вариант", StringComparison.OrdinalIgnoreCase))
+        {
+            columnMap = PhysicalVolumeColumnMap.SpisokRabot;
+            firstDataRowNumber = 2;
+            return true;
+        }
+
+        columnMap = PhysicalVolumeColumnMap.LegacyTemplate;
+        firstDataRowNumber = 2;
+        return true;
+    }
+
+    private static bool IsSpisokCatalogHeaderText(string text)
+    {
+        var t = text.Trim();
+        if (t.Length == 0)
+        {
+            return false;
+        }
+
+        if (t.Contains("ID по каталогу", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (t.Contains("Код по каталогу", StringComparison.OrdinalIgnoreCase)
+            || t.Contains("код по каталогу", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (t.Contains("Шифр по каталогу", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (t.Contains("по каталогу", StringComparison.OrdinalIgnoreCase) && t.Length < 48)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static int? TryFindEpCatalogColumnIndex(IXLWorksheet worksheet, int headerRow)
+    {
+        var used = worksheet.RangeUsed();
+        if (used is null)
+        {
+            return null;
+        }
+
+        var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+        for (var c = 1; c <= lastCol; c++)
+        {
+            var text = GetWorksheetCellString(worksheet, headerRow, c);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            if (IsSpisokCatalogHeaderText(text))
+            {
+                return c;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Ищет колонку «Кол-во по BoQ» / «Количество» в строке заголовка.
+    /// Возвращает номер колонки или <c>null</c>, если не найдено.
+    /// </summary>
+    private static int? TryFindQuantityColumnIndex(IXLWorksheet worksheet, int headerRow)
+    {
+        var used = worksheet.RangeUsed();
+        if (used is null)
+        {
+            return null;
+        }
+
+        var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+        for (var c = 1; c <= lastCol; c++)
+        {
+            var text = GetWorksheetCellString(worksheet, headerRow, c);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            var t = text.Trim();
+            if (t.Contains("кол-во", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("BoQ", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("количество", StringComparison.OrdinalIgnoreCase))
+            {
+                return c;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Находит колонку с шифрами ЕП по данным (если шапка нестандартная или другой лист).
+    /// </summary>
+    private static bool TryDetectEpCodeColumnByData(IXLWorksheet ws, out int epCol, out int firstDataRow)
+    {
+        epCol = 6;
+        firstDataRow = 2;
+
+        var used = ws.RangeUsed();
+        if (used is null)
+        {
+            return false;
+        }
+
+        var rStart = used.FirstRow().RowNumber();
+        var rEnd = Math.Min(used.LastRow().RowNumber(), rStart + 8000);
+        var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+
+        var bestCol = -1;
+        var bestHits = 0;
+
+        for (var c = 1; c <= lastCol; c++)
+        {
+            var hits = 0;
+            for (var r = rStart; r <= rEnd; r++)
+            {
+                var t = GetWorksheetCellString(ws, r, c);
+                if (string.IsNullOrWhiteSpace(t))
+                {
+                    continue;
+                }
+
+                var x = t.Trim();
+                if (CellTextLooksLikeCatalogWorkCode(x))
+                {
+                    hits++;
+                }
+            }
+
+            if (hits > bestHits)
+            {
+                bestHits = hits;
+                bestCol = c;
+            }
+        }
+
+        if (bestHits < 2 || bestCol < 1)
+        {
+            return false;
+        }
+
+        epCol = bestCol;
+
+        for (var r = rStart; r <= rEnd; r++)
+        {
+            var t = GetWorksheetCellString(ws, r, bestCol);
+            if (string.IsNullOrWhiteSpace(t))
+            {
+                continue;
+            }
+
+            var x = t.Trim();
+            if (CellTextLooksLikeCatalogWorkCode(x))
+            {
+                firstDataRow = r;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Совпадение с шифром БЭР (01-01-001-01) или КФО2 (KQ.02.160) в ячейке или внутри текста.</summary>
+    private static bool CellTextLooksLikeCatalogWorkCode(string x)
+    {
+        if (CatalogEpCodeLoosePattern.IsMatch(x) || CatalogEpCodePattern.IsMatch(x))
+        {
+            return true;
+        }
+
+        if (CatalogKfoEpCodeLoosePattern.IsMatch(x))
+        {
+            return true;
+        }
+
+        if (CatalogEpCodeEmbeddedPattern.IsMatch(x) || CatalogKfoEpCodeEmbeddedPattern.IsMatch(x))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryFindSpisokRabotHeaderRow(IXLWorksheet worksheet, out int headerRowNumber)
+    {
+        headerRowNumber = 1;
+        var range = worksheet.RangeUsed();
+        if (range is null)
+        {
+            return false;
+        }
+
+        var firstRow = range.FirstRow().RowNumber();
+        var lastRow = Math.Min(range.LastRow().RowNumber(), firstRow + 120);
+        var lastCol = Math.Min(range.LastColumn().ColumnNumber(), 40);
+
+        for (var r = firstRow; r <= lastRow; r++)
+        {
+            for (var c = 1; c <= lastCol; c++)
+            {
+                var text = GetWorksheetCellString(worksheet, r, c);
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    continue;
+                }
+
+                if (IsSpisokCatalogHeaderText(text))
+                {
+                    headerRowNumber = r;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<IXLRangeRow> EnumeratePhysicalVolumeDataRows(IXLWorksheet worksheet, int firstDataRowNumber)
+    {
+        var used = worksheet.RangeUsed();
+        if (used is null)
+        {
+            yield break;
+        }
+
+        foreach (var row in used.RowsUsed())
+        {
+            if (row.RowNumber() < firstDataRowNumber)
+            {
+                continue;
+            }
+
+            yield return row;
+        }
+    }
+
+    private static bool LooksLikePhysicalVolumeHeaderLabel(string epCode)
+    {
+        if (epCode.Equals("ID по каталогу", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (epCode.Contains("каталогу", StringComparison.OrdinalIgnoreCase) && epCode.Length < 40)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private readonly struct PhysicalVolumeColumnMap
+    {
+        public int EpCode { get; init; }
+
+        public int Quantity { get; init; }
+
+        public int FacilitySource { get; init; }
+
+        public int WorkName { get; init; }
+
+        public int BindingType { get; init; }
+
+        public int DocumentSet { get; init; }
+
+        public int CatalogId { get; init; }
+
+        public int Tag { get; init; }
+
+        public int WorkComment { get; init; }
+
+        public int EstimationBasis { get; init; }
+
+        public int WorkId { get; init; }
+
+        public bool SplitFacilityFromFbs { get; init; }
+
+        public static PhysicalVolumeColumnMap LegacyTemplate => new()
+        {
+            EpCode = 6,
+            Quantity = 8,
+            FacilitySource = 9,
+            WorkName = 10,
+            BindingType = 11,
+            DocumentSet = 12,
+            CatalogId = 13,
+            Tag = 14,
+            WorkComment = 15,
+            EstimationBasis = 16,
+            WorkId = 0,
+            SplitFacilityFromFbs = false,
+        };
+
+        /// <summary>
+        /// «Список работ» (см. <c>_dev/excel_analysis_report.md</c>, FILE 5): A–W, кол-во в колонке Q.
+        /// </summary>
+        public static PhysicalVolumeColumnMap SpisokRabot => new()
+        {
+            EpCode = 6,
+            Quantity = 17,
+            FacilitySource = 3,
+            WorkName = 9,
+            BindingType = 4,
+            DocumentSet = 5,
+            CatalogId = 6,
+            Tag = 7,
+            WorkId = 8,
+            WorkComment = 10,
+            EstimationBasis = 18,
+            SplitFacilityFromFbs = true,
+        };
+
+        /// <summary>
+        /// Сдвиг всех колонок относительно стандартной F (6): для вариантов файла с доп. колонками.
+        /// <paramref name="overrideQuantityColumn"/> позволяет передать колонку «Кол-во»,
+        /// найденную по заголовку, вместо расчётного смещения <c>e + 11</c>.
+        /// </summary>
+        public static PhysicalVolumeColumnMap FromEpCatalogColumn(int epCol, int? overrideQuantityColumn = null)
+        {
+            var e = epCol < 4 ? 6 : epCol;
+
+            return new PhysicalVolumeColumnMap
+            {
+                EpCode = e,
+                CatalogId = e,
+                FacilitySource = e - 3,
+                BindingType = e - 2,
+                DocumentSet = e - 1,
+                Tag = e + 1,
+                WorkId = e + 2,
+                WorkName = e + 3,
+                WorkComment = e + 4,
+                Quantity = overrideQuantityColumn ?? e + 11,
+                EstimationBasis = e + 12,
+                SplitFacilityFromFbs = true,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Несколько строк каталога могут иметь один код. Импорт выбирает кандидата явно.
+    /// </summary>
+    private ILookup<string, PvCatalogRow> BuildCodeLookup(
+        IReadOnlyList<PvCatalogRow> rows,
+        string catalogName)
+    {
+        var pairs = new List<(string Key, PvCatalogRow Pv)>();
+        foreach (var pv in rows)
+        {
+            var codeKey = NormalizeCatalogCode(pv.Code);
+            if (string.IsNullOrEmpty(codeKey))
+            {
+                continue;
+            }
+
+            pairs.Add((codeKey, pv));
+        }
+
+        var duplicateGroups = pairs
+            .GroupBy(p => p.Key, StringComparer.OrdinalIgnoreCase)
+            .Count(g => g.Count() > 1);
+        if (duplicateGroups > 0)
+        {
+            _logger.LogInformation(
+                "Catalog {Catalog}: {Count} code keys map to multiple rows; import picks row with ClassifierId, then longest Code",
+                catalogName,
+                duplicateGroups);
+        }
+
+        return pairs.ToLookup(p => p.Key, p => p.Pv, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static PvCatalogRow? PickBestPhysicalVolumeCandidate(IReadOnlyList<PvCatalogRow> candidates)
+    {
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        if (candidates.Count == 1)
+        {
+            return candidates[0];
+        }
+
+        var withClassifier = candidates.Where(c => c.ClassifierId.HasValue).ToList();
+        var pool = withClassifier.Count > 0 ? withClassifier : candidates;
+
+        return pool
+            .OrderByDescending(c => c.Code.Length)
+            .ThenBy(c => c.Id)
+            .First();
+    }
+
+    /// <summary>
+    /// Для позиций сида без «Техас» в Excel ClassifierId остаётся NULL, хотя у родительских
+    /// групп в каталоге связь с ИИС уже задана — поднимаем её при импорте, чтобы аналитика
+    /// и колонка «Классификатор» были заполнены.
+    /// </summary>
+    private async Task BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
+        AppDbContext context,
+        IEnumerable<int> importedPhysicalVolumeIds,
+        IReadOnlyDictionary<int, PvCatalogRow> pvByIdSnapshot,
+        bool isKfo)
+    {
+        var updated = 0;
+        foreach (var pvId in importedPhysicalVolumeIds.Distinct())
+        {
+            if (!pvByIdSnapshot.TryGetValue(pvId, out var snap) || snap.ClassifierId.HasValue)
+            {
+                continue;
+            }
+
+            var resolved = ResolveClassifierIdFromAncestorChain(pvId, pvByIdSnapshot);
+            if (!resolved.HasValue)
+            {
+                continue;
+            }
+
+            if (isKfo)
+            {
+                var tracked = await context.PhysicalVolumesKfo.FirstOrDefaultAsync(p => p.Id == pvId);
+                if (tracked is null || tracked.ClassifierId.HasValue)
+                    continue;
+                tracked.ClassifierId = resolved.Value;
+            }
+            else
+            {
+                var tracked = await context.PhysicalVolumesBer.FirstOrDefaultAsync(p => p.Id == pvId);
+                if (tracked is null || tracked.ClassifierId.HasValue)
+                    continue;
+                tracked.ClassifierId = resolved.Value;
+            }
+
+            updated++;
+        }
+
+        if (updated > 0)
+        {
+            _logger.LogInformation(
+                "Physical volume import: set ClassifierId from ancestor chain for {Count} catalog rows",
+                updated);
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static int? ResolveClassifierIdFromAncestorChain(
+        int startPvId,
+        IReadOnlyDictionary<int, PvCatalogRow> byId)
+    {
+        var visited = new HashSet<int>();
+        var currentId = (int?)startPvId;
+        while (currentId.HasValue && visited.Add(currentId.Value))
+        {
+            if (!byId.TryGetValue(currentId.Value, out var node))
+            {
+                break;
+            }
+
+            if (node.ClassifierId.HasValue)
+            {
+                return node.ClassifierId;
+            }
+
+            currentId = node.ParentId;
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeCatalogCode(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var t = code.Trim()
+            .Replace('\u2013', '-')
+            .Replace('\u2014', '-')
+            .Replace('\u2212', '-')
+            .Replace('\u2011', '-');
+
+        return t;
+    }
+
+    private static IEnumerable<string> EnumerateCandidateEpCodesFromRow(
+        IXLRangeRow row,
+        PhysicalVolumeColumnMap map,
+        Func<IXLRangeRow, int, string?> getCell)
+    {
+        var columns = new List<int>(8)
+        {
+            map.EpCode,
+            map.EpCode + 1,
+            map.EpCode + 2,
+            map.EpCode + 3,
+        };
+
+        if (map.SplitFacilityFromFbs)
+        {
+            columns.Add(6);
+            columns.Add(8);
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in columns.Distinct().OrderBy(c => c))
+        {
+            if (col < 1)
+            {
+                continue;
+            }
+
+            foreach (var code in EnumerateCatalogCodesFromCellText(getCell(row, col)))
+            {
+                if (seen.Add(code))
+                {
+                    yield return code;
+                }
+            }
+        }
+    }
+
+    /// <summary>Одна ячейка может содержать только шифр, шифр с наименованием или нестандартные пробелы.</summary>
+    private static IEnumerable<string> EnumerateCatalogCodesFromCellText(string? cellText)
+    {
+        var v = NormalizeCatalogCode(cellText);
+        if (string.IsNullOrWhiteSpace(v) || LooksLikePhysicalVolumeHeaderLabel(v))
+        {
+            yield break;
+        }
+
+        var t = v.Trim();
+        if (t.Length > 120)
+        {
+            yield break;
+        }
+
+        if (CatalogEpCodeLoosePattern.IsMatch(t))
+        {
+            yield return t;
+            yield break;
+        }
+
+        if (CatalogKfoEpCodeLoosePattern.IsMatch(t))
+        {
+            yield return t;
+            yield break;
+        }
+
+        var m = CatalogEpCodeEmbeddedPattern.Match(t);
+        if (m.Success)
+        {
+            yield return m.Value;
+            yield break;
+        }
+
+        var km = CatalogKfoEpCodeEmbeddedPattern.Match(t);
+        if (km.Success)
+        {
+            yield return km.Value;
+        }
+    }
+
+    private static bool TryResolvePhysicalVolume(
+        ILookup<string, PvCatalogRow> physicalVolumes,
+        string raw,
+        out PvCatalogRow physicalVolume)
+    {
+        foreach (var key in ExpandEpCodeLookupKeys(raw))
+        {
+            if (!physicalVolumes.Contains(key))
+            {
+                continue;
+            }
+
+            var list = physicalVolumes[key].ToList();
+            var picked = PickBestPhysicalVolumeCandidate(list);
+            if (picked is not null)
+            {
+                physicalVolume = picked.Value;
+                return true;
+            }
+        }
+
+        physicalVolume = default;
+        return false;
+    }
+
+    private static IEnumerable<string> ExpandEpCodeLookupKeys(string raw)
+    {
+        var n = NormalizeCatalogCode(raw);
+        if (string.IsNullOrEmpty(n))
+        {
+            yield break;
+        }
+
+        yield return n;
+
+        var parts = n.Split('-', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 4 && parts.All(static p => p.Length > 0 && p.All(char.IsDigit)))
+        {
+            yield return $"{parts[0].PadLeft(2, '0')}-{parts[1].PadLeft(2, '0')}-{parts[2].PadLeft(3, '0')}-{parts[3].PadLeft(2, '0')}";
+        }
+    }
+
+    /// <summary>
+    /// Нормализует строковое поле для использования в качестве части ключа словаря:
+    /// обрезает до <paramref name="maxLength"/> символов и заменяет <c>null</c> пустой строкой.
+    /// Совпадает с тем, что сохранится в БД после <c>ApplyTruncation()</c>.
+    /// </summary>
+    private static string TruncateKey(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    private static decimal ParseDecimal(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 0m;
+        }
+
+        var normalized = value.Trim()
+            .Replace('\u00A0', ' ')
+            .Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace(',', '.');
+
+        if (decimal.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+        {
+            return d;
+        }
+
+        if (double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out var dbl))
+        {
+            return (decimal)dbl;
+        }
+
+        return 0m;
+    }
+
+    private static string FormatImportExceptionMessage(Exception ex)
+    {
+        var inner = ex.InnerException;
+        if (ex is DbUpdateException && inner is not null)
+        {
+            return $"{inner.Message} ({inner.GetType().Name})";
+        }
+
+        if (inner is not null)
+        {
+            return $"{ex.Message} — {inner.Message}";
+        }
+
+        return ex.Message;
+    }
+
+    private static async Task<int> DeleteImportedRecordsAsync(AppDbContext context, DataImportType dataType, int projectId, int versionId, DateTime importedAt)
+    {
+        return dataType switch
+        {
+            DataImportType.PhysicalVolume => await DeletePhysicalVolumeRecordsAsync(context, projectId, versionId, importedAt),
+            DataImportType.LaborIntensity => await DeleteLaborIntensityRecordsAsync(context, projectId, versionId, importedAt),
+            DataImportType.Equipment => await DeleteEquipmentRecordsAsync(context, projectId, versionId, importedAt),
+            _ => 0,
+        };
+    }
+
+    private static async Task ClearPhysicalVolumeDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existingVolumes = await context.ProjectPhysicalVolumes
+            .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        if (existingVolumes.Count > 0)
+        {
+            context.ProjectPhysicalVolumes.RemoveRange(existingVolumes);
+        }
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.PhysicalVolume)
+            .ToListAsync();
+
+        if (existingIterations.Count > 0)
+        {
+            context.DataImportIterations.RemoveRange(existingIterations);
+        }
+
+        if (existingVolumes.Count > 0 || existingIterations.Count > 0)
+        {
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task ClearEquipmentDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        if (existing.Count > 0)
+        {
+            context.ProjectEquipments.RemoveRange(existing);
+        }
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.Equipment)
+            .ToListAsync();
+
+        if (existingIterations.Count > 0)
+        {
+            context.DataImportIterations.RemoveRange(existingIterations);
+        }
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
+        {
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task<int> DeletePhysicalVolumeRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectPhysicalVolumes
+            .Where(pv => pv.ProjectId == projectId
+                      && pv.ProjectAnalysisVersionId == versionId
+                      && pv.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectPhysicalVolumes.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
+    private static async Task<int> DeleteLaborIntensityRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectLaborIntensities
+            .Where(li => li.ProjectId == projectId
+                      && li.ProjectAnalysisVersionId == versionId
+                      && li.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectLaborIntensities.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
+    private static async Task<int> DeleteEquipmentRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId
+                     && e.ProjectAnalysisVersionId == versionId
+                     && e.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectEquipments.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
+    /// <summary>
+    /// Unique index: (ProjectAnalysisVersionId, ProjectId, PhysicalVolumeId).
+    /// </summary>
+    private sealed class PhysicalVolumeImportDraft
+    {
+        public const int FacilityCodeMax = 100;
+        public const int FacilityNameMax = 500;
+        public const int BindingTypeMax = 200;
+        public const int DocumentSetMax = 100;
+        public const int CatalogIdMax = 100;
+        public const int TagMax = 100;
+        public const int WorkIdMax = 200;
+        public const int WorkNameMax = 1000;
+        public const int WorkCommentMax = 500;
+        public const int EstimationBasisMax = 500;
+        public const int CatalogCodeMax = 100;
+        public const int CatalogNameMax = 1000;
+
+        public decimal Quantity { get; set; }
+
+        public string? FacilityCode { get; set; }
+
+        public string? FacilityName { get; set; }
+
+        public string? BindingType { get; set; }
+
+        public string? DocumentSet { get; set; }
+
+        public string? CatalogId { get; set; }
+
+        public string? Tag { get; set; }
+
+        public string? WorkId { get; set; }
+
+        public string? WorkName { get; set; }
+
+        public string? WorkComment { get; set; }
+
+        public string? EstimationBasis { get; set; }
+
+        public string? CatalogCode { get; set; }
+
+        public string? CatalogName { get; set; }
+
+        public static PhysicalVolumeImportDraft FromRow(
+            IXLRangeRow row,
+            PhysicalVolumeColumnMap map,
+            Func<string?, decimal> parseDecimal,
+            Func<IXLRangeRow, int, string?> getCell,
+            PvCatalogRow catalogEntry)
+        {
+            var fbsSource = getCell(row, map.FacilitySource)?.Trim();
+            var rawWorkName = getCell(row, map.WorkName)?.Trim();
+
+            string? facilityCode;
+            string? facilityName;
+
+            if (map.SplitFacilityFromFbs)
+            {
+                var split = SplitFbsFacilityCodeAndName(fbsSource);
+                facilityCode = split.Code;
+                facilityName = split.Name;
+            }
+            else
+            {
+                facilityCode = fbsSource;
+                facilityName = null;
+            }
+
+            var workId = map.WorkId > 0 ? getCell(row, map.WorkId)?.Trim() : null;
+
+            return new PhysicalVolumeImportDraft
+            {
+                Quantity = parseDecimal(getCell(row, map.Quantity)),
+                FacilityCode = facilityCode,
+                FacilityName = facilityName,
+                BindingType = getCell(row, map.BindingType)?.Trim(),
+                DocumentSet = getCell(row, map.DocumentSet)?.Trim(),
+                CatalogId = getCell(row, map.CatalogId)?.Trim(),
+                Tag = getCell(row, map.Tag)?.Trim(),
+                WorkId = workId,
+                WorkName = rawWorkName,
+                WorkComment = getCell(row, map.WorkComment)?.Trim(),
+                EstimationBasis = getCell(row, map.EstimationBasis)?.Trim(),
+                CatalogCode = catalogEntry.Code,
+                CatalogName = catalogEntry.Name,
+            };
+        }
+
+        private static (string? Code, string? Name) SplitFbsFacilityCodeAndName(string? fbs)
+        {
+            if (string.IsNullOrWhiteSpace(fbs))
+            {
+                return (null, null);
+            }
+
+            var idx = fbs.IndexOf(" - ", StringComparison.Ordinal);
+            if (idx <= 0)
+            {
+                var t = fbs.Trim();
+                return (Truncate(t, FacilityCodeMax), Truncate(t, FacilityNameMax));
+            }
+
+            var code = fbs[..idx].Trim();
+            var name = fbs[(idx + 3)..].Trim();
+            return (Truncate(code, FacilityCodeMax), Truncate(name, FacilityNameMax));
+        }
+
+        public void MergeFrom(PhysicalVolumeImportDraft other)
+        {
+            Quantity += other.Quantity;
+            FacilityCode = PreferNonEmpty(FacilityCode, other.FacilityCode);
+            FacilityName = PreferNonEmpty(FacilityName, other.FacilityName);
+            BindingType = PreferNonEmpty(BindingType, other.BindingType);
+            DocumentSet = PreferNonEmpty(DocumentSet, other.DocumentSet);
+            CatalogId = PreferNonEmpty(CatalogId, other.CatalogId);
+            Tag = PreferNonEmpty(Tag, other.Tag);
+            WorkId = PreferNonEmpty(WorkId, other.WorkId);
+            WorkName = PreferNonEmpty(WorkName, other.WorkName);
+            WorkComment = PreferNonEmpty(WorkComment, other.WorkComment);
+            EstimationBasis = PreferNonEmpty(EstimationBasis, other.EstimationBasis);
+            CatalogCode = PreferNonEmpty(CatalogCode, other.CatalogCode);
+            CatalogName = PreferNonEmpty(CatalogName, other.CatalogName);
+        }
+
+        public void ApplyTruncation()
+        {
+            FacilityCode = Truncate(FacilityCode, FacilityCodeMax);
+            FacilityName = Truncate(FacilityName, FacilityNameMax);
+            BindingType = Truncate(BindingType, BindingTypeMax);
+            DocumentSet = Truncate(DocumentSet, DocumentSetMax);
+            CatalogId = Truncate(CatalogId, CatalogIdMax);
+            Tag = Truncate(Tag, TagMax);
+            WorkId = Truncate(WorkId, WorkIdMax);
+            WorkName = Truncate(WorkName, WorkNameMax);
+            WorkComment = Truncate(WorkComment, WorkCommentMax);
+            EstimationBasis = Truncate(EstimationBasis, EstimationBasisMax);
+            CatalogCode = Truncate(CatalogCode, CatalogCodeMax);
+            CatalogName = Truncate(CatalogName, CatalogNameMax);
+        }
+
+        public void ApplyTo(ProjectPhysicalVolume entity)
+        {
+            entity.Quantity = Quantity;
+            entity.FacilityCode = FacilityCode;
+            entity.FacilityName = FacilityName;
+            entity.BindingType = BindingType;
+            entity.DocumentSet = DocumentSet;
+            entity.CatalogId = CatalogId;
+            entity.Tag = Tag;
+            entity.WorkId = WorkId;
+            entity.WorkName = WorkName;
+            entity.WorkComment = WorkComment;
+            entity.EstimationBasis = EstimationBasis;
+            entity.CatalogCode = CatalogCode;
+            entity.CatalogName = CatalogName;
+        }
+
+        public ProjectPhysicalVolume ToNewEntity(int projectId, int versionId, int physicalVolumeId, bool isKfo, DateTime createdAt)
+        {
+            var entity = new ProjectPhysicalVolume
+            {
+                ProjectId = projectId,
+                ProjectAnalysisVersionId = versionId,
+                CreatedAt = createdAt,
+                Quantity = Quantity,
+                FacilityCode = FacilityCode,
+                FacilityName = FacilityName,
+                BindingType = BindingType,
+                DocumentSet = DocumentSet,
+                CatalogId = CatalogId,
+                Tag = Tag,
+                WorkId = WorkId,
+                WorkName = WorkName,
+                WorkComment = WorkComment,
+                EstimationBasis = EstimationBasis,
+                CatalogCode = CatalogCode,
+                CatalogName = CatalogName,
+            };
+            PhysicalVolumeCatalogBinding.AssignCatalogId(entity, physicalVolumeId, isKfo);
+            return entity;
+        }
+
+        private static string? PreferNonEmpty(string? current, string? incoming)
+        {
+            return string.IsNullOrWhiteSpace(incoming) ? current : incoming;
+        }
+
+        private static string? Truncate(string? value, int maxLength)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+            {
+                return value;
+            }
+
+            return value[..maxLength];
+        }
+    }
+}
