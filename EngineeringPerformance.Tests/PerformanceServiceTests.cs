@@ -176,4 +176,104 @@ public sealed class PerformanceServiceTests
 
         await seed.SaveChangesAsync();
     }
+
+    /// <summary>
+    /// В справочнике могут существовать несколько норм с одним WorkDirectionId;
+    /// ключ словаря норм для версии — WorkDirectionId из снимка, а не из Norm.
+    /// </summary>
+    [Fact]
+    public async Task GetPerformanceData_DuplicateNormWorkDirectionIdsInCatalog_DoesNotThrow()
+    {
+        var factory = CreateFactory();
+        await using (var seed = factory.CreateDbContext())
+        {
+            seed.Projects.Add(new Project { Id = 1, Code = "PRJ", Name = "test" });
+            seed.IicWorkDirections.Add(new IicWorkDirection { Id = 10, Name = "root", Code = "R" });
+            seed.IicWorkDirections.Add(new IicWorkDirection { Id = 11, Name = "leaf", Code = "A", ParentId = 10 });
+
+            // Две нормы с одним WorkDirectionId (исторический дубликат в справочнике).
+            seed.IicWorkDirectionNorms.Add(new IicWorkDirectionNorm
+            {
+                Id = 100,
+                WorkDirectionId = 10,
+                Performance = 2.0m,
+                Estimate = 1.0m,
+                StandardDeviation = 0.5m,
+                EffectiveFrom = DateTime.UtcNow.AddDays(-60),
+                EffectiveTo = DateTime.UtcNow.AddDays(-1)
+            });
+            seed.IicWorkDirectionNorms.Add(new IicWorkDirectionNorm
+            {
+                Id = 101,
+                WorkDirectionId = 10,
+                Performance = 2.5m,
+                Estimate = 1.2m,
+                StandardDeviation = 0.6m,
+                EffectiveFrom = DateTime.UtcNow.AddDays(-30),
+                EffectiveTo = null
+            });
+
+            seed.PhysicalVolumes.Add(new PhysicalVolume
+            {
+                Id = 50,
+                Code = "PV-A",
+                Name = "pv-a",
+                ClassifierId = 11,
+                Coefficient = 1m,
+                VolumeTypeId = 1,
+                IsAssessment = true
+            });
+
+            seed.ProjectAnalysisVersions.Add(new ProjectAnalysisVersion
+            {
+                Id = 1,
+                ProjectId = 1,
+                VersionName = "v1",
+                CreatedAt = DateTime.UtcNow,
+                Direction = AnalysisDirection.Fact
+            });
+
+            await seed.SaveChangesAsync();
+
+            seed.AnalysisVersionSnapshots.Add(new AnalysisVersionSnapshot
+            {
+                ProjectAnalysisVersionId = 1,
+                WorkDirectionId = 10,
+                NormId = 100
+            });
+            seed.AnalysisVersionSnapshots.Add(new AnalysisVersionSnapshot
+            {
+                ProjectAnalysisVersionId = 1,
+                WorkDirectionId = 11,
+                NormId = 101
+            });
+
+            seed.ProjectPhysicalVolumes.Add(new ProjectPhysicalVolume
+            {
+                Id = 200,
+                ProjectId = 1,
+                ProjectAnalysisVersionId = 1,
+                PhysicalVolumeId = 50,
+                Quantity = 100m
+            });
+            seed.ProjectLaborIntensities.Add(new ProjectLaborIntensity
+            {
+                Id = 300,
+                ProjectId = 1,
+                ProjectAnalysisVersionId = 1,
+                WorkDirectionId = 11,
+                ActualHours = 200m,
+                PlannedHours = 200m
+            });
+
+            await seed.SaveChangesAsync();
+        }
+
+        var service = new PerformanceService(factory);
+        var act = async () => await service.GetPerformanceDataAsync(projectId: 1, versionId: 1);
+
+        var rows = await act.Should().NotThrowAsync();
+        rows.Subject.Should().Contain(r => r.WorkDirectionId == 10);
+        rows.Subject.Should().Contain(r => r.WorkDirectionId == 11);
+    }
 }

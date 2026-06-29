@@ -1,0 +1,19 @@
+# Игнорируем скомпилированные файлы и мусор .NET
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.user
+*.suo
+
+# Игнорируем папки пакетов и node_modules (если уже начали фронтенд)
+packages/
+node_modules/
+dist/
+build/
+
+# Игнорируем системные папки
+.vs/
+.vscode/
+.git/

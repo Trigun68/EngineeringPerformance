@@ -14,7 +14,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectAnalysisVersion> ProjectAnalysisVersions => Set<ProjectAnalysisVersion>();
     public DbSet<PhysicalVolumeType> PhysicalVolumeTypes => Set<PhysicalVolumeType>();
-    public DbSet<PhysicalVolume> PhysicalVolumes => Set<PhysicalVolume>();
+    public DbSet<PhysicalVolumeKfo> PhysicalVolumesKfo => Set<PhysicalVolumeKfo>();
+    public DbSet<PhysicalVolumeBer> PhysicalVolumesBer => Set<PhysicalVolumeBer>();
     public DbSet<Equipment> Equipments => Set<Equipment>();
     public DbSet<IicWorkDirection> IicWorkDirections => Set<IicWorkDirection>();
     public DbSet<IicWorkDirectionNorm> IicWorkDirectionNorms => Set<IicWorkDirectionNorm>();
@@ -40,7 +41,8 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ProjectConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectAnalysisVersionConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeTypeConfiguration());
-        modelBuilder.ApplyConfiguration(new PhysicalVolumeConfiguration());
+        modelBuilder.ApplyConfiguration(new PhysicalVolumeKfoConfiguration());
+        modelBuilder.ApplyConfiguration(new PhysicalVolumeBerConfiguration());
         modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());

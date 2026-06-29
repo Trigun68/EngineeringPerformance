@@ -1,4 +1,4 @@
-﻿using EngineeringPerformance.Core.Services;
+using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,6 +38,20 @@ public sealed class UserSettingsService : IUserSettingsService
         }
 
         await ctx.SaveChangesAsync();
+    }
+
+    public void SetSync(int userId, string key, string value)
+    {
+        using var ctx = _contextFactory.CreateDbContext();
+        var setting = ctx.UserSettings
+            .FirstOrDefault(s => s.UserId == userId && s.Key == key);
+
+        if (setting is null)
+            ctx.UserSettings.Add(new UserSetting { UserId = userId, Key = key, Value = value });
+        else
+            setting.Value = value;
+
+        ctx.SaveChanges();
     }
 
     public async Task<Dictionary<string, string>> GetAllAsync(int userId)

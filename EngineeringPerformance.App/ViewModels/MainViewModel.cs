@@ -83,8 +83,6 @@ public sealed partial class MainViewModel : ObservableObject
         AddIfAccessible(items, "\U0001F4DC", "Журнал действий",    "UserActionLog");
         AddIfAccessible(items, "\U00002699", "Настройки",          "SettingsPage");
         AddIfAccessible(items, "\U00002753", "Справка",            "HelpPage");
-        AddIfAccessible(items, "\U0001F4CA", "Анализ проекта",     "Assessment");
-        AddIfAccessible(items, "\U0001F52E", "Прогноз по проекту", "Planning");
 
         NavigationGroups = new ObservableCollection<NavigationGroup>
         {

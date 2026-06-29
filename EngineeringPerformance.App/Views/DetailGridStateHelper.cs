@@ -18,9 +18,10 @@ internal static class DetailGridStateHelper
         if (tv is not null)
         {
             var focusedRh = tv.FocusedRowHandle;
-            if (!grid.IsGroupRowHandle(focusedRh) && grid.GetRow(focusedRh) is DetailForecastItem focused)
+            var stateKey = GetDetailStateKey(grid.GetRow(focusedRh));
+            if (!grid.IsGroupRowHandle(focusedRh) && stateKey != 0)
             {
-                state.FocusedRowId = focused.ProjectPhysicalVolumeId;
+                state.FocusedRowId = stateKey;
                 for (var i = 0; i < grid.VisibleRowCount; i++)
                 {
                     if (grid.GetRowHandleByVisibleIndex(i) == focusedRh)
@@ -45,13 +46,12 @@ internal static class DetailGridStateHelper
             return;
         }
 
-        if (state.FocusedRowId >= 0)
+        if (state.FocusedRowId != 0)
         {
             for (var i = 0; i < visibleCount; i++)
             {
                 var rh = grid.GetRowHandleByVisibleIndex(i);
-                if (!grid.IsGroupRowHandle(rh) && grid.GetRow(rh) is DetailForecastItem row
-                    && row.ProjectPhysicalVolumeId == state.FocusedRowId)
+                if (!grid.IsGroupRowHandle(rh) && GetDetailStateKey(grid.GetRow(rh)) == state.FocusedRowId)
                 {
                     tv.TopRowIndex = Math.Max(0, i - state.FocusedVisibleOffset);
                     return;
@@ -63,4 +63,11 @@ internal static class DetailGridStateHelper
         // откатываемся на сохранённый абсолютный TopRowIndex с clamp-ом к актуальному количеству строк.
         tv.TopRowIndex = Math.Clamp(state.TopRowIndex, 0, visibleCount - 1);
     }
+
+    private static int GetDetailStateKey(object? row) => row switch
+    {
+        DetailForecastItem forecast => forecast.DetailStateKey,
+        FactDetailRow fact => fact.DetailStateKey,
+        _ => 0,
+    };
 }

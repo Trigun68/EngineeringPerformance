@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
+using EngineeringPerformance.Infrastructure.Services;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -12,6 +13,7 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
     private readonly IDirectoryService<Equipment> _service;
     private readonly IDirectoryCache<Equipment> _equipmentCache;
     private readonly IDirectoryCache<IicWorkDirection> _classifierCache;
+    private readonly IDirectoryCache<UnitOfMeasurement> _unitCache;
     private Action<bool>? _closeDialog;
 
     [ObservableProperty]
@@ -54,7 +56,20 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private decimal? _coefficient;
+    private decimal _coefficient = 1m;
+
+    [ObservableProperty]
+    private int? _selectedUnitId;
+
+    [ObservableProperty]
+    private UnitOfMeasurement? _selectedUnit;
+
+    partial void OnSelectedUnitChanged(UnitOfMeasurement? value)
+    {
+        SelectedUnitId = value is null || value.Id == 0 ? null : value.Id;
+    }
+
+    public ObservableCollection<UnitOfMeasurement> Units { get; } = [];
 
     public ObservableCollection<AssessmentOption> AssessmentOptions { get; } =
     [
@@ -88,11 +103,13 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
     public EquipmentEditViewModel(
         IDirectoryService<Equipment> service,
         IDirectoryCache<Equipment> equipmentCache,
-        IDirectoryCache<IicWorkDirection> classifierCache)
+        IDirectoryCache<IicWorkDirection> classifierCache,
+        IDirectoryCache<UnitOfMeasurement> unitCache)
     {
         _service = service;
         _equipmentCache = equipmentCache;
         _classifierCache = classifierCache;
+        _unitCache = unitCache;
     }
 
     public void PrepareSync(Equipment? entity, Action<bool>? closeDialog = null)
@@ -105,8 +122,9 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
         Description = string.Empty;
         SelectedClassifierId = null;
         SelectedParentId = null;
-        IsAssessment = null;
-        Coefficient = null;
+        SelectedUnitId = null;
+        IsAssessment = false;
+        Coefficient = 1m;
 
         if (entity is not null)
         {
@@ -117,6 +135,7 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
             Description = entity.Description;
             SelectedClassifierId = entity.ClassifierId;
             SelectedParentId = entity.ParentId;
+            SelectedUnitId = entity.UnitId;
             IsAssessment = entity.IsAssessment;
             Coefficient = entity.Coefficient;
         }
@@ -128,7 +147,7 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
         }
 
         SelectedAssessmentItem = AssessmentOptions.FirstOrDefault(o => o.Value == IsAssessment)
-                                 ?? AssessmentOptions[0];
+                                 ?? AssessmentOptions.First(o => o.Value == false);
     }
 
     public async Task LoadLookupsAsync(CancellationToken cancellationToken = default)
@@ -139,11 +158,22 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
 
             var classifiersTask = _classifierCache.GetAllAsync(cancellationToken);
             var allEquipmentTask = _equipmentCache.GetAllAsync(cancellationToken);
+            var unitsTask = _unitCache.GetAllAsync(cancellationToken);
 
-            await Task.WhenAll(classifiersTask, allEquipmentTask);
+            await Task.WhenAll(classifiersTask, allEquipmentTask, unitsTask);
 
             var classifiers = classifiersTask.Result;
             var parents = BuildParentLookup(allEquipmentTask.Result, excludeId);
+            var unitsList = unitsTask.Result;
+
+            var unitsWithSentinel = new List<UnitOfMeasurement>
+            {
+                new() { Id = 0, Name = "(не выбрано)" },
+            };
+            unitsWithSentinel.AddRange(unitsList);
+            Units.Clear();
+            foreach (var unit in unitsWithSentinel)
+                Units.Add(unit);
 
             BuildClassifierDisplayItems(classifiers);
             BuildParentDisplayItems(parents);
@@ -152,6 +182,9 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
                                      ?? ClassifierDisplayItems.FirstOrDefault();
             SelectedParentItem = ParentDisplayItems.FirstOrDefault(i => i.Id == SelectedParentId)
                                  ?? ParentDisplayItems.FirstOrDefault();
+            SelectedUnit = SelectedUnitId.HasValue
+                ? Units.FirstOrDefault(u => u.Id == SelectedUnitId.Value) ?? Units[0]
+                : Units[0];
         }
         finally
         {
@@ -287,6 +320,17 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
         {
             var nameValue = Name.Trim();
             var descriptionValue = (Description ?? string.Empty).Trim();
+            var duplicate = (await _equipmentCache.GetAllAsync())
+                .Any(e => e.Id != EntityId
+                          && string.Equals(
+                              e.CatalogKeyHash,
+                              EquipmentCatalogKeyHasher.Compute(nameValue, SelectedUnitId),
+                              StringComparison.Ordinal));
+            if (duplicate)
+            {
+                ErrorMessage = "Запись с таким наименованием и единицей измерения уже существует";
+                return;
+            }
 
             if (IsEditMode)
             {
@@ -297,6 +341,7 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
                     Description = descriptionValue,
                     ClassifierId = SelectedClassifierId,
                     ParentId = SelectedParentId,
+                    UnitId = SelectedUnitId,
                     IsAssessment = IsAssessment,
                     Coefficient = Coefficient,
                 };
@@ -312,8 +357,10 @@ public sealed partial class EquipmentEditViewModel : ObservableObject
                     Description = descriptionValue,
                     ClassifierId = SelectedClassifierId,
                     ParentId = SelectedParentId,
+                    UnitId = SelectedUnitId,
                     IsAssessment = IsAssessment,
                     Coefficient = Coefficient,
+                    IsArchived = false,
                 };
 
                 await _service.CreateAsync(entity);

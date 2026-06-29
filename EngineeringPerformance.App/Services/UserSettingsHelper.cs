@@ -1,13 +1,15 @@
-﻿using System.IO;
+using System.IO;
 using System.Text;
 using DevExpress.Xpf.Grid;
 using EngineeringPerformance.Core.Services;
+using Serilog;
 
 namespace EngineeringPerformance.App.Services;
 
 public sealed class UserSettingsHelper
 {
     private readonly IUserSettingsService _settingsService;
+    private readonly Dictionary<GridControl, GridLayoutAutoSave> _gridAutoSaves = new();
     private int _userId;
 
     public UserSettingsHelper(IUserSettingsService settingsService)
@@ -31,8 +33,55 @@ public sealed class UserSettingsHelper
         if (_userId <= 0 || string.IsNullOrEmpty(gridName)) return;
         var xml = await _settingsService.GetAsync(_userId, $"grid.{gridName}");
         if (string.IsNullOrEmpty(xml)) return;
-        using var ms = new MemoryStream(Encoding.UTF8.GetBytes(xml));
-        grid.RestoreLayoutFromStream(ms);
+        try
+        {
+            using var ms = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+            grid.RestoreLayoutFromStream(ms);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to restore grid layout for {GridName}", gridName);
+        }
+    }
+
+    /// <summary>Подписывает грид на изменения раскладки (ширина, порядок, видимость столбцов).</summary>
+    public void AttachGridLayoutAutoSave(GridControl grid, string gridName)
+    {
+        if (_userId <= 0 || string.IsNullOrEmpty(gridName)) return;
+        if (_gridAutoSaves.ContainsKey(grid)) return;
+        _gridAutoSaves[grid] = new GridLayoutAutoSave(this, grid, gridName);
+    }
+
+    /// <summary>Снимает подписку и сохраняет текущую раскладку.</summary>
+    public async Task DetachAndSaveGridLayoutAsync(GridControl grid)
+    {
+        if (!_gridAutoSaves.Remove(grid, out var autoSave)) return;
+        await autoSave.FlushAsync();
+        autoSave.Dispose();
+    }
+
+    /// <summary>Сохраняет раскладку всех подключённых гридов (перед закрытием приложения).</summary>
+    public async Task FlushAllAttachedGridLayoutsAsync()
+    {
+        foreach (var autoSave in _gridAutoSaves.Values.ToList())
+            await autoSave.FlushAsync();
+    }
+
+    /// <summary>
+    /// Синхронно сохраняет раскладки всех гридов (для вызова с UI-потока при закрытии).
+    /// Полностью синхронный путь — без Task.Run, без GetAwaiter().GetResult(), без риска дедлока.
+    /// SQLite под капотом синхронный, поэтому SetSync не медленнее async-аналога.
+    /// </summary>
+    public void FlushAllSync()
+    {
+        if (_userId <= 0) return;
+
+        foreach (var autoSave in _gridAutoSaves.Values)
+        {
+            var xml = autoSave.CollectLayoutXml();
+            if (!string.IsNullOrEmpty(xml))
+                _settingsService.SetSync(_userId, $"grid.{autoSave.GridName}", xml);
+        }
     }
 
     public async Task SavePrefAsync(string key, string value)

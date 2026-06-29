@@ -1,7 +1,7 @@
 # Performance Analytics
 
 **Status:** ✅ Implemented
-**Date:** 2026-04-15
+**Date:** 2026-05-21
 
 ## Description
 
@@ -28,7 +28,7 @@ For each work direction (recursive tree traversal):
 ```
 Step 1: Aggregate fact data
   factVolume = SUM(ProjectPhysicalVolume.Quantity × PhysicalVolume.Coefficient) WHERE PhysicalVolume.ClassifierId = WorkDirectionId
-  factHours  = SUM(ProjectLaborIntensity.ActualHours) WHERE WorkDirectionId = WorkDirectionId
+  factHours  = SUM(ProjectLaborIntensity.PlannedHours) WHERE WorkDirectionId = WorkDirectionId
 
 Step 2: Calculate fact productivity
   factProductivity = factHours / factVolume    (when factVolume > 0)
@@ -60,6 +60,24 @@ FactEstimate_row = subtreeWeighted / subtreeHours     (when subtreeHours > 0)
 
 `Z-score` and `Interpretation` on every row are recomputed from the aggregated `FactEstimate` (norm values come directly from the version snapshot — no extra calculations).
 
+`PerformanceRowDto.SubtreeHours` — часы поддерева, участвующие в агрегации `FactEstimate` (используются как вес при расчёте итоговой Z-оценки в отчёте «Анализ версии проекта»). Поле `FactLaborHours` — только прямые часы узла, без суммирования по детям.
+
+### Отчёт «Анализ версии проекта» (since 2026-05-21)
+
+Итоги рассчитываются в `ProjectVersionAnalysisTotalsCalculator` и сохраняются в `ProjectVersionAnalysisDto.Summary`:
+
+| Поле | Источник |
+|------|----------|
+| `TotalFactLaborHours` | `SUM(ProjectLaborIntensity.PlannedHours)` по всем строкам файла |
+| `UnallocatedLaborHours` | часы с `WorkDirectionId IS NULL` |
+| `WeightedZScore` | `Σ(root.ZScore × root.SubtreeHours) / Σ(root.SubtreeHours)` |
+| `PhysicalVolumeTotalsByUnit` | сумма `FactPhysicalVolume` по каждой единице измерения (без смешивания ед.) |
+| `WeightedZScorePercentile` / `WeightedZScoreInterpretation` | по той же шкале, что на вкладке «Оценка факта → По объектам» |
+
+**Ограничение UI:** на странице «Проекты» экран открывается только для выбранной **версии факта**. Для версии **плана** — из карточки проекта (`ProjectEditWindow`).
+
+Экспорт Excel/PDF использует те же итоги из `Summary`.
+
 ### Z-Score Interpretation
 
 | Z-Score Range | Interpretation | Russian | Color |
@@ -78,7 +96,7 @@ Work directions are displayed as a tree using DevExpress `TreeListView`:
 
 - Root directions (`ParentId = NULL`) are rendered at level 0
 - Children are recursively rendered at `level + 1`
-- Each row contains aggregated `factVolume` and `factHours` for that direction and its descendants
+- Each row: `FactPhysicalVolume` and `FactLaborHours` — прямые значения узла (без суммирования по детям в `FactLaborHours`)
 
 ### DTO Structure
 
@@ -97,7 +115,18 @@ public sealed record PerformanceRowDto(
     decimal? NormEstimate,
     decimal? NormStdDev,
     decimal? ZScore,
-    PerformanceInterpretation? Interpretation);
+    PerformanceInterpretation? Interpretation,
+    decimal? SubtreeHours = null);
+```
+
+```csharp
+public sealed record ProjectVersionAnalysisSummaryDto(
+    decimal? TotalFactLaborHours,
+    decimal? WeightedZScore,
+    string WeightedZScorePercentile,
+    PerformanceInterpretation? WeightedZScoreInterpretation,
+    IReadOnlyList<PhysicalVolumeTotalByUnitDto> PhysicalVolumeTotalsByUnit,
+    decimal? UnallocatedLaborHours);
 ```
 
 ### ViewModel Binding

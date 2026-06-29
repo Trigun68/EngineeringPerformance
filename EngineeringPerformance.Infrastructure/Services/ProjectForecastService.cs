@@ -36,13 +36,13 @@ public sealed class ProjectForecastService : IProjectForecastService
             .AsNoTracking()
             .Include(li => li.WorkDirection)
             .ThenInclude(d => d!.Unit)
-            .Include(li => li.PhysicalVolume)
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
         var physicalVolumes = await context.ProjectPhysicalVolumes
             .AsNoTracking()
-            .Include(pv => pv.PhysicalVolume)
+            .Include(pv => pv.PhysicalVolumeKfo).ThenInclude(k => k!.Unit)
+            .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
@@ -73,8 +73,8 @@ public sealed class ProjectForecastService : IProjectForecastService
         var normByDirection = snapshotNorms.ToDictionary(n => n.WorkDirectionId);
 
         var volumeByDirection = physicalVolumes
-            .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.PhysicalVolume.IsAssessment == true)
-            .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+            .Where(pv => pv.GetClassifierId().HasValue && pv.GetIsAssessment() == true)
+            .GroupBy(pv => pv.GetClassifierId()!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.QuantityInIicGroupUnits()));
 
         EquipmentVolumeAggregator.MergeInto(volumeByDirection, equipmentRows);
@@ -475,5 +475,72 @@ public sealed class ProjectForecastService : IProjectForecastService
             characteristics["ГИП"] = project.Gip;
 
         return characteristics;
+    }
+
+    public async Task<ProjectForecastAssessmentVolumesDto> GetAssessmentVolumesByDirectionAsync(
+        int projectId,
+        int versionId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+
+        var pvList = await context.ProjectPhysicalVolumes
+            .AsNoTracking()
+            .Include(pv => pv.PhysicalVolumeKfo).ThenInclude(k => k!.Unit)
+            .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
+            .Where(pv => pv.ProjectId == projectId
+                         && pv.ProjectAnalysisVersionId == versionId
+                         && pv.Quantity > 0
+                         && ((pv.PhysicalVolumeKfo != null && pv.PhysicalVolumeKfo.IsAssessment == true && pv.PhysicalVolumeKfo.ClassifierId != null)
+                             || (pv.PhysicalVolumeBer != null && pv.PhysicalVolumeBer.IsAssessment == true && pv.PhysicalVolumeBer.ClassifierId != null)))
+            .ToListAsync();
+
+        var pvByDirection = pvList
+            .GroupBy(pv => pv.GetClassifierId()!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(pv =>
+                {
+                    var coeff = pv.GetCoefficient();
+                    return new ProjectVersionPhysicalVolumeDto(
+                        Code: pv.GetVolumeCode(),
+                        Name: pv.GetVolumeName(),
+                        UnitName: IicWorkDirectionDisplayUnit.ResolveProjectPhysicalVolumeUnitName(pv),
+                        Quantity: pv.Quantity,
+                        Coefficient: coeff,
+                        Total: pv.Quantity * coeff);
+                })
+                .OrderBy(p => p.Code)
+                .ToList());
+
+        var eqList = await context.ProjectEquipments
+            .AsNoTracking()
+            .Include(eq => eq.Equipment).ThenInclude(e => e!.Unit)
+            .Where(eq => eq.ProjectId == projectId
+                         && eq.ProjectAnalysisVersionId == versionId
+                         && eq.Quantity > 0
+                         && eq.Equipment!.IsAssessment == true
+                         && eq.Equipment.ClassifierId != null)
+            .ToListAsync();
+
+        var eqByDirection = eqList
+            .GroupBy(eq => eq.Equipment!.ClassifierId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(eq =>
+                {
+                    var coeff = eq.Equipment?.Coefficient ?? 1m;
+                    return new ProjectVersionPhysicalVolumeDto(
+                        Code: eq.CatalogId ?? string.Empty,
+                        Name: eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                        UnitName: eq.Equipment?.Unit?.Name,
+                        Quantity: eq.Quantity,
+                        Coefficient: coeff,
+                        Total: eq.QuantityInIicGroupUnits());
+                })
+                .OrderBy(p => p.Code)
+                .ThenBy(p => p.Name)
+                .ToList());
+
+        return new ProjectForecastAssessmentVolumesDto(pvByDirection, eqByDirection);
     }
 }

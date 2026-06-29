@@ -5,5 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\EngineeringPerformance.Domain\EngineeringPerformance.Domain.csproj" />
+    <PackageReference Include="FluentValidation" Version="11.9.0" />
   </ItemGroup>
 </Project>

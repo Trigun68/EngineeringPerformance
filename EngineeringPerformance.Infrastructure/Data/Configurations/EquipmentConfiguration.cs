@@ -12,21 +12,26 @@ public sealed class EquipmentConfiguration : IEntityTypeConfiguration<Equipment>
         builder.HasKey(e => e.Id);
 
         builder.Property(e => e.Name)
-            .IsRequired()
-            .HasMaxLength(1000);
+            .IsRequired();
 
-        builder.Property(e => e.Description)
-            .HasMaxLength(4000);
+        builder.Property(e => e.Description);
+
+        builder.Property(e => e.CatalogKeyHash)
+            .IsRequired()
+            .HasMaxLength(64);
 
         builder.Property(e => e.Coefficient)
-            .HasPrecision(18, 4);
+            .HasPrecision(18, 4)
+            .HasDefaultValue(1m);
 
         builder.HasIndex(e => e.ParentId);
         builder.HasIndex(e => e.IsArchived);
         builder.HasIndex(e => e.ClassifierId);
         builder.HasIndex(e => e.IsAssessment);
+        builder.HasIndex(e => e.UnitId);
         builder.HasIndex(e => new { e.IsArchived, e.ParentId, e.SortOrder });
-        builder.HasIndex(e => e.Name);
+        builder.HasIndex(e => e.CatalogKeyHash)
+            .IsUnique();
 
         builder.HasOne(e => e.Parent)
             .WithMany(e => e.Children)
@@ -36,6 +41,11 @@ public sealed class EquipmentConfiguration : IEntityTypeConfiguration<Equipment>
         builder.HasOne(e => e.Classifier)
             .WithMany()
             .HasForeignKey(e => e.ClassifierId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(e => e.Unit)
+            .WithMany()
+            .HasForeignKey(e => e.UnitId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 }

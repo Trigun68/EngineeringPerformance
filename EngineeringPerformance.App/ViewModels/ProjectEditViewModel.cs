@@ -9,8 +9,6 @@ using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
-using EngineeringPerformance.Infrastructure.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EngineeringPerformance.App.ViewModels;
@@ -33,7 +31,6 @@ public sealed partial class ProjectEditViewModel : ObservableObject
     private readonly IPerformanceService _performanceService;
     private readonly IProjectVisibilityService _visibilityService;
     private readonly CurrentUserHolder _currentUserHolder;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserActionLogService _actionLog;
     private readonly DispatcherTimer _autoSaveTimer;
@@ -99,7 +96,6 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         IPerformanceService performanceService,
         IProjectVisibilityService visibilityService,
         CurrentUserHolder currentUserHolder,
-        IDbContextFactory<AppDbContext> contextFactory,
         IServiceProvider serviceProvider,
         IUserActionLogService actionLog)
     {
@@ -117,7 +113,6 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         _performanceService = performanceService;
         _visibilityService = visibilityService;
         _currentUserHolder = currentUserHolder;
-        _contextFactory = contextFactory;
         _serviceProvider = serviceProvider;
         _actionLog = actionLog;
 
@@ -196,23 +191,10 @@ public sealed partial class ProjectEditViewModel : ObservableObject
 
         try
         {
-            await using var context = await _contextFactory.CreateDbContextAsync();
-            var participants = await context.ProjectPermissions
-                .AsNoTracking()
-                .Include(pp => pp.User)
-                .ThenInclude(u => u.Role)
-                .Where(pp => pp.ProjectId == EntityId)
-                .Select(pp => new ProjectParticipantItem
-                {
-                    Id = pp.User.Id,
-                    UserName = pp.User.DisplayName,
-                    Role = pp.User.Role.Name,
-                    AccessLevel = pp.Level,
-                })
-                .ToListAsync();
+            var participants = await _visibilityService.GetProjectPermissionsAsync(EntityId);
 
             ProjectParticipants.Clear();
-            foreach (var participant in participants)
+            foreach (var participant in participants.Select(MapParticipant))
             {
                 ProjectParticipants.Add(participant);
             }
@@ -571,16 +553,7 @@ public sealed partial class ProjectEditViewModel : ObservableObject
         {
             try
             {
-                await using var context = await _contextFactory.CreateDbContextAsync();
-                var permission = await context.ProjectPermissions
-                    .FirstOrDefaultAsync(pp => pp.ProjectId == EntityId && pp.UserId == SelectedProjectParticipant.Id);
-
-                if (permission is not null)
-                {
-                    context.ProjectPermissions.Remove(permission);
-                    await context.SaveChangesAsync();
-                }
-
+                await _visibilityService.RemoveUserFromProjectAsync(EntityId, SelectedProjectParticipant.Id);
                 await LoadProjectParticipantsAsync();
             }
             catch (Exception ex)
@@ -732,6 +705,14 @@ public sealed partial class ProjectEditViewModel : ObservableObject
             });
         }
     }
+
+    private static ProjectParticipantItem MapParticipant(ProjectPermissionDto dto) => new()
+    {
+        Id = dto.UserId,
+        UserName = dto.DisplayName,
+        Role = dto.RoleName,
+        AccessLevel = dto.Level,
+    };
 }
 
 public sealed class ProjectParticipantItem

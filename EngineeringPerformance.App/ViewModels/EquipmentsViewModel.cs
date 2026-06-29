@@ -17,6 +17,7 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
     private readonly IDirectoryService<Equipment> _equipmentService;
     private readonly IDirectoryCache<Equipment> _equipmentCache;
     private readonly IDirectoryCache<IicWorkDirection> _classifierCache;
+    private readonly IDirectoryCache<UnitOfMeasurement> _unitCache;
 
     public Func<Equipment?, Task>? OpenEditWindow { get; set; }
 
@@ -52,11 +53,13 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
     public EquipmentsViewModel(
         IDirectoryService<Equipment> service,
         IDirectoryCache<Equipment> equipmentCache,
-        IDirectoryCache<IicWorkDirection> classifierCache) : base(service)
+        IDirectoryCache<IicWorkDirection> classifierCache,
+        IDirectoryCache<UnitOfMeasurement> unitCache) : base(service)
     {
         _equipmentService = service;
         _equipmentCache = equipmentCache;
         _classifierCache = classifierCache;
+        _unitCache = unitCache;
     }
 
     protected override void ApplyRefreshedItem(Equipment existing, Equipment updated)
@@ -66,6 +69,9 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
         existing.ClassifierId = updated.ClassifierId;
         existing.Classifier = updated.Classifier;
         existing.ClassifierNameWithUnit = updated.ClassifierNameWithUnit;
+        existing.UnitId = updated.UnitId;
+        existing.Unit = updated.Unit;
+        existing.UnitName = updated.UnitName;
         existing.IsAssessment = updated.IsAssessment;
         existing.Coefficient = updated.Coefficient;
         existing.NotifyRowRefreshed();
@@ -86,18 +92,19 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
 
                 var swParallel = Stopwatch.StartNew();
                 var classifiersTask = _classifierCache.GetAllAsync();
+                var unitsTask = _unitCache.GetAllAsync();
                 var itemsTask = ShowArchived
                     ? _equipmentService.GetAllAsync(true)
                     : LoadFromCacheAsync();
 
-                await Task.WhenAll(classifiersTask, itemsTask);
+                await Task.WhenAll(classifiersTask, unitsTask, itemsTask);
                 swParallel.Stop();
 
                 vm.SetProgress(80, "Обработка данных...");
                 _allLoadedItems = itemsTask.Result.ToList();
 
                 var swEnrich = Stopwatch.StartNew();
-                EnrichNavigations(_allLoadedItems, classifiersTask.Result);
+                EnrichNavigations(_allLoadedItems, classifiersTask.Result, unitsTask.Result);
                 swEnrich.Stop();
 
                 var swApply = Stopwatch.StartNew();
@@ -131,14 +138,15 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
         try
         {
             var classifiersTask = _classifierCache.GetAllAsync();
+            var unitsTask = _unitCache.GetAllAsync();
             var itemsTask = ShowArchived
                 ? _equipmentService.GetAllAsync(true)
                 : LoadFromCacheAsync();
 
-            await Task.WhenAll(classifiersTask, itemsTask);
+            await Task.WhenAll(classifiersTask, unitsTask, itemsTask);
 
             _allLoadedItems = itemsTask.Result.ToList();
-            EnrichNavigations(_allLoadedItems, classifiersTask.Result);
+            EnrichNavigations(_allLoadedItems, classifiersTask.Result, unitsTask.Result);
             ApplyFilters();
         }
         finally
@@ -152,9 +160,11 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
 
     private static void EnrichNavigations(
         IReadOnlyList<Equipment> items,
-        IReadOnlyList<IicWorkDirection> classifiers)
+        IReadOnlyList<IicWorkDirection> classifiers,
+        IReadOnlyList<UnitOfMeasurement> units)
     {
         var classifierById = classifiers.ToDictionary(c => c.Id);
+        var unitById = units.ToDictionary(u => u.Id);
 
         foreach (var item in items)
         {
@@ -165,6 +175,10 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
             item.ClassifierNameWithUnit = item.Classifier is { } cl
                 ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(cl, classifierById)
                 : string.Empty;
+            item.Unit = item.UnitId.HasValue && unitById.TryGetValue(item.UnitId.Value, out var u)
+                ? u
+                : null;
+            item.UnitName = item.Unit?.Name ?? string.Empty;
         }
     }
 
@@ -217,7 +231,8 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
         }
 
         var classifiers = await _classifierCache.GetAllAsync();
-        EnrichNavigations(new[] { updated }, classifiers);
+        var units = await _unitCache.GetAllAsync();
+        EnrichNavigations(new[] { updated }, classifiers, units);
 
         var passesFilter = MatchesActiveFilters(updated);
 
@@ -270,9 +285,10 @@ public sealed partial class EquipmentsViewModel : DirectoryViewModelBase<Equipme
         var columns = new ReferenceExcelExporter.ColumnDef[]
         {
             new("Наименование", o => ((Equipment)o).Name, FixedWidth: 50),
+            new("Ед. изм.",     o => ((Equipment)o).UnitName, FixedWidth: 12),
             new("Описание",     o => ((Equipment)o).Description, FixedWidth: 30),
             new("Классификатор",o => ((Equipment)o).ClassifierNameWithUnit, FixedWidth: 45),
-            new("Коэффициент",  o => ((Equipment)o).Coefficient?.ToString("G") ?? string.Empty),
+            new("Коэффициент",  o => ((Equipment)o).Coefficient.ToString("G")),
             new("Оценка",       o => ((Equipment)o).IsAssessment?.ToString()),
             new("Архив",        o => ((Equipment)o).IsArchived.ToString()),
         };

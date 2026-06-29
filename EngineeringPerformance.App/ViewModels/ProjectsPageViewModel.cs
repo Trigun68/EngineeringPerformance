@@ -10,7 +10,6 @@ using EngineeringPerformance.Core.Enums;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
 using EngineeringPerformance.Infrastructure.Services;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 
@@ -30,12 +29,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     private readonly IIterationDeleteDialogService _iterationDeleteDialog;
     private readonly IConfirmDialogService _confirmDialog;
     private readonly IProjectPhysicalVolumeCreateDialogService _ppvCreateDialog;
+    private readonly IProjectEquipmentCreateDialogService _peqCreateDialog;
     private readonly IDataTableService<ProjectPhysicalVolume> _ppvService;
+    private readonly IDataTableService<ProjectEquipment> _peqService;
+    private readonly IEquipmentEditDialogService _equipmentEditDialog;
     private readonly IProjectVersionAnalysisExportService _exportService;
     private readonly IProjectForecastExportService _forecastExportService;
     private readonly IProjectForecastService _forecastService;
     private readonly ProjectCharacteristicSelectionService _characteristicSelectionService;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IDirectoryService<Project> _projectService;
+    private readonly IDirectoryService<PhysicalVolumeKfo> _physicalVolumeKfoService;
+    private readonly IDirectoryService<PhysicalVolumeBer> _physicalVolumeBerService;
+    private readonly IDirectoryService<Equipment> _equipmentService;
+    private readonly ProjectVersionGridDataService _gridDataService;
     private readonly IServiceProvider _serviceProvider;
     private readonly IUserActionLogService _actionLog;
     private readonly CurrentUserHolder _currentUser;
@@ -101,11 +107,18 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         IIterationDeleteDialogService iterationDeleteDialog,
         IConfirmDialogService confirmDialog,
         IProjectPhysicalVolumeCreateDialogService ppvCreateDialog,
+        IProjectEquipmentCreateDialogService peqCreateDialog,
         IDataTableService<ProjectPhysicalVolume> ppvService,
+        IDataTableService<ProjectEquipment> peqService,
+        IEquipmentEditDialogService equipmentEditDialog,
         IProjectVersionAnalysisExportService exportService,
         IProjectForecastExportService forecastExportService,
         ProjectCharacteristicSelectionService characteristicSelectionService,
-        IDbContextFactory<AppDbContext> contextFactory,
+        IDirectoryService<Project> projectService,
+        IDirectoryService<PhysicalVolumeKfo> physicalVolumeKfoService,
+        IDirectoryService<PhysicalVolumeBer> physicalVolumeBerService,
+        IDirectoryService<Equipment> equipmentService,
+        ProjectVersionGridDataService gridDataService,
         IServiceProvider serviceProvider,
         IUserActionLogService actionLog,
         CurrentUserHolder currentUser)
@@ -123,11 +136,18 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _iterationDeleteDialog = iterationDeleteDialog;
         _confirmDialog = confirmDialog;
         _ppvCreateDialog = ppvCreateDialog;
+        _peqCreateDialog = peqCreateDialog;
         _ppvService = ppvService;
+        _peqService = peqService;
+        _equipmentEditDialog = equipmentEditDialog;
         _exportService = exportService;
         _forecastExportService = forecastExportService;
         _characteristicSelectionService = characteristicSelectionService;
-        _contextFactory = contextFactory;
+        _projectService = projectService;
+        _physicalVolumeKfoService = physicalVolumeKfoService;
+        _physicalVolumeBerService = physicalVolumeBerService;
+        _equipmentService = equipmentService;
+        _gridDataService = gridDataService;
         _serviceProvider = serviceProvider;
         _actionLog = actionLog;
         _currentUser = currentUser;
@@ -154,6 +174,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         _versionPickerDialog.SetOwnerWindow(owner);
         _dataImportDialog.SetOwnerWindow(owner);
         _iterationDeleteDialog.SetOwnerWindow(owner);
+        _equipmentEditDialog.SetOwnerWindow(owner);
     }
 
     [RelayCommand]
@@ -167,9 +188,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
     private async Task LoadProjectAsync(int projectId)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var project = await context.Projects.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == projectId);
+        var project = await _projectService.GetByIdAsync(projectId);
         if (project is null) return;
 
         SelectedProjectId = projectId;
@@ -222,8 +241,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         if (SelectedProjectId is not int pid) return;
         SetDialogOwners();
 
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var project = await context.Projects.FindAsync(pid);
+        var project = await _projectService.GetByIdAsync(pid);
         if (project is null) return;
         var saved = await _projectDataDialog.ShowAsync(project);
         if (saved) await LoadProjectAsync(pid);
@@ -272,53 +290,19 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             ErrorMessage = null;
 
             var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
+            var gridTask = _gridDataService.LoadAsync(
+                projectId,
+                versionId,
+                new ProjectVersionGridLoadOptions { IncludeUnitsOnDirections = true });
 
-            await using var ctxCl = await _contextFactory.CreateDbContextAsync();
-            var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
-                .Include(d => d.Unit)
-                .ToDictionaryAsync(c => c.Id);
-
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
-            var pvTask = ctx.ProjectPhysicalVolumes
-                .AsNoTracking()
-                .Include(pv => pv.PhysicalVolume)
-                    .ThenInclude(p => p!.Unit)
-                .Where(pv => pv.ProjectId == projectId
-                             && pv.ProjectAnalysisVersionId == versionId
-                             && pv.PhysicalVolume!.IsAssessment == true
-                             && pv.PhysicalVolume.ClassifierId != null)
-                .ToListAsync();
-
-            await using var ctx2 = await _contextFactory.CreateDbContextAsync();
-            var pvAllTask = ctx2.ProjectPhysicalVolumes
-                .AsNoTracking()
-                .Include(pv => pv.PhysicalVolume)
-                    .ThenInclude(p => p!.Unit)
-                .Where(pv => pv.ProjectId == projectId
-                             && pv.ProjectAnalysisVersionId == versionId)
-                .ToListAsync();
-
-            await using var ctxEq = await _contextFactory.CreateDbContextAsync();
-            var equipmentAllTask = ctxEq.ProjectEquipments
-                .AsNoTracking()
-                .Include(e => e.Equipment)
-                .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-                .ToListAsync();
-
-            await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
-            var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
-                .AsNoTracking()
-                .Where(s => s.ProjectAnalysisVersionId == versionId)
-                .Select(s => new { s.WorkDirectionId, s.NormId })
-                .ToListAsync();
-
-            await Task.WhenAll(perfTask, pvTask, pvAllTask, equipmentAllTask, snapshotMapTask);
+            await Task.WhenAll(perfTask, gridTask);
             var data = perfTask.Result;
-            var physicalVolumes = pvTask.Result;
-            var physicalVolumesAll = pvAllTask.Result;
-            var equipmentAll = equipmentAllTask.Result;
-            var snapshotNormIdByDirection = snapshotMapTask.Result
-                .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
+            var grid = gridTask.Result;
+            var classifierMap = grid.ClassifierMap;
+            var physicalVolumes = grid.AssessmentPhysicalVolumes;
+            var physicalVolumesAll = grid.AllPhysicalVolumes;
+            var equipmentAll = grid.AllEquipment;
+            var snapshotNormIdByDirection = grid.SnapshotNormIdByDirection;
 
             // Ед. изм. для «Итого» — из справочника групп ФО IIC.
             // Сначала берём собственную ед. изм. группы (Unit.Name), как в окне справочника IicWorkDirections.
@@ -478,11 +462,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 decimal baseH = 0m, optH = 0m, pesH = 0m;
                 foreach (var pv in facilityGroup)
                 {
-                    var dirId = pv.PhysicalVolume!.ClassifierId!.Value;
+                    var dirId = pv.GetClassifierId()!.Value;
                     if (!normByDirection.TryGetValue(dirId, out var norm))
                         continue;
 
-                    var vol = pv.Quantity * pv.PhysicalVolume.Coefficient;
+                    var vol = pv.Quantity * pv.GetCoefficient();
                     var p   = norm.NormProductivity!.Value;
                     var std = norm.NormStdDev ?? 0m;
 
@@ -525,16 +509,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var allPv = physicalVolumesAll
                 .OrderBy(pv => pv.FacilityCode ?? string.Empty)
                 .ThenBy(pv => pv.FacilityName ?? string.Empty)
-                .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+                .ThenBy(pv => pv.GetVolumeCode());
 
             var detailRows = new List<DetailForecastItem>();
             foreach (var pv in allPv)
             {
-                var dirId = pv.PhysicalVolume?.ClassifierId;
+                var dirId = pv.GetClassifierId();
                 PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
 
-                var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
-                var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+                var isAssessment = pv.GetIsAssessment() == true;
+                var vol = pv.Quantity * (pv.GetCoefficient());
                 decimal? baseH = null, optH = null, pesH = null;
                 if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
                 {
@@ -547,8 +531,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 detailRows.Add(new DetailForecastItem
                 {
                     ProjectPhysicalVolumeId = pv.Id,
-                    PhysicalVolumeId      = pv.PhysicalVolumeId,
-                    ClassifierId          = pv.PhysicalVolume?.ClassifierId,
+                    PhysicalVolumeId      = pv.GetCatalogVolumeId() ?? 0,
+                    ClassifierId          = pv.GetClassifierId(),
                     NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid) ? nid : null,
                     FacilityCode          = pv.FacilityCode ?? string.Empty,
                     FacilityName          = pv.FacilityName ?? string.Empty,
@@ -558,22 +542,74 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                     Tag                   = pv.Tag ?? string.Empty,
                     WorkId                = pv.WorkId ?? string.Empty,
                     WorkName              = pv.WorkName ?? string.Empty,
+                    ItemName              = pv.WorkName ?? string.Empty,
                     WorkComment           = pv.WorkComment ?? string.Empty,
                     EstimationBasis       = pv.EstimationBasis ?? string.Empty,
-                    PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
-                    PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
+                    PvCode                = pv.GetVolumeCode(),
+                    PvName                = pv.GetVolumeName(),
                     IsAssessment          = isAssessment ? "Да" : "Нет",
-                    Coefficient           = pv.PhysicalVolume?.Coefficient,
-                    IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid && classifierMap.TryGetValue(cid, out var cl)
+                    Coefficient           = pv.GetCoefficient(),
+                    IicGroupName          = pv.GetClassifierId() is int cid && classifierMap.TryGetValue(cid, out var cl)
                         ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(cl, classifierMap)
                         : string.Empty,
-                    IicUnitName           = IicWorkDirectionDisplayUnit.ResolvePhysicalVolumeUnitName(pv.PhysicalVolume) ?? string.Empty,
+                    IicUnitName           = IicWorkDirectionDisplayUnit.ResolveProjectPhysicalVolumeUnitName(pv) ?? string.Empty,
                     NormProductivity      = norm?.NormProductivity,
                     NormStdDev            = norm?.NormStdDev,
                     Quantity              = pv.Quantity,
                     BaseHours             = baseH,
                     OptimisticHours       = optH,
                     PessimisticHours      = pesH,
+                });
+            }
+
+            foreach (var eq in equipmentAll
+                         .OrderBy(e => e.FacilityCode ?? string.Empty)
+                         .ThenBy(e => e.FacilityName ?? string.Empty)
+                         .ThenBy(e => e.Equipment?.Name ?? string.Empty))
+            {
+                var dirId = eq.Equipment?.ClassifierId;
+                PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var ndEq)
+                    ? ndEq
+                    : null;
+                var isAssessment = eq.Equipment?.IsAssessment == true;
+                var vol = eq.QuantityInIicGroupUnits();
+                decimal? baseH = null, optH = null, pesH = null;
+                if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
+                {
+                    var std = norm.NormStdDev ?? 0m;
+                    baseH = Math.Round(vol * p, 2);
+                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
+                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                }
+
+                detailRows.Add(new DetailForecastItem
+                {
+                    ProjectPhysicalVolumeId = 0,
+                    PhysicalVolumeId = 0,
+                    ProjectEquipmentId = eq.Id,
+                    EquipmentId = eq.EquipmentId,
+                    ClassifierId = dirId,
+                    NormId = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nidEq) ? nidEq : null,
+                    FacilityCode = eq.FacilityCode ?? string.Empty,
+                    FacilityName = eq.FacilityName ?? string.Empty,
+                    DocumentSet = eq.DocumentSet ?? string.Empty,
+                    CatalogId = eq.CatalogId ?? string.Empty,
+                    Tag = eq.Tag ?? string.Empty,
+                    PvCode = eq.CatalogId ?? string.Empty,
+                    PvName = eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                    ItemName = eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                    IsAssessment = isAssessment ? "Да" : "Нет",
+                    Coefficient = eq.Equipment?.Coefficient,
+                    IicGroupName = dirId is int cidEq && classifierMap.TryGetValue(cidEq, out var clEq)
+                        ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(clEq, classifierMap)
+                        : string.Empty,
+                    IicUnitName = norm?.NormUnitName ?? string.Empty,
+                    NormProductivity = norm?.NormProductivity,
+                    NormStdDev = norm?.NormStdDev,
+                    Quantity = eq.Quantity,
+                    BaseHours = baseH,
+                    OptimisticHours = optH,
+                    PessimisticHours = pesH,
                 });
             }
 
@@ -691,58 +727,24 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             ErrorMessage = null;
 
             var perfTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
+            var gridTask = _gridDataService.LoadAsync(
+                projectId,
+                versionId,
+                new ProjectVersionGridLoadOptions
+                {
+                    IncludeLaborIntensities = true,
+                    IncludeActualHoursInLabor = true,
+                });
 
-            await using var ctxCl = await _contextFactory.CreateDbContextAsync();
-            var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
-                .ToDictionaryAsync(c => c.Id);
-
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
-            var pvTask = ctx.ProjectPhysicalVolumes
-                .AsNoTracking()
-                .Include(pv => pv.PhysicalVolume)
-                .Where(pv => pv.ProjectId == projectId
-                             && pv.ProjectAnalysisVersionId == versionId
-                             && pv.PhysicalVolume!.IsAssessment == true
-                             && pv.PhysicalVolume.ClassifierId != null)
-                .ToListAsync();
-
-            await using var ctx2 = await _contextFactory.CreateDbContextAsync();
-            var pvAllTask = ctx2.ProjectPhysicalVolumes
-                .AsNoTracking()
-                .Include(pv => pv.PhysicalVolume)
-                .Where(pv => pv.ProjectId == projectId
-                             && pv.ProjectAnalysisVersionId == versionId)
-                .ToListAsync();
-
-            await using var ctxEq = await _contextFactory.CreateDbContextAsync();
-            var equipmentAllTask = ctxEq.ProjectEquipments
-                .AsNoTracking()
-                .Include(e => e.Equipment)
-                .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-                .ToListAsync();
-
-            await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
-            var snapshotMapTask = ctxSnap.AnalysisVersionSnapshots
-                .AsNoTracking()
-                .Where(s => s.ProjectAnalysisVersionId == versionId)
-                .Select(s => new { s.WorkDirectionId, s.NormId })
-                .ToListAsync();
-
-            await using var ctxLi = await _contextFactory.CreateDbContextAsync();
-            var liTask = ctxLi.ProjectLaborIntensities
-                .AsNoTracking()
-                .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-                .Select(li => new { li.DocumentationCode, li.WorkDirectionId, li.PlannedHours, li.ActualHours })
-                .ToListAsync();
-
-            await Task.WhenAll(perfTask, pvTask, pvAllTask, equipmentAllTask, snapshotMapTask, liTask);
+            await Task.WhenAll(perfTask, gridTask);
             var data = perfTask.Result ?? throw new InvalidOperationException("Performance data is null");
-            var physicalVolumes = pvTask.Result;
-            var physicalVolumesAll = pvAllTask.Result;
-            var equipmentAll = equipmentAllTask.Result;
-            var snapshotNormIdByDirection = snapshotMapTask.Result
-                .ToDictionary(s => s.WorkDirectionId, s => s.NormId);
-            var laborIntensitiesRaw = liTask.Result;
+            var grid = gridTask.Result;
+            var classifierMap = grid.ClassifierMap;
+            var physicalVolumes = grid.AssessmentPhysicalVolumes;
+            var physicalVolumesAll = grid.AllPhysicalVolumes;
+            var equipmentAll = grid.AllEquipment;
+            var snapshotNormIdByDirection = grid.SnapshotNormIdByDirection;
+            var laborIntensitiesRaw = grid.LaborIntensities;
             // Связка LI ↔ PV: трудоёмкость относится к комплекту документов (DocumentSet)
             // или марке (Tag). LI.DocumentationCode хранится как «<тип документации>/<название>|<DocumentSet>»
             // (например `AC_03Схема ... |4L0000-XX-XX2`), а в PV есть прямая колонка DocumentSet.
@@ -985,30 +987,30 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
 
         // Объёмы PV (assessment) по (DocSet, Direction) — знаменатель для пропорции.
         var docSetVolumes = physicalVolumesAll
-            .Where(pv => pv.PhysicalVolume?.IsAssessment == true
-                      && pv.PhysicalVolume.ClassifierId.HasValue
+            .Where(pv => pv.GetIsAssessment() == true
+                      && pv.GetClassifierId().HasValue
                       && !string.IsNullOrEmpty(pv.DocumentSet))
             .GroupBy(pv => (
                 Set: pv.DocumentSet!,
-                Dir: pv.PhysicalVolume!.ClassifierId!.Value))
-            .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.PhysicalVolume!.Coefficient));
+                Dir: pv.GetClassifierId()!.Value))
+            .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.GetCoefficient()));
 
         // Сначала строим «Детально» (рассчитываем factHours по каждому PPV),
         // затем агрегируем суммы факт-часов в «По объектам» по FacilityCode.
         var allPv = physicalVolumesAll
             .OrderBy(pv => pv.FacilityCode ?? string.Empty)
             .ThenBy(pv => pv.FacilityName ?? string.Empty)
-            .ThenBy(pv => pv.PhysicalVolume?.Code ?? string.Empty);
+            .ThenBy(pv => pv.GetVolumeCode());
 
         var detailRows = new List<FactDetailRow>();
         decimal totalMatchedHours = 0m;
         foreach (var pv in allPv)
         {
-            var dirId = pv.PhysicalVolume?.ClassifierId;
+            var dirId = pv.GetClassifierId();
             PerformanceRowDto? norm = dirId.HasValue && normByDirection.TryGetValue(dirId.Value, out var nd) ? nd : null;
 
-            var isAssessment = pv.PhysicalVolume?.IsAssessment == true;
-            var vol = pv.Quantity * (pv.PhysicalVolume?.Coefficient ?? 1m);
+            var isAssessment = pv.GetIsAssessment() == true;
+            var vol = pv.Quantity * (pv.GetCoefficient());
 
             decimal? factHours = null;
             decimal? factProductivity = null;
@@ -1043,7 +1045,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             detailRows.Add(new FactDetailRow
             {
                 ProjectPhysicalVolumeId = pv.Id,
-                PhysicalVolumeId      = pv.PhysicalVolumeId,
+                PhysicalVolumeId      = pv.GetCatalogVolumeId() ?? 0,
                 NormId                = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nid2) ? nid2 : null,
                 FacilityCode          = pv.FacilityCode ?? string.Empty,
                 FacilityName          = pv.FacilityName ?? string.Empty,
@@ -1052,12 +1054,13 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 CatalogId             = pv.CatalogId ?? string.Empty,
                 Tag                   = pv.Tag ?? string.Empty,
                 WorkId                = pv.WorkId ?? string.Empty,
-                WorkName              = pv.WorkName ?? string.Empty,
-                WorkComment           = pv.WorkComment ?? string.Empty,
+                    WorkName              = pv.WorkName ?? string.Empty,
+                    ItemName              = pv.WorkName ?? string.Empty,
+                    WorkComment           = pv.WorkComment ?? string.Empty,
                 EstimationBasis       = pv.EstimationBasis ?? string.Empty,
-                PvCode                = pv.PhysicalVolume?.Code ?? string.Empty,
-                PvName                = pv.PhysicalVolume?.Name ?? string.Empty,
-                IicGroupName          = pv.PhysicalVolume?.ClassifierId is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
+                PvCode                = pv.GetVolumeCode(),
+                PvName                = pv.GetVolumeName(),
+                IicGroupName          = pv.GetClassifierId() is int cid2 && classifierMap.TryGetValue(cid2, out var cl2) ? $"{cl2.Code} {cl2.Name}" : string.Empty,
                 IicUnitName           = norm?.NormUnitName ?? string.Empty,
                 Quantity              = pv.Quantity,
                 FactLaborHours        = factHours,
@@ -1088,6 +1091,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             {
                 ProjectPhysicalVolumeId = 0,
                 PhysicalVolumeId = 0,
+                ProjectEquipmentId = eq.Id,
+                EquipmentId = eq.EquipmentId,
                 NormId = dirId.HasValue && snapshotNormIdByDirection.TryGetValue(dirId.Value, out var nidEq) ? nidEq : null,
                 FacilityCode = eq.FacilityCode ?? string.Empty,
                 FacilityName = eq.FacilityName ?? string.Empty,
@@ -1096,6 +1101,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 Tag = eq.Tag ?? string.Empty,
                 PvCode = eq.CatalogId ?? string.Empty,
                 PvName = eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                ItemName = eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
                 IicGroupName = dirId is int cidEq && classifierMap.TryGetValue(cidEq, out var clEq)
                     ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(clEq, classifierMap)
                     : string.Empty,
@@ -1181,37 +1187,16 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     {
         var perfData = await _performanceService.GetPerformanceDataAsync(projectId, versionId);
 
-        await using var ctxCl = await _contextFactory.CreateDbContextAsync();
-        var classifierMap = await ctxCl.IicWorkDirections.AsNoTracking()
-            .ToDictionaryAsync(c => c.Id);
+        var grid = await _gridDataService.LoadAsync(
+            projectId,
+            versionId,
+            new ProjectVersionGridLoadOptions { IncludeLaborIntensities = true });
 
-        await using var ctx = await _contextFactory.CreateDbContextAsync();
-        var physicalVolumesAll = await ctx.ProjectPhysicalVolumes
-            .AsNoTracking()
-            .Include(pv => pv.PhysicalVolume)
-            .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
-
-        await using var ctxEq = await _contextFactory.CreateDbContextAsync();
-        var equipmentAll = await ctxEq.ProjectEquipments
-            .AsNoTracking()
-            .Include(e => e.Equipment)
-            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
-
-        await using var ctxSnap = await _contextFactory.CreateDbContextAsync();
-        var snapshotNormIdByDirection = await ctxSnap.AnalysisVersionSnapshots
-            .AsNoTracking()
-            .Where(s => s.ProjectAnalysisVersionId == versionId)
-            .Select(s => new { s.WorkDirectionId, s.NormId })
-            .ToDictionaryAsync(s => s.WorkDirectionId, s => s.NormId);
-
-        await using var ctxLi = await _contextFactory.CreateDbContextAsync();
-        var laborIntensitiesRaw = await ctxLi.ProjectLaborIntensities
-            .AsNoTracking()
-            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-            .Select(li => new { li.DocumentationCode, li.WorkDirectionId, li.PlannedHours })
-            .ToListAsync();
+        var classifierMap = grid.ClassifierMap;
+        var physicalVolumesAll = grid.AllPhysicalVolumes;
+        var equipmentAll = grid.AllEquipment;
+        var snapshotNormIdByDirection = grid.SnapshotNormIdByDirection;
+        var laborIntensitiesRaw = grid.LaborIntensities;
 
         static string ExtractDocSet(string? code)
         {
@@ -1771,20 +1756,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             IsLoading = true;
             ErrorMessage = null;
 
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
-            var directions = await ctx.IicWorkDirections.AsNoTracking()
-                .Include(d => d.Unit)
-                .Where(d => !d.IsArchived)
-                .OrderBy(d => d.SortOrder)
-                .ThenBy(d => d.Name)
-                .Select(d => new IicDirectionNodeDto(
-                    d.Id,
-                    d.ParentId,
-                    d.Name,
-                    d.Code,
-                    d.SortOrder,
-                    d.Unit != null ? d.Unit.Name : null))
-                .ToListAsync();
+            var directions = await _gridDataService.GetActiveDirectionNodesAsync();
 
             var inputRows = DetailForecastData
                 .Where(r => !r.IsTotal)
@@ -1934,7 +1906,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task EditProjectPhysicalVolumeAsync(DetailForecastItem? row)
     {
-        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        if (row is null || row.IsTotal || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0 || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
 
         var vm = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeQuickEditViewModel>();
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
@@ -1954,7 +1926,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task EditPhysicalVolumeNomenclatureAsync(DetailForecastItem? row)
     {
-        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        if (row is null || row.IsTotal || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0 || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
 
         var state = SaveDetailForecastStateCallback?.Invoke();
 
@@ -1963,10 +1935,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         vm.Prepare(row.PhysicalVolumeId, nomenclature, row.NormId.HasValue ? null : (int?)null,
             row.Coefficient ?? 1m, row.IsAssessment == "Да" ? true : row.IsAssessment == "Нет" ? false : (bool?)null);
 
-        await using var ctx = await _contextFactory.CreateDbContextAsync();
-        var pv = await ctx.PhysicalVolumes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PhysicalVolumeId);
-        if (pv is not null)
-            vm.Prepare(row.PhysicalVolumeId, nomenclature, pv.ClassifierId, pv.Coefficient, pv.IsAssessment);
+        var meta = await GetCatalogVolumeMetaAsync(row.PhysicalVolumeId);
+        if (meta is not null)
+            vm.Prepare(row.PhysicalVolumeId, nomenclature, meta.Value.ClassifierId, meta.Value.Coefficient, meta.Value.IsAssessment, meta.Value.IsKfo);
 
         var window = _serviceProvider.GetRequiredService<Views.PhysicalVolumeQuickEditDialog>();
         window.DataContext = vm;
@@ -2010,7 +1981,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task DeleteProjectPhysicalVolumeAsync(DetailForecastItem? row)
     {
-        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        if (row is null || row.IsTotal || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0 || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
 
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
         var confirmed = await _confirmDialog.ShowAsync(
@@ -2042,7 +2013,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task CreateProjectPhysicalVolumeFromCopyAsync(DetailForecastItem? row)
     {
-        if (row is null || row.IsTotal || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        if (row is null || row.IsTotal || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0 || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
         await ShowCreateDialogAsync(forCopy: true, source: row, pid, vid);
     }
 
@@ -2067,12 +2038,115 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         await LoadForecastDataAsync(projectId, versionId, state);
     }
 
+    // ─── Контекстное меню «Детально» — оборудование (Forecast) ────────────
+
+    [RelayCommand]
+    private async Task EditProjectEquipmentAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || !row.IsEquipmentRow || row.ProjectEquipmentId <= 0
+            || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<ProjectEquipmentQuickEditViewModel>();
+        var nomenclature = row.ItemName;
+        vm.Prepare(row.ProjectEquipmentId, nomenclature, row.Quantity);
+
+        var window = _serviceProvider.GetRequiredService<Views.ProjectEquipmentQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.EquipmentEdit, "ProjectEquipment", row.ProjectEquipmentId,
+                $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+            await LoadForecastDataAsync(pid, vid, state);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditEquipmentNomenclatureAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || !row.IsEquipmentRow || row.EquipmentId <= 0
+            || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var equipment = await _equipmentService.GetByIdAsync(row.EquipmentId);
+        if (equipment is null) return;
+
+        _equipmentEditDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        var nomenclature = row.ItemName;
+        if (await _equipmentEditDialog.ShowEditDialogAsync(equipment) is null) return;
+
+        await LogDetailEditAsync(UserActionType.EquipmentEdit, "Equipment", row.EquipmentId,
+            $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadForecastDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task DeleteProjectEquipmentAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || !row.IsEquipmentRow || row.ProjectEquipmentId <= 0
+            || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+
+        var nomenclature = row.ItemName;
+        var confirmed = await _confirmDialog.ShowAsync(
+            "Удалить строку",
+            $"Удалить выбранную строку?\n{nomenclature}",
+            "Удалить");
+        if (!confirmed) return;
+
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        try
+        {
+            await _peqService.DeleteAsync(row.ProjectEquipmentId);
+        }
+        catch (Exception ex)
+        {
+            await _confirmDialog.ShowAsync(
+                "Ошибка удаления",
+                $"Не удалось удалить строку: {ex.Message}",
+                "OK", "OK");
+            return;
+        }
+        await LogDetailEditAsync(UserActionType.EquipmentDelete, "ProjectEquipment",
+            row.ProjectEquipmentId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadForecastDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task CreateProjectEquipmentFromCopyAsync(DetailForecastItem? row)
+    {
+        if (row is null || row.IsTotal || !row.IsEquipmentRow || SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        await ShowEquipmentCreateDialogAsync(forCopy: true, source: row, pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task CreateProjectEquipmentAsync(DetailForecastItem? _)
+    {
+        if (SelectedProjectId is not int pid || PlanVersionId is not int vid) return;
+        await ShowEquipmentCreateDialogAsync(forCopy: false, source: null, pid, vid);
+    }
+
+    private async Task ShowEquipmentCreateDialogAsync(bool forCopy, DetailForecastItem? source, int projectId, int versionId)
+    {
+        _peqCreateDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveDetailForecastStateCallback?.Invoke();
+        var created = await _peqCreateDialog.ShowAsync(forCopy, source, projectId, versionId);
+        if (!created) return;
+
+        var description = forCopy && source is not null
+            ? $"ProjectId={projectId}, VersionId={versionId}, copyOf={source.ProjectEquipmentId}"
+            : $"ProjectId={projectId}, VersionId={versionId}";
+        await LogDetailEditAsync(UserActionType.EquipmentCreate, "ProjectEquipment", 0, description);
+        await LoadForecastDataAsync(projectId, versionId, state);
+    }
+
     // ─── Контекстное меню «Детально» (Fact) ───────────────────────────────
 
     [RelayCommand]
     private async Task EditFactProjectPhysicalVolumeAsync(FactDetailRow? row)
     {
-        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        if (row is null || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
 
         var vm = _serviceProvider.GetRequiredService<ProjectPhysicalVolumeQuickEditViewModel>();
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
@@ -2092,7 +2166,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task EditFactPhysicalVolumeNomenclatureAsync(FactDetailRow? row)
     {
-        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        if (row is null || row.IsEquipmentRow || row.PhysicalVolumeId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
 
         var state = SaveFactDetailStateCallback?.Invoke();
 
@@ -2100,10 +2175,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
         vm.Prepare(row.PhysicalVolumeId, nomenclature, null, 1m, null);
 
-        await using var ctx = await _contextFactory.CreateDbContextAsync();
-        var pv = await ctx.PhysicalVolumes.AsNoTracking().FirstOrDefaultAsync(p => p.Id == row.PhysicalVolumeId);
-        if (pv is not null)
-            vm.Prepare(row.PhysicalVolumeId, nomenclature, pv.ClassifierId, pv.Coefficient, pv.IsAssessment);
+        var meta = await GetCatalogVolumeMetaAsync(row.PhysicalVolumeId);
+        if (meta is not null)
+            vm.Prepare(row.PhysicalVolumeId, nomenclature, meta.Value.ClassifierId, meta.Value.Coefficient, meta.Value.IsAssessment, meta.Value.IsKfo);
 
         var window = _serviceProvider.GetRequiredService<Views.PhysicalVolumeQuickEditDialog>();
         window.DataContext = vm;
@@ -2140,7 +2214,8 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task DeleteFactProjectPhysicalVolumeAsync(FactDetailRow? row)
     {
-        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        if (row is null || row.IsEquipmentRow || row.ProjectPhysicalVolumeId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
 
         var nomenclature = $"{row.PvCode} {row.PvName}".Trim();
         var confirmed = await _confirmDialog.ShowAsync(
@@ -2170,7 +2245,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
     [RelayCommand]
     private async Task CreateFactProjectPhysicalVolumeFromCopyAsync(FactDetailRow? row)
     {
-        if (row is null || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        if (row is null || row.IsEquipmentRow || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
         await ShowFactCreateDialogAsync(forCopy: true, source: row, pid, vid);
     }
 
@@ -2193,6 +2268,121 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             : $"ProjectId={projectId}, VersionId={versionId}";
         await LogDetailEditAsync(UserActionType.PhysicalVolumeCreate, "ProjectPhysicalVolume", 0, description);
         await LoadFactDataAsync(projectId, versionId, state);
+    }
+
+    // ─── Контекстное меню «Детально» — оборудование (Fact) ────────────────
+
+    [RelayCommand]
+    private async Task EditFactProjectEquipmentAsync(FactDetailRow? row)
+    {
+        if (row is null || !row.IsEquipmentRow || row.ProjectEquipmentId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var vm = _serviceProvider.GetRequiredService<ProjectEquipmentQuickEditViewModel>();
+        var nomenclature = row.ItemName;
+        vm.Prepare(row.ProjectEquipmentId, nomenclature, row.Quantity);
+
+        var window = _serviceProvider.GetRequiredService<Views.ProjectEquipmentQuickEditDialog>();
+        window.DataContext = vm;
+        window.Owner = GetOwner();
+        var state = SaveFactDetailStateCallback?.Invoke();
+        if (window.ShowDialog() == true)
+        {
+            await LogDetailEditAsync(UserActionType.EquipmentEdit, "ProjectEquipment", row.ProjectEquipmentId,
+                $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+            await LoadFactDataAsync(pid, vid, state);
+        }
+    }
+
+    [RelayCommand]
+    private async Task EditFactEquipmentNomenclatureAsync(FactDetailRow? row)
+    {
+        if (row is null || !row.IsEquipmentRow || row.EquipmentId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var equipment = await _equipmentService.GetByIdAsync(row.EquipmentId);
+        if (equipment is null) return;
+
+        _equipmentEditDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveFactDetailStateCallback?.Invoke();
+        var nomenclature = row.ItemName;
+        if (await _equipmentEditDialog.ShowEditDialogAsync(equipment) is null) return;
+
+        await LogDetailEditAsync(UserActionType.EquipmentEdit, "Equipment", row.EquipmentId,
+            $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadFactDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task DeleteFactProjectEquipmentAsync(FactDetailRow? row)
+    {
+        if (row is null || !row.IsEquipmentRow || row.ProjectEquipmentId <= 0
+            || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+
+        var nomenclature = row.ItemName;
+        var confirmed = await _confirmDialog.ShowAsync(
+            "Удалить строку",
+            $"Удалить выбранную строку?\n{nomenclature}",
+            "Удалить");
+        if (!confirmed) return;
+
+        var state = SaveFactDetailStateCallback?.Invoke();
+        try
+        {
+            await _peqService.DeleteAsync(row.ProjectEquipmentId);
+        }
+        catch (Exception ex)
+        {
+            await _confirmDialog.ShowAsync(
+                "Ошибка удаления",
+                $"Не удалось удалить строку: {ex.Message}",
+                "OK", "OK");
+            return;
+        }
+        await LogDetailEditAsync(UserActionType.EquipmentDelete, "ProjectEquipment",
+            row.ProjectEquipmentId, $"ProjectId={pid}, VersionId={vid}, {nomenclature}");
+        await LoadFactDataAsync(pid, vid, state);
+    }
+
+    [RelayCommand]
+    private async Task CreateFactProjectEquipmentFromCopyAsync(FactDetailRow? row)
+    {
+        if (row is null || !row.IsEquipmentRow || SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        await ShowFactEquipmentCreateDialogAsync(forCopy: true, source: row, pid, vid);
+    }
+
+    [RelayCommand]
+    private async Task CreateFactProjectEquipmentAsync(FactDetailRow? _)
+    {
+        if (SelectedProjectId is not int pid || FactVersionId is not int vid) return;
+        await ShowFactEquipmentCreateDialogAsync(forCopy: false, source: null, pid, vid);
+    }
+
+    private async Task ShowFactEquipmentCreateDialogAsync(bool forCopy, FactDetailRow? source, int projectId, int versionId)
+    {
+        _peqCreateDialog.SetOwnerWindow(GetOwner()!);
+        var state = SaveFactDetailStateCallback?.Invoke();
+        var created = await _peqCreateDialog.ShowAsync(forCopy, source, projectId, versionId);
+        if (!created) return;
+
+        var description = forCopy && source is not null
+            ? $"ProjectId={projectId}, VersionId={versionId}, copyOf={source.ProjectEquipmentId}"
+            : $"ProjectId={projectId}, VersionId={versionId}";
+        await LogDetailEditAsync(UserActionType.EquipmentCreate, "ProjectEquipment", 0, description);
+        await LoadFactDataAsync(projectId, versionId, state);
+    }
+
+    private async Task<(int? ClassifierId, decimal Coefficient, bool? IsAssessment, bool IsKfo)?> GetCatalogVolumeMetaAsync(int catalogId)
+    {
+        var kfo = await _physicalVolumeKfoService.GetByIdAsync(catalogId);
+        if (kfo is not null)
+            return (kfo.ClassifierId, kfo.Coefficient, kfo.IsAssessment, IsKfo: true);
+
+        var ber = await _physicalVolumeBerService.GetByIdAsync(catalogId);
+        if (ber is not null)
+            return (ber.ClassifierId, ber.Coefficient, ber.IsAssessment, IsKfo: false);
+
+        return null;
     }
 }
 
@@ -2304,6 +2494,8 @@ public sealed class FactDetailRow
 {
     public int ProjectPhysicalVolumeId { get; set; }
     public int PhysicalVolumeId { get; set; }
+    public int ProjectEquipmentId { get; set; }
+    public int EquipmentId { get; set; }
     public int? NormId { get; set; }
     public string FacilityCode { get; set; } = string.Empty;
     public string FacilityName { get; set; } = string.Empty;
@@ -2313,6 +2505,7 @@ public sealed class FactDetailRow
     public string Tag { get; set; } = string.Empty;
     public string WorkId { get; set; } = string.Empty;
     public string WorkName { get; set; } = string.Empty;
+    public string ItemName { get; set; } = string.Empty;
     public string WorkComment { get; set; } = string.Empty;
     public string EstimationBasis { get; set; } = string.Empty;
     public string PvCode { get; set; } = string.Empty;
@@ -2326,6 +2519,11 @@ public sealed class FactDetailRow
     public decimal? ZScore { get; set; }
     public string Percentile { get; set; } = string.Empty;
     public string Interpretation { get; set; } = string.Empty;
+
+    public bool IsEquipmentRow => ProjectEquipmentId > 0;
+
+    /// <summary>Ключ для RestoreStateOnSourceChange: ФО — положительный Id, оборудование — отрицательный.</summary>
+    public int DetailStateKey => IsEquipmentRow ? -ProjectEquipmentId : ProjectPhysicalVolumeId;
 }
 
 public sealed class DetailGridState
@@ -2339,6 +2537,8 @@ public sealed class DetailForecastItem
 {
     public int ProjectPhysicalVolumeId { get; set; }
     public int PhysicalVolumeId { get; set; }
+    public int ProjectEquipmentId { get; set; }
+    public int EquipmentId { get; set; }
     public int? ClassifierId { get; set; }
     public int? NormId { get; set; }
     public string FacilityCode { get; set; } = string.Empty;
@@ -2349,6 +2549,7 @@ public sealed class DetailForecastItem
     public string Tag { get; set; } = string.Empty;
     public string WorkId { get; set; } = string.Empty;
     public string WorkName { get; set; } = string.Empty;
+    public string ItemName { get; set; } = string.Empty;
     public string WorkComment { get; set; } = string.Empty;
     public string EstimationBasis { get; set; } = string.Empty;
     public string PvCode { get; set; } = string.Empty;
@@ -2365,10 +2566,15 @@ public sealed class DetailForecastItem
     public decimal? PessimisticHours { get; set; }
     public bool IsTotal { get; set; }
 
+    public bool IsEquipmentRow => ProjectEquipmentId > 0;
+
+    /// <summary>Ключ для RestoreStateOnSourceChange: ФО — положительный Id, оборудование — отрицательный.</summary>
+    public int DetailStateKey => IsEquipmentRow ? -ProjectEquipmentId : ProjectPhysicalVolumeId;
+
     /// <summary>Строка для Excel — те же значения, что в колонках грида «Детально» (прогноз).</summary>
     public DetailForecastRowDto ToExportDto() => new(
         FacilityCode, FacilityName, BindingType, DocumentSet,
-        CatalogId, Tag, WorkId, WorkName, WorkComment,
+        CatalogId, Tag, WorkId, ItemName, WorkComment,
         EstimationBasis, PvCode, PvName, IsAssessment,
         Coefficient, IicGroupName, IicUnitName,
         NormProductivity, NormStdDev, Quantity,

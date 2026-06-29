@@ -4,8 +4,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Services;
-using EngineeringPerformance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
@@ -13,7 +11,7 @@ namespace EngineeringPerformance.App.ViewModels;
 public sealed partial class ProjectForecastReportViewModel : ObservableObject, ILoadableViewModel
 {
     private readonly IProjectForecastExportService _exportService;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IProjectForecastService _forecastService;
 
     public int ProjectId { get; set; }
     public int VersionId { get; set; }
@@ -35,10 +33,10 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
 
     public ProjectForecastReportViewModel(
         IProjectForecastExportService exportService,
-        IDbContextFactory<AppDbContext> contextFactory)
+        IProjectForecastService forecastService)
     {
         _exportService = exportService;
-        _contextFactory = contextFactory;
+        _forecastService = forecastService;
     }
 
     public void SetForecastData(
@@ -62,36 +60,14 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
     {
         IReadOnlyDictionary<int, List<ProjectVersionPhysicalVolumeDto>> pvByDirection =
             new Dictionary<int, List<ProjectVersionPhysicalVolumeDto>>();
+        IReadOnlyDictionary<int, List<ProjectVersionPhysicalVolumeDto>> eqByDirection =
+            new Dictionary<int, List<ProjectVersionPhysicalVolumeDto>>();
 
         if (ProjectId > 0 && VersionId > 0)
         {
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
-            var pvList = await ctx.ProjectPhysicalVolumes
-                .AsNoTracking()
-                .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
-                .Where(pv => pv.ProjectId == ProjectId
-                             && pv.ProjectAnalysisVersionId == VersionId
-                             && pv.Quantity > 0
-                             && pv.PhysicalVolume!.IsAssessment == true
-                             && pv.PhysicalVolume.ClassifierId != null)
-                .ToListAsync();
-
-            pvByDirection = pvList
-                .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
-                .ToDictionary(g => g.Key, g => g
-                    .Select(pv =>
-                    {
-                        var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
-                        return new ProjectVersionPhysicalVolumeDto(
-                            Code: pv.PhysicalVolume?.Code ?? string.Empty,
-                            Name: pv.PhysicalVolume?.Name ?? string.Empty,
-                            UnitName: pv.PhysicalVolume?.Unit?.Name,
-                            Quantity: pv.Quantity,
-                            Coefficient: coeff,
-                            Total: pv.Quantity * coeff);
-                    })
-                    .OrderBy(p => p.Code)
-                    .ToList());
+            var volumes = await _forecastService.GetAssessmentVolumesByDirectionAsync(ProjectId, VersionId);
+            pvByDirection = volumes.PhysicalVolumesByDirection;
+            eqByDirection = volumes.EquipmentVolumesByDirection;
         }
 
         var directions = new ObservableCollection<ForecastDirectionViewModel>();
@@ -101,7 +77,8 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
         {
             if (item.IsTotal && item.Level == -1) { totalRow = item; continue; }
             pvByDirection.TryGetValue(item.Id, out var pvs);
-            directions.Add(new ForecastDirectionViewModel(item, pvs ?? []));
+            eqByDirection.TryGetValue(item.Id, out var eqs);
+            directions.Add(new ForecastDirectionViewModel(item, pvs ?? [], eqs ?? []));
         }
 
         Directions = directions;
@@ -216,7 +193,10 @@ public sealed partial class ProjectForecastReportViewModel : ObservableObject, I
 
 public sealed class ForecastDirectionViewModel
 {
-    public ForecastDirectionViewModel(ForecastPerformanceItem item, IReadOnlyList<ProjectVersionPhysicalVolumeDto> physicalVolumes)
+    public ForecastDirectionViewModel(
+        ForecastPerformanceItem item,
+        IReadOnlyList<ProjectVersionPhysicalVolumeDto> physicalVolumes,
+        IReadOnlyList<ProjectVersionPhysicalVolumeDto> equipmentVolumes)
     {
         Id = item.Id;
         Code = item.Code;
@@ -232,6 +212,7 @@ public sealed class ForecastDirectionViewModel
         Level = item.Level;
         IndentMargin = Math.Max(0, item.Level) * 24d;
         PhysicalVolumes = physicalVolumes;
+        EquipmentVolumes = equipmentVolumes;
     }
 
     public int Id { get; }
@@ -247,5 +228,8 @@ public sealed class ForecastDirectionViewModel
     public bool IsTotal { get; }
     public int Level { get; }
     public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes { get; }
+    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> EquipmentVolumes { get; }
+    public bool HasPhysicalVolumes => PhysicalVolumes.Count > 0;
+    public bool HasEquipment => EquipmentVolumes.Count > 0;
     public double IndentMargin { get; }
 }

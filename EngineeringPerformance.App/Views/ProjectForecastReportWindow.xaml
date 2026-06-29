@@ -138,11 +138,51 @@
                     </Border>
 
                     <!-- Физ. объёмы проекта -->
-                    <StackPanel Margin="0,12,0,0">
+                    <StackPanel Margin="0,12,0,0"
+                                Visibility="{Binding HasPhysicalVolumes, Converter={StaticResource BoolToVisibility}}">
                         <TextBlock Text="Физ. объёмы проекта"
                                    FontSize="12" FontWeight="SemiBold" Foreground="#64748B"
                                    Margin="0,0,0,6" />
                         <dxg:GridControl ItemsSource="{Binding PhysicalVolumes}"
+                                         AutoGenerateColumns="None"
+                                         MaxHeight="240">
+                            <dxg:GridControl.Columns>
+                                <dxg:GridColumn FieldName="Code" Header="Код" Width="7*" />
+                                <dxg:GridColumn FieldName="Name" Header="Номенклатурная позиция" Width="60*" MinWidth="80" />
+                                <dxg:GridColumn FieldName="UnitName" Header="Ед. изм." Width="7*" />
+                                <dxg:GridColumn FieldName="Quantity" Header="Кол-во" Width="7*">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                                <dxg:GridColumn FieldName="Coefficient" Header="Коэфф." Width="7*">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N4" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                                <dxg:GridColumn FieldName="Total" Header="Итого" Width="12*" MinWidth="60">
+                                    <dxg:GridColumn.EditSettings>
+                                        <dxe:TextEditSettings DisplayFormat="N2" HorizontalContentAlignment="Right" />
+                                    </dxg:GridColumn.EditSettings>
+                                </dxg:GridColumn>
+                            </dxg:GridControl.Columns>
+                            <dxg:GridControl.View>
+                                <dxg:TableView NavigationStyle="Row"
+                                               AllowEditing="False"
+                                               ShowGroupPanel="False"
+                                               ShowIndicator="False"
+                                               AutoWidth="True" />
+                            </dxg:GridControl.View>
+                        </dxg:GridControl>
+                    </StackPanel>
+
+                    <!-- Оборудование проекта -->
+                    <StackPanel Margin="0,12,0,0"
+                                Visibility="{Binding HasEquipment, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Оборудование проекта"
+                                   FontSize="12" FontWeight="SemiBold" Foreground="#64748B"
+                                   Margin="0,0,0,6" />
+                        <dxg:GridControl ItemsSource="{Binding EquipmentVolumes}"
                                          AutoGenerateColumns="None"
                                          MaxHeight="240">
                             <dxg:GridControl.Columns>

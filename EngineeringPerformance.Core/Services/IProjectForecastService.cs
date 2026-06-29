@@ -14,4 +14,11 @@ public interface IProjectForecastService
         int projectId,
         int versionId,
         IReadOnlyDictionary<int, decimal>? nodePlannedTotalsByWorkDirectionId = null);
+
+    /// <summary>
+    /// Физ. объёмы и оборудование оценки, сгруппированные по ClassifierId (направление ИИС).
+    /// </summary>
+    Task<ProjectForecastAssessmentVolumesDto> GetAssessmentVolumesByDirectionAsync(
+        int projectId,
+        int versionId);
 }

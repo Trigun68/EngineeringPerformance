@@ -3,10 +3,12 @@ using System.Diagnostics;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Models;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.Win32;
 using Serilog;
 
 namespace EngineeringPerformance.App.ViewModels;
@@ -206,7 +208,7 @@ public sealed partial class PhysicalVolumesViewModel : DirectoryViewModelBase<Ph
                 ? u
                 : null;
             item.ClassifierNameWithUnit = item.Classifier is { } cl
-                ? IicWorkDirectionDisplayUnit.FormatNameWithResolvedUnit(cl, classifierById)
+                ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(cl, classifierById)
                 : string.Empty;
         }
     }
@@ -333,6 +335,47 @@ public sealed partial class PhysicalVolumesViewModel : DirectoryViewModelBase<Ph
         if (SelectedVolumeTypeIdFilter.HasValue && item.VolumeTypeId != SelectedVolumeTypeIdFilter.Value) return false;
         if (SelectedAssessmentFilter.HasValue && item.IsAssessment != SelectedAssessmentFilter.Value) return false;
         return true;
+    }
+
+    [RelayCommand]
+    private void ExportToExcel()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сохранить как Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = "Номенклатура_физических_объёмов.xlsx"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var columns = new ReferenceExcelExporter.ColumnDef[]
+        {
+            new("Код",          o => ((PhysicalVolume)o).Code,               FixedWidth: 15),
+            new("Наименование", o => ((PhysicalVolume)o).Name,               FixedWidth: 40),
+            new("Описание",     o => ((PhysicalVolume)o).Description,        FixedWidth: 30),
+            new("Тип",          o => ((PhysicalVolume)o).VolumeType?.Name),
+            new("Классификатор",o => ((PhysicalVolume)o).ClassifierNameWithUnit, FixedWidth: 45),
+            new("Ед. изм.",     o => ((PhysicalVolume)o).Unit?.Name),
+            new("Коэффициент",  o => ((PhysicalVolume)o).Coefficient.ToString("G")),
+            new("Оценка",       o => ((PhysicalVolume)o).IsAssessment?.ToString()),
+            new("Архив",        o => ((PhysicalVolume)o).IsArchived.ToString()),
+        };
+
+        try
+        {
+            ReferenceExcelExporter.Export(
+                "Номенклатура физических объёмов",
+                columns,
+                Items.Cast<object>(),
+                dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }
 

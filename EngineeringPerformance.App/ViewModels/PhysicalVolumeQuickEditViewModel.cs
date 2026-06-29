@@ -9,10 +9,13 @@ namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class PhysicalVolumeQuickEditViewModel : ObservableObject
 {
-    private readonly IDirectoryService<PhysicalVolume> _service;
-    private readonly IDirectoryCache<PhysicalVolume> _pvCache;
+    private readonly IDirectoryService<PhysicalVolumeKfo> _kfoService;
+    private readonly IDirectoryService<PhysicalVolumeBer> _berService;
+    private readonly IDirectoryCache<PhysicalVolumeKfo> _kfoCache;
+    private readonly IDirectoryCache<PhysicalVolumeBer> _berCache;
     private readonly IDirectoryCache<IicWorkDirection> _classifierCache;
     private int _entityId;
+    private bool _isKfo;
 
     [ObservableProperty] private string _nomenclature = string.Empty;
     [ObservableProperty] private decimal _coefficient = 1m;
@@ -39,18 +42,23 @@ public sealed partial class PhysicalVolumeQuickEditViewModel : ObservableObject
     public ObservableCollection<ClassifierDisplayItem> ClassifierDisplayItems { get; } = [];
 
     public PhysicalVolumeQuickEditViewModel(
-        IDirectoryService<PhysicalVolume> service,
-        IDirectoryCache<PhysicalVolume> pvCache,
+        IDirectoryService<PhysicalVolumeKfo> kfoService,
+        IDirectoryService<PhysicalVolumeBer> berService,
+        IDirectoryCache<PhysicalVolumeKfo> kfoCache,
+        IDirectoryCache<PhysicalVolumeBer> berCache,
         IDirectoryCache<IicWorkDirection> classifierCache)
     {
-        _service = service;
-        _pvCache = pvCache;
+        _kfoService = kfoService;
+        _berService = berService;
+        _kfoCache = kfoCache;
+        _berCache = berCache;
         _classifierCache = classifierCache;
     }
 
-    public void Prepare(int physicalVolumeId, string nomenclature, int? classifierId, decimal coefficient, bool? isAssessment)
+    public void Prepare(int physicalVolumeId, string nomenclature, int? classifierId, decimal coefficient, bool? isAssessment, bool isKfo = true)
     {
         _entityId = physicalVolumeId;
+        _isKfo = isKfo;
         Nomenclature = nomenclature;
         Coefficient = coefficient;
         SelectedClassifierId = classifierId;
@@ -110,18 +118,37 @@ public sealed partial class PhysicalVolumeQuickEditViewModel : ObservableObject
     {
         try
         {
-            var all = await _pvCache.GetAllAsync();
-            var entity = all.FirstOrDefault(p => p.Id == _entityId);
-            if (entity is null)
+            if (_isKfo)
             {
-                ErrorMessage = "Запись не найдена";
-                return;
+                var all = await _kfoCache.GetAllAsync();
+                var entity = all.FirstOrDefault(p => p.Id == _entityId);
+                if (entity is null)
+                {
+                    ErrorMessage = "Запись КФО не найдена";
+                    return;
+                }
+                entity.ClassifierId = SelectedClassifierId;
+                entity.Coefficient = Coefficient;
+                entity.IsAssessment = IsAssessment;
+                await _kfoService.UpdateAsync(entity);
+                _kfoCache.Upsert(entity);
             }
-            entity.ClassifierId = SelectedClassifierId;
-            entity.Coefficient = Coefficient;
-            entity.IsAssessment = IsAssessment;
-            await _service.UpdateAsync(entity);
-            _pvCache.Upsert(entity);
+            else
+            {
+                var all = await _berCache.GetAllAsync();
+                var entity = all.FirstOrDefault(p => p.Id == _entityId);
+                if (entity is null)
+                {
+                    ErrorMessage = "Запись БЭР не найдена";
+                    return;
+                }
+                entity.ClassifierId = SelectedClassifierId;
+                entity.Coefficient = Coefficient;
+                entity.IsAssessment = IsAssessment;
+                await _berService.UpdateAsync(entity);
+                _berCache.Upsert(entity);
+            }
+
             CloseDialog(true);
         }
         catch (Exception ex)

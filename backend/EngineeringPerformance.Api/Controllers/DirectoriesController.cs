@@ -6,6 +6,9 @@ using EngineeringPerformance.Infrastructure.Export;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
+// Make PagedDirectoryResponse available without namespace prefix
+using static EngineeringPerformance.Application.Directories.PagedDirectoryResponse;
+
 namespace EngineeringPerformance.Api.Controllers;
 
 /// <summary>
@@ -24,6 +27,8 @@ public sealed class DirectoriesController : ControllerBase
         _directories = directories;
     }
 
+    // === GENERIC DIRECTORY ROUTES ===
+    // NOTE: regex constraint only on {resource}/{id:int} routes to avoid conflict with project-characteristics/{id}/options
     [HttpGet("{resource}/export.xlsx")]
     [DirectoryPermission(AccessLevel.Read)]
     public async Task<IActionResult> ExportExcel(string resource, CancellationToken cancellationToken)
@@ -44,13 +49,20 @@ public sealed class DirectoriesController : ControllerBase
 
     [HttpGet("{resource}")]
     [DirectoryPermission(AccessLevel.Read)]
-    public async Task<ActionResult<IReadOnlyList<DirectoryEntryDto>>> List(
+    public async Task<ActionResult<PagedDirectoryResponse>> List(
         string resource,
         [FromQuery] bool includeArchived = false,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 100,
         CancellationToken cancellationToken = default)
     {
-        var items = await _directories.ListAsync(resource, includeArchived, cancellationToken);
-        return Ok(items);
+        var allItems = await _directories.ListAsync(resource, includeArchived, cancellationToken);
+        var totalCount = allItems.Count;
+        var items = allItems
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+        return Ok(new PagedDirectoryResponse(items, totalCount, page, pageSize));
     }
 
     [HttpGet("{resource}/tree")]
@@ -147,45 +159,6 @@ public sealed class DirectoriesController : ControllerBase
     public async Task<IActionResult> Delete(string resource, int id, CancellationToken cancellationToken)
     {
         var ok = await _directories.DeleteAsync(resource, id, cancellationToken);
-        return ok ? NoContent() : NotFound();
-    }
-
-    [HttpGet("project-characteristics/{id:int}/options")]
-    [DirectoryPermission(AccessLevel.Read)]
-    public async Task<ActionResult<IReadOnlyList<CharacteristicOptionDto>>> GetOptions(int id, CancellationToken cancellationToken)
-    {
-        var options = await _directories.GetCharacteristicOptionsAsync(id, cancellationToken);
-        return Ok(options);
-    }
-
-    [HttpPost("project-characteristics/{id:int}/options")]
-    [DirectoryPermission(AccessLevel.Edit)]
-    public async Task<ActionResult<CharacteristicOptionDto>> CreateOption(
-        int id,
-        [FromBody] CharacteristicOptionWriteRequest request,
-        CancellationToken cancellationToken)
-    {
-        var created = await _directories.CreateCharacteristicOptionAsync(id, request, cancellationToken);
-        return CreatedAtAction(nameof(GetOptions), new { id }, created);
-    }
-
-    [HttpPut("project-characteristics/{id:int}/options/{optionId:int}")]
-    [DirectoryPermission(AccessLevel.Edit)]
-    public async Task<ActionResult<CharacteristicOptionDto>> UpdateOption(
-        int id,
-        int optionId,
-        [FromBody] CharacteristicOptionWriteRequest request,
-        CancellationToken cancellationToken)
-    {
-        var updated = await _directories.UpdateCharacteristicOptionAsync(id, optionId, request, cancellationToken);
-        return updated is null ? NotFound() : Ok(updated);
-    }
-
-    [HttpDelete("project-characteristics/{id:int}/options/{optionId:int}")]
-    [DirectoryPermission(AccessLevel.Edit)]
-    public async Task<IActionResult> DeleteOption(int id, int optionId, CancellationToken cancellationToken)
-    {
-        var ok = await _directories.DeleteCharacteristicOptionAsync(id, optionId, cancellationToken);
         return ok ? NoContent() : NotFound();
     }
 }

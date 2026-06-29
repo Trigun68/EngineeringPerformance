@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:dxe="http://schemas.devexpress.com/winfx/2008/xaml/editors"
         Title="{Binding WindowTitle}"
-        Height="460" Width="520"
+        Height="520" Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Icon="/Assets/logo.png">
@@ -20,6 +20,7 @@
         <Border Grid.Row="1" Background="#FFFFFF">
             <Grid Margin="16">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -58,28 +59,35 @@
                                   IsTextEditable="False"
                                   Margin="0,0,0,8" />
 
-                <TextBlock Grid.Row="4" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <dxe:SpinEdit Grid.Row="4" Grid.Column="1"
+                <TextBlock Grid.Row="4" Grid.Column="0" Text="Ед. изм." VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:ComboBoxEdit Grid.Row="4" Grid.Column="1"
+                                  ItemsSource="{Binding Units}"
+                                  SelectedItem="{Binding SelectedUnit}"
+                                  DisplayMember="Name"
+                                  IsEnabled="{Binding AreLookupsReady}"
+                                  IsTextEditable="False"
+                                  Margin="0,0,0,8" />
+
+                <TextBlock Grid.Row="5" Grid.Column="0" Text="Коэффициент" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:SpinEdit Grid.Row="5" Grid.Column="1"
                               EditValue="{Binding Coefficient, UpdateSourceTrigger=PropertyChanged}"
                               MinValue="0.0001"
                               MaxValue="1000000"
                               Increment="0.0001"
                               IsFloatValue="True"
-                              AllowNullInput="True"
-                              NullValue=""
                               Margin="0,0,0,8" />
 
-                <TextBlock Grid.Row="5" Grid.Column="0" Text="Оценка" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <dxe:ComboBoxEdit Grid.Row="5" Grid.Column="1"
+                <TextBlock Grid.Row="6" Grid.Column="0" Text="Оценка" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <dxe:ComboBoxEdit Grid.Row="6" Grid.Column="1"
                                   ItemsSource="{Binding AssessmentOptions}"
                                   SelectedItem="{Binding SelectedAssessmentItem}"
                                   DisplayMember="Display"
                                   IsTextEditable="False"
                                   Margin="0,0,0,8" />
 
-                <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Text="{Binding ErrorMessage}" Foreground="Red" TextWrapping="Wrap" Margin="0,0,0,8" />
 
-                <StackPanel Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                <StackPanel Grid.Row="8" Grid.Column="0" Grid.ColumnSpan="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                     <Button Content="Сохранить" Command="{Binding SaveCommand}" Width="100" Margin="0,0,8,0" IsDefault="True" IsEnabled="{Binding AreLookupsReady}" />
                     <Button Content="Отмена" Command="{Binding CancelCommand}" Width="100" IsCancel="True" />
                 </StackPanel>

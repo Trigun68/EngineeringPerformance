@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+### Added (2026-06-08, Phase 4 ops pack)
+- Cutover runbook, UAT sign-off template, root README, `.env.production.example`.
+- React `/help` — справка по Z-оценке и PD%.
+- GitHub Actions `api-tests.yml`; `PerformanceApiTests` (PPV pageSize=1000).
+- `appsettings.Production.json` — шаблон CORS для prod.
+
+### Added (2026-06-09, Playwright E2E + checklist sync)
+- **E2E:** `client/e2e/migration-smoke.spec.ts` — 8 UI-тестов (login, projects, references, help, audit, права, аналитика).
+- **Docker runner:** `client/run-e2e-docker.sh`, `npm run test:e2e:docker`.
+- **CI:** `.github/workflows/e2e-tests.yml`.
+- **Docs:** `migration_map.md` — Phase 1–2 отмечены ✅, критерии 1.4 обновлены.
+
+### Added (2026-06-08, Compare facility/detail port)
+- **API:** `GET /compare` возвращает `{ summary, facility, detail }` — порт `ComputeFactRows` из WPF.
+- **React:** CompareTab — подвкладки Итого / По объектам / Детально.
+- **Scripts:** `scripts/uat-smoke.sh` — автоматическая проверка UAT (API).
+
+### Added (2026-06-08, Web migration — Phase 4 technical readiness)
+- **Docs:** `_install/DEPLOY.md`, UAT checklist, security audit, WPF archive policy.
+- **Scripts:** `scripts/perf-smoke.sh` — latency smoke после деплоя.
+- **Tests:** +4 API tests (export, group, audit, access-rights) — всего 17.
+- **UI:** CompareTab фильтр «Только различия»; nav скрывает Журнал/Права без прав.
+
+### Added (2026-06-08, Web migration — Phase 3 Analytics & Exports)
+- **Backend:** `PerformanceService`, `ProjectVersionAnalysisService`, `ProjectForecastService`, `ProjectCompareService`, `AnalysisVersionSnapshotService`, `AnalyticsExportService` (ClosedXML + QuestPDF), `UserActionLogService`, `AccessRightsService`.
+- **API:** version analytics (`performance`, `analysis`, `forecast`, planned-volumes, export xlsx/pdf), project-level `compare`, `group-analysis`/`group-trend` placeholders, `GET /api/audit/user-actions`, `GET/PUT /api/access-rights`.
+- **React:** вкладки Оценка, Прогноз, Сравнение, Группа, Тренд на `/projects/:id`; страницы `/audit`, `/settings/access-rights`.
+- **Tests:** 13 API integration tests (analytics, snapshot, compare smoke).
+- Документация: `_doc/features/web-analytics-phase3.md`, `_work/20260608_phase3_complete.md`.
+
+### Changed (2026-06-01, Печатные формы — оборудование и условные таблицы)
+- **Анализ версии** (`ProjectVersionAnalysisExportService`): Excel — лист «Оборудование» (только направления с данными); PDF — детальные страницы при ФО / оборудовании / трудоёмкости, блок «Оборудование проекта» под таблицей ФО.
+- **Прогноз трудозатрат** (`ProjectForecastExportService`, полный отчёт Excel/PDF): лист «Оборудование» и секция оборудования на детальных PDF-страницах; страница создаётся при наличии ФО или оборудования.
+
+### Changed (2026-06-01, Модальные отчёты — таблицы ФО и оборудования по наличию данных)
+- **Прогноз трудозатрат** (`ProjectForecastReportWindow`): таблица «Физ. объёмы проекта» показывается только при ≥1 строке; ниже — «Оборудование проекта» при ≥1 строке.
+- **Анализ версии проекта** (`ProjectVersionAnalysisWindow`): та же логика для физ. объёмов и оборудования; «Трудоёмкость по направлению» — только при наличии строк.
+- `ProjectVersionDirectionDto.EquipmentVolumes`, загрузка оборудования в `ProjectVersionAnalysisService` и `ProjectForecastReportViewModel`.
+
+### Changed (2026-06-01, Детально — колонка «Наименование» и контекстное меню по типу строки)
+- Вкладки **Прогнозирование → Детально** и **Оценка факта → Детально**: колонка «Наименование работы» заменена на **«Наименование»** — для физ. объёмов показывается наименование работы, для оборудования — наименование оборудования (`ItemName`).
+- Контекстное меню адаптировано под тип строки (6 пунктов): физ. объём — редактирование PPV / номенклатуры ФО; оборудование — редактирование строки проекта / номенклатуры оборудования; общие пункты — норма EAC, удалить, копировать, добавить.
+- `DetailStateKey` (положительный Id PPV / отрицательный Id ProjectEquipment) для сохранения фокуса строк оборудования при перезагрузке грида.
+- Новые сервисы: `ProjectEquipmentService`, диалоги быстрого редактирования и создания `ProjectEquipment*`, `UserActionType.EquipmentEdit` / `EquipmentCreate`.
+- Экспорт Excel «Детально»: заголовок колонки «Наименование работы» → «Наименование».
+
+### Changed (2026-06-01, Оборудование — ед. изм. и ключ справочника)
+- Справочник `Equipments`: поле `UnitId` (FK на `UnitsOfMeasurement`), колонка «Ед. изм.» в гриде и диалоге редактирования; миграция `AddEquipmentUnitId`.
+- Уникальный ключ номенклатуры: **наименование + ед. изм.** (из Excel «Размерность», колонка R); сопоставление при импорте по тандему `(Name, UnitId)`.
+- Дефолты автосоздания: `Coefficient = 1`, `IsAssessment = false`, `IsArchived = false`, `ClassifierId = null`.
+- Импорт: пропуск строк при дубликатах в справочнике с одним ключом — лог Serilog + сводка с номерами строк.
+- Исправлен импорт длинных наименований: индексы `IX_Equipments_Name` / `(Name, UnitId)` заменены на `CatalogKeyHash` (SHA-256), миграция `FixEquipmentCatalogKeyIndex`.
+- Анализ `.src/Оборудование.xlsx` (3191 строк): max «Наименование по каталогу» = 2308 символов. Поля `Equipments.Name`, `ProjectEquipments.CatalogName` и другие описательные колонки переведены на `nvarchar(max)`; импорт больше не обрезает длинные тексты.
+- Тесты: `EquipmentImportCatalogMatcherTests`, `EquipmentUnitNameMatcherTests`.
+
+### Added (2026-05-28, Модуль «Оборудование»)
+- БД: справочник `Equipments`, данные проекта `ProjectEquipments`, миграция `AddEquipment`, `DataImportType.Equipment`.
+- UI: вкладка «Номенклатура оборудования» в «Справочники»; кнопки импорта/удаления на вкладках Прогнозирование, Оценка факта, Сравнение версий.
+- Импорт Excel (лист «Список оборудования»): сопоставление по «Наименование по каталогу», автосоздание элементов справочника без классификации.
+- Расчёт: объёмы оборудования (`Quantity × Coefficient`) суммируются с ФО в `PerformanceService` / прогнозе; часы = объём × норма при `IsAssessment == true`.
+- План: `docs/plans/equipment-module.md`.
+
 ### Changed (2026-05-20, Навигация — убраны отдельные страницы анализа и прогноза)
 - `MainViewModel.BuildNavigation`: из бокового меню удалены пункты «Анализ проекта» и «Прогноз по проекту». Сценарии доступны на вкладках **Проекты → Прогнозирование / Оценка факта**.
 

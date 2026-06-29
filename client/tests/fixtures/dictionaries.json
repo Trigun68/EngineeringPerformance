@@ -1,0 +1,38 @@
+{
+  "physicalVolumeTypes": [
+    {
+      "id": 1,
+      "name": "Тип 1",
+      "code": "NT1"
+    }
+  ],
+  "physicalVolumes": [],
+  "equipments": [],
+  "laborIntensities": [],
+  "iicWorkDirections": [
+    {
+      "id": 1,
+      "name": "Направление А",
+      "code": "DIR-A",
+      "parentId": null
+    },
+    {
+      "id": 2,
+      "name": "Направление Б",
+      "code": "DIR-B",
+      "parentId": 1
+    }
+  ],
+  "iicWorkDirectionNorms": [],
+  "unitsOfMeasurement": [
+    {
+      "id": 1,
+      "name": "шт"
+    },
+    {
+      "id": 2,
+      "name": "м"
+    }
+  ],
+  "projectCharacteristics": []
+}

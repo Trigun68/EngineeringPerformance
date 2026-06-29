@@ -19,12 +19,12 @@ public sealed class ProjectEquipmentIicUnitsTests
     }
 
     [Fact]
-    public void QuantityInIicGroupUnits_NullCoefficient_UsesOne()
+    public void QuantityInIicGroupUnits_ZeroCoefficient_UsesOne()
     {
         var row = new ProjectEquipment
         {
             Quantity = 4m,
-            Equipment = new Equipment { Coefficient = null },
+            Equipment = new Equipment { Coefficient = 0m },
         };
 
         row.QuantityInIicGroupUnits().Should().Be(4m);

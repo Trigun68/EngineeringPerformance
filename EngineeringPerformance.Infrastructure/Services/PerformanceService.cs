@@ -63,7 +63,8 @@ public sealed class PerformanceService : IPerformanceService
         var physicalVolumesTask = ctx3.ProjectPhysicalVolumes
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(pv => pv.PhysicalVolume)
+            .Include(pv => pv.PhysicalVolumeKfo).ThenInclude(k => k!.Unit)
+            .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
@@ -105,8 +106,8 @@ public sealed class PerformanceService : IPerformanceService
         var parentIdLookup = workDirections.Where(d => d.ParentId.HasValue).ToLookup(d => d.ParentId!.Value);
 
         var volumeByDirection = physicalVolumes
-            .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.PhysicalVolume.IsAssessment == true)
-            .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+            .Where(pv => pv.GetClassifierId().HasValue && pv.GetIsAssessment() == true)
+            .GroupBy(pv => pv.GetClassifierId()!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.QuantityInIicGroupUnits()));
 
         EquipmentVolumeAggregator.MergeInto(volumeByDirection, equipmentRows);
@@ -142,7 +143,7 @@ public sealed class PerformanceService : IPerformanceService
         }
 
         var unallocatedPhysicalVolume = physicalVolumes
-            .Where(pv => pv.PhysicalVolume is not null && !pv.PhysicalVolume.ClassifierId.HasValue && pv.PhysicalVolume.IsAssessment == true)
+            .Where(pv => pv.GetCatalogVolumeId().HasValue && !pv.GetClassifierId().HasValue && pv.GetIsAssessment() == true)
             .Sum(pv => pv.QuantityInIicGroupUnits())
             + EquipmentVolumeAggregator.SumUnallocatedAssessmentVolume(equipmentRows);
 

@@ -5,7 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Services;
 
-public sealed class IicWorkDirectionNormService : IDateFilteredRegisterService<IicWorkDirectionNorm>
+public sealed class IicWorkDirectionNormService
+    : IDateFilteredRegisterService<IicWorkDirectionNorm>, IIicWorkDirectionNormQueryService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
@@ -64,5 +65,15 @@ public sealed class IicWorkDirectionNormService : IDateFilteredRegisterService<I
             context.IicWorkDirectionNorms.Remove(entity);
             await context.SaveChangesAsync();
         }
+    }
+
+    public async Task<IReadOnlyList<IicWorkDirectionNorm>> GetHistoryByWorkDirectionIdAsync(int workDirectionId)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync();
+        return await context.IicWorkDirectionNorms
+            .AsNoTracking()
+            .Where(n => n.WorkDirectionId == workDirectionId)
+            .OrderByDescending(n => n.EffectiveFrom)
+            .ToListAsync();
     }
 }

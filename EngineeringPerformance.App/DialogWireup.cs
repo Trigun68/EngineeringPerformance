@@ -4,6 +4,7 @@ using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.ViewModels;
 using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Services;
+using EngineeringPerformance.Core.Models;
 using EngineeringPerformance.Infrastructure.Data;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -70,7 +71,8 @@ internal sealed class DialogWireup
 
         _services.GetRequiredService<UsersViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<ProjectsViewModel>().SettingsHelper = helper;
-        _services.GetRequiredService<PhysicalVolumesViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<PhysicalVolumesKfoViewModel>().SettingsHelper = helper;
+        _services.GetRequiredService<PhysicalVolumesBerViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<EquipmentsViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<PhysicalVolumeTypesViewModel>().SettingsHelper = helper;
         _services.GetRequiredService<IicWorkDirectionsViewModel>().SettingsHelper = helper;
@@ -120,15 +122,42 @@ internal sealed class DialogWireup
 
     private void WirePhysicalVolumes()
     {
-        var svc = _services.GetRequiredService<IPhysicalVolumeEditDialogService>();
+        WirePhysicalVolumeKfoCatalog();
+        WirePhysicalVolumeBerCatalog();
+    }
+
+    private void WirePhysicalVolumeKfoCatalog()
+    {
+        var svc = _services.GetRequiredService<IPhysicalVolumeKfoEditDialogService>();
         svc.SetOwnerWindow(_owner);
-        var vm = _services.GetRequiredService<PhysicalVolumesViewModel>();
+        var cache = _services.GetRequiredService<IDirectoryCache<PhysicalVolumeKfo>>();
+        var vm = _services.GetRequiredService<PhysicalVolumesKfoViewModel>();
         vm.OwnerWindow = _owner;
         vm.OpenEditWindow = async item =>
         {
-            var savedId = await svc.ShowEditDialogAsync(item);
-            if (savedId is int id)
+            if (await svc.ShowEditDialogAsync(item) is int id)
+            {
+                cache.Invalidate();
                 await vm.RefreshSingleItemAsync(id);
+            }
+        };
+        _resetActions.Add(vm.Reset);
+    }
+
+    private void WirePhysicalVolumeBerCatalog()
+    {
+        var svc = _services.GetRequiredService<IPhysicalVolumeBerEditDialogService>();
+        svc.SetOwnerWindow(_owner);
+        var cache = _services.GetRequiredService<IDirectoryCache<PhysicalVolumeBer>>();
+        var vm = _services.GetRequiredService<PhysicalVolumesBerViewModel>();
+        vm.OwnerWindow = _owner;
+        vm.OpenEditWindow = async item =>
+        {
+            if (await svc.ShowEditDialogAsync(item) is int id)
+            {
+                cache.Invalidate();
+                await vm.RefreshSingleItemAsync(id);
+            }
         };
         _resetActions.Add(vm.Reset);
     }

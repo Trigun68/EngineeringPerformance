@@ -1,6 +1,9 @@
+using System.Windows;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -55,5 +58,46 @@ public sealed partial class LaborIntensitiesViewModel : DirectoryViewModelBase<L
         if (SelectedItem is null || OpenEditWindow is null) return;
 
         await OpenEditWindow(SelectedItem);
+    }
+
+    [RelayCommand]
+    private void ExportToExcel()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сохранить как Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = "Справочник_трудоёмкости.xlsx"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var columns = new ReferenceExcelExporter.ColumnDef[]
+        {
+            new("Код",               o => ((LaborIntensity)o).Code,                   FixedWidth: 20),
+            new("Наименование",      o => ((LaborIntensity)o).Name,                   FixedWidth: 40),
+            new("Тип документа TF",  o => ((LaborIntensity)o).DocumentTypeName,       FixedWidth: 35),
+            new("Направление IIC",   o => ((LaborIntensity)o).IicWorkDirectionDisplay, FixedWidth: 35),
+            new("Норма ПИР",         o => ((LaborIntensity)o).NormPpr?.ToString("G")),
+            new("Норма ОПР",         o => ((LaborIntensity)o).NormOpr?.ToString("G")),
+            new("Норма ПД",          o => ((LaborIntensity)o).NormPd?.ToString("G")),
+            new("Норма РД",          o => ((LaborIntensity)o).NormRd?.ToString("G")),
+            new("Архив",             o => ((LaborIntensity)o).IsArchived.ToString()),
+        };
+
+        try
+        {
+            ReferenceExcelExporter.Export(
+                "Справочник трудоёмкости",
+                columns,
+                Items.Cast<object>(),
+                dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }

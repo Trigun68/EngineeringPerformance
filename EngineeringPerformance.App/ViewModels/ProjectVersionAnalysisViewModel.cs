@@ -41,6 +41,17 @@ public sealed partial class ProjectVersionAnalysisViewModel : ObservableObject, 
 
     public Window? OwnerWindow { get; set; }
 
+    public ProjectVersionAnalysisSummaryDto? Summary => Report?.Summary;
+
+    public string SummaryInterpretationText =>
+        Summary?.WeightedZScoreInterpretation?.ToRussian() ?? "—";
+
+    public bool HasPhysicalVolumeTotals =>
+        (Summary?.PhysicalVolumeTotalsByUnit.Count ?? 0) > 0;
+
+    public bool HasUnallocatedLabor =>
+        Summary?.UnallocatedLaborHours is > 0;
+
     public string ProjectNameWithVersion
     {
         get
@@ -142,6 +153,10 @@ public sealed partial class ProjectVersionAnalysisViewModel : ObservableObject, 
     partial void OnReportChanged(ProjectVersionAnalysisDto? value)
     {
         OnPropertyChanged(nameof(ProjectNameWithVersion));
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(SummaryInterpretationText));
+        OnPropertyChanged(nameof(HasPhysicalVolumeTotals));
+        OnPropertyChanged(nameof(HasUnallocatedLabor));
         ExportToExcelCommand.NotifyCanExecuteChanged();
         ExportToPdfCommand.NotifyCanExecuteChanged();
     }
@@ -161,14 +176,6 @@ public sealed partial class ProjectVersionAnalysisViewModel : ObservableObject, 
         return $"{safe}.{ext}";
     }
 
-    public decimal? TotalFactPhysicalVolume => Directions
-        .Where(d => d.ParentId == null)
-        .Sum(d => d.FactPhysicalVolume ?? 0m) is var s && s > 0 ? s : null;
-
-    public decimal? TotalFactLaborHours => Directions
-        .Where(d => d.ParentId == null)
-        .Sum(d => d.FactLaborHours ?? 0m) is var s && s > 0 ? s : null;
-
     private async Task LoadReportAsync()
     {
         IsLoading = true;
@@ -184,14 +191,16 @@ public sealed partial class ProjectVersionAnalysisViewModel : ObservableObject, 
                 Directions.Add(new DirectionViewModel(d));
             }
 
-            OnPropertyChanged(nameof(TotalFactPhysicalVolume));
-            OnPropertyChanged(nameof(TotalFactLaborHours));
-
             LaborIntensities.Clear();
             foreach (var li in report.LaborIntensities)
             {
                 LaborIntensities.Add(li);
             }
+
+            OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(SummaryInterpretationText));
+        OnPropertyChanged(nameof(HasPhysicalVolumeTotals));
+        OnPropertyChanged(nameof(HasUnallocatedLabor));
         }
         catch (Exception ex)
         {
@@ -236,9 +245,11 @@ public sealed class DirectionViewModel
     public string InterpretationText => Dto.Interpretation?.ToRussian() ?? "—";
 
     public IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes => Dto.PhysicalVolumes;
+    public IReadOnlyList<ProjectVersionPhysicalVolumeDto> EquipmentVolumes => Dto.EquipmentVolumes;
     public IReadOnlyList<ProjectVersionDirectionLaborDto> DirectionLaborIntensities => Dto.DirectionLaborIntensities;
 
     public bool HasPhysicalVolumes => Dto.PhysicalVolumes.Count > 0;
+    public bool HasEquipment => Dto.EquipmentVolumes.Count > 0;
     public bool HasDirectionLabor => Dto.DirectionLaborIntensities.Count > 0;
 
     /// <summary>ФО нет, но трудоёмкость есть — подсветить ячейку «Факт ФО».</summary>
@@ -248,5 +259,5 @@ public sealed class DirectionViewModel
     public bool HighlightMissingLaborHours => !Dto.FactLaborHours.HasValue && Dto.FactPhysicalVolume.HasValue;
 
     /// <summary>Левый отступ карточки в иерархии (px). Корень = 0.</summary>
-    public double IndentMargin => Math.Max(0, Level) * 24d;
+    public Thickness CardMargin => new(Math.Max(0, Level) * 24d, 0, 0, 10);
 }

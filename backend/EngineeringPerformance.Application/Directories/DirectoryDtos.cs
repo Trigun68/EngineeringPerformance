@@ -40,3 +40,12 @@ public sealed record CharacteristicOptionWriteRequest(
     string Name,
     decimal? ValuePercent = null,
     int SortOrder = 0);
+
+/// <summary>
+/// Пагинированный ответ для справочников.
+/// </summary>
+public sealed record PagedDirectoryResponse(
+    IReadOnlyList<DirectoryEntryDto> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);

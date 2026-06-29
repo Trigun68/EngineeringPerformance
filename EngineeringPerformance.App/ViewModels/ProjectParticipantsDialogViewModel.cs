@@ -3,16 +3,13 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.Services;
-using EngineeringPerformance.Infrastructure.Data;
-using EngineeringPerformance.Infrastructure.Services;
-using Microsoft.EntityFrameworkCore;
+using EngineeringPerformance.Core.DTOs;
 
 namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class ProjectParticipantsDialogViewModel : ObservableObject
 {
     private readonly IProjectVisibilityService _visibilityService;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private Action<bool>? _closeDialog;
 
     [ObservableProperty] private int _projectId;
@@ -22,12 +19,9 @@ public sealed partial class ProjectParticipantsDialogViewModel : ObservableObjec
     private ProjectParticipantItem? _selectedParticipant;
     [ObservableProperty] private string? _errorMessage;
 
-    public ProjectParticipantsDialogViewModel(
-        IProjectVisibilityService visibilityService,
-        IDbContextFactory<AppDbContext> contextFactory)
+    public ProjectParticipantsDialogViewModel(IProjectVisibilityService visibilityService)
     {
         _visibilityService = visibilityService;
-        _contextFactory = contextFactory;
     }
 
     public async Task InitializeAsync(int projectId, Action<bool>? closeDialog = null)
@@ -42,21 +36,9 @@ public sealed partial class ProjectParticipantsDialogViewModel : ObservableObjec
     {
         try
         {
-            await using var ctx = await _contextFactory.CreateDbContextAsync();
-            var list = await ctx.ProjectPermissions
-                .AsNoTracking()
-                .Include(pp => pp.User).ThenInclude(u => u.Role)
-                .Where(pp => pp.ProjectId == ProjectId)
-                .Select(pp => new ProjectParticipantItem
-                {
-                    Id = pp.User.Id,
-                    UserName = pp.User.DisplayName,
-                    Role = pp.User.Role.Name,
-                    AccessLevel = pp.Level,
-                })
-                .ToListAsync();
-
-            Participants = new ObservableCollection<ProjectParticipantItem>(list);
+            var list = await _visibilityService.GetProjectPermissionsAsync(ProjectId);
+            Participants = new ObservableCollection<ProjectParticipantItem>(
+                list.Select(MapParticipant));
         }
         catch (Exception ex)
         {
@@ -98,6 +80,14 @@ public sealed partial class ProjectParticipantsDialogViewModel : ObservableObjec
 
     [RelayCommand]
     private void Close() => CloseDialog(false);
+
+    private static ProjectParticipantItem MapParticipant(ProjectPermissionDto dto) => new()
+    {
+        Id = dto.UserId,
+        UserName = dto.DisplayName,
+        Role = dto.RoleName,
+        AccessLevel = dto.Level,
+    };
 
     private void CloseDialog(bool result)
     {

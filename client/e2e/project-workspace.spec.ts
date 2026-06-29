@@ -6,6 +6,35 @@ test.describe('Project Workspace - WPF Style', () => {
     await loginAsAdmin(page);
   });
 
+  test('projects list has search and edit controls without export actions', async ({ page }) => {
+    await page.goto('/projects');
+
+    await expect(page.getByLabel('Поиск по проектам')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
+
+    const editSelectedButton = page.getByRole('button', {
+      name: 'Редактировать выбранную строку таблицы',
+    });
+    await expect(editSelectedButton).toBeVisible();
+    await expect(editSelectedButton).toBeDisabled();
+
+    await expect(page.getByRole('button', { name: 'Экспорт Excel' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Импорт Excel' })).toHaveCount(0);
+
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
+    const firstCode = (await firstRow.locator('[col-id="code"]').first().textContent())?.trim() ?? '';
+    await firstRow.click();
+    await expect(editSelectedButton).toBeEnabled();
+
+    if (firstCode) {
+      await page.getByLabel('Поиск по проектам').fill(firstCode);
+      await expect(page.locator('.ag-center-cols-container .ag-row')).toHaveCount(1);
+      await expect(page.locator('.ag-center-cols-container .ag-row').first()).toContainText(firstCode);
+    }
+  });
+
   test('shows project selection card when accessing /projects/0 (no project)', async ({ page }) => {
     await page.goto('/projects/0');
 
@@ -108,18 +137,21 @@ test.describe('Project Workspace - WPF Style', () => {
     await page.getByRole('button', { name: 'Отмена' }).first().click();
   });
 
-  test('characteristics button shows alert in current implementation', async ({ page }) => {
+  test('characteristics button opens characteristics dialog', async ({ page }) => {
     // Navigate to first project
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
 
-    // Setup dialog handler
-    page.once('dialog', dialog => dialog.accept());
+    // Click characteristics button after project header is fully loaded
+    const characteristicsButton = page.getByRole('button', { name: 'Характеристики' });
+    await expect(characteristicsButton).toBeEnabled();
+    await characteristicsButton.click();
 
-    // Click characteristics button
-    await page.getByRole('button', { name: 'Характеристики' }).click();
+    // Dialog should open
+    await expect(page.getByText('Характеристики проекта')).toBeVisible();
+    await page.getByRole('button', { name: 'Закрыть' }).click();
   });
 
   test('shows main tabs: Прогнозирование, Оценка факта, Сравнение версий, Отчёты', async ({ page }) => {

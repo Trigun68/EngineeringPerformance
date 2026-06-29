@@ -6,7 +6,7 @@ using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
+using EngineeringPerformance.Infrastructure.Services;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -14,7 +14,7 @@ public sealed partial class IicWorkDirectionNormEditViewModel : ObservableObject
 {
     private readonly IRegisterService<IicWorkDirectionNorm> _service;
     private readonly IDirectoryCache<IicWorkDirection> _directionCache;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IIicWorkDirectionNormQueryService _normQueryService;
     private Action<bool>? _closeDialog;
     private int? _preselectedWorkDirectionId;
 
@@ -60,11 +60,11 @@ public sealed partial class IicWorkDirectionNormEditViewModel : ObservableObject
     public IicWorkDirectionNormEditViewModel(
         IRegisterService<IicWorkDirectionNorm> service,
         IDirectoryCache<IicWorkDirection> directionCache,
-        IDbContextFactory<AppDbContext> contextFactory)
+        IIicWorkDirectionNormQueryService normQueryService)
     {
         _service = service;
         _directionCache = directionCache;
-        _contextFactory = contextFactory;
+        _normQueryService = normQueryService;
     }
 
     public void PrepareSync(
@@ -146,13 +146,7 @@ public sealed partial class IicWorkDirectionNormEditViewModel : ObservableObject
             return;
         }
 
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        var history = await context.IicWorkDirectionNorms
-            .AsNoTracking()
-            .Where(n => n.WorkDirectionId == SelectedWorkDirectionId.Value)
-            .OrderByDescending(n => n.EffectiveFrom)
-            .ToListAsync();
-
+        var history = await _normQueryService.GetHistoryByWorkDirectionIdAsync(SelectedWorkDirectionId.Value);
         HistoryItems = new ObservableCollection<IicWorkDirectionNorm>(history);
     }
 

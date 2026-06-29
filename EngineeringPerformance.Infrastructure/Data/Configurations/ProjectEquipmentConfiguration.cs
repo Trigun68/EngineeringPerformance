@@ -17,20 +17,23 @@ public sealed class ProjectEquipmentConfiguration : IEntityTypeConfiguration<Pro
         builder.Property(e => e.QuantityInWork)
             .HasPrecision(18, 4);
 
+        // Короткие идентификаторы — фиксированный лимит достаточен для Excel (≤100 символов).
         builder.Property(e => e.PositionNumber).HasMaxLength(50);
         builder.Property(e => e.FacilityCode).HasMaxLength(100);
-        builder.Property(e => e.FacilityName).HasMaxLength(500);
         builder.Property(e => e.DocumentSet).HasMaxLength(100);
-        builder.Property(e => e.DiagramNumber).HasMaxLength(200);
-        builder.Property(e => e.ShortName).HasMaxLength(1000);
-        builder.Property(e => e.CatalogName).HasMaxLength(1000);
-        builder.Property(e => e.TypeMark).HasMaxLength(200);
         builder.Property(e => e.CatalogId).HasMaxLength(100);
         builder.Property(e => e.Tag).HasMaxLength(100);
         builder.Property(e => e.FullEquipmentId).HasMaxLength(100);
-        builder.Property(e => e.SupplyStandard).HasMaxLength(200);
-        builder.Property(e => e.OlReference).HasMaxLength(200);
-        builder.Property(e => e.EstimationBasis).HasMaxLength(2000);
+
+        // Описательные поля — без лимита (в файле «Наименование по каталогу» до 2308 символов).
+        builder.Property(e => e.FacilityName);
+        builder.Property(e => e.DiagramNumber);
+        builder.Property(e => e.ShortName);
+        builder.Property(e => e.CatalogName);
+        builder.Property(e => e.TypeMark);
+        builder.Property(e => e.SupplyStandard);
+        builder.Property(e => e.OlReference);
+        builder.Property(e => e.EstimationBasis);
 
         builder.HasOne(e => e.Project)
             .WithMany()

@@ -89,38 +89,12 @@ function toTreeRows(
   directions: DictionaryItem[],
   getUnitName: (id: number | null | undefined) => string,
 ): IicNormTreeRow[] {
-  // Группируем нормы по workDirectionId чтобы избежать дублирования групп в дереве
-  const normsByDirection = new Map<number, IicNorm[]>();
-  
-  for (const norm of norms) {
-    const dirId = norm.workDirectionId;
-    if (!normsByDirection.has(dirId)) {
-      normsByDirection.set(dirId, []);
-    }
-    normsByDirection.get(dirId)!.push(norm);
-  }
-  
-  const result: IicNormTreeRow[] = [];
-  
-  for (const [directionId, dirNorms] of normsByDirection) {
-    const directionPath = buildDirectionPath(directionId, directions, getUnitName);
-    
-    for (const norm of dirNorms) {
-      const leaf = [
-        norm.effectiveFrom.slice(0, 10),
-        norm.performance != null ? `P=${norm.performance}` : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      
-      result.push({
-        ...norm,
-        hierarchy: [...directionPath, leaf],
-      });
-    }
-  }
-  
-  return result;
+  // Нормы отображаются на том же уровне, что и группы физобъёмов:
+  // одна строка на направление, без искусственного дочернего leaf-узла.
+  return norms.map((norm) => ({
+    ...norm,
+    hierarchy: buildDirectionPath(norm.workDirectionId, directions, getUnitName),
+  }));
 }
 
 export function IicNormsPage() {
@@ -149,18 +123,7 @@ export function IicNormsPage() {
   });
 
   const treeRows = useMemo(() => {
-    console.log(`[IicNormsPage] Computing treeRows: rows=${rows.length}, directions=${directions.length}`);
-    const result = toTreeRows(rows, directions, getUnitName);
-    // Проверка на дубли ID
-    const ids = result.map(r => r.id);
-    const uniqueIds = new Set(ids);
-    if (ids.length !== uniqueIds.size) {
-      console.error(`[IicNormsPage] DUPLICATE IDs detected! Total: ${ids.length}, Unique: ${uniqueIds.size}`);
-      const duplicates = ids.filter((id, i) => ids.indexOf(id) !== i);
-      console.error(`[IicNormsPage] Duplicate IDs:`, duplicates);
-    }
-    console.log(`[IicNormsPage] treeRows computed: ${result.length} rows, unique IDs: ${uniqueIds.size}, sample:`, result.slice(0, 2));
-    return result;
+    return toTreeRows(rows, directions, getUnitName);
   }, [directions, getUnitName, rows]);
 
   const directionLabel = useMemo(() => {

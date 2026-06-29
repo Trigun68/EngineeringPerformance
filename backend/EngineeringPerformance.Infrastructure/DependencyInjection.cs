@@ -87,6 +87,7 @@ public static class DependencyInjection
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
         services.AddSingleton<IPerformanceCalculationEngine, PerformanceCalculationEngine>();
         services.AddScoped<IProjectVisibilityService, ProjectVisibilityService>();
+        services.AddScoped<IProjectCharacteristicSelectionService, ProjectCharacteristicSelectionService>();
         services.AddScoped<IProjectVersionDeepCopyService, ProjectVersionDeepCopyService>();
         services.AddScoped<IProjectVersionService, ProjectVersionService>();
         services.AddScoped<IProjectDataService, ProjectDataService>();

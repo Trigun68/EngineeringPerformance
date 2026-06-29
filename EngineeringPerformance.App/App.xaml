@@ -32,10 +32,21 @@
         <!-- Стиль строки итога в таблице прогноза -->
         <Style x:Key="ForecastRowStyle" TargetType="dxg:RowControl">
             <Style.Triggers>
+                <!-- Итоговая строка: голубой фон, чёрный шрифт, полужирное начертание -->
                 <DataTrigger Binding="{Binding Row.IsTotal}" Value="True">
                     <Setter Property="Background" Value="#EBF5FB" />
+                    <Setter Property="Foreground" Value="Black" />
                     <Setter Property="FontWeight" Value="SemiBold" />
                 </DataTrigger>
+                <!-- Итоговая строка при фокусе: чуть темнее, чёрный текст -->
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding Row.IsTotal}" Value="True" />
+                        <Condition Binding="{Binding DataContext.IsFocused}" Value="True" />
+                    </MultiDataTrigger.Conditions>
+                    <Setter Property="Background" Value="#A9CCE3" />
+                    <Setter Property="Foreground" Value="Black" />
+                </MultiDataTrigger>
             </Style.Triggers>
         </Style>
 

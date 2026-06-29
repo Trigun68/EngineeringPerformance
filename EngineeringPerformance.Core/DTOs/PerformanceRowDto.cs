@@ -17,7 +17,9 @@ public sealed record PerformanceRowDto(
     decimal? NormEstimate,
     decimal? NormStdDev,
     decimal? ZScore,
-    PerformanceInterpretation? Interpretation)
+    PerformanceInterpretation? Interpretation,
+    /// <summary>Часы поддерева, участвующие в средневзвешенной FactEstimate (и в весе Z родителя).</summary>
+    decimal? SubtreeHours = null)
 {
     /// <summary>Синтетическая строка: сумма физ. объёмов без связи с группой ИИС (ClassifierId).</summary>
     public const int UnallocatedPhysicalVolumeWorkDirectionId = -1;

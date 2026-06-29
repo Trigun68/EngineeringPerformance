@@ -3,14 +3,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class IicNormQuickEditViewModel : ObservableObject
 {
     private readonly IRegisterService<IicWorkDirectionNorm> _service;
-    private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private int _normId;
 
     [ObservableProperty] private string _directionLabel = string.Empty;
@@ -20,12 +18,9 @@ public sealed partial class IicNormQuickEditViewModel : ObservableObject
     [ObservableProperty] private decimal? _standardDeviation;
     [ObservableProperty] private string? _errorMessage;
 
-    public IicNormQuickEditViewModel(
-        IRegisterService<IicWorkDirectionNorm> service,
-        IDbContextFactory<AppDbContext> contextFactory)
+    public IicNormQuickEditViewModel(IRegisterService<IicWorkDirectionNorm> service)
     {
         _service = service;
-        _contextFactory = contextFactory;
     }
 
     public async Task PrepareAsync(int normId)
@@ -33,11 +28,7 @@ public sealed partial class IicNormQuickEditViewModel : ObservableObject
         _normId = normId;
         ErrorMessage = null;
 
-        await using var ctx = await _contextFactory.CreateDbContextAsync();
-        var norm = await ctx.IicWorkDirectionNorms
-            .AsNoTracking()
-            .Include(n => n.WorkDirection)
-            .FirstOrDefaultAsync(n => n.Id == normId);
+        var norm = await _service.GetByIdAsync(normId);
 
         if (norm is null)
         {

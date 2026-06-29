@@ -11,29 +11,35 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
+        <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
+            <Button DockPanel.Dock="Left" Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
                 <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
+            <Button DockPanel.Dock="Left" Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
                 <Image Source="/Assets/icons8-edit-90.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
+            <Button DockPanel.Dock="Left" Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
                 <Image Source="/Assets/icons8-delete-96.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding ArchiveItemCommand}" Margin="0,0,4,0" ToolTip="В архив">
+            <Button DockPanel.Dock="Left" Command="{Binding ArchiveItemCommand}" Margin="0,0,4,0" ToolTip="В архив">
                 <Image Source="/Assets/icons8-pack-luggage-100.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding UnarchiveItemCommand}" Margin="0,0,4,0" ToolTip="Из архива">
+            <Button DockPanel.Dock="Left" Command="{Binding UnarchiveItemCommand}" Margin="0,0,4,0" ToolTip="Из архива">
                 <Image Source="/Assets/icons8-unpack-luggage-100.png" Width="20" Height="20" />
             </Button>
-            <Separator Margin="4,0" />
-            <Button Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
+            <Separator DockPanel.Dock="Left" Margin="4,0" />
+            <Button DockPanel.Dock="Left" Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
                 <Image Source="/Assets/icons8-update-100.png" Width="20" Height="20" />
             </Button>
-            <CheckBox Content="Показать архивные" IsChecked="{Binding ShowArchived}"
+            <CheckBox DockPanel.Dock="Left" Content="Показать архивные" IsChecked="{Binding ShowArchived}"
                       VerticalAlignment="Center" Margin="0,0,8,0" />
-        </StackPanel>
+            <Button DockPanel.Dock="Right" Command="{Binding ExportToExcelCommand}" ToolTip="Выгрузить в Excel">
+                <StackPanel Orientation="Horizontal">
+                    <Image Source="/Assets/icons8-save-96.png" Width="20" Height="20" Margin="0,0,4,0" />
+                    <TextBlock Text="Выгрузить в Excel" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </DockPanel>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="Вид:" VerticalAlignment="Center" Margin="0,0,4,0" />
@@ -75,6 +81,7 @@
                 <dxg:TreeListView x:Name="TreeListView"
                                   KeyFieldName="Id"
                                   ParentFieldName="ParentId"
+                                  TreeColumnFieldName="Code"
                                   AllowEditing="False"
                                   NavigationStyle="Row"
                                   AutoExpandAllNodes="False"

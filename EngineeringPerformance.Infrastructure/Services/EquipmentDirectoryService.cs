@@ -42,6 +42,7 @@ public sealed class EquipmentDirectoryService : DirectoryServiceBase<Equipment>
                 ClassifierId = e.ClassifierId,
                 IsAssessment = e.IsAssessment,
                 Coefficient = e.Coefficient,
+                UnitId = e.UnitId,
             })
             .ToListAsync();
         swQuery.Stop();
@@ -55,8 +56,15 @@ public sealed class EquipmentDirectoryService : DirectoryServiceBase<Equipment>
         return list;
     }
 
+    public override async Task<Equipment> CreateAsync(Equipment item)
+    {
+        item.CatalogKeyHash = EquipmentCatalogKeyHasher.Compute(item.Name, item.UnitId);
+        return await base.CreateAsync(item);
+    }
+
     public override async Task UpdateAsync(Equipment item)
     {
+        item.CatalogKeyHash = EquipmentCatalogKeyHasher.Compute(item.Name, item.UnitId);
         await using var context = await ContextFactory.CreateDbContextAsync();
 
         item.ModifiedAt = DateTime.UtcNow;
@@ -70,6 +78,8 @@ public sealed class EquipmentDirectoryService : DirectoryServiceBase<Equipment>
                 .SetProperty(e => e.ParentId, item.ParentId)
                 .SetProperty(e => e.IsAssessment, item.IsAssessment)
                 .SetProperty(e => e.Coefficient, item.Coefficient)
+                .SetProperty(e => e.UnitId, item.UnitId)
+                .SetProperty(e => e.CatalogKeyHash, item.CatalogKeyHash)
                 .SetProperty(e => e.ModifiedAt, item.ModifiedAt));
 
         if (affected == 0)

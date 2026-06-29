@@ -90,6 +90,37 @@ public sealed class ProjectVersionAnalysisServiceTests
         report.LaborIntensities[1].DocumentationCode.Should().Be("DOC-002");
         report.LaborIntensities[0].PlannedHours.Should().Be(200m);
         report.LaborIntensities[0].ActualHours.Should().Be(200m);
+
+        report.Summary.TotalFactLaborHours.Should().Be(350m);
+        report.Summary.UnallocatedLaborHours.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GenerateReport_Summary_IncludesUnallocatedLabor()
+    {
+        var factory = CreateFactory();
+        await SeedAsync(factory);
+
+        await using (var seed = factory.CreateDbContext())
+        {
+            seed.ProjectLaborIntensities.Add(new ProjectLaborIntensity
+            {
+                Id = 302,
+                ProjectId = 1,
+                ProjectAnalysisVersionId = 1,
+                WorkDirectionId = null,
+                ActualHours = 25m,
+                PlannedHours = 25m,
+                DocumentationCode = "DOC-UNALLOC"
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        var service = new ProjectVersionAnalysisService(factory, new PerformanceService(factory));
+        var report = await service.GenerateReportAsync(projectId: 1, versionId: 1);
+
+        report.Summary.TotalFactLaborHours.Should().Be(375m);
+        report.Summary.UnallocatedLaborHours.Should().Be(25m);
     }
 
     [Fact]

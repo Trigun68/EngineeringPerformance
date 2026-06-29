@@ -99,20 +99,6 @@ public sealed class AuthenticationService : IAuthenticationService
         return MapToDto(user);
     }
 
-    public async Task<bool> VerifyConnectionAsync(string connectionString)
-    {
-        try
-        {
-            await using var connection = new Microsoft.Data.SqlClient.SqlConnection(connectionString);
-            await connection.OpenAsync();
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
     private static bool VerifyPassword(string password, string storedHash)
     {
         return BCrypt.Net.BCrypt.Verify(password, storedHash);

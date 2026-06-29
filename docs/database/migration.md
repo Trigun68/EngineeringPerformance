@@ -28,6 +28,23 @@ SQL scripts are grouped by purpose. **Entry points** (run with `sqlcmd`; relativ
 
 See also: `install/README.md` (Russian deployment guide).
 
+## Source of truth and legacy drift (2026-06)
+
+**Production schema is defined by EF Core migrations** in `EngineeringPerformance.Infrastructure/Migrations/`.
+The application applies them at startup (`DatabaseSeeder.MigrateAsync`) or via `dotnet ef database update` / `EngineeringPerformance.DbInitializer`.
+
+**Legacy `sqlcmd` scripts** under `migrations/schema/` and `migrations/data/` are **not kept in sync automatically**.
+As of the latest EF migration (`ExpandEquipmentTextFields`, 2026-06-01), the SQL script chain ends at `schema/016_ExpandLaborDocumentationCodeTo450.sql` and **does not include**:
+
+| Missing in sqlcmd chain | EF migration (examples) |
+|-------------------------|-------------------------|
+| `Equipments`, `ProjectEquipments` | `AddEquipment`, `AddEquipmentUnitId`, `FixEquipmentCatalogKeyIndex`, `ExpandEquipmentTextFields` |
+| V2 additive fields, snapshots, permissions | `V2A_*`, `V2B_AnalysisVersionSnapshot`, `V2C_ProjectPermissions`, `V2D_*` |
+| User settings, action logs (partial) | `AddUserSettings`, `AddUserActionLogs` (scripts `014`–`015` exist but master chain may omit them) |
+| Post-April indexes and constraint changes | multiple migrations after `006_Consolidated` |
+
+**Recommendation:** use EF migrations for all new environments. Use `sqlcmd` only when .NET SDK is unavailable; after any schema change, regenerate scripts with `scripts/Regenerate-SqlSchema.ps1` or extend the master chain manually — never mix EF-applied DB with partial sqlcmd updates.
+
 ## Migration Files
 
 ### Location

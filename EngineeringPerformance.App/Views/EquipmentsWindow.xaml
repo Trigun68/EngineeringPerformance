@@ -60,6 +60,7 @@
                          RestoreStateKeyFieldName="Id">
             <dxg:GridControl.Columns>
                 <dxg:GridColumn FieldName="Name" Header="Наименование" Width="350" />
+                <dxg:GridColumn FieldName="UnitName" Header="Ед. изм." Width="80" />
                 <dxg:GridColumn FieldName="Description" Header="Описание" Width="200" />
                 <dxg:GridColumn FieldName="ClassifierNameWithUnit" Header="Классификатор (IIC)" Width="220" />
                 <dxg:GridColumn FieldName="Coefficient" Header="Коэффициент" Width="100" />

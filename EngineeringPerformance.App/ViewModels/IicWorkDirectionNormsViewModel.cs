@@ -4,10 +4,12 @@ using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.App.Models;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.App.Views;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -218,4 +220,50 @@ public sealed partial class IicWorkDirectionNormsViewModel : ObservableObject, I
         await _service.DeleteAsync(SelectedItem.NormId);
         await LoadSafeAsync();
     }
+
+    [RelayCommand]
+    private void ExportToExcel()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сохранить как Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = $"Нормы_IIC_{SelectedDate:yyyy-MM-dd}.xlsx"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var columns = new ReferenceExcelExporter.ColumnDef[]
+        {
+            new("Код",                 o => ((IicWorkDirectionNormDisplay)o).Code,               FixedWidth: 12),
+            new("Группа",              o => ((IicWorkDirectionNormDisplay)o).Name,               FixedWidth: 40),
+            new("Производительность",  o => ((IicWorkDirectionNormDisplay)o).Performance?.ToString("G")),
+            new("Оценка",              o => ((IicWorkDirectionNormDisplay)o).Estimate?.ToString("G")),
+            new("Станд. отклонение",   o => ((IicWorkDirectionNormDisplay)o).StandardDeviation?.ToString("G")),
+            new("Ед. изм.",            o => ((IicWorkDirectionNormDisplay)o).UnitName),
+            new("Действует с",         o => FormatDate(((IicWorkDirectionNormDisplay)o).EffectiveFrom)),
+            new("Действует по",        o => FormatDate(((IicWorkDirectionNormDisplay)o).EffectiveTo)),
+        };
+
+        try
+        {
+            ReferenceExcelExporter.Export(
+                $"Нормы IIC на {SelectedDate:dd.MM.yyyy}",
+                columns,
+                Items.Cast<object>(),
+                dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private static string? FormatDate(DateTime dt)
+        => dt == DateTime.MinValue ? null : dt.ToString("dd.MM.yyyy");
+
+    private static string? FormatDate(DateTime? dt)
+        => dt.HasValue ? dt.Value.ToString("dd.MM.yyyy") : null;
 }

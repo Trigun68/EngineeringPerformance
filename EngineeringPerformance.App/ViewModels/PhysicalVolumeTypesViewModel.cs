@@ -1,7 +1,10 @@
+using System.Windows;
 using CommunityToolkit.Mvvm.Input;
+using EngineeringPerformance.App.Services;
 using EngineeringPerformance.Core.Models;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
+using Microsoft.Win32;
 
 namespace EngineeringPerformance.App.ViewModels;
 
@@ -50,5 +53,40 @@ public sealed partial class PhysicalVolumeTypesViewModel : DirectoryViewModelBas
         if (SelectedItem is null || OpenEditWindow is null) return;
 
         await OpenEditWindow(SelectedItem);
+    }
+
+    [RelayCommand]
+    private void ExportToExcel()
+    {
+        var dlg = new SaveFileDialog
+        {
+            Title = "Сохранить как Excel",
+            Filter = "Excel (*.xlsx)|*.xlsx",
+            FileName = "Виды_справочников_физ_объёмов.xlsx"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        var columns = new ReferenceExcelExporter.ColumnDef[]
+        {
+            new("Наименование", o => ((PhysicalVolumeType)o).Name,        FixedWidth: 30),
+            new("Описание",     o => ((PhysicalVolumeType)o).Description, FixedWidth: 40),
+            new("Архив",        o => ((PhysicalVolumeType)o).IsArchived.ToString()),
+        };
+
+        try
+        {
+            ReferenceExcelExporter.Export(
+                "Виды справочников физ. объёмов",
+                columns,
+                Items.Cast<object>(),
+                dlg.FileName);
+            MessageBox.Show($"Экспорт завершён:\n{dlg.FileName}", "Готово",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Ошибка экспорта: {ex.Message}", "Ошибка",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 }

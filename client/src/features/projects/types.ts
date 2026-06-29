@@ -1,0 +1,78 @@
+import type { ForecastIicVolumeRow, PerformanceRow, VersionCompareDetailRow, VersionCompareFacilityRow, VersionCompareRow } from '../../api/analyticsApi';
+
+export type GridTabId =
+  | 'forecast-summary'
+  | 'forecast-facility'
+  | 'forecast-detail'
+  | 'fact-performance'
+  | 'fact-facility'
+  | 'fact-detail'
+  | 'compare-summary'
+  | 'compare-facility'
+  | 'compare-detail';
+
+export interface ProjectsPageFacilityRow {
+  facilityCode: string;
+  facilityName: string;
+  laborHours: number | null;
+  zScore: number | null;
+  interpretation: string;
+}
+
+export interface ProjectsPageDetailRow {
+  rowId: number | null;
+  facilityCode: string;
+  facilityName: string;
+  documentSet: string;
+  catalogCode: string;
+  catalogName: string;
+  workId: string;
+  workName: string;
+  iicGroupName: string;
+  iicUnitName: string;
+  quantity: number;
+  baseHours: number | null;
+  optimisticHours: number | null;
+  pessimisticHours: number | null;
+  factLaborHours: number | null;
+  factProductivity: number | null;
+  zScore: number | null;
+  interpretation: string;
+  isEquipment: boolean;
+}
+
+export interface ProjectsPageForecastGrids {
+  summary: ForecastIicVolumeRow[];
+  facility: ProjectsPageFacilityRow[];
+  detail: ProjectsPageDetailRow[];
+}
+
+export interface ProjectsPageFactGrids {
+  performance: PerformanceRow[];
+  facility: ProjectsPageFacilityRow[];
+  detail: ProjectsPageDetailRow[];
+}
+
+export interface ProjectsPageCompareGrids {
+  summary: VersionCompareRow[];
+  facility: VersionCompareFacilityRow[];
+  detail: VersionCompareDetailRow[];
+}
+
+export interface ProjectsPageData {
+  forecast: ProjectsPageForecastGrids;
+  fact: ProjectsPageFactGrids;
+  compare: ProjectsPageCompareGrids | null;
+}
+
+export const GRID_TABS: { id: GridTabId; label: string; group: string }[] = [
+  { id: 'forecast-summary', label: 'Прогноз — итого', group: 'Прогноз' },
+  { id: 'forecast-facility', label: 'Прогноз — по объектам', group: 'Прогноз' },
+  { id: 'forecast-detail', label: 'Прогноз — детально', group: 'Прогноз' },
+  { id: 'fact-performance', label: 'Факт — итого', group: 'Факт' },
+  { id: 'fact-facility', label: 'Факт — по объектам', group: 'Факт' },
+  { id: 'fact-detail', label: 'Факт — детально', group: 'Факт' },
+  { id: 'compare-summary', label: 'Сравнение — итого', group: 'Сравнение' },
+  { id: 'compare-facility', label: 'Сравнение — по объектам', group: 'Сравнение' },
+  { id: 'compare-detail', label: 'Сравнение — детально', group: 'Сравнение' },
+];

@@ -57,4 +57,32 @@ public static class IicWorkDirectionDisplayUnit
             ? direction.Name
             : $"{direction.Name} ({unitName})";
     }
+
+    /// <summary>
+    /// «Группа ФО IIC» в отчётах и гридах: код, наименование и ед. изм. группы ИИС — «код имя (ед.)».
+    /// </summary>
+    public static string FormatCodeNameWithResolvedUnit(
+        IicWorkDirection direction,
+        IReadOnlyDictionary<int, IicWorkDirection> byId)
+    {
+        var baseName = string.IsNullOrWhiteSpace(direction.Code)
+            ? direction.Name
+            : $"{direction.Code} {direction.Name}".Trim();
+        var unitName = ResolveUnitName(direction, byId);
+        return string.IsNullOrWhiteSpace(unitName) ? baseName : $"{baseName} ({unitName})";
+    }
+
+    /// <summary>Ед. изм. номенклатуры ФО (справочник Unit).</summary>
+    public static string? ResolvePhysicalVolumeUnitName(PhysicalVolumeKfo? volume) =>
+        volume?.Unit?.Name is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
+
+    public static string? ResolvePhysicalVolumeUnitName(PhysicalVolumeBer? volume) =>
+        volume?.Unit?.Name is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
+
+    public static string? ResolveProjectPhysicalVolumeUnitName(ProjectPhysicalVolume ppv) =>
+        ResolvePhysicalVolumeUnitName(ppv.PhysicalVolumeKfo) ?? ResolvePhysicalVolumeUnitName(ppv.PhysicalVolumeBer);
+
+    [Obsolete("Use Kfo/Ber or ProjectPhysicalVolume overload.")]
+    public static string? ResolvePhysicalVolumeUnitName(PhysicalVolume? volume) =>
+        volume?.Unit?.Name is string name && !string.IsNullOrWhiteSpace(name) ? name.Trim() : null;
 }

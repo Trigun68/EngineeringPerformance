@@ -29,6 +29,8 @@ public enum UserActionType
     // Оборудование
     EquipmentImport = 34,
     EquipmentDelete = 35,
+    EquipmentEdit = 36,
+    EquipmentCreate = 37,
 
     // Трудоёмкость
     LaborIntensityImport = 40,

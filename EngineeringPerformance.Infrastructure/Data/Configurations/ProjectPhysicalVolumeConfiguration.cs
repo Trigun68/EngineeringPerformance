@@ -72,15 +72,23 @@ public sealed class ProjectPhysicalVolumeConfiguration : IEntityTypeConfiguratio
             .HasForeignKey(pv => pv.ProjectAnalysisVersionId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(pv => pv.PhysicalVolume)
+        builder.HasOne(pv => pv.PhysicalVolumeKfo)
             .WithMany(pv => pv.ProjectPhysicalVolumes)
-            .HasForeignKey(pv => pv.PhysicalVolumeId)
+            .HasForeignKey(pv => pv.PhysicalVolumeKfoId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(pv => pv.PhysicalVolumeBer)
+            .WithMany(pv => pv.ProjectPhysicalVolumes)
+            .HasForeignKey(pv => pv.PhysicalVolumeBerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(pv => pv.Parent)
+            .WithMany(pv => pv.Children)
+            .HasForeignKey(pv => pv.ParentId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(pv => pv.CatalogId);
-
-        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeId, pv.FacilityCode, pv.FacilityName, pv.WorkId })
-            .IsUnique()
-            .HasFilter(null);
+        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeKfoId });
+        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeBerId });
     }
 }

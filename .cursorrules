@@ -1,0 +1,146 @@
+# Engineering Performance — Cursor Rules (Web Migration from WPF)
+
+**Stack (STRICT — ignore Python/FastAPI/PostgreSQL in this repo):**
+- Backend: ASP.NET Core 8, C# 12, EF Core, MS SQL Server, QuestPDF, ClosedXML
+- Frontend: React 18+, TypeScript, MUI, AG Grid, Zustand, Vite
+- Infra: Docker Compose, Nginx (+ auth-spnego for Windows Auth), JWT cookie fallback
+
+**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`, `_install/`, `docs/`).
+
+---
+
+## 1. Architecture
+
+### Backend layers
+```
+Api (Controllers, Auth) → Application (DTOs, Interfaces, CQRS handlers) → Domain (Entities, Enums) → Infrastructure (EF, Services, Import/Export)
+```
+
+- **Repository pattern:** data access via `AppDbContext` + scoped services; no business logic in controllers.
+- **CQRS (light):** project mutations via `ICommandHandler<T>` (`CreateProjectCommand`, etc.) in `Application/Projects/Commands`.
+- **DTO vs Domain:** never expose EF entities from API. Use `record` DTOs in `Application/*`. Map in Infrastructure (`DirectoryEntityMapper`, service layers).
+- **Directories facade:** unified CRUD via `IDirectoryFacade` + `DirectoryResourceCatalog` (slug → `PermissionType`).
+- **Registers:** non-tree data (e.g. IIC norms) via `RegistersController` + dedicated services.
+
+### Frontend patterns
+- **Dictionary pattern:** bulk-load all reference lookups once via `GET /api/dictionaries/all` → `useDictionaryStore` (Zustand). Invalidate after directory mutations.
+- **Directory pages:** generic `DirectoryPage` + `referenceConfig.ts`; special cases (`IicNormsPage`) only when API differs.
+- **Permissions:** `usePermission(objectName)` → `canRead` / `canEdit`; mirror WPF `AccessControlConstants` names exactly.
+- **AG Grid:** wrap in `DataTable`; column defs in `useMemo`; save layout via `userSettingsApi`.
+- **Context menus:** define items in page; pass to `DataTable.contextMenuItems`; extract reusable menu builders to hooks (`useProjectContextMenu`, etc.) when duplicated.
+
+### API conventions
+- Route prefix: `/api/`
+- Auth: HttpOnly JWT cookie `ep_auth_token`; `withCredentials: true` on axios.
+- SPNEGO: Nginx sets `X-Remote-User` + `X-Trusted-Proxy-Token`; API validates via `SpnegoOptions` — never trust `X-Remote-User` without token.
+- Version-scoped data: `/api/projects/{projectId}/versions/{versionId}/...`
+
+---
+
+## 2. Business rules (WPF parity)
+
+| Area | Rule |
+|------|------|
+| Hierarchy | Physical volumes, equipment, labor intensities, IIC directions — tree via `parentId`; UI uses AG Grid `treeData`. |
+| Versioning | `ProjectAnalysisVersion` + frozen `AnalysisVersionSnapshot` of norms at version create. Copy must clone data (known gap — implement fully). |
+| IIC / performance | Fact volume from PPV + equipment; hours by `WorkDirectionId`; Z-score from productivity vs norm snapshot; **PlannedHours only** in aggregation (not ActualHours). |
+| Labor import | Match document type → `LaborIntensity` catalog (case-insensitive); preview unmatched types before commit. |
+| Physical volume import | EP code normalization (trim, dash variants, zero-padding); regex patterns for catalog codes. |
+| Excel validation | Extension `.xlsx`, MIME check, PK zip magic bytes, max 50 MB (`ExcelUploadValidator`). |
+| Access matrix | 3 roles (Administrator, Manager, Observer) + per-object levels 0/1/2; enforce on API **and** hide UI controls. |
+
+---
+
+## 3. C# 12 code style
+
+```csharp
+// Primary constructors
+public sealed class PermissionService(AppDbContext context, IMemoryCache cache) : IPermissionService
+
+// DTOs as records
+public sealed record DirectoryEntryDto(int Id, string Name, ...);
+
+// QuestPDF / ClosedXML — ALWAYS using declarations (memory leaks if omitted)
+using var workbook = new XLWorkbook(stream);
+return document.GeneratePdf();
+
+// Validation: prefer FluentValidation for complex requests (target state — add validators per command/DTO)
+// Until FluentValidation is wired: guard clauses in controllers/services, never silent swallow.
+
+// Async: suffix Async, CancellationToken last parameter
+// Permissions: [HasPermission(PermissionType.X, AccessLevel.Read|Edit)] on controllers; directories use EnsureAccessAsync equivalent
+```
+
+**Forbidden:** raw SQL string interpolation; secrets in source; exposing `AppDbContext` to Api layer.
+
+---
+
+## 4. React / TypeScript code style
+
+```typescript
+// Strict typing — no any; use unknown + narrowing
+// AG Grid columns
+const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
+
+// API layer: directoriesApi.ts, registersApi.ts — normalize PascalCase properties from backend
+// Error UX: show HTTP status hints (401/403/410), not generic messages only
+// Routes: /references/:path, /projects/:projectId with version-scoped tabs
+```
+
+**Hooks extraction:** context menu definitions, filter state, load callbacks — extract when >30 lines or reused.
+
+---
+
+## 5. Security
+
+| Control | Implementation |
+|---------|----------------|
+| SQL | EF Core parameterized queries only |
+| Excel upload | `ExcelUploadValidator` — size, extension, MIME, magic bytes |
+| Proxy auth | `X-Trusted-Proxy-Token` required when `Spnego__Enabled=true` |
+| Secrets | `.env` / env vars — `JWT_SECRET`, `SQL_SA_PASSWORD`; never commit |
+| CORS | Restrict in production (`Cors__AllowedOrigins`) |
+| Headers | Nginx: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, CSP |
+| Dictionaries API | Gate `GET /dictionaries/all` by role (known gap) |
+
+---
+
+## 6. Testing expectations
+
+- Backend CI: `EngineeringPerformance.Api.Tests` (integration, Testcontainers/SQL optional).
+- Target: port algorithm tests from legacy `EngineeringPerformance.Tests` to backend Infrastructure.
+- Frontend: Playwright smoke (`client/e2e/`); add Vitest for stores/hooks.
+- Coverage goal: >80% on Import, PerformanceService, PermissionAuthorization.
+
+---
+
+## 7. Docker / deploy
+
+- `docker compose up` — `ep-sqlserver`, `ep-api`, `ep-web`
+- Web proxies `/api/` → `api:8080`; tunnel hostname `eng-perf` → `ep-web` (not `web` DNS collision with HR Portal)
+- Production: `ASPNETCORE_ENVIRONMENT=Production`, empty `DEV_WINDOWS_USER`, SPNEGO on Nginx
+
+---
+
+## 8. Workflow for AI agents
+
+1. Read `docs/revision_report.md` and `docs/development_roadmap.md` before large features.
+2. Match WPF behavior via `docs/migration_map.md` and `EngineeringPerformance.App/`.
+3. After logic changes: `dotnet build EngineeringPerformance.slnx`, `dotnet test`, rebuild `web` if client changed.
+4. Docs: update `docs/changelog/CHANGELOG.md` for user-visible changes.
+
+---
+
+## 9. Архитектурные правила (критически важно)
+
+1. **Единый движок расчётов (Single Source of Truth):**
+   ЗАПРЕЩЕНО размазывать логику расчётов (взвешенный Z-score, распределение LI, ИИС, Forecast/Fact) по ViewModel, контроллерам или сервисам импорта.
+   ВСЯ математическая и агрегирующая логика ДОЛЖНА находиться исключительно в классе `PerformanceCalculationEngine` (реализующем `IPerformanceCalculationEngine`). Сервисы только передают туда данные и получают результат.
+
+2. **Работа с БД и транзакциями:**
+   - Строго один `DbContext` на HTTP-запрос (Scoped).
+   - Для импорта Excel использовать стратегию **Replace** для дубликатов в рамках одной транзакции (не откатывать весь импорт из-за skip, как в legacy).
+   - Всегда использовать `.AsNoTracking()` для чтений, питающих UI-гриды.
+
+3. **Глубокое копирование (Deep Copy):**
+   Метод копирования версии проекта (`CopyProjectVersion`) ОБЯЗАН рекурсивно копировать ВСЕ связанные сущности: PPV, LI, итерации и **Equipment**. Исправить GAP legacy-кода, где Equipment не копировался.

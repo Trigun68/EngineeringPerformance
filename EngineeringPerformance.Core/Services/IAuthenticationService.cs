@@ -9,6 +9,4 @@ public interface IAuthenticationService
     string? GetCurrentWindowsUsername();
 
     Task<UserDto?> LoginAsync(string username, string password);
-
-    Task<bool> VerifyConnectionAsync(string connectionString);
 }

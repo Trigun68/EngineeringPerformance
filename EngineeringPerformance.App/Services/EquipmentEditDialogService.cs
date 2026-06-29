@@ -72,10 +72,12 @@ public sealed class EquipmentEditDialogService : IEquipmentEditDialogService
         {
             var equipmentCache = _serviceProvider.GetRequiredService<IDirectoryCache<Equipment>>();
             var classifierCache = _serviceProvider.GetRequiredService<IDirectoryCache<IicWorkDirection>>();
+            var unitCache = _serviceProvider.GetRequiredService<IDirectoryCache<UnitOfMeasurement>>();
 
             await Task.WhenAll(
                 equipmentCache.GetAllAsync(),
-                classifierCache.GetAllAsync());
+                classifierCache.GetAllAsync(),
+                unitCache.GetAllAsync());
         }
         catch (Exception ex)
         {

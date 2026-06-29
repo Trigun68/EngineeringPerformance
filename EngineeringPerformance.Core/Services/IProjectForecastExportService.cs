@@ -14,4 +14,5 @@ public interface IProjectForecastExportService
     Task ExportFactFacilityToPdfAsync(IReadOnlyList<FactFacilityRowDto> rows, string projectCode, string versionName, string filePath);
     Task ExportFactDetailToExcelAsync(IReadOnlyList<FactDetailRowDto> rows, string projectCode, string versionName, string filePath);
     Task ExportDetailForecastToExcelAsync(IReadOnlyList<DetailForecastRowDto> rows, string projectCode, string versionName, string filePath);
+    Task ExportDetailForecastSummaryTableToExcelAsync(DetailForecastSummaryTableDto table, string filePath);
 }

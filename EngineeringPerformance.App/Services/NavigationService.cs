@@ -121,7 +121,7 @@ public sealed class NavigationService : INavigationService
             "Dashboard"               => (_serviceProvider.GetRequiredService<ProjectDashboardView>(),         _serviceProvider.GetRequiredService<ProjectDashboardViewModel>()),
             "Users"                   => (_serviceProvider.GetRequiredService<UsersWindow>(),                  _serviceProvider.GetRequiredService<UsersViewModel>()),
             "Projects"                => (_serviceProvider.GetRequiredService<ProjectsPageView>(),             _serviceProvider.GetRequiredService<ProjectsPageViewModel>()),
-            "PhysicalVolumes"         => (_serviceProvider.GetRequiredService<PhysicalVolumesWindow>(),        _serviceProvider.GetRequiredService<PhysicalVolumesViewModel>()),
+            "PhysicalVolumes"         => (_serviceProvider.GetRequiredService<PhysicalVolumesKfoWindow>(),        _serviceProvider.GetRequiredService<PhysicalVolumesKfoViewModel>()),
             "PhysicalVolumeTypes"     => (_serviceProvider.GetRequiredService<PhysicalVolumeTypesWindow>(),    _serviceProvider.GetRequiredService<PhysicalVolumeTypesViewModel>()),
             "IicWorkDirections"       => (_serviceProvider.GetRequiredService<IicWorkDirectionsWindow>(),      _serviceProvider.GetRequiredService<IicWorkDirectionsViewModel>()),
             "UnitOfMeasurements"      => (_serviceProvider.GetRequiredService<UnitOfMeasurementsWindow>(),     _serviceProvider.GetRequiredService<UnitOfMeasurementsViewModel>()),

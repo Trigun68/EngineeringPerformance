@@ -9,25 +9,31 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-            <Button Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
+        <DockPanel Grid.Row="0" Margin="0,0,0,8" LastChildFill="False">
+            <Button DockPanel.Dock="Left" Command="{Binding CreateAndEditCommand}" Margin="0,0,4,0" ToolTip="Добавить">
                 <Image Source="/Assets/icons8-add-96.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
+            <Button DockPanel.Dock="Left" Command="{Binding EditItemCommand}" Margin="0,0,4,0" ToolTip="Редактировать">
                 <Image Source="/Assets/icons8-edit-90.png" Width="20" Height="20" />
             </Button>
-            <Button Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
+            <Button DockPanel.Dock="Left" Command="{Binding DeleteItemCommand}" Margin="0,0,4,0" ToolTip="Удалить">
                 <Image Source="/Assets/icons8-delete-96.png" Width="20" Height="20" />
             </Button>
-            <Separator Margin="4,0" />
-            <Button Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
+            <Separator DockPanel.Dock="Left" Margin="4,0" />
+            <Button DockPanel.Dock="Left" Command="{Binding RefreshCommand}" Margin="0,0,4,0" ToolTip="Обновить">
                 <Image Source="/Assets/icons8-update-100.png" Width="20" Height="20" />
             </Button>
-            <TextBlock Text="Дата:" VerticalAlignment="Center" Margin="8,0,4,0" />
-            <dxe:DateEdit EditValue="{Binding SelectedDate, UpdateSourceTrigger=PropertyChanged}"
+            <TextBlock DockPanel.Dock="Left" Text="Дата:" VerticalAlignment="Center" Margin="8,0,4,0" />
+            <dxe:DateEdit DockPanel.Dock="Left" EditValue="{Binding SelectedDate, UpdateSourceTrigger=PropertyChanged}"
                           Width="150"
                           VerticalAlignment="Center" />
-        </StackPanel>
+            <Button DockPanel.Dock="Right" Command="{Binding ExportToExcelCommand}" ToolTip="Выгрузить в Excel">
+                <StackPanel Orientation="Horizontal">
+                    <Image Source="/Assets/icons8-save-96.png" Width="20" Height="20" Margin="0,0,4,0" />
+                    <TextBlock Text="Выгрузить в Excel" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+        </DockPanel>
 
         <dxg:GridControl Grid.Row="1" ItemsSource="{Binding Items}"
                          SelectedItem="{Binding SelectedItem}"

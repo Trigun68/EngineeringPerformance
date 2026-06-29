@@ -42,8 +42,8 @@ public sealed partial class ReferencesPageViewModel : ObservableObject
 
         var tabConfigs = new[]
         {
-            ("Виды справочников физ. объёмов", typeof(PhysicalVolumeTypesWindow), typeof(PhysicalVolumeTypesViewModel), "PhysicalVolumeTypes"),
-            ("Номенклатура физических объёмов", typeof(PhysicalVolumesWindow), typeof(PhysicalVolumesViewModel), "PhysicalVolumes"),
+            ("Номенклатура физических объёмов – КФО", typeof(PhysicalVolumesKfoWindow), typeof(PhysicalVolumesKfoViewModel), "PhysicalVolumes"),
+            ("Номенклатура физических объёмов – БЕР", typeof(PhysicalVolumesBerWindow), typeof(PhysicalVolumesBerViewModel), "PhysicalVolumes"),
             ("Номенклатура оборудования", typeof(EquipmentsWindow), typeof(EquipmentsViewModel), "Equipment"),
             ("Трудоёмкость", typeof(LaborIntensitiesWindow), typeof(LaborIntensitiesViewModel), "LaborIntensities"),
             ("Группы физ. объёмов (IIC)", typeof(IicWorkDirectionsWindow), typeof(IicWorkDirectionsViewModel), "IicWorkDirections"),

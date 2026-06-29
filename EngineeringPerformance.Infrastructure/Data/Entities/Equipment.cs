@@ -23,6 +23,9 @@ public sealed class Equipment : DirectoryItem, INotifyPropertyChanged
         Raise(nameof(ClassifierId));
         Raise(nameof(Classifier));
         Raise(nameof(ClassifierNameWithUnit));
+        Raise(nameof(UnitId));
+        Raise(nameof(Unit));
+        Raise(nameof(UnitName));
         Raise(nameof(IsAssessment));
         Raise(nameof(Coefficient));
         Raise(nameof(ParentId));
@@ -37,11 +40,17 @@ public sealed class Equipment : DirectoryItem, INotifyPropertyChanged
     /// <summary>Группа физ. объёмов (IIC) для расчёта норм.</summary>
     public int? ClassifierId { get; set; }
 
+    /// <summary>SHA-256 (Name + UnitId) — уникальный ключ без индекса по длинному Name.</summary>
+    public string CatalogKeyHash { get; set; } = string.Empty;
+
     /// <summary>Оценка: да / нет / не выбрано (null).</summary>
     public bool? IsAssessment { get; set; }
 
-    /// <summary>Перевод количества из ед. номенклатуры в ед. группы IIC. Null — не задано.</summary>
-    public decimal? Coefficient { get; set; }
+    /// <summary>Единица измерения номенклатуры (из Excel «Размерность»). FK на UnitsOfMeasurement.</summary>
+    public int? UnitId { get; set; }
+
+    /// <summary>Перевод количества из ед. номенклатуры в ед. группы IIC.</summary>
+    public decimal Coefficient { get; set; } = 1m;
 
     public Equipment? Parent { get; set; }
 
@@ -54,4 +63,10 @@ public sealed class Equipment : DirectoryItem, INotifyPropertyChanged
     /// <summary>Классификатор для грида: код и наименование группы IIC с ед. изм.</summary>
     [NotMapped]
     public string ClassifierNameWithUnit { get; set; } = string.Empty;
+
+    public UnitOfMeasurement? Unit { get; set; }
+
+    /// <summary>Ед. изм. для грида и экспорта.</summary>
+    [NotMapped]
+    public string UnitName { get; set; } = string.Empty;
 }

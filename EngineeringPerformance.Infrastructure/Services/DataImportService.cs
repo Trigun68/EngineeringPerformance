@@ -49,6 +49,8 @@ public sealed class DataImportService : IDataImportService
         string FacilityName,
         string WorkId);
 
+    private readonly record struct PvCatalogRow(int Id, string Code, string Name, int? ClassifierId, int? ParentId);
+
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<DataImportService> _logger;
 
@@ -204,8 +206,16 @@ public sealed class DataImportService : IDataImportService
         context.DataImportIterations.Add(iteration);
         await context.SaveChangesAsync();
 
-        var physicalVolumeRows = await context.PhysicalVolumes.AsNoTracking().ToListAsync();
-        var physicalVolumes = BuildCodeLookup(physicalVolumeRows, "PhysicalVolumes");
+        var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, versionId);
+        var physicalVolumeRows = isKfo
+            ? await context.PhysicalVolumesKfo.AsNoTracking()
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .ToListAsync()
+            : await context.PhysicalVolumesBer.AsNoTracking()
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .ToListAsync();
+        var catalogName = isKfo ? "PhysicalVolumesKfo" : "PhysicalVolumesBer";
+        var physicalVolumes = BuildCodeLookup(physicalVolumeRows, catalogName);
 
         using var workbook = new XLWorkbook(filePath);
         var worksheet = GetPhysicalVolumeImportWorksheet(workbook);
@@ -251,16 +261,17 @@ public sealed class DataImportService : IDataImportService
                 continue;
             }
 
-            PhysicalVolume? physicalVolume = null;
+            PvCatalogRow? catalogRow = null;
             foreach (var candidate in candidates)
             {
-                if (TryResolvePhysicalVolume(physicalVolumes, candidate, out physicalVolume))
+                if (TryResolvePhysicalVolume(physicalVolumes, candidate, out var resolved))
                 {
+                    catalogRow = resolved;
                     break;
                 }
             }
 
-            if (physicalVolume is null)
+            if (catalogRow is null)
             {
                 skippedNotInCatalogRows.Add((row.RowNumber(), candidates[0], ParseDecimal(GetCellValue(row, columnMap.Quantity))));
                 _logger.LogWarning(
@@ -270,9 +281,9 @@ public sealed class DataImportService : IDataImportService
                 continue;
             }
 
-            var draft = PhysicalVolumeImportDraft.FromRow(row, columnMap, ParseDecimal, GetCellValue, physicalVolume);
+            var draft = PhysicalVolumeImportDraft.FromRow(row, columnMap, ParseDecimal, GetCellValue, catalogRow.Value);
             draft.ApplyTruncation();
-            newEntities.Add(draft.ToNewEntity(projectId, versionId, physicalVolume.Id, importTimestamp));
+            newEntities.Add(draft.ToNewEntity(projectId, versionId, catalogRow.Value.Id, isKfo, importTimestamp));
         }
 
         if (newEntities.Count == 0)
@@ -292,8 +303,9 @@ public sealed class DataImportService : IDataImportService
         var pvById = physicalVolumeRows.ToDictionary(pv => pv.Id);
         await BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
             context,
-            newEntities.Select(e => e.PhysicalVolumeId).Distinct(),
-            pvById);
+            newEntities.Select(e => e.PhysicalVolumeKfoId ?? e.PhysicalVolumeBerId).Where(id => id.HasValue).Select(id => id!.Value).Distinct(),
+            pvById,
+            isKfo);
 
         context.ProjectPhysicalVolumes.AddRange(newEntities);
         await context.SaveChangesAsync();
@@ -349,9 +361,20 @@ public sealed class DataImportService : IDataImportService
 
         var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? firstDataRowNumber - 1;
         var catalogRows = await context.Equipments.AsNoTracking().ToListAsync();
-        var nameLookup = EquipmentImportCatalogMatcher.BuildNameLookup(catalogRows);
+        var units = await context.UnitsOfMeasurement.AsNoTracking().ToListAsync();
+        var (catalogLookup, ambiguousKeys, duplicateKeyCount) =
+            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, _logger);
+        if (duplicateKeyCount > 0)
+        {
+            _logger.LogWarning(
+                "Equipment import: catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                duplicateKeyCount);
+        }
+
         var pendingCatalogCreates = new List<Equipment>();
         var autoCreatedCount = 0;
+        var skippedDuplicateCount = 0;
+        var skippedDuplicateRows = new List<(int RowNumber, string Name, string Unit)>();
         var importTimestamp = iteration.ImportedAt;
         var newEntities = new List<ProjectEquipment>();
 
@@ -365,13 +388,34 @@ public sealed class DataImportService : IDataImportService
             if (string.IsNullOrWhiteSpace(catalogName))
                 continue;
 
-            var (equipment, created) = EquipmentImportCatalogMatcher.ResolveOrCreate(
-                catalogName, nameLookup, pendingCatalogCreates);
-            if (created)
+            var rawUnitName = row.Cell(columnMap.UnitDimension).GetString()?.Trim() ?? string.Empty;
+            var unitId = EquipmentUnitNameMatcher.ResolveUnitId(rawUnitName, units);
+
+            var resolveResult = EquipmentImportCatalogMatcher.ResolveOrCreate(
+                catalogName,
+                unitId,
+                catalogLookup,
+                ambiguousKeys,
+                pendingCatalogCreates);
+
+            if (resolveResult.SkippedDuplicate)
+            {
+                skippedDuplicateCount++;
+                skippedDuplicateRows.Add((rowNumber, catalogName, rawUnitName));
+                _logger.LogWarning(
+                    "Equipment import row {Row}: skipped duplicate catalog key Name='{Name}', Unit='{Unit}' (UnitId={UnitId})",
+                    rowNumber,
+                    catalogName,
+                    rawUnitName,
+                    unitId);
+                continue;
+            }
+
+            if (resolveResult.Created)
                 autoCreatedCount++;
 
             newEntities.Add(BuildProjectEquipmentFromImportRow(
-                row, columnMap, projectId, versionId, equipment, importTimestamp));
+                row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp));
         }
 
         if (newEntities.Count == 0)
@@ -384,7 +428,11 @@ public sealed class DataImportService : IDataImportService
                 0,
                 null,
                 iteration.Id,
-                EquipmentImportCatalogMatcher.BuildImportSummary(0, autoCreatedCount));
+                EquipmentImportCatalogMatcher.BuildImportSummary(
+                    0,
+                    autoCreatedCount,
+                    skippedDuplicateCount,
+                    skippedDuplicateRows));
         }
 
         if (pendingCatalogCreates.Count > 0)
@@ -397,7 +445,11 @@ public sealed class DataImportService : IDataImportService
         await context.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        var details = EquipmentImportCatalogMatcher.BuildImportSummary(newEntities.Count, autoCreatedCount);
+        var details = EquipmentImportCatalogMatcher.BuildImportSummary(
+            newEntities.Count,
+            autoCreatedCount,
+            skippedDuplicateCount,
+            skippedDuplicateRows);
         return new DataImportResult(true, newEntities.Count, null, iteration.Id, details);
     }
 
@@ -430,16 +482,16 @@ public sealed class DataImportService : IDataImportService
             FacilityCode = facilityCode,
             FacilityName = facilityName,
             DocumentSet = TruncateEquipmentField(row.Cell(map.DocumentSet).GetString(), 100),
-            DiagramNumber = TruncateEquipmentField(row.Cell(map.DiagramNumber).GetString(), 200),
-            ShortName = TruncateEquipmentField(row.Cell(map.ShortName).GetString(), 1000),
-            CatalogName = TruncateEquipmentField(row.Cell(map.CatalogName).GetString(), 1000),
-            TypeMark = TruncateEquipmentField(row.Cell(map.TypeMark).GetString(), 200),
+            DiagramNumber = TrimEquipmentField(row.Cell(map.DiagramNumber).GetString()),
+            ShortName = TrimEquipmentField(row.Cell(map.ShortName).GetString()),
+            CatalogName = TrimEquipmentField(row.Cell(map.CatalogName).GetString()),
+            TypeMark = TrimEquipmentField(row.Cell(map.TypeMark).GetString()),
             CatalogId = TruncateEquipmentField(row.Cell(map.CatalogId).GetString(), 100),
             Tag = TruncateEquipmentField(row.Cell(map.Tag).GetString(), 100),
             FullEquipmentId = TruncateEquipmentField(row.Cell(map.FullEquipmentId).GetString(), 100),
-            SupplyStandard = TruncateEquipmentField(row.Cell(map.SupplyStandard).GetString(), 200),
-            OlReference = TruncateEquipmentField(row.Cell(map.OlReference).GetString(), 200),
-            EstimationBasis = TruncateEquipmentField(row.Cell(map.EstimationBasis).GetString(), 2000),
+            SupplyStandard = TrimEquipmentField(row.Cell(map.SupplyStandard).GetString()),
+            OlReference = TrimEquipmentField(row.Cell(map.OlReference).GetString()),
+            EstimationBasis = TrimEquipmentField(row.Cell(map.EstimationBasis).GetString()),
         };
     }
 
@@ -452,12 +504,20 @@ public sealed class DataImportService : IDataImportService
         if (idx <= 0)
         {
             var t = fbs.Trim();
-            return (TruncateEquipmentField(t, 100), TruncateEquipmentField(t, 500));
+            return (TruncateEquipmentField(t, 100), TrimEquipmentField(t));
         }
 
         return (
             TruncateEquipmentField(fbs[..idx].Trim(), 100),
-            TruncateEquipmentField(fbs[(idx + 3)..].Trim(), 500));
+            TrimEquipmentField(fbs[(idx + 3)..].Trim()));
+    }
+
+    private static string? TrimEquipmentField(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim();
     }
 
     private static string? TruncateEquipmentField(string? value, int maxLength)
@@ -1253,6 +1313,7 @@ public sealed class DataImportService : IDataImportService
             Quantity = FindEquipmentColumn(columns, "Всего, (ед)", 14),
             QuantityInWork = FindEquipmentColumn(columns, "В работе, (ед)", 15),
             EstimationBasis = FindEquipmentColumn(columns, "Базис оценки", 16),
+            UnitDimension = FindEquipmentColumn(columns, "Размерность", 18),
         };
 
         return true;
@@ -1280,6 +1341,7 @@ public sealed class DataImportService : IDataImportService
         public int Quantity { get; init; }
         public int QuantityInWork { get; init; }
         public int EstimationBasis { get; init; }
+        public int UnitDimension { get; init; }
     }
 
     /// <summary>
@@ -1738,18 +1800,16 @@ public sealed class DataImportService : IDataImportService
     /// <see cref="PhysicalVolume.VolumeTypeId"/>). Старый словарь оставлял только первую строку
     /// из выборки БД — часто без ClassifierId. Импорт выбирает кандидата явно.
     /// </summary>
-    private ILookup<string, PhysicalVolume> BuildCodeLookup(
-        IReadOnlyList<PhysicalVolume> rows,
+    private ILookup<string, PvCatalogRow> BuildCodeLookup(
+        IReadOnlyList<PvCatalogRow> rows,
         string catalogName)
     {
-        var pairs = new List<(string Key, PhysicalVolume Pv)>();
+        var pairs = new List<(string Key, PvCatalogRow Pv)>();
         foreach (var pv in rows)
         {
             var codeKey = NormalizeCatalogCode(pv.Code);
             if (string.IsNullOrEmpty(codeKey))
-            {
                 continue;
-            }
 
             pairs.Add((codeKey, pv));
         }
@@ -1760,7 +1820,7 @@ public sealed class DataImportService : IDataImportService
         if (duplicateGroups > 0)
         {
             _logger.LogInformation(
-                "Catalog {Catalog}: {Count} code keys map to multiple rows (e.g. КФО/БЭР); import picks row with ClassifierId, then longest Code",
+                "Catalog {Catalog}: {Count} duplicate code keys; import picks row with ClassifierId, then longest Code",
                 catalogName,
                 duplicateGroups);
         }
@@ -1768,64 +1828,54 @@ public sealed class DataImportService : IDataImportService
         return pairs.ToLookup(p => p.Key, p => p.Pv, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static PhysicalVolume? PickBestPhysicalVolumeCandidate(IReadOnlyList<PhysicalVolume> candidates)
+    private static PvCatalogRow? PickBestPhysicalVolumeCandidate(IReadOnlyList<PvCatalogRow> candidates)
     {
         if (candidates.Count == 0)
-        {
             return null;
-        }
 
         if (candidates.Count == 1)
-        {
             return candidates[0];
-        }
 
         var withClassifier = candidates.Where(c => c.ClassifierId.HasValue).ToList();
         var pool = withClassifier.Count > 0 ? withClassifier : candidates;
 
         return pool
             .OrderByDescending(c => c.Code.Length)
-            .ThenBy(c => c.VolumeTypeId)
             .ThenBy(c => c.Id)
             .First();
     }
 
-    /// <summary>
-    /// Для позиций сида без «Техас» в Excel ClassifierId остаётся NULL, хотя у родительских
-    /// групп в каталоге связь с ИИС уже задана — поднимаем её при импорте, чтобы аналитика
-    /// и колонка «Классификатор» были заполнены.
-    /// </summary>
     private async Task BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
         AppDbContext context,
         IEnumerable<int> importedPhysicalVolumeIds,
-        IReadOnlyDictionary<int, PhysicalVolume> pvByIdSnapshot)
+        IReadOnlyDictionary<int, PvCatalogRow> pvByIdSnapshot,
+        bool isKfo)
     {
         var updated = 0;
         foreach (var pvId in importedPhysicalVolumeIds.Distinct())
         {
-            if (!pvByIdSnapshot.TryGetValue(pvId, out var snap))
-            {
+            if (!pvByIdSnapshot.TryGetValue(pvId, out var snap) || snap.ClassifierId.HasValue)
                 continue;
-            }
-
-            if (snap.ClassifierId.HasValue)
-            {
-                continue;
-            }
 
             var resolved = ResolveClassifierIdFromAncestorChain(pvId, pvByIdSnapshot);
             if (!resolved.HasValue)
-            {
                 continue;
+
+            if (isKfo)
+            {
+                var tracked = await context.PhysicalVolumesKfo.FirstOrDefaultAsync(p => p.Id == pvId);
+                if (tracked is null || tracked.ClassifierId.HasValue)
+                    continue;
+                tracked.ClassifierId = resolved.Value;
+            }
+            else
+            {
+                var tracked = await context.PhysicalVolumesBer.FirstOrDefaultAsync(p => p.Id == pvId);
+                if (tracked is null || tracked.ClassifierId.HasValue)
+                    continue;
+                tracked.ClassifierId = resolved.Value;
             }
 
-            var tracked = await context.PhysicalVolumes.FirstOrDefaultAsync(p => p.Id == pvId);
-            if (tracked is null || tracked.ClassifierId.HasValue)
-            {
-                continue;
-            }
-
-            tracked.ClassifierId = resolved.Value;
             updated++;
         }
 
@@ -1840,21 +1890,17 @@ public sealed class DataImportService : IDataImportService
 
     private static int? ResolveClassifierIdFromAncestorChain(
         int startPvId,
-        IReadOnlyDictionary<int, PhysicalVolume> byId)
+        IReadOnlyDictionary<int, PvCatalogRow> byId)
     {
         var visited = new HashSet<int>();
         var currentId = (int?)startPvId;
         while (currentId.HasValue && visited.Add(currentId.Value))
         {
             if (!byId.TryGetValue(currentId.Value, out var node))
-            {
                 break;
-            }
 
             if (node.ClassifierId.HasValue)
-            {
                 return node.ClassifierId;
-            }
 
             currentId = node.ParentId;
         }
@@ -1957,26 +2003,25 @@ public sealed class DataImportService : IDataImportService
     }
 
     private static bool TryResolvePhysicalVolume(
-        ILookup<string, PhysicalVolume> physicalVolumes,
+        ILookup<string, PvCatalogRow> physicalVolumes,
         string raw,
-        out PhysicalVolume? physicalVolume)
+        out PvCatalogRow physicalVolume)
     {
         foreach (var key in ExpandEpCodeLookupKeys(raw))
         {
             if (!physicalVolumes.Contains(key))
-            {
                 continue;
-            }
 
             var list = physicalVolumes[key].ToList();
-            physicalVolume = PickBestPhysicalVolumeCandidate(list);
-            if (physicalVolume is not null)
+            var picked = PickBestPhysicalVolumeCandidate(list);
+            if (picked is not null)
             {
+                physicalVolume = picked.Value;
                 return true;
             }
         }
 
-        physicalVolume = null;
+        physicalVolume = default;
         return false;
     }
 
@@ -2220,7 +2265,7 @@ public sealed class DataImportService : IDataImportService
             PhysicalVolumeColumnMap map,
             Func<string?, decimal> parseDecimal,
             Func<IXLRangeRow, int, string?> getCell,
-            PhysicalVolume catalogEntry)
+            PvCatalogRow catalogEntry)
         {
             var fbsSource = getCell(row, map.FacilitySource)?.Trim();
             var rawWorkName = getCell(row, map.WorkName)?.Trim();
@@ -2329,13 +2374,12 @@ public sealed class DataImportService : IDataImportService
             entity.CatalogName = CatalogName;
         }
 
-        public ProjectPhysicalVolume ToNewEntity(int projectId, int versionId, int physicalVolumeId, DateTime createdAt)
+        public ProjectPhysicalVolume ToNewEntity(int projectId, int versionId, int physicalVolumeId, bool isKfo, DateTime createdAt)
         {
-            return new ProjectPhysicalVolume
+            var entity = new ProjectPhysicalVolume
             {
                 ProjectId = projectId,
                 ProjectAnalysisVersionId = versionId,
-                PhysicalVolumeId = physicalVolumeId,
                 CreatedAt = createdAt,
                 Quantity = Quantity,
                 FacilityCode = FacilityCode,
@@ -2351,6 +2395,8 @@ public sealed class DataImportService : IDataImportService
                 CatalogCode = CatalogCode,
                 CatalogName = CatalogName,
             };
+            PhysicalVolumeCatalogBinding.AssignCatalogId(entity, physicalVolumeId, isKfo);
+            return entity;
         }
 
         private static string? PreferNonEmpty(string? current, string? incoming)

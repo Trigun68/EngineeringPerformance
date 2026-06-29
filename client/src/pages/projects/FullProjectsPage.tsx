@@ -15,6 +15,7 @@ import {
   Paper,
   Stack,
   Tab,
+  TextField,
   Tabs,
   Tooltip,
   Typography,
@@ -29,12 +30,15 @@ import {
   fetchProjectVersions,
   type ProjectVersion,
 } from '../../api/projectVersionsApi';
-import { fetchProjects } from '../../api/projectsApi';
+import { createProject, fetchProjects, updateProject } from '../../api/projectsApi';
 import { DataTable } from '../../components/DataTable/DataTable';
 import { usePermission } from '../../hooks/usePermission';
 import type { Project } from '../../types/project';
+import type { ProjectFormData } from '../../types/project';
 import { ProjectSelectionDialog } from '../../components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { ParticipantsModal } from '../../components/ParticipantsModal/ParticipantsModal';
+import { EditModal } from '../../components/EditModal/EditModal';
+import { ProjectCharacteristicsDialog } from '../../components/ProjectCharacteristicsDialog/ProjectCharacteristicsDialog';
 
 // Типы для данных гридов
 type ForecastTabId = 'forecast-total' | 'forecast-facility' | 'forecast-detail';
@@ -76,6 +80,40 @@ const EMPTY_DATA: ProjectsPageData = {
   deviationPercent: null,
 };
 
+const EMPTY_PROJECT_FORM: ProjectFormData = {
+  code: '',
+  name: '',
+  workNumber: '',
+  contractNumber: '',
+  calendarPlanNumber: '',
+  type: '',
+  customer: '',
+  contractor: '',
+  gip: '',
+  workStatus: '',
+  workStart: '',
+  program: '',
+  description: '',
+};
+
+function toProjectForm(project: Project): ProjectFormData {
+  return {
+    code: project.code,
+    name: project.name,
+    workNumber: project.workNumber ?? '',
+    contractNumber: project.contractNumber ?? '',
+    calendarPlanNumber: project.calendarPlanNumber ?? '',
+    type: project.type ?? '',
+    customer: project.customer ?? '',
+    contractor: project.contractor ?? '',
+    gip: project.gip ?? '',
+    workStatus: project.workStatus ?? '',
+    workStart: project.workStart ?? '',
+    program: project.program ?? '',
+    description: project.description ?? '',
+  };
+}
+
 async function fetchWorkspaceData(projectId: number): Promise<ProjectsPageData> {
   const [projectsData, versionsData, participantsData] = await Promise.all([
     fetchProjects(),
@@ -114,8 +152,14 @@ export function FullProjectsPage() {
   // Диалоги
   const [selectionDialogOpen, setSelectionDialogOpen] = useState(!currentProjectId);
   const [participantsOpen, setParticipantsOpen] = useState(false);
+  const [characteristicsOpen, setCharacteristicsOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [compareShowOnlyDifferences, setCompareShowOnlyDifferences] = useState(false);
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [projectModalMode, setProjectModalMode] = useState<'create' | 'edit'>('edit');
+  const [projectEditingId, setProjectEditingId] = useState<number | null>(null);
+  const [projectForm, setProjectForm] = useState<ProjectFormData>(EMPTY_PROJECT_FORM);
+  const [projectSubmitting, setProjectSubmitting] = useState(false);
 
   // Активные вкладки
   const [mainTab, setMainTab] = useState<'forecast' | 'fact' | 'compare' | 'reports'>('forecast');
@@ -149,6 +193,53 @@ export function FullProjectsPage() {
   const handleSelectProject = (pid: number) => {
     setSelectionDialogOpen(false);
     navigate(`/projects/${pid}`);
+  };
+
+  const openCreateProject = () => {
+    setProjectModalMode('create');
+    setProjectEditingId(null);
+    setProjectForm(EMPTY_PROJECT_FORM);
+    setProjectModalOpen(true);
+  };
+
+  const openEditProject = (project: Project) => {
+    setProjectModalMode('edit');
+    setProjectEditingId(project.id);
+    setProjectForm(toProjectForm(project));
+    setProjectModalOpen(true);
+  };
+
+  const openCopyProject = (project: Project) => {
+    setProjectModalMode('create');
+    setProjectEditingId(null);
+    const copyCode = project.code.length <= 44 ? `${project.code}-copy` : `${project.code.slice(0, 44)}-copy`;
+    setProjectForm({
+      ...toProjectForm(project),
+      code: copyCode,
+      name: `${project.name} (копия)`,
+    });
+    setProjectModalOpen(true);
+  };
+
+  const handleSaveProject = async () => {
+    setProjectSubmitting(true);
+    setPageError(null);
+    try {
+      if (projectModalMode === 'edit' && projectEditingId) {
+        await updateProject(projectEditingId, projectForm);
+        setProjectModalOpen(false);
+        await Promise.all([projectsQuery.refetch(), projectDataQuery.refetch()]);
+      } else {
+        const created = await createProject(projectForm);
+        setProjectModalOpen(false);
+        await projectsQuery.refetch();
+        navigate(`/projects/${created.id}`);
+      }
+    } catch {
+      setPageError('Не удалось сохранить проект.');
+    } finally {
+      setProjectSubmitting(false);
+    }
   };
 
   // Заглушки для импорта/удаления
@@ -276,7 +367,9 @@ export function FullProjectsPage() {
           projects={projects}
           onSelect={handleSelectProject}
           onClose={() => setSelectionDialogOpen(false)}
-          onCreateNew={() => navigate('/projects/new')}
+          onCreateNew={openCreateProject}
+          onEditSelected={openEditProject}
+          onCopySelected={openCopyProject}
         />
       </Box>
     );
@@ -370,7 +463,7 @@ export function FullProjectsPage() {
           <Button
             variant="outlined"
             disabled={!project}
-            onClick={() => navigate(`/projects/${currentProjectId}`)}
+            onClick={() => project && openEditProject(project)}
           >
             Основные данные
           </Button>
@@ -378,7 +471,7 @@ export function FullProjectsPage() {
           <Button
             variant="outlined"
             disabled={!project}
-            onClick={() => window.alert('Характеристики — в разработке')}
+            onClick={() => setCharacteristicsOpen(true)}
           >
             Характеристики
           </Button>
@@ -414,16 +507,76 @@ export function FullProjectsPage() {
           ГЛАВНЫЕ ВКЛАДКИ: Прогнозирование / Оценка факта / Сравнение / Отчёты
          ═════════════════════════════════════════════════════════════════ */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Tabs
-          value={mainTab}
-          onChange={(_, value) => setMainTab(value)}
-          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            p: 1,
+            border: '1px solid #D5DDE5',
+            backgroundColor: '#EAF0F6',
+          }}
         >
-          <Tab label="Прогнозирование" value="forecast" />
-          <Tab label="Оценка факта" value="fact" />
-          <Tab label="Сравнение версий" value="compare" />
-          <Tab label="Отчёты" value="reports" />
-        </Tabs>
+          <Tabs
+            value={mainTab}
+            onChange={(_, value) => setMainTab(value)}
+            sx={{
+              '& .MuiTabs-indicator': { display: 'none' },
+            }}
+          >
+            <Tab
+              label="Прогнозирование"
+              value="forecast"
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#DCE5EE',
+                color: '#2C3E50',
+                '&.Mui-selected': {
+                  bgcolor: '#5D6D7E',
+                  color: '#FFFFFF',
+                },
+              }}
+            />
+            <Tab
+              label="Оценка факта"
+              value="fact"
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#DCE5EE',
+                color: '#2C3E50',
+                '&.Mui-selected': {
+                  bgcolor: '#5D6D7E',
+                  color: '#FFFFFF',
+                },
+              }}
+            />
+            <Tab
+              label="Сравнение версий"
+              value="compare"
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#DCE5EE',
+                color: '#2C3E50',
+                '&.Mui-selected': {
+                  bgcolor: '#5D6D7E',
+                  color: '#FFFFFF',
+                },
+              }}
+            />
+            <Tab
+              label="Отчёты"
+              value="reports"
+              sx={{
+                textTransform: 'none',
+                bgcolor: '#DCE5EE',
+                color: '#2C3E50',
+                '&.Mui-selected': {
+                  bgcolor: '#5D6D7E',
+                  color: '#FFFFFF',
+                },
+              }}
+            />
+          </Tabs>
+        </Paper>
 
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: ПРОГНОЗИРОВАНИЕ
@@ -1059,7 +1212,9 @@ export function FullProjectsPage() {
         projects={projects}
         onSelect={handleSelectProject}
         onClose={() => setSelectionDialogOpen(false)}
-        onCreateNew={() => navigate('/projects/new')}
+        onCreateNew={openCreateProject}
+        onEditSelected={openEditProject}
+        onCopySelected={openCopyProject}
       />
 
       <ParticipantsModal
@@ -1068,6 +1223,74 @@ export function FullProjectsPage() {
         onClose={() => setParticipantsOpen(false)}
         onSaved={() => void projectDataQuery.refetch()}
       />
+
+      <ProjectCharacteristicsDialog
+        open={characteristicsOpen}
+        projectId={currentProjectId}
+        onClose={() => setCharacteristicsOpen(false)}
+      />
+
+      <EditModal
+        open={projectModalOpen}
+        title={projectModalMode === 'edit' ? 'Основные данные проекта' : 'Создание проекта'}
+        onClose={() => setProjectModalOpen(false)}
+        onSubmit={handleSaveProject}
+        isSubmitting={projectSubmitting}
+        maxWidth="md"
+      >
+        <Stack spacing={2}>
+          <TextField
+            label="Код"
+            value={projectForm.code}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, code: e.target.value }))}
+            required
+            fullWidth
+          />
+          <TextField
+            label="Наименование"
+            value={projectForm.name}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, name: e.target.value }))}
+            required
+            fullWidth
+          />
+          <TextField
+            label="Номер работы"
+            value={projectForm.workNumber ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, workNumber: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            label="Номер договора"
+            value={projectForm.contractNumber ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, contractNumber: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            label="Заказчик"
+            value={projectForm.customer ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, customer: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            label="Подрядчик"
+            value={projectForm.contractor ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, contractor: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            label="ГИП"
+            value={projectForm.gip ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, gip: e.target.value }))}
+            fullWidth
+          />
+          <TextField
+            label="Статус работ"
+            value={projectForm.workStatus ?? ''}
+            onChange={(e) => setProjectForm((prev) => ({ ...prev, workStatus: e.target.value }))}
+            fullWidth
+          />
+        </Stack>
+      </EditModal>
     </Box>
   );
 }

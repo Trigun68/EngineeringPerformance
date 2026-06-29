@@ -40,8 +40,16 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         var pvTask = ctx2.ProjectPhysicalVolumes
             .AsNoTracking()
             .AsSplitQuery()
-            .Include(pv => pv.PhysicalVolume).ThenInclude(p => p!.Unit)
+            .Include(pv => pv.PhysicalVolumeKfo).ThenInclude(k => k!.Unit)
+            .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        var eqTask = ctx4.ProjectEquipments
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(e => e.Equipment).ThenInclude(e => e!.Unit)
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
             .ToListAsync();
 
         var laborTask = ctx3.ProjectLaborIntensities
@@ -53,18 +61,24 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
 
         var performanceTask = _performanceService.GetPerformanceDataAsync(projectId, versionId);
 
-        await Task.WhenAll(versionTask, pvTask, laborTask, performanceTask);
+        await Task.WhenAll(versionTask, pvTask, eqTask, laborTask, performanceTask);
 
         var version = versionTask.Result
             ?? throw new InvalidOperationException($"Version {versionId} not found for project {projectId}");
         var projectPhysicalVolumes = pvTask.Result;
+        var projectEquipments = eqTask.Result;
         var laborIntensities = laborTask.Result;
         var performanceData = performanceTask.Result;
 
         // Группировка ненулевых физ. объёмов по направлению (ClassifierId).
         var pvByDirection = projectPhysicalVolumes
-            .Where(pv => pv.PhysicalVolume?.ClassifierId.HasValue == true && pv.Quantity > 0m && pv.PhysicalVolume.IsAssessment == true)
-            .GroupBy(pv => pv.PhysicalVolume!.ClassifierId!.Value)
+            .Where(pv => pv.GetClassifierId().HasValue && pv.Quantity > 0m && pv.GetIsAssessment() == true)
+            .GroupBy(pv => pv.GetClassifierId()!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var eqByDirection = projectEquipments
+            .Where(eq => eq.Equipment?.ClassifierId.HasValue == true && eq.Quantity > 0m && eq.Equipment.IsAssessment == true)
+            .GroupBy(eq => eq.Equipment!.ClassifierId!.Value)
             .ToDictionary(g => g.Key, g => g.ToList());
 
         // Группировка трудоёмкости по направлению (WorkDirectionId).
@@ -93,6 +107,7 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 ZScore: r.ZScore,
                 Interpretation: r.Interpretation,
                 PhysicalVolumes: BuildPhysicalVolumes(pvByDirection, r.WorkDirectionId),
+                EquipmentVolumes: BuildEquipmentVolumes(eqByDirection, r.WorkDirectionId),
                 DirectionLaborIntensities: BuildDirectionLabor(laborByDirection, r.WorkDirectionId)))
             .ToList();
 
@@ -106,12 +121,23 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 ActualHours: li.ActualHours))
             .ToList();
 
+        var totalPlannedHours = laborIntensities.Sum(li => li.PlannedHours);
+        var unallocatedPlannedHours = laborIntensities
+            .Where(li => !li.WorkDirectionId.HasValue)
+            .Sum(li => li.PlannedHours);
+
+        var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
+            performanceData,
+            totalPlannedHours,
+            unallocatedPlannedHours);
+
         return new ProjectVersionAnalysisDto(
             ProjectName: version.Project.Name,
             ProjectCode: version.Project.Code,
             VersionName: version.VersionName,
             Directions: directions,
-            LaborIntensities: laborRows);
+            LaborIntensities: laborRows,
+            Summary: summary);
     }
 
     private static IReadOnlyList<ProjectVersionPhysicalVolumeDto> BuildPhysicalVolumes(
@@ -124,17 +150,41 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         return list
             .Select(pv =>
             {
-                var coeff = pv.PhysicalVolume?.Coefficient ?? 1m;
+                var coeff = pv.GetCoefficient();
                 return new ProjectVersionPhysicalVolumeDto(
-                    Code: pv.PhysicalVolume?.Code ?? string.Empty,
-                    Name: pv.PhysicalVolume?.Name ?? string.Empty,
-                    UnitName: pv.PhysicalVolume?.Unit?.Name,
+                    Code: pv.GetVolumeCode(),
+                    Name: pv.GetVolumeName(),
+                    UnitName: IicWorkDirectionDisplayUnit.ResolveProjectPhysicalVolumeUnitName(pv),
                     Quantity: pv.Quantity,
                     Coefficient: coeff,
                     Total: pv.Quantity * coeff);
             })
             .OrderBy(pv => pv.Code, StringComparer.Ordinal)
             .ThenBy(pv => pv.Name, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static IReadOnlyList<ProjectVersionPhysicalVolumeDto> BuildEquipmentVolumes(
+        IReadOnlyDictionary<int, List<ProjectEquipment>> eqByDirection,
+        int directionId)
+    {
+        if (!eqByDirection.TryGetValue(directionId, out var list))
+            return Array.Empty<ProjectVersionPhysicalVolumeDto>();
+
+        return list
+            .Select(eq =>
+            {
+                var coeff = eq.Equipment?.Coefficient ?? 1m;
+                return new ProjectVersionPhysicalVolumeDto(
+                    Code: eq.CatalogId ?? string.Empty,
+                    Name: eq.Equipment?.Name ?? eq.CatalogName ?? string.Empty,
+                    UnitName: eq.Equipment?.Unit?.Name,
+                    Quantity: eq.Quantity,
+                    Coefficient: coeff,
+                    Total: eq.QuantityInIicGroupUnits());
+            })
+            .OrderBy(eq => eq.Code, StringComparer.Ordinal)
+            .ThenBy(eq => eq.Name, StringComparer.Ordinal)
             .ToList();
     }
 

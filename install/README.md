@@ -37,6 +37,8 @@ cd <корень_репозитория>\migrations
 | `schema/006_Consolidated_20260415.sql` | Накопительный DDL (нормы ИИС, версии анализа, связи физ. объёмов, `DataImportIterations` и т.д.). |
 | `schema/007_PhysicalVolumeCoefficient.sql` | Столбец `PhysicalVolumes.Coefficient` (перевод количества в единицы группы физ. объёмов ИИС), запись в `__EFMigrationsHistory`. |
 
+> **Отставание от EF:** цепочка `FullMigration_01` подключает только `001`, `006`, `007` (+ отдельные `008`–`016` в каталоге `schema/`, но не все входят в master). Схема **оборудования**, **V2** (снимки версий, `ProjectPermissions`) и миграции после 2026-05 **отсутствуют** в sqlcmd-пайплайне. Для актуальной схемы используйте `dotnet ef database update` или `EngineeringPerformance.DbInitializer`. Подробнее: [docs/database/migration.md](../docs/database/migration.md#source-of-truth-and-legacy-drift-2026-06).
+
 ### Часть 2 — данные (`FullMigration_02_DataImport.sql`)
 
 | Файл | Назначение |

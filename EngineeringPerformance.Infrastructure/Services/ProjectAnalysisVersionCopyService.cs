@@ -25,9 +25,7 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(newVersionName))
-        {
             throw new ArgumentException("Имя новой версии обязательно.", nameof(newVersionName));
-        }
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
@@ -36,10 +34,8 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             .FirstOrDefaultAsync(v => v.Id == sourceVersionId, cancellationToken)
             ?? throw new InvalidOperationException($"ProjectAnalysisVersion with Id={sourceVersionId} not found.");
 
-        // Транзакция: либо вся структура копии создана, либо ничего.
         await using var tx = await context.Database.BeginTransactionAsync(cancellationToken);
 
-        // 1. Создаём саму версию.
         var copy = new ProjectAnalysisVersion
         {
             ProjectId = source.ProjectId,
@@ -53,7 +49,6 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
         context.ProjectAnalysisVersions.Add(copy);
         await context.SaveChangesAsync(cancellationToken);
 
-        // 2. ProjectPhysicalVolume — копируем всегда (Plan и Fact).
         var sourcePvs = await context.ProjectPhysicalVolumes
             .AsNoTracking()
             .Where(pv => pv.ProjectAnalysisVersionId == sourceVersionId)
@@ -65,7 +60,9 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             {
                 ProjectId = pv.ProjectId,
                 ProjectAnalysisVersionId = copy.Id,
-                PhysicalVolumeId = pv.PhysicalVolumeId,
+                PhysicalVolumeKfoId = pv.PhysicalVolumeKfoId,
+                PhysicalVolumeBerId = pv.PhysicalVolumeBerId,
+                ParentId = pv.ParentId,
                 Quantity = pv.Quantity,
                 FacilityCode = pv.FacilityCode,
                 FacilityName = pv.FacilityName,
@@ -88,7 +85,6 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             });
         }
 
-        // 3. ProjectLaborIntensity — только для Fact-версий (на Plan PLI бессмысленны).
         if (source.Direction == AnalysisDirection.Fact)
         {
             var sourceLis = await context.ProjectLaborIntensities
@@ -105,7 +101,9 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
                     DocumentationCode = li.DocumentationCode,
                     WorkDirectionId = li.WorkDirectionId,
                     LaborIntensityId = li.LaborIntensityId,
-                    PhysicalVolumeId = li.PhysicalVolumeId,
+                    PhysicalVolumeKfoId = li.PhysicalVolumeKfoId,
+                    PhysicalVolumeBerId = li.PhysicalVolumeBerId,
+                    ProjectPhysicalVolumeId = li.ProjectPhysicalVolumeId,
                     PlannedHours = li.PlannedHours,
                     ActualHours = li.ActualHours,
                     Notes = li.Notes,
@@ -116,10 +114,6 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             }
         }
 
-        // 4. DataImportIteration — копируем 1-в-1 (вариант «б» из ADR-обсуждения):
-        //    те же ImportedAt, SourceFileHash, SourceFileName, RecordCount, DataType, ImportedByUserId.
-        //    Цель: новая версия должна содержать буквальную аудит-историю источника, без подмены
-        //    меток времени и пользователя.
         var sourceIterations = await context.DataImportIterations
             .AsNoTracking()
             .Where(it => it.ProjectAnalysisVersionId == sourceVersionId)
@@ -141,11 +135,6 @@ public sealed class ProjectAnalysisVersionCopyService : IProjectAnalysisVersionC
             });
         }
 
-        // AnalysisVersionSnapshot не копируем у source, но генерируем новый по актуальным нормам IIC
-        // на момент copy.CreatedAt. Без этого PerformanceService не находит нормы и расчёт пуст
-        // (см. ISS-004 «Известный дефект 2026-05-10»). Логика дублирует
-        // ProjectAnalysisVersionDirectoryService.PopulateSnapshotInternalAsync — один SaveChanges
-        // и одна транзакция атомарнее, чем делегирование в directory-сервис.
         var activeNorms = await context.IicWorkDirectionNorms
             .AsNoTracking()
             .Where(n => n.EffectiveFrom <= copy.CreatedAt

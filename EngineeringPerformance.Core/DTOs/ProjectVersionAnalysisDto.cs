@@ -11,7 +11,22 @@ public sealed record ProjectVersionAnalysisDto(
     string? ProjectCode,
     string VersionName,
     IReadOnlyList<ProjectVersionDirectionDto> Directions,
-    IReadOnlyList<ProjectVersionLaborIntensityDto> LaborIntensities);
+    IReadOnlyList<ProjectVersionLaborIntensityDto> LaborIntensities,
+    ProjectVersionAnalysisSummaryDto Summary);
+
+/// <summary>Итоговые показатели отчёта «Анализ версии проекта».</summary>
+public sealed record ProjectVersionAnalysisSummaryDto(
+    decimal? TotalFactLaborHours,
+    decimal? WeightedZScore,
+    string WeightedZScorePercentile,
+    PerformanceInterpretation? WeightedZScoreInterpretation,
+    IReadOnlyList<PhysicalVolumeTotalByUnitDto> PhysicalVolumeTotalsByUnit,
+    decimal? UnallocatedLaborHours);
+
+/// <summary>Сумма физ. объёма по одной единице измерения (без смешивания разных ед.).</summary>
+public sealed record PhysicalVolumeTotalByUnitDto(
+    string UnitName,
+    decimal TotalVolume);
 
 /// <summary>
 /// Узел иерархии IIC c показателями производительности и списком ненулевых физ. объёмов проекта.
@@ -33,6 +48,7 @@ public sealed record ProjectVersionDirectionDto(
     decimal? ZScore,
     PerformanceInterpretation? Interpretation,
     IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes,
+    IReadOnlyList<ProjectVersionPhysicalVolumeDto> EquipmentVolumes,
     IReadOnlyList<ProjectVersionDirectionLaborDto> DirectionLaborIntensities);
 
 /// <summary>Запись трудоёмкости проекта, привязанная к конкретному направлению IIC.</summary>

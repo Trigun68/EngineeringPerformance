@@ -1,0 +1,113 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ep-redis
+    ports:
+      - "127.0.0.1:6381:6379"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ep-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required}
+    ports:
+      - "127.0.0.1:1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    networks:
+      - internal
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$${MSSQL_SA_PASSWORD}" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  db-init:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: ep-db-init
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required}
+      SQL_HOST: sqlserver
+    volumes:
+      - ./migrations:/migrations:ro
+      - ./scripts/docker-db-init.sh:/init.sh:ro
+    entrypoint: ["/bin/bash", "/init.sh"]
+    networks:
+      - internal
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      network: host
+    container_name: ep-backend
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=EngineeringPerformance;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;"
+      ConnectionStrings__Redis: "redis:6379"  # Внутри сети Docker порт всегда 6379
+      Jwt__Secret: ${JWT_SECRET:?JWT_SECRET is required}
+      Jwt__Issuer: ${JWT_ISSUER:-EngineeringPerformance}
+      Jwt__Audience: ${JWT_AUDIENCE:-EngineeringPerformance}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-60}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      Spnego__Enabled: ${SPNEGO_ENABLED:-false}
+      Spnego__TrustedProxySecret: ${PROXY_TRUSTED_SECRET:-}
+      DevWindowsAuth__SimulatedWindowsUser: ${DEV_WINDOWS_USER:-}
+      AllowedHosts: ${ALLOWED_HOSTS:-localhost;127.0.0.1;eng-perf.tech-lab24.ru}
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN_0:-https://eng-perf.tech-lab24.ru}
+      Cors__AllowedOrigins__1: ${CORS_ORIGIN_1:-http://127.0.0.1:8081}
+    expose:
+      - "8080"
+    networks:
+      - internal
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: ep-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${WEB_PORT:-80}:80"
+    networks:
+      internal: null
+      tech-lab24-edge:
+        aliases:
+          - ep-web
+          - web
+    # DNS через WireGuard туннель (auto-restore 01ae5d07-9604)
+    dns:
+      - 127.0.0.11
+      - 1.1.1.1
+      - 8.8.8.8
+
+volumes:
+  mssql_data:
+
+networks:
+  internal:
+    driver: bridge
+  tech-lab24-edge:
+    external: true

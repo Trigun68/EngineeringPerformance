@@ -260,7 +260,8 @@ public partial class App : Application
     {
         try
         {
-            var pvCache = _host!.Services.GetRequiredService<IDirectoryCache<PhysicalVolume>>();
+            var pvKfoCache = _host!.Services.GetRequiredService<IDirectoryCache<PhysicalVolumeKfo>>();
+            var pvBerCache = _host.Services.GetRequiredService<IDirectoryCache<PhysicalVolumeBer>>();
             var equipmentCache = _host.Services.GetRequiredService<IDirectoryCache<Equipment>>();
             var pvTypeCache = _host.Services.GetRequiredService<IDirectoryCache<PhysicalVolumeType>>();
             var classifierCache = _host.Services.GetRequiredService<IDirectoryCache<IicWorkDirection>>();
@@ -270,7 +271,8 @@ public partial class App : Application
                 pvTypeCache.GetAllAsync(),
                 classifierCache.GetAllAsync(),
                 unitCache.GetAllAsync(),
-                pvCache.GetAllAsync(),
+                pvKfoCache.GetAllAsync(),
+                pvBerCache.GetAllAsync(),
                 equipmentCache.GetAllAsync());
         }
         catch (Exception ex)
@@ -300,9 +302,11 @@ public partial class App : Application
         services.AddSingleton<IDirectoryService<User>, UserDirectoryService>();
         services.AddSingleton<IDirectoryService<Role>, RoleDirectoryService>();
         services.AddSingleton<IDirectoryService<Project>, ProjectDirectoryService>();
-        services.AddSingleton<PhysicalVolumeDirectoryService>();
-        services.AddSingleton<IDirectoryService<PhysicalVolume>>(sp => sp.GetRequiredService<PhysicalVolumeDirectoryService>());
-        services.AddSingleton<IPhysicalVolumeLookupService>(sp => sp.GetRequiredService<PhysicalVolumeDirectoryService>());
+        services.AddSingleton<PhysicalVolumeKfoDirectoryService>();
+        services.AddSingleton<IDirectoryService<PhysicalVolumeKfo>>(sp => sp.GetRequiredService<PhysicalVolumeKfoDirectoryService>());
+        services.AddSingleton<PhysicalVolumeBerDirectoryService>();
+        services.AddSingleton<IDirectoryService<PhysicalVolumeBer>>(sp => sp.GetRequiredService<PhysicalVolumeBerDirectoryService>());
+        services.AddSingleton<IPhysicalVolumeLookupService>(sp => sp.GetRequiredService<PhysicalVolumeKfoDirectoryService>());
         services.AddSingleton<EquipmentDirectoryService>();
         services.AddSingleton<IDirectoryService<Equipment>>(sp => sp.GetRequiredService<EquipmentDirectoryService>());
         services.AddSingleton<IicWorkDirectionDirectoryService>();
@@ -331,8 +335,12 @@ public partial class App : Application
         services.AddSingleton<IicWorkDirectionNormService>();
         services.AddSingleton<IRegisterService<IicWorkDirectionNorm>>(sp => sp.GetRequiredService<IicWorkDirectionNormService>());
         services.AddSingleton<IDateFilteredRegisterService<IicWorkDirectionNorm>>(sp => sp.GetRequiredService<IicWorkDirectionNormService>());
+        services.AddSingleton<IIicWorkDirectionNormQueryService>(sp => sp.GetRequiredService<IicWorkDirectionNormService>());
+        services.AddSingleton<ProjectVersionGridDataService>();
         services.AddSingleton<ProjectPhysicalVolumeService>();
         services.AddSingleton<IDataTableService<ProjectPhysicalVolume>>(sp => sp.GetRequiredService<ProjectPhysicalVolumeService>());
+        services.AddSingleton<ProjectEquipmentService>();
+        services.AddSingleton<IDataTableService<ProjectEquipment>>(sp => sp.GetRequiredService<ProjectEquipmentService>());
         services.AddSingleton<ProjectLaborIntensityService>();
         services.AddSingleton<IDataTableService<ProjectLaborIntensity>>(sp => sp.GetRequiredService<ProjectLaborIntensityService>());
         services.AddSingleton<IPerformanceService, PerformanceService>();
@@ -371,11 +379,16 @@ public partial class App : Application
         services.AddTransient<ProjectParticipantsDialogViewModel>();
         services.AddTransient<ProjectParticipantsDialog>();
         services.AddSingleton<IProjectParticipantsDialogService, ProjectParticipantsDialogService>();
-        services.AddSingleton<PhysicalVolumesViewModel>();
-        services.AddTransient<PhysicalVolumesWindow>();
-        services.AddTransient<PhysicalVolumeEditViewModel>();
-        services.AddTransient<PhysicalVolumeEditWindow>();
-        services.AddSingleton<IPhysicalVolumeEditDialogService, PhysicalVolumeEditDialogService>();
+        services.AddSingleton<PhysicalVolumesKfoViewModel>();
+        services.AddTransient<PhysicalVolumesKfoWindow>();
+        services.AddSingleton<PhysicalVolumesBerViewModel>();
+        services.AddTransient<PhysicalVolumesBerWindow>();
+        services.AddTransient<PhysicalVolumeKfoEditViewModel>();
+        services.AddTransient<PhysicalVolumeKfoEditWindow>();
+        services.AddTransient<PhysicalVolumeBerEditViewModel>();
+        services.AddTransient<PhysicalVolumeBerEditWindow>();
+        services.AddSingleton<IPhysicalVolumeKfoEditDialogService, PhysicalVolumeKfoEditDialogService>();
+        services.AddSingleton<IPhysicalVolumeBerEditDialogService, PhysicalVolumeBerEditDialogService>();
         services.AddSingleton<EquipmentsViewModel>();
         services.AddTransient<EquipmentsWindow>();
         services.AddTransient<EquipmentEditViewModel>();
@@ -502,6 +515,11 @@ public partial class App : Application
         services.AddTransient<ProjectPhysicalVolumeCreateViewModel>();
         services.AddTransient<ProjectPhysicalVolumeCreateDialog>();
         services.AddSingleton<IProjectPhysicalVolumeCreateDialogService, ProjectPhysicalVolumeCreateDialogService>();
+        services.AddTransient<ProjectEquipmentQuickEditViewModel>();
+        services.AddTransient<ProjectEquipmentQuickEditDialog>();
+        services.AddTransient<ProjectEquipmentCreateViewModel>();
+        services.AddTransient<ProjectEquipmentCreateDialog>();
+        services.AddSingleton<IProjectEquipmentCreateDialogService, ProjectEquipmentCreateDialogService>();
     }
 
     private static void ConfigureSerilog()

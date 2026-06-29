@@ -142,20 +142,26 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("CatalogKeyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<int?>("ClassifierId")
                         .HasColumnType("int");
 
-                    b.Property<decimal?>("Coefficient")
+                    b.Property<decimal>("Coefficient")
+                        .ValueGeneratedOnAdd()
                         .HasPrecision(18, 4)
-                        .HasColumnType("decimal(18,4)");
+                        .HasColumnType("decimal(18,4)")
+                        .HasDefaultValue(1m);
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsArchived")
                         .HasColumnType("bit");
@@ -168,8 +174,7 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("ParentId")
                         .HasColumnType("int");
@@ -177,7 +182,13 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                     b.Property<int>("SortOrder")
                         .HasColumnType("int");
 
+                    b.Property<int?>("UnitId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("CatalogKeyHash")
+                        .IsUnique();
 
                     b.HasIndex("ClassifierId");
 
@@ -185,9 +196,9 @@ namespace EngineeringPerformance.Infrastructure.Migrations
 
                     b.HasIndex("IsAssessment");
 
-                    b.HasIndex("Name");
-
                     b.HasIndex("ParentId");
+
+                    b.HasIndex("UnitId");
 
                     b.HasIndex("IsArchived", "ParentId", "SortOrder");
 
@@ -762,15 +773,13 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("CatalogName")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("DiagramNumber")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DocumentSet")
                         .HasMaxLength(100)
@@ -780,16 +789,14 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("EstimationBasis")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FacilityCode")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("FacilityName")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FullEquipmentId")
                         .HasMaxLength(100)
@@ -799,8 +806,7 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("OlReference")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PositionNumber")
                         .HasMaxLength(50)
@@ -821,20 +827,17 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasColumnType("decimal(18,4)");
 
                     b.Property<string>("ShortName")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SupplyStandard")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Tag")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("TypeMark")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -1359,9 +1362,16 @@ namespace EngineeringPerformance.Infrastructure.Migrations
                         .HasForeignKey("ParentId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("EngineeringPerformance.Infrastructure.Data.UnitOfMeasurement", "Unit")
+                        .WithMany()
+                        .HasForeignKey("UnitId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Classifier");
 
                     b.Navigation("Parent");
+
+                    b.Navigation("Unit");
                 });
 
             modelBuilder.Entity("EngineeringPerformance.Infrastructure.Data.IicWorkDirection", b =>

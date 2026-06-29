@@ -11,7 +11,6 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
 
         builder.HasKey(li => li.Id);
 
-        // Должно совпадать с миграцией ExpandLaborDocumentationCodeTo450 (импорт TF, длинные составные коды).
         builder.Property(li => li.DocumentationCode)
             .IsRequired()
             .HasMaxLength(450);
@@ -48,23 +47,25 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
             .HasForeignKey(li => li.LaborIntensityId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // V2-D: явный FK на PhysicalVolume с ON DELETE SET NULL.
-        // Без явной конфигурации EF создавал shadow-свойство и оставлял
-        // delete-rule = NO_ACTION (ClientSetNull) — тогда удаление PhysicalVolume
-        // падало бы с FK-conflict, а не сохраняло историю с обнулённой привязкой.
-        builder.HasOne(li => li.PhysicalVolume)
+        builder.HasOne(li => li.PhysicalVolumeKfo)
             .WithMany(pv => pv.LaborIntensities)
-            .HasForeignKey(li => li.PhysicalVolumeId)
+            .HasForeignKey(li => li.PhysicalVolumeKfoId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        builder.HasOne(li => li.PhysicalVolumeBer)
+            .WithMany(pv => pv.LaborIntensities)
+            .HasForeignKey(li => li.PhysicalVolumeBerId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(li => li.ProjectPhysicalVolume)
+            .WithMany()
+            .HasForeignKey(li => li.ProjectPhysicalVolumeId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(li => li.Brand);
-
         builder.HasIndex(li => li.LaborIntensityId);
-
-        builder.HasIndex(li => li.PhysicalVolumeId);
-
-        builder.HasIndex(li => new { li.ProjectAnalysisVersionId, li.ProjectId, li.DocumentationCode, li.WorkDirectionId })
-            .IsUnique()
-            .HasFilter("[WorkDirectionId] IS NOT NULL");
+        builder.HasIndex(li => li.PhysicalVolumeKfoId);
+        builder.HasIndex(li => li.PhysicalVolumeBerId);
+        builder.HasIndex(li => new { li.ProjectAnalysisVersionId, li.ProjectId });
     }
 }

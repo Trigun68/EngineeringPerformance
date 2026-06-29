@@ -24,7 +24,19 @@ public sealed class IicWorkDirectionNormService : IIicNormService
             .ThenByDescending(n => n.EffectiveFrom)
             .ToListAsync(cancellationToken);
 
-        return items.Select(Map).ToList();
+        // На дату должен возвращаться один актуальный набор норм на направление.
+        // Если в данных есть исторические пересечения, берём самую позднюю запись.
+        var latestByDirection = items
+            .GroupBy(x => x.WorkDirectionId)
+            .Select(g => g
+                .OrderByDescending(x => x.EffectiveFrom)
+                .ThenByDescending(x => x.Id)
+                .First())
+            .OrderBy(x => x.WorkDirection?.SortOrder ?? int.MaxValue)
+            .ThenBy(x => x.WorkDirection?.Name)
+            .ToList();
+
+        return latestByDirection.Select(Map).ToList();
     }
 
     public async Task<IReadOnlyList<IicNormDto>> GetHistoryAsync(int workDirectionId, CancellationToken cancellationToken = default)

@@ -4,17 +4,22 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
+using EngineeringPerformance.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.App.ViewModels;
 
 public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObject
 {
     private readonly IDataTableService<ProjectPhysicalVolume> _service;
-    private readonly IDirectoryCache<PhysicalVolume> _pvCache;
+    private readonly IDirectoryCache<PhysicalVolumeKfo> _kfoCache;
+    private readonly IDirectoryCache<PhysicalVolumeBer> _berCache;
+    private readonly IDbContextFactory<AppDbContext> _contextFactory;
 
     private int _projectId;
     private int _versionId;
     private bool _forCopy;
+    private bool _isKfo = true;
 
     [ObservableProperty] private string _windowTitle = "Добавить строку";
     [ObservableProperty] private bool _isLoading = true;
@@ -39,10 +44,14 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
 
     public ProjectPhysicalVolumeCreateViewModel(
         IDataTableService<ProjectPhysicalVolume> service,
-        IDirectoryCache<PhysicalVolume> pvCache)
+        IDirectoryCache<PhysicalVolumeKfo> kfoCache,
+        IDirectoryCache<PhysicalVolumeBer> berCache,
+        IDbContextFactory<AppDbContext> contextFactory)
     {
         _service = service;
-        _pvCache = pvCache;
+        _kfoCache = kfoCache;
+        _berCache = berCache;
+        _contextFactory = contextFactory;
     }
 
     public void Prepare(bool forCopy, DetailForecastItem? source, int projectId, int versionId)
@@ -125,8 +134,19 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
     {
         try
         {
-            var all = await _pvCache.GetAllAsync();
-            BuildPhysicalVolumeDisplayItems(all);
+            await using var context = await _contextFactory.CreateDbContextAsync();
+            _isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, _versionId);
+
+            if (_isKfo)
+            {
+                var all = await _kfoCache.GetAllAsync();
+                BuildPhysicalVolumeDisplayItems(all.Select(v => (v.Id, v.Code, v.Name, v.ParentId, v.IsArchived)).ToList());
+            }
+            else
+            {
+                var all = await _berCache.GetAllAsync();
+                BuildPhysicalVolumeDisplayItems(all.Select(v => (v.Id, v.Code, v.Name, v.ParentId, v.IsArchived)).ToList());
+            }
         }
         finally
         {
@@ -134,7 +154,7 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
         }
     }
 
-    private void BuildPhysicalVolumeDisplayItems(IReadOnlyList<PhysicalVolume> volumes)
+    private void BuildPhysicalVolumeDisplayItems(IReadOnlyList<(int Id, string Code, string Name, int? ParentId, bool IsArchived)> volumes)
     {
         PhysicalVolumeDisplayItems.Clear();
 
@@ -148,7 +168,11 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
             Append(root, byParent, 0, visited);
     }
 
-    private void Append(PhysicalVolume item, ILookup<int?, PhysicalVolume> byParent, int depth, HashSet<int> visited)
+    private void Append(
+        (int Id, string Code, string Name, int? ParentId, bool IsArchived) item,
+        ILookup<int?, (int Id, string Code, string Name, int? ParentId, bool IsArchived)> byParent,
+        int depth,
+        HashSet<int> visited)
     {
         if (!visited.Add(item.Id)) return;
         PhysicalVolumeDisplayItems.Add(new PhysicalVolumeDisplayItem
@@ -180,7 +204,6 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
             {
                 ProjectId = _projectId,
                 ProjectAnalysisVersionId = _versionId,
-                PhysicalVolumeId = pvId,
                 Quantity = Quantity,
                 FacilityCode = FacilityCode,
                 FacilityName = FacilityName,
@@ -193,15 +216,12 @@ public sealed partial class ProjectPhysicalVolumeCreateViewModel : ObservableObj
                 WorkComment = WorkComment,
                 EstimationBasis = EstimationBasis,
             };
+            PhysicalVolumeCatalogBinding.AssignCatalogId(entity, pvId, _isKfo);
             await _service.CreateAsync(entity);
             CloseDialog(true);
         }
         catch (Exception ex) when (IsUniqueViolation(ex))
         {
-            // На версию проекта допускается только одна строка ProjectPhysicalVolume
-            // для каждой комбинации (номенклатура ФО × код объекта × наименование объекта × ID работы).
-            // Уникальный индекс ProjectAnalysisVersionId+ProjectId+PhysicalVolumeId+FacilityCode+FacilityName+WorkId
-            // (см. ADR-003). При копировании пользователь должен сменить хотя бы одно из этих полей.
             ErrorMessage = "Строка с такой комбинацией «номенклатура ФО + код/наименование объекта + ID работы» " +
                            "в данной версии проекта уже существует. Измените номенклатуру в выпадающем списке " +
                            "либо отредактируйте поля «Код объекта», «Наименование объекта» или «ID работы».";
