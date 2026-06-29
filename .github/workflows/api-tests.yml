@@ -1,0 +1,54 @@
+name: API Tests
+
+on:
+  push:
+    branches: [main, feat/*, fix/*]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/api-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
+      EP_TEST_CONNECTION: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
+      Jwt__Secret: test-jwt-secret-minimum-32-characters-long
+      Jwt__Issuer: EngineeringPerformance
+      Jwt__Audience: EngineeringPerformance
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start SQL + Redis + DB init
+        run: |
+          cp .env.example .env
+          echo "SQL_SA_PASSWORD=Test_SA_password1!" >> .env
+          echo "JWT_SECRET=test-jwt-secret-minimum-32-characters-long" >> .env
+          echo "WEB_PORT=8081" >> .env
+          docker compose up -d sqlserver redis db-init --wait
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        working-directory: backend
+        run: dotnet restore EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.Tests.csproj
+
+      - name: Run API integration tests
+        working-directory: backend
+        run: dotnet test EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.Tests.csproj --verbosity minimal
+
+      - name: Run infrastructure unit tests
+        working-directory: backend
+        run: dotnet test EngineeringPerformance.Infrastructure.Tests/EngineeringPerformance.Infrastructure.Tests.csproj --verbosity minimal
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

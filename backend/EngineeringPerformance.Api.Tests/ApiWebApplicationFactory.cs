@@ -11,11 +11,14 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
         builder.UseEnvironment("Development");
         builder.ConfigureAppConfiguration((_, config) =>
         {
+            var explicitConnection =
+                Environment.GetEnvironmentVariable("EP_TEST_CONNECTION")
+                ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] =
-                    Environment.GetEnvironmentVariable("EP_TEST_CONNECTION")
-                    ?? BuildDefaultConnectionString(),
+                    explicitConnection ?? BuildDefaultConnectionString(),
                 ["Jwt:Secret"] = "dev-jwt-secret-change-in-production-32chars",
                 ["Jwt:ExpirationMinutes"] = "60",
             });
@@ -24,7 +27,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
 
     private static string BuildDefaultConnectionString()
     {
-        const string password = "Your_strong_SA_password1!";
+        var password = Environment.GetEnvironmentVariable("SQL_SA_PASSWORD")
+            ?? "Your_strong_SA_password1!";
         var servers = new[] { "127.0.0.1,1433", "host.docker.internal,1433", "localhost,1433" };
         foreach (var server in servers)
         {

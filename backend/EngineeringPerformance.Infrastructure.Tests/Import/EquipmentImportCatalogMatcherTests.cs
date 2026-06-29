@@ -35,9 +35,9 @@ public sealed class EquipmentImportCatalogMatcherTests
         var (lookup, ambiguous, duplicateCount) = EquipmentImportCatalogMatcher.BuildCatalogLookup(rows);
 
         lookup.Should().HaveCount(3);
-        lookup.Should().ContainKey(("Pump A", 1));
-        lookup.Should().ContainKey(("Pump B", 1));
-        lookup.Should().ContainKey(("Pump A", 2));
+        lookup.Should().ContainKey(EquipmentImportCatalogMatcher.CreateKey("Pump A", 1));
+        lookup.Should().ContainKey(EquipmentImportCatalogMatcher.CreateKey("Pump B", 1));
+        lookup.Should().ContainKey(EquipmentImportCatalogMatcher.CreateKey("Pump A", 2));
         ambiguous.Should().BeEmpty();
         duplicateCount.Should().Be(0);
     }
@@ -55,21 +55,21 @@ public sealed class EquipmentImportCatalogMatcherTests
         var (lookup, ambiguous, duplicateCount) = EquipmentImportCatalogMatcher.BuildCatalogLookup(rows);
 
         duplicateCount.Should().Be(1);
-        ambiguous.Should().Contain(("Pump A", 1));
-        lookup.Should().ContainKey(("Pump B", 1));
+        ambiguous.Should().Contain(EquipmentImportCatalogMatcher.CreateKey("Pump A", 1));
+        lookup.Should().ContainKey(EquipmentImportCatalogMatcher.CreateKey("Pump B", 1));
     }
 
     [Fact]
     public void ResolveOrCreate_ExistingKey_ReturnsExistingEquipment()
     {
         var equipment = new Equipment { Id = 1, Name = "Pump A", UnitId = 1 };
-        var lookup = new Dictionary<(string Name, int? UnitId), Equipment>
+        var lookup = new Dictionary<EquipmentImportCatalogMatcher.EquipmentCatalogKey, Equipment>
         {
-            [("Pump A", 1)] = equipment
+            [EquipmentImportCatalogMatcher.CreateKey("Pump A", 1)] = equipment
         };
 
         var result = EquipmentImportCatalogMatcher.ResolveOrCreate(
-            "Pump A", 1, lookup, new HashSet<(string, int?)>(), new List<Equipment>());
+            "Pump A", 1, lookup, new HashSet<EquipmentImportCatalogMatcher.EquipmentCatalogKey>(), new List<Equipment>());
 
         result.Equipment.Should().Be(equipment);
         result.Created.Should().BeFalse();
@@ -79,11 +79,11 @@ public sealed class EquipmentImportCatalogMatcherTests
     [Fact]
     public void ResolveOrCreate_NewKey_CreatesNewEquipment()
     {
-        var lookup = new Dictionary<(string Name, int? UnitId), Equipment>();
+        var lookup = new Dictionary<EquipmentImportCatalogMatcher.EquipmentCatalogKey, Equipment>();
         var pending = new List<Equipment>();
 
         var result = EquipmentImportCatalogMatcher.ResolveOrCreate(
-            "Pump B", 2, lookup, new HashSet<(string, int?)>(), pending);
+            "Pump B", 2, lookup, new HashSet<EquipmentImportCatalogMatcher.EquipmentCatalogKey>(), pending);
 
         result.Created.Should().BeTrue();
         result.SkippedDuplicate.Should().BeFalse();
@@ -95,8 +95,11 @@ public sealed class EquipmentImportCatalogMatcherTests
     [Fact]
     public void ResolveOrCreate_AmbiguousKey_ReturnsSkipped()
     {
-        var lookup = new Dictionary<(string Name, int? UnitId), Equipment>();
-        var ambiguous = new HashSet<(string, int?)> { ("Pump C", 1) };
+        var lookup = new Dictionary<EquipmentImportCatalogMatcher.EquipmentCatalogKey, Equipment>();
+        var ambiguous = new HashSet<EquipmentImportCatalogMatcher.EquipmentCatalogKey>
+        {
+            EquipmentImportCatalogMatcher.CreateKey("Pump C", 1)
+        };
         var pending = new List<Equipment>();
 
         var result = EquipmentImportCatalogMatcher.ResolveOrCreate(

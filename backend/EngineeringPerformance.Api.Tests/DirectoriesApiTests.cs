@@ -49,7 +49,7 @@ public sealed class DirectoriesApiTests : IClassFixture<ApiWebApplicationFactory
     {
         if (!_sqlAvailable) return;
 
-        var treeResponse = await _client.GetAsync("/api/directories/physical-volumes/tree");
+        var treeResponse = await _client.GetAsync("/api/directories/physical-volumes-kfo/tree");
         treeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var tree = await treeResponse.Content.ReadFromJsonAsync<JsonElement>();
         tree.ValueKind.Should().Be(JsonValueKind.Array);
@@ -61,13 +61,13 @@ public sealed class DirectoriesApiTests : IClassFixture<ApiWebApplicationFactory
             props.TryGetProperty("Code", out _).Should().BeFalse("properties must not use PascalCase keys");
         }
 
-        var childrenResponse = await _client.GetAsync("/api/directories/physical-volumes/children?parentId=1");
+        var childrenResponse = await _client.GetAsync("/api/directories/physical-volumes-kfo/children?parentId=1");
         childrenResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
     }
 
     [Theory]
-    [InlineData("physical-volume-types")]
-    [InlineData("physical-volumes")]
+    [InlineData("physical-volumes-kfo")]
+    [InlineData("physical-volumes-ber")]
     [InlineData("equipment")]
     [InlineData("labor-intensities")]
     [InlineData("iic-work-directions")]

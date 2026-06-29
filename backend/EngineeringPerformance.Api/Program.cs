@@ -2,9 +2,11 @@ using System.Threading.RateLimiting;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
 using EngineeringPerformance.Api.Middleware;
+using EngineeringPerformance.Application.Validators;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Auth;
 using EngineeringPerformance.Infrastructure.Logging;
+using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -14,7 +16,7 @@ using CorsOptions = EngineeringPerformance.Api.Configuration.CorsOptions;
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
-    .CreateBootstrapLogger();
+    .CreateLogger();
 
 try
 {
@@ -34,7 +36,7 @@ try
 
     // FluentValidation: авто-регистрация валидаторов из Assembly (S1-01)
     builder.Services.AddFluentValidationAutoValidation();
-    builder.Services.AddValidatorsFromAssemblyContaining<Application.Validators.DirectoryWriteRequestValidator>();
+    builder.Services.AddValidatorsFromAssemblyContaining<DirectoryWriteRequestValidator>();
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();

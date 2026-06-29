@@ -20,18 +20,18 @@ public sealed class AuditLoggingApiTests : IClassFixture<ApiWebApplicationFactor
         if (!_sqlAvailable)
             return;
 
-        using var client = new HttpClient { BaseAddress = _client.BaseAddress };
-        var loginResponse = await client.PostAsJsonAsync(
+        var loginResponse = await _client.PostAsJsonAsync(
             "/api/auth/login",
             new { username = "admin", password = "admin" });
         Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
 
-        var logsResponse = await client.GetAsync("/api/audit/user-actions?actionType=Login&take=5");
+        var logsResponse = await _client.GetAsync("/api/audit/user-actions?actionType=Login&take=5");
         Assert.Equal(HttpStatusCode.OK, logsResponse.StatusCode);
 
         var logs = await logsResponse.Content.ReadFromJsonAsync<List<AuditLogItem>>();
         Assert.NotNull(logs);
-        Assert.Contains(logs!, l => l.UserName == "admin" && l.Description.Contains("Manual login"));
+        var nonNullLogs = logs!;
+        Assert.Contains(nonNullLogs, l => l.UserName == "admin" && (l.Description?.Contains("Manual login") ?? false));
     }
 
     private sealed record AuditLogItem(
