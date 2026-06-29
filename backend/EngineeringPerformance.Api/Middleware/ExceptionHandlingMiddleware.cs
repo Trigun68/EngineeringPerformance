@@ -1,4 +1,5 @@
 using System.Text.Json;
+using FluentValidation;
 
 namespace EngineeringPerformance.Api.Middleware;
 
@@ -37,13 +38,51 @@ public sealed class ExceptionHandlingMiddleware
     {
         context.Items["ExceptionType"] = exception.GetType().Name;
 
-        var (status, title) = exception switch
+        var (status, title, detail, errorCode, errors) = exception switch
         {
-            KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found."),
-            UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Access denied."),
-            ArgumentException => (StatusCodes.Status400BadRequest, exception.Message),
-            InvalidOperationException => (StatusCodes.Status400BadRequest, exception.Message),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred.")
+            ValidationException validationException => (
+                StatusCodes.Status400BadRequest,
+                "Validation failed.",
+                "One or more validation errors occurred.",
+                "validation_failed",
+                validationException.Errors
+                    .GroupBy(e => string.IsNullOrWhiteSpace(e.PropertyName) ? "body" : NormalizePropertyName(e.PropertyName))
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g
+                            .Select(e => string.IsNullOrWhiteSpace(e.ErrorMessage) ? "Invalid value." : e.ErrorMessage)
+                            .Distinct(StringComparer.Ordinal)
+                            .ToArray())),
+            KeyNotFoundException => (
+                StatusCodes.Status404NotFound,
+                "Resource not found.",
+                exception.Message,
+                "not_found",
+                null),
+            UnauthorizedAccessException => (
+                StatusCodes.Status403Forbidden,
+                "Access denied.",
+                exception.Message,
+                "forbidden",
+                null),
+            ArgumentException => (
+                StatusCodes.Status400BadRequest,
+                "Invalid request.",
+                exception.Message,
+                "invalid_request",
+                null),
+            InvalidOperationException => (
+                StatusCodes.Status400BadRequest,
+                "Invalid operation.",
+                exception.Message,
+                "invalid_operation",
+                null),
+            _ => (
+                StatusCodes.Status500InternalServerError,
+                "An unexpected error occurred.",
+                _environment.IsDevelopment() ? exception.ToString() : null,
+                "internal_error",
+                null)
         };
 
         if (status >= 500)
@@ -54,19 +93,43 @@ public sealed class ExceptionHandlingMiddleware
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/problem+json";
 
-        var detail = _environment.IsDevelopment() && status >= 500
-            ? exception.ToString()
-            : exception.Message;
-
-        var problem = new
+        var problem = new Dictionary<string, object?>
         {
-            type = $"https://httpstatuses.com/{status}",
-            title,
-            status,
-            detail = status >= 500 && !_environment.IsDevelopment() ? null : detail,
-            traceId = context.TraceIdentifier,
+            ["type"] = status == StatusCodes.Status400BadRequest && errorCode == "validation_failed"
+                ? "https://engineering-performance.dev/problems/validation"
+                : $"https://httpstatuses.com/{status}",
+            ["title"] = title,
+            ["status"] = status,
+            ["detail"] = detail,
+            ["traceId"] = context.TraceIdentifier,
+            ["errorCode"] = errorCode,
         };
 
+        if (errors is not null && errors.Count > 0)
+            problem["errors"] = errors;
+
         await context.Response.WriteAsync(JsonSerializer.Serialize(problem));
+    }
+
+    private static string NormalizePropertyName(string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(propertyName))
+            return "body";
+
+        var parts = propertyName.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+            return "body";
+
+        return string.Join('.', parts.Select(ToCamelCase));
+    }
+
+    private static string ToCamelCase(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return value;
+
+        return char.IsLower(value[0])
+            ? value
+            : char.ToLowerInvariant(value[0]) + value[1..];
     }
 }

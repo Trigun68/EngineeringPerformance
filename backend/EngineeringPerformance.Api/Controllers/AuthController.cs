@@ -62,9 +62,6 @@ public sealed class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
-            return BadRequest("Username and password are required.");
-
         var user = await FindUserForLoginAsync(request.Username, cancellationToken);
 
         if (user is null || string.IsNullOrEmpty(user.PasswordHash))

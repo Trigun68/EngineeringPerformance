@@ -36,7 +36,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
             {
                 versionName = $"snapshot-test-{suffix}",
                 description = "snapshot api test",
-                direction = 0,
+                direction = 1,
                 physicalVolumeTypeId = (int?)null,
             });
 

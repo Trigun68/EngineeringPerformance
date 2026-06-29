@@ -2,6 +2,7 @@ using System.Threading.RateLimiting;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
 using EngineeringPerformance.Api.Middleware;
+using EngineeringPerformance.Api.Validators;
 using EngineeringPerformance.Application.Validators;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Auth;
@@ -10,6 +11,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
 using CorsOptions = EngineeringPerformance.Api.Configuration.CorsOptions;
@@ -37,6 +39,47 @@ try
     // FluentValidation: авто-регистрация валидаторов из Assembly (S1-01)
     builder.Services.AddFluentValidationAutoValidation();
     builder.Services.AddValidatorsFromAssemblyContaining<DirectoryWriteRequestValidator>();
+    builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
+
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var problem = new ValidationProblemDetails(context.ModelState)
+            {
+                Type = "https://engineering-performance.dev/problems/validation",
+                Title = "Validation failed.",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "One or more validation errors occurred.",
+                Instance = context.HttpContext.Request.Path,
+            };
+            problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+            problem.Extensions["errorCode"] = "validation_failed";
+            problem.Errors.Clear();
+
+            foreach (var (key, value) in context.ModelState)
+            {
+                if (value?.Errors.Count is null or 0)
+                    continue;
+
+                var normalizedKey = NormalizeModelStateKey(key);
+                var messages = value.Errors
+                    .Select(e => string.IsNullOrWhiteSpace(e.ErrorMessage) ? "Invalid value." : e.ErrorMessage)
+                    .ToArray();
+
+                if (problem.Errors.TryGetValue(normalizedKey, out var existing))
+                {
+                    problem.Errors[normalizedKey] = existing.Concat(messages).Distinct(StringComparer.Ordinal).ToArray();
+                }
+                else
+                {
+                    problem.Errors[normalizedKey] = messages;
+                }
+            }
+
+            return new BadRequestObjectResult(problem);
+        };
+    });
 
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
@@ -147,4 +190,30 @@ static void ValidateRequiredConfiguration(IConfiguration configuration, IHostEnv
     var spnego = configuration.GetSection(SpnegoOptions.SectionName).Get<SpnegoOptions>() ?? new SpnegoOptions();
     if (spnego.Enabled && string.IsNullOrWhiteSpace(spnego.TrustedProxySecret))
         throw new InvalidOperationException("Spnego:TrustedProxySecret is required when Spnego:Enabled is true.");
+}
+
+static string NormalizeModelStateKey(string key)
+{
+    if (string.IsNullOrWhiteSpace(key))
+        return "body";
+
+    var parts = key.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    if (parts.Length == 0)
+        return "body";
+
+    if (parts.Length == 1)
+        return ToCamelCase(parts[0]);
+
+    return string.Join('.', parts.Select(ToCamelCase));
+}
+
+static string ToCamelCase(string value)
+{
+    if (string.IsNullOrEmpty(value))
+        return value;
+
+    if (char.IsLower(value[0]))
+        return value;
+
+    return char.ToLowerInvariant(value[0]) + value[1..];
 }
