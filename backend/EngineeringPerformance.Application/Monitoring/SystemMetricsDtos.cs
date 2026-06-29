@@ -12,6 +12,7 @@ public sealed record SystemMetricsDto(
 public sealed record SystemMetricsRedDto(
     int TotalRequests,
     double AverageDurationMs,
+    double P95DurationMs,
     int ServerErrorCount,
     int WindowMinutes);
 

@@ -37,6 +37,9 @@ public sealed class ExceptionHandlingMiddleware
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
         context.Items["ExceptionType"] = exception.GetType().Name;
+        var correlationId = context.Items.TryGetValue(CorrelationIdMiddleware.CorrelationIdItemKey, out var cid)
+            ? cid?.ToString()
+            : null;
 
         var (status, title, detail, errorCode, errors) = exception switch
         {
@@ -102,6 +105,7 @@ public sealed class ExceptionHandlingMiddleware
             ["status"] = status,
             ["detail"] = detail,
             ["traceId"] = context.TraceIdentifier,
+            ["correlationId"] = correlationId,
             ["errorCode"] = errorCode,
         };
 

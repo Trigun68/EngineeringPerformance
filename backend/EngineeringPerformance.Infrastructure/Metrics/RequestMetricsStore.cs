@@ -37,6 +37,9 @@ public sealed class RequestMetricsStore : IRequestMetricsStore
             var avgDuration = totalRequests > 0
                 ? windowEntries.Average(e => e.DurationMs)
                 : 0d;
+            var p95Duration = totalRequests > 0
+                ? CalculatePercentile(windowEntries.Select(e => e.DurationMs), 0.95)
+                : 0d;
             var serverErrors = windowEntries.Count(e => e.StatusCode >= 500);
 
             var requestRateSeries = BuildMinuteSeries(windowEntries, windowStart, now);
@@ -46,6 +49,7 @@ public sealed class RequestMetricsStore : IRequestMetricsStore
             var red = new SystemMetricsRedDto(
                 totalRequests,
                 Math.Round(avgDuration, 2),
+                Math.Round(p95Duration, 2),
                 serverErrors,
                 rateWindowMinutes);
 
@@ -149,6 +153,26 @@ public sealed class RequestMetricsStore : IRequestMetricsStore
             429 => "TooManyRequests",
             _ => $"HTTP {entry.StatusCode}",
         };
+    }
+
+    private static double CalculatePercentile(IEnumerable<double> values, double percentile)
+    {
+        var ordered = values.OrderBy(x => x).ToArray();
+        if (ordered.Length == 0)
+            return 0d;
+
+        if (ordered.Length == 1)
+            return ordered[0];
+
+        var clampedPercentile = Math.Clamp(percentile, 0d, 1d);
+        var index = (ordered.Length - 1) * clampedPercentile;
+        var lower = (int)Math.Floor(index);
+        var upper = (int)Math.Ceiling(index);
+        if (lower == upper)
+            return ordered[lower];
+
+        var weight = index - lower;
+        return ordered[lower] + ((ordered[upper] - ordered[lower]) * weight);
     }
 
     private sealed record RequestMetricEntry(

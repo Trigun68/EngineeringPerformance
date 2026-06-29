@@ -54,6 +54,10 @@ try
                 Instance = context.HttpContext.Request.Path,
             };
             problem.Extensions["traceId"] = context.HttpContext.TraceIdentifier;
+            problem.Extensions["correlationId"] =
+                context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.CorrelationIdItemKey, out var cid)
+                    ? cid?.ToString()
+                    : null;
             problem.Extensions["errorCode"] = "validation_failed";
             problem.Errors.Clear();
 
@@ -152,6 +156,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseForwardedHeaders();
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RequestMetricsMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors();

@@ -18,13 +18,23 @@ public sealed class ValidationContractApiTests : IClassFixture<ApiWebApplication
     [Fact]
     public async Task Login_WithEmptyCredentials_ReturnsValidationProblemDetails()
     {
-        var response = await _client.PostAsJsonAsync("/api/auth/login", new
+        const string correlationId = "validation-contract-test-id";
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/auth/login")
         {
-            username = "",
-            password = "",
-        });
+            Content = JsonContent.Create(new
+            {
+                username = "",
+                password = "",
+            }),
+        };
+        request.Headers.TryAddWithoutValidation("X-Correlation-Id", correlationId);
+
+        var response = await _client.SendAsync(request);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Headers.TryGetValues("X-Correlation-Id", out var headerValues).Should().BeTrue();
+        headerValues.Should().NotBeNull();
+        headerValues!.Single().Should().Be(correlationId);
 
         var body = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
@@ -32,6 +42,7 @@ public sealed class ValidationContractApiTests : IClassFixture<ApiWebApplication
 
         root.GetProperty("title").GetString().Should().Be("Validation failed.");
         root.GetProperty("errorCode").GetString().Should().Be("validation_failed");
+        root.GetProperty("correlationId").GetString().Should().Be(correlationId);
         root.GetProperty("errors").TryGetProperty("username", out _).Should().BeTrue();
         root.GetProperty("errors").TryGetProperty("password", out _).Should().BeTrue();
     }
