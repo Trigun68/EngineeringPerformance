@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using EngineeringPerformance.Api.Auth;
+using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
 using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
@@ -97,6 +98,32 @@ public sealed class AuthController : ControllerBase
         return Ok(new WindowsIdentityHintResponse(hint.Username, displayName, hint.Source));
     }
 
+    public sealed record SpnegoProfileResponse(
+        bool SpnegoEnabled,
+        bool TrustedProxyRequest,
+        bool RemoteUserHeaderPresent,
+        string? RemoteUser,
+        bool DevWindowsUserConfigured,
+        string? AuthMethod);
+
+    [HttpGet("spnego-profile")]
+    [HasPermission(PermissionType.Administration, AccessLevel.Read)]
+    public ActionResult<SpnegoProfileResponse> SpnegoProfile()
+    {
+        var trustedProxy = IsTrustedProxyRequest();
+        var remoteUserPresent = Request.Headers.TryGetValue(SpnegoUserMiddleware.RemoteUserHeader, out var remoteUserValues);
+        var remoteUser = remoteUserValues.FirstOrDefault()?.Trim();
+        var authMethod = User.FindFirstValue("auth_method");
+
+        return Ok(new SpnegoProfileResponse(
+            SpnegoEnabled: _spnegoOptions.Enabled,
+            TrustedProxyRequest: trustedProxy,
+            RemoteUserHeaderPresent: remoteUserPresent,
+            RemoteUser: string.IsNullOrWhiteSpace(remoteUser) ? null : remoteUser,
+            DevWindowsUserConfigured: !string.IsNullOrWhiteSpace(_devWindowsAuth.SimulatedWindowsUser),
+            AuthMethod: authMethod));
+    }
+
     [HttpGet("negotiate")]
     [HttpPost("negotiate")]
     [AllowAnonymous]
@@ -118,6 +145,30 @@ public sealed class AuthController : ControllerBase
 
         Response.Cookies.Delete(AuthCookieConstants.TokenCookieName, new CookieOptions { Path = "/" });
         return NoContent();
+    }
+
+    [HttpPost("refresh")]
+    [Authorize]
+    public async Task<ActionResult<LoginResponse>> Refresh(CancellationToken cancellationToken)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(userIdClaim, out var userId))
+            return Unauthorized();
+
+        var user = await _context.Users
+            .AsNoTracking()
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
+
+        if (user is null)
+            return Unauthorized();
+
+        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
+        var token = _jwtTokenService.GenerateToken(user);
+        var expires = _jwtTokenService.GetExpiration();
+        AppendAuthCookie(token, expires);
+
+        return Ok(new LoginResponse(expires, MapUser(user, permissions)));
     }
 
     [HttpGet("me")]
@@ -248,7 +299,7 @@ public sealed class AuthController : ControllerBase
     {
         if (string.Equals(roleName, nameof(UserRole.Administrator), StringComparison.Ordinal))
         {
-            return AccessControlConstants.AllObjectNames
+            return PermissionObjectCatalog.AllObjectNames
                 .ToDictionary(name => name, _ => (int)AccessLevel.Edit);
         }
 
@@ -270,20 +321,4 @@ public sealed class AuthController : ControllerBase
             user.WindowsUsername,
             user.IsActive,
             permissions);
-}
-
-/// <summary>Зеркало WPF AccessControlConstants для API-слоя.</summary>
-file static class AccessControlConstants
-{
-    public static readonly string[] AllObjectNames =
-    [
-        "Dashboard", "Users", "Projects", "PhysicalVolumes", "PhysicalVolumeTypes",
-        "Equipment", "IicWorkDirections", "ProjectAnalysisVersions",
-        "IicWorkDirectionNorms", "UnitsOfMeasurement",
-        "ProjectPhysicalVolumes", "ProjectEquipments", "ProjectLaborIntensities",
-        "ProjectDataUpload", "Assessment", "Planning",
-        "VersionComparison", "GroupAnalysis", "GroupTrend",
-        "References", "DataPage", "SettingsPage", "HelpPage",
-        "LaborIntensities", "ProjectCharacteristics", "UserActionLog"
-    ];
 }

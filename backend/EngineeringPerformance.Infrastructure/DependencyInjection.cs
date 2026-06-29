@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
         services.AddSingleton<SerilogLogStore>();
         services.AddScoped<ISystemMetricsService, SystemMetricsService>();
+        services.AddScoped<IPermissionDriftService, PermissionDriftService>();
         services.AddScoped<ILogViewerService, LogViewerService>();
         services.AddScoped<Application.Monitoring.IHealthCheckService, Monitoring.HealthCheckService>();
         services.AddScoped<IAuditConfigService, AuditConfigService>();

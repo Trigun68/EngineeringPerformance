@@ -27,6 +27,22 @@ public interface ISystemMetricsService
     Task<SystemMetricsDto> GetSystemMetricsAsync(int windowMinutes = 15, CancellationToken cancellationToken = default);
 }
 
+public sealed record PermissionDriftDto(
+    bool HasDrift,
+    IReadOnlyList<string> UnknownObjects,
+    IReadOnlyList<RolePermissionGapDto> MissingObjectsByRole,
+    DateTime CheckedAtUtc);
+
+public sealed record RolePermissionGapDto(
+    int RoleId,
+    string RoleName,
+    IReadOnlyList<string> MissingObjects);
+
+public interface IPermissionDriftService
+{
+    Task<PermissionDriftDto> GetPermissionDriftAsync(CancellationToken cancellationToken = default);
+}
+
 public interface IRequestMetricsStore
 {
     void Record(DateTime timestampUtc, double durationMs, int statusCode, string? exceptionType);

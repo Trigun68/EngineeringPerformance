@@ -26,7 +26,7 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
 
         var payload = await response.Content.ReadFromJsonAsync<SystemMetricsResponse>();
         payload.Should().NotBeNull();
-        payload!.Red.TotalRequests.Should().BeGreaterOrEqualTo(0);
+        payload!.Red.TotalRequests.Should().BeGreaterThanOrEqualTo(0);
         payload.Database.IsConfigured.Should().BeTrue();
     }
 
@@ -38,6 +38,19 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [Fact]
+    public async Task PermissionDrift_Admin_Returns200()
+    {
+        if (!_sqlAvailable) return;
+
+        var response = await _client.GetAsync("/api/monitoring/permission-drift");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadFromJsonAsync<PermissionDriftResponse>();
+        payload.Should().NotBeNull();
+        payload!.CheckedAtUtc.Should().NotBe(default);
+    }
+
     private sealed record SystemMetricsResponse(
         RedMetricsResponse Red,
         DependencyHealthResponse Database);
@@ -45,4 +58,6 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
     private sealed record RedMetricsResponse(int TotalRequests, double AverageDurationMs, int ServerErrorCount);
 
     private sealed record DependencyHealthResponse(bool IsConfigured, bool IsConnected, string Status);
+
+    private sealed record PermissionDriftResponse(bool HasDrift, string[] UnknownObjects, DateTime CheckedAtUtc);
 }

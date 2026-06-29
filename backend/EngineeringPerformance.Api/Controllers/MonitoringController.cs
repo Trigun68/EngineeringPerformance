@@ -15,17 +15,20 @@ public sealed class MonitoringController : ControllerBase
     private readonly ILogViewerService _logViewer;
     private readonly IHealthCheckService _healthCheck;
     private readonly IAuditConfigService _auditConfig;
+    private readonly IPermissionDriftService _permissionDrift;
 
     public MonitoringController(
         ISystemMetricsService systemMetrics,
         ILogViewerService logViewer,
         IHealthCheckService healthCheck,
-        IAuditConfigService auditConfig)
+        IAuditConfigService auditConfig,
+        IPermissionDriftService permissionDrift)
     {
         _systemMetrics = systemMetrics;
         _logViewer = logViewer;
         _healthCheck = healthCheck;
         _auditConfig = auditConfig;
+        _permissionDrift = permissionDrift;
     }
 
     [HttpGet("system-metrics")]
@@ -70,5 +73,13 @@ public sealed class MonitoringController : ControllerBase
     {
         var entries = await _auditConfig.GetConfigAuditAsync(from, to, userId, search, take, cancellationToken);
         return Ok(entries);
+    }
+
+    [HttpGet("permission-drift")]
+    [HasPermission(PermissionType.Administration, AccessLevel.Read)]
+    public async Task<ActionResult<PermissionDriftDto>> GetPermissionDrift(CancellationToken cancellationToken = default)
+    {
+        var drift = await _permissionDrift.GetPermissionDriftAsync(cancellationToken);
+        return Ok(drift);
     }
 }

@@ -12,7 +12,12 @@ import {
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import { format } from 'date-fns';
-import { fetchSystemMetrics, type SystemMetrics } from '../../api/monitoringApi';
+import {
+  fetchPermissionDrift,
+  fetchSystemMetrics,
+  type PermissionDrift,
+  type SystemMetrics,
+} from '../../api/monitoringApi';
 import { getApiErrorMessage } from '../../services/apiError';
 import { wpColors } from '../../theme/wpColors';
 
@@ -28,14 +33,19 @@ interface MonitoringDashboardProps {
 
 export function MonitoringDashboard({ windowMinutes = 15 }: MonitoringDashboardProps) {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const [permissionDrift, setPermissionDrift] = useState<PermissionDrift | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const loadMetrics = useCallback(async () => {
     try {
-      const data = await fetchSystemMetrics(windowMinutes);
-      setMetrics(data);
+      const [metricsData, driftData] = await Promise.all([
+        fetchSystemMetrics(windowMinutes),
+        fetchPermissionDrift().catch(() => null),
+      ]);
+      setMetrics(metricsData);
+      setPermissionDrift(driftData);
       setError(null);
       setLastUpdated(new Date());
     } catch (err) {
@@ -177,6 +187,11 @@ export function MonitoringDashboard({ windowMinutes = 15 }: MonitoringDashboardP
                       size="small"
                       label={`Redis: ${metrics.redis.isConfigured ? (metrics.redis.isConnected ? 'OK' : 'N/A') : '—'}`}
                       color={metrics.redis.isConnected ? 'success' : 'default'}
+                    />
+                    <Chip
+                      size="small"
+                      label={`Permission drift: ${permissionDrift?.hasDrift ? 'DRIFT' : 'OK'}`}
+                      color={permissionDrift?.hasDrift ? 'warning' : 'success'}
                     />
                   </Box>
                 </CardContent>

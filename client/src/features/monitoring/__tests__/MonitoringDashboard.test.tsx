@@ -26,6 +26,13 @@ vi.mock('../../../api/monitoringApi', () => ({
       redis: { isConfigured: false, isConnected: false, status: 'Not configured' },
       collectedAtUtc: '2026-06-08T10:15:00.000Z',
     })),
+  fetchPermissionDrift: vi.fn(() =>
+    Promise.resolve({
+      hasDrift: false,
+      unknownObjects: [],
+      missingObjectsByRole: [],
+      checkedAtUtc: '2026-06-08T10:15:00.000Z',
+    })),
 }));
 
 import { MonitoringDashboard } from '../MonitoringDashboard';
@@ -45,6 +52,7 @@ describe('MonitoringDashboard', () => {
     expect(screen.getByText('42')).toBeInTheDocument();
     expect(screen.getByText('18.5 мс')).toBeInTheDocument();
     expect(screen.getByText('41.2 мс')).toBeInTheDocument();
+    expect(screen.getByText('Permission drift: OK')).toBeInTheDocument();
     expect(screen.getAllByTestId('highcharts-chart')).toHaveLength(3);
     expect(screen.getByText('Нагрузка API (запросы/мин)')).toBeInTheDocument();
     expect(screen.getByText('Распределение ошибок')).toBeInTheDocument();

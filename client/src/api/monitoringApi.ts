@@ -34,9 +34,27 @@ export interface SystemMetrics {
   collectedAtUtc: string;
 }
 
+export interface RolePermissionGap {
+  roleId: number;
+  roleName: string;
+  missingObjects: string[];
+}
+
+export interface PermissionDrift {
+  hasDrift: boolean;
+  unknownObjects: string[];
+  missingObjectsByRole: RolePermissionGap[];
+  checkedAtUtc: string;
+}
+
 export async function fetchSystemMetrics(windowMinutes = 15): Promise<SystemMetrics> {
   const { data } = await apiClient.get<SystemMetrics>('/monitoring/system-metrics', {
     params: { windowMinutes },
   });
+  return data;
+}
+
+export async function fetchPermissionDrift(): Promise<PermissionDrift> {
+  const { data } = await apiClient.get<PermissionDrift>('/monitoring/permission-drift');
   return data;
 }
