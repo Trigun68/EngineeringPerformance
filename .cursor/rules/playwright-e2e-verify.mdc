@@ -1,0 +1,48 @@
+---
+description: Playwright E2E — обязательная проверка UI после изменений frontend
+alwaysApply: true
+---
+
+# Playwright E2E после UI-изменений
+
+Когда затронуты `client/` (страницы, компоненты, AG Grid, e2e, поведение UI), агент **дополнительно** к Vitest и `npm run build` прогоняет Playwright.
+
+## Подготовка стенда
+
+1. Пересобрать образы с актуальным кодом:
+   ```bash
+   docker compose build frontend backend
+   docker compose up -d
+   ```
+2. **Не** использовать Vite dev (`:5173`) для E2E — proxy `/api` → `localhost:5080`, backend там не слушает.
+3. Базовый URL: **`http://127.0.0.1:8081`** (docker `frontend` → nginx → `backend`).
+
+## Команды
+
+Полный suite (предпочтительно, как в CI):
+```bash
+cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
+```
+
+Точечно по затронутому модулю:
+```bash
+cd client && E2E_BASE_URL=http://127.0.0.1:8081 npx playwright test e2e/<spec>.spec.ts
+```
+
+## Минимальный набор spec по области
+
+| Область | Файлы |
+|---------|--------|
+| Справочники, фильтры, экспорт | `e2e/dictionary-filtering.spec.ts`, `e2e/dictionary-hierarchy.spec.ts` |
+| Прогноз / проект | `e2e/forecast-module.spec.ts`, `e2e/project-workspace.spec.ts` |
+| Нормы ИИС | `e2e/iic-norms-history.spec.ts` |
+| Логин / навигация | `e2e/login-page.spec.ts`, `e2e/migration-smoke.spec.ts` |
+
+## Критерий готовности UI-задачи
+
+- `npm run build` — 0 ошибок
+- `npm test` (Vitest) — green
+- Playwright — green (полный suite или релевантные spec)
+- В отчёте пользователю: **N passed**, base URL, был ли пересобран `frontend`
+
+См. также: `run-after-changes.mdc`, CI `.github/workflows/e2e-tests.yml`.

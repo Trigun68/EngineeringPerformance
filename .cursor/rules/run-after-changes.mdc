@@ -1,0 +1,40 @@
+---
+description: После завершения изменений кода — сборка, тесты, smoke и запуск (агент выполняет сам)
+alwaysApply: true
+---
+
+# Запуск после завершения изменений
+
+Когда задача по изменению кода **завершена** (фича, фикс, рефакторинг — не вопросы и не только ревью), агент **сам** выполняет проверки (см. также `self-verify-checks.mdc`).
+
+## Web-стек (по умолчанию)
+
+1. **Client** — `cd client && npm run build` (0 ошибок), если затронут frontend.
+2. **API tests** — `EngineeringPerformance.Api.Tests` (18+ тестов green), если затронут backend/логика.
+3. **Docker** — `docker compose build api web && docker compose up -d`, если менялись deploy/UI/API образы.
+4. **Smoke API** — `./scripts/uat-smoke.sh http://localhost:8081` при API правках.
+5. **Playwright E2E** — обязательно при UI/frontend правках; см. `playwright-e2e-verify.mdc`.
+   ```bash
+   docker compose build frontend && docker compose up -d
+   cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
+   ```
+   Не гонять E2E против Vite `:5173` (API proxy не совпадает с docker backend).
+
+API tests через Docker, если на хосте нет `dotnet`:
+
+```bash
+docker run --rm --network host -v "$(pwd)/backend:/src" -w /src \
+  mcr.microsoft.com/dotnet/sdk:8.0 \
+  dotnet test EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.Tests.csproj
+```
+
+## Legacy WPF (только если задача явно про desktop)
+
+- `dotnet build EngineeringPerformance.slnx`
+- `dotnet test EngineeringPerformance.slnx`
+
+## Завершение задачи
+
+Не считать задачу выполненной без зелёной сборки. Кратко сообщить: client OK, tests OK (N passed), docker/smoke OK.
+
+Если контейнеры уже запущены — пересобрать и `docker compose up -d` после успешной сборки.

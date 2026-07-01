@@ -109,7 +109,8 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 
 - Backend CI: `EngineeringPerformance.Api.Tests` (integration, Testcontainers/SQL optional).
 - Target: port algorithm tests from legacy `EngineeringPerformance.Tests` to backend Infrastructure.
-- Frontend: Playwright smoke (`client/e2e/`); add Vitest for stores/hooks.
+- Frontend: Vitest for stores/hooks; **Playwright E2E обязателен после UI-правок** (см. `.cursor/rules/playwright-e2e-verify.mdc`).
+- Playwright: только через docker stack на `http://127.0.0.1:8081` или `npm run test:e2e:docker`; не через Vite dev `:5173`.
 - Coverage goal: >80% on Import, PerformanceService, PermissionAuthorization.
 
 ---
@@ -127,7 +128,8 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 1. Read `docs/revision_report.md` and `docs/development_roadmap.md` before large features.
 2. Match WPF behavior via `docs/migration_map.md` and `EngineeringPerformance.App/`.
 3. After logic changes: `dotnet build EngineeringPerformance.slnx`, `dotnet test`, rebuild `web` if client changed.
-4. Docs: update `docs/changelog/CHANGELOG.md` for user-visible changes.
+4. After **UI changes**: rebuild frontend, run Playwright on `:8081` per `.cursor/rules/playwright-e2e-verify.mdc`.
+5. Docs: update `docs/changelog/CHANGELOG.md` for user-visible changes.
 
 ---
 

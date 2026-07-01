@@ -41,9 +41,11 @@ _tmp/
 # DevExpress license
 *.key
 
-# AI tool internals — полностью исключены из репозитория
+# AI tool internals — полностью исключены из репозитория, кроме правил агента
 .claude/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .playwright-mcp/
 
 # Source research files (исходники, референсы, черновики)

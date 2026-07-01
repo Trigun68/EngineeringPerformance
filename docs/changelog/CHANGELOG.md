@@ -2,6 +2,61 @@
 
 ## [Unreleased]
 
+### Added (2026-07-01, AI workflow)
+- **Playwright E2E rule:** `.cursor/rules/playwright-e2e-verify.mdc` — обязательная проверка UI через docker stack (`:8081`), не через Vite dev; правила в git (`.cursor/rules/`).
+
+### Changed (2026-06-08, прогнозирование — единая формула Z)
+- **Все сценарии:** `ФО × (Performance + Z × StdDev)`; Z (`ZBase` / `ZOptimistic` / `ZPessimistic`) per discipline из `ProjectVersionPlanningParameters`.
+- **WPF:** маппинг `ProjectVersionPlanningParameters`, загрузка Z в `ProjectVersionGridDataService` и `ProjectsPageViewModel`; `ProjectForecastService` и экспорт на `ComputeForecastHours`.
+- **Web:** `ProjectForecastService` (PlanningTab / отчёт) на Z из БД; приоритет таблицы настроек над query override.
+- **Контракт:** `ForecastCalculation.ResolvePlanningZ`; тесты `PerformanceCalculationEngineTests`, `ProjectsPageGridBuilderTests`.
+- **Документация:** `docs/features/forecast-algorithm.md`.
+
+### Added (2026-06-08, прогнозирование — паритет WPF Phase B)
+- **Единый расчёт:** `ForecastCalculation` / `ComputeForecastHours` в Application и Core (WPF); Z-параметры из `ProjectVersionPlanningParameters`.
+- **Параметры планирования:** иерархическое дерево IIC, Z с двумя знаками после запятой, формат «код — наименование (ед.)».
+- **Вкладка «Итого»:** AG Grid treeData по `hierarchy`, целые числа вправо, без отдельной колонки «Ед. изм.».
+- **Вкладка «Детально»:** контекстное меню (редактирование ФО/оборудования), row grouping, экспорт Excel и «Сводная таблица» (`DetailForecastSummaryTableBuilder`).
+- **Импорт/удаление:** модалки `DataImportDialog` и `IterationDeleteDialog` по образцу WPF.
+- **Экспорт «По объектам»:** шапка проекта/версии, строка ИТОГО, целые часы (Excel/PDF).
+
+### Fixed (2026-06-08, прогнозирование)
+- **Модальное окно «Прогноз»:** `assessment-volumes` доступен с правом Projects Read; детальные ошибки API.
+- **Формат IIC:** единый «код — наименование (ед.)» в backend и frontend (`formatIisNorm`).
+
+### Added (2026-06-30, карточка проекта — загрузка, параметры планирования, прогноз)
+- **Карточка проекта:** загрузка по `GET /api/projects/{id}` — код и название в шапке, доступны «Основные данные», «Характеристики», «Участники».
+- **Параметры планирования:** кнопка рядом с «Версия (план)»; таблица Z-сценариев по группам IIC (пессимист. +0,5 / базовый 0 / оптимист. −0,5); сохранение в БД; seed при создании/копировании версии.
+- **Прогноз (модальное окно):** карточки направлений IIC по образцу WPF `ProjectForecastReportWindow` (итого, ФО, оборудование, экспорт Excel/PDF).
+- **Подвкладки прогноза:** выбранная — только фон (текст не белый); «Итого по объекту» / «Детально» — целые числа с разрядами, выравнивание вправо.
+- **Список проектов:** компактное контекстное меню (без «Экспорт» и «Копировать с заголовками»).
+
+### Fixed (2026-06-30, карточка проекта и прогноз)
+- **Карточка проекта:** загрузка по URL `/projects/{id}` (WPF-шапка), fallback из списка; «Проект не выбран» только в строке идентификатора.
+- **Параметры планирования:** кнопка рядом с версией плана; Z-параметры учитываются в расчёте гридов прогноза.
+- **Прогноз (модальное окно):** макет как в WPF — шапка колонок, строка ИТОГО, карточки направлений с ФО/оборудованием.
+- **Подвкладки прогноза:** выбранная вкладка — только фон (текст не белый); «Итого по объекту» / «Детально» — целые числа с разрядами, выравнивание вправо.
+
+### Fixed (2026-06-30, справочники — высота грида)
+- Таблицы справочников помещаются в карточку приложения: прокрутка только внутри AG Grid, заголовок столбцов закреплён; страница больше не прокручивается целиком.
+
+### Added (2026-06-30, вкладка «Проекты» — UX, CRUD, прогноз)
+- **Список проектов:** flex-высота грида; кнопки «Редактировать», «Удалить», «Поместить в архив» / «Извлечь из архива»; checkbox «Отображать архивные элементы»; убран дубль «Открыть карточку» в контекстном меню.
+- **Backend:** разделены архив (`POST .../archive`, `.../unarchive`) и безвозвратное удаление (`DELETE`); query `includeArchived`; валидация PUT; 409 при дубликате кода.
+- **Карточка проекта:** шапка в 3 строки (выбор + метрики / данные / вкладки); отклонение из характеристик; исправлено сохранение основных данных (`workStart` sanitization).
+- **Прогнозирование:** подвкладка «Итого по объекту», числа с разделением разрядов, IIC «код. имя (ед.)»; bordered sub-tabs.
+- **Версия плана:** диалог выбора — создание, редактирование, удаление, копирование версии.
+
+### Added (2026-06-30, нормы IIC и закреплённые шапки справочников)
+- **Backend:** `IicNormDto` — `unitName`, `resolvedUnitId`, `workDirectionCode`; наследование ед. изм. через `IicWorkDirectionDisplayUnit`; в словаре `iicWorkDirections` — поле `unitId`; при создании новой записи истории предыдущий открытый период закрывается автоматически; запрет дубликата `EffectiveFrom`.
+- **Frontend:** исправлен API истории (`GET /registers/iic-work-direction-norms?workDirectionId=`); утилита `resolveIicDirectionUnit`; модалка редактирования по образцу WPF (группа/ед. read-only, таблица истории, sub-dialog «Добавить строку»); общий `GridViewport` для AG Grid — прокрутка внутри таблицы, шапка остаётся на месте.
+- **E2E:** обновлён `iic-norms-history.spec.ts`; smoke закреплённой шапки на KFO/BER в `dictionary-filtering.spec.ts`.
+
+### Added (2026-06-30, вкладка «Прогнозирование» — паритет WPF)
+- **Backend:** иерархический грид «Итого» (`ProjectsPageForecastSummaryRowDto`), сценарии часов «По объектам», расширенный «Детально» (22 колонки); API экспорта `forecast-facility` (xlsx/pdf) и `forecast-detail` (xlsx).
+- **Frontend:** `ForecastPanel` в `FullProjectsPage` — выбор версии плана, импорт/удаление ФО и оборудования, подвкладки Итого/По объектам/Детально, кнопка «Прогноз» → `ForecastReportDialog` (PlanningForm).
+- **E2E:** расширен `forecast-module.spec.ts` (диалог прогноза).
+
 ### Added (2026-06-08, Phase 4 ops pack)
 - Cutover runbook, UAT sign-off template, root README, `.env.production.example`.
 - React `/help` — справка по Z-оценке и PD%.
