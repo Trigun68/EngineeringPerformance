@@ -1,4 +1,5 @@
 using EngineeringPerformance.Api.Authorization;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Export;
@@ -13,10 +14,23 @@ namespace EngineeringPerformance.Api.Controllers;
 public sealed class RegistersController : ControllerBase
 {
     private readonly IIicNormService _norms;
+    private readonly IDirectoryExportService _directoryExport;
 
-    public RegistersController(IIicNormService norms)
+    public RegistersController(IIicNormService norms, IDirectoryExportService directoryExport)
     {
         _norms = norms;
+        _directoryExport = directoryExport;
+    }
+
+    [HttpPost("iic-work-direction-norms/export")]
+    [HasPermission(PermissionType.IicWorkDirectionNorms, AccessLevel.Read)]
+    public IActionResult ExportExcelPost([FromBody] DirectoryExportRequest request)
+    {
+        var bytes = _directoryExport.ExportToExcel(request);
+        var safeName = SanitizeFileName(request.TabName);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        var filename = $"{safeName}_{timestamp}.xlsx";
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
     }
 
     [HttpGet("iic-work-direction-norms/export.xlsx")]
@@ -83,5 +97,12 @@ public sealed class RegistersController : ControllerBase
     {
         var ok = await _norms.DeleteAsync(id, cancellationToken);
         return ok ? NoContent() : NotFound();
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Справочник" : cleaned;
     }
 }

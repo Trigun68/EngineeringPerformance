@@ -50,3 +50,63 @@ export async function exportProjectsPageExcel(
   );
   triggerBrowserDownload(blob, filename);
 }
+
+export async function exportForecastFacilityExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-facility/excel`,
+    {},
+    `ForecastFacility_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastFacilityPdf(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-facility/pdf`,
+    {},
+    `ForecastFacility_${projectId}_v${versionId}.pdf`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastDetailExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-detail/excel`,
+    {},
+    `ForecastDetail_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastDetailPdf(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-detail/pdf`,
+    {},
+    `ForecastDetail_${projectId}_v${versionId}.pdf`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastDetailSummaryTable(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-detail/summary-table`,
+    {},
+    `ForecastDetailSummary_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}

@@ -32,6 +32,7 @@ import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
 import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
 import { ExcelSetColumnFilter } from './ExcelSetColumnFilter';
+import { GridViewport } from './GridViewport';
 
 export interface DictionaryContextMenuItem<T> {
   name: string;
@@ -60,7 +61,10 @@ export interface DictionaryGridProps<T extends { id: number }> {
   onRowDoubleClicked?: (row: T) => void;
   onExportExcel?: () => void;
   showExportButton?: boolean;
+  onGridApiReady?: (api: GridApi<T>) => void;
   additionalContextMenuItems?: DictionaryContextMenuItem<T>[];
+  /** compact — только «Копировать», без export и copyWithHeaders */
+  contextMenuMode?: 'full' | 'compact';
 }
 
 const LAYOUT_DEBOUNCE_MS = 1000;
@@ -79,6 +83,22 @@ function layoutPrefKey(gridId: string): string {
 
 function filterPrefKey(gridId: string): string {
   return `grid.${gridId}.filter`;
+}
+
+/** Пустой set-filter (values: []) скрывает все строки — не восстанавливаем и не сохраняем. */
+function isBlockingEmptySetFilter(model: Record<string, unknown>): boolean {
+  return Object.values(model).some((value) => {
+    if (!value || typeof value !== 'object' || !('values' in value)) return false;
+    const values = (value as { values?: unknown[] }).values;
+    return Array.isArray(values) && values.length === 0;
+  });
+}
+
+function sanitizeFilterModel(model: Record<string, unknown>): Record<string, unknown> | null {
+  if (Object.keys(model).length === 0 || isBlockingEmptySetFilter(model)) {
+    return null;
+  }
+  return model;
 }
 
 function columnLabel(col: Column): string {
@@ -104,15 +124,16 @@ function DictionaryGridInternal<T extends { id: number }>({
   onRowDoubleClicked,
   onExportExcel,
   showExportButton = false,
+  onGridApiReady,
   additionalContextMenuItems = [],
+  contextMenuMode = 'full',
 }: DictionaryGridProps<T>) {
-  console.log(`[DictionaryGrid ${gridId}] Render: rowData.length=${rowData.length}, loading=${loading}, treeData=${treeData}`);
-
   const gridRef = useRef<AgGridReact<T>>(null);
   const gridApiRef = useRef<GridApi<T> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gridInitializedRef = useRef(false);
   const isFirstRenderRef = useRef(true);
+  const filterAppliedRef = useRef(false);
 
   const { canRead, canEdit: canEditPermission, hasLevel } = usePermission(objectName);
   const canEdit = canEditProp ?? canEditPermission;
@@ -126,8 +147,8 @@ function DictionaryGridInternal<T extends { id: number }>({
     const visibility: Record<string, boolean> = {};
 
     columnDefs.forEach((col, index) => {
-      const colId = col.colId ?? col.field ?? `col_${index}`;
-      labels[colId] = col.headerName ?? colId;
+      const colId = col.colId ?? col.field ?? col.headerName ?? `col_${index}`;
+      labels[colId] = col.headerName ?? String(colId);
       visibility[colId] = col.hide !== true;
     });
 
@@ -165,20 +186,23 @@ function DictionaryGridInternal<T extends { id: number }>({
     [],
   );
 
+  const persistLayoutNow = useCallback(async () => {
+    const api = gridApiRef.current;
+    if (!api || !gridInitializedRef.current) return;
+    const layout = api.getColumnState();
+    await putUserPreferences({
+      [layoutPrefKey(gridId)]: JSON.stringify(layout),
+    });
+  }, [gridId]);
+
   const scheduleLayoutSave = useCallback(() => {
     if (!gridApiRef.current || !gridInitializedRef.current) return;
-    // Skip saving during initial render to avoid unnecessary API calls
     if (isFirstRenderRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      const api = gridApiRef.current;
-      if (!api || !gridInitializedRef.current) return;
-      const layout = api.getColumnState();
-      void putUserPreferences({
-        [layoutPrefKey(gridId)]: JSON.stringify(layout),
-      });
+      void persistLayoutNow();
     }, LAYOUT_DEBOUNCE_MS);
-  }, [gridId]);
+  }, [gridId, persistLayoutNow]);
 
   const filterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -189,9 +213,10 @@ function DictionaryGridInternal<T extends { id: number }>({
     filterTimerRef.current = setTimeout(() => {
       const api = gridApiRef.current;
       if (!api || !gridInitializedRef.current) return;
-      const filter = api.getFilterModel();
+      const filter = api.getFilterModel() as Record<string, unknown>;
+      const sanitized = sanitizeFilterModel(filter);
       void putUserPreferences({
-        [filterPrefKey(gridId)]: JSON.stringify(filter),
+        [filterPrefKey(gridId)]: JSON.stringify(sanitized ?? {}),
       });
     }, FILTER_DEBOUNCE_MS);
   }, [gridId]);
@@ -211,7 +236,7 @@ function DictionaryGridInternal<T extends { id: number }>({
     setAllColumnLabels(labels);
   }, [seedColumnMetaFromDefs]);
 
-  const applySavedPreferences = useCallback(async (api: GridApi<T>) => {
+  const applySavedLayout = useCallback(async (api: GridApi<T>) => {
     try {
       const prefs = await getUserPreferences();
       const layoutRaw = prefs[layoutPrefKey(gridId)];
@@ -219,12 +244,30 @@ function DictionaryGridInternal<T extends { id: number }>({
         const state = JSON.parse(layoutRaw) as ColumnState[];
         api.applyColumnState({ state, applyOrder: true });
       }
-      // НЕ применяем сохранённые фильтры автоматически - они скрывают новые данные
-      // const filterRaw = prefs[filterPrefKey(gridId)];
-      // if (filterRaw) {
-      //   const model = JSON.parse(filterRaw) as Record<string, unknown>;
-      //   api.setFilterModel(model);
-      // }
+    } catch {
+      // Повреждённые настройки — игнорируем.
+    }
+  }, [gridId]);
+
+  const applySavedFilter = useCallback(async (api: GridApi<T>, dataRowCount: number) => {
+    if (dataRowCount === 0) return;
+    try {
+      const prefs = await getUserPreferences();
+      const filterRaw = prefs[filterPrefKey(gridId)];
+      if (!filterRaw) return;
+      const model = JSON.parse(filterRaw) as Record<string, unknown>;
+      const sanitized = sanitizeFilterModel(model);
+      if (!sanitized) {
+        if (Object.keys(model).length > 0) {
+          await putUserPreferences({ [filterPrefKey(gridId)]: '{}' });
+        }
+        return;
+      }
+      api.setFilterModel(sanitized);
+      if (api.getDisplayedRowCount() === 0) {
+        api.setFilterModel(null);
+        await putUserPreferences({ [filterPrefKey(gridId)]: '{}' });
+      }
     } catch {
       // Повреждённые настройки — игнорируем.
     }
@@ -232,22 +275,17 @@ function DictionaryGridInternal<T extends { id: number }>({
 
   const onGridReady = useCallback(
     (event: GridReadyEvent<T>) => {
-      console.log(`[DictionaryGrid ${gridId}] onGridReady called`);
       gridApiRef.current = event.api;
-      console.log(`[DictionaryGrid ${gridId}] API set, rowData.length=${rowData.length}`);
-      void applySavedPreferences(event.api).then(() => {
-        console.log(`[DictionaryGrid ${gridId}] Preferences applied`);
+      onGridApiReady?.(event.api);
+      void applySavedLayout(event.api).then(() => {
         syncColumnVisibilityState(event.api);
-        // Mark grid as initialized after preferences are applied
         gridInitializedRef.current = true;
-        console.log(`[DictionaryGrid ${gridId}] Grid initialized, rowCount=${event.api.getDisplayedRowCount()}`);
-        // Clear first render flag after a short delay to skip initial events
         setTimeout(() => {
           isFirstRenderRef.current = false;
         }, 500);
       });
     },
-    [applySavedPreferences, gridId, rowData.length, syncColumnVisibilityState],
+    [applySavedLayout, onGridApiReady, syncColumnVisibilityState],
   );
 
   useEffect(() => () => {
@@ -255,39 +293,43 @@ function DictionaryGridInternal<T extends { id: number }>({
     if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
   }, []);
 
-  // Reset initialization flags and filters when rowData changes (new data loaded)
   useEffect(() => {
-    console.log(`[DictionaryGrid ${gridId}] rowData changed: length=${rowData.length}`);
+    gridInitializedRef.current = false;
+    isFirstRenderRef.current = true;
+    filterAppliedRef.current = false;
+  }, [gridId]);
+
+  useEffect(() => {
     const api = gridApiRef.current;
-    if (api) {
-      console.log(`[DictionaryGrid ${gridId}] Current grid row count: ${api.getDisplayedRowCount()}`);
-      // Сбрасываем фильтры при загрузке новых данных - иначе старые фильтры скрывают новые данные
-      if (rowData.length > 0) {
-        const currentFilter = api.getFilterModel();
-        if (Object.keys(currentFilter).length > 0) {
-          console.log(`[DictionaryGrid ${gridId}] Resetting filters to show new data`);
-          api.setFilterModel({});
-        }
-      }
+    if (!api || !gridInitializedRef.current || filterAppliedRef.current || rowData.length === 0) {
+      return undefined;
     }
-    if (rowData && rowData.length > 0) {
-      console.log(`[DictionaryGrid ${gridId}] Data loaded, first row:`, rowData[0]);
-      // Data loaded, but wait before allowing saves to skip grid init events
-      const timer = setTimeout(() => {
-        isFirstRenderRef.current = false;
-        if (gridApiRef.current) {
-          console.log(`[DictionaryGrid ${gridId}] After timeout - grid row count: ${gridApiRef.current.getDisplayedRowCount()}`);
-        }
-      }, 600);
-      return () => clearTimeout(timer);
-    }
-  }, [gridId, rowData]);
+
+    const timer = window.setTimeout(() => {
+      if (filterAppliedRef.current) return;
+      filterAppliedRef.current = true;
+      void applySavedFilter(api, rowData.length);
+    }, 800);
+
+    return () => window.clearTimeout(timer);
+  }, [applySavedFilter, columnDefs, gridId, rowData.length]);
 
   useEffect(() => {
     const seeded = seedColumnMetaFromDefs();
-    setAllColumnLabels((prev) => ({ ...seeded.labels, ...prev }));
-    setColumnVisibility((prev) => ({ ...seeded.visibility, ...prev }));
+    setAllColumnLabels((prev) => {
+      const next = { ...prev };
+      for (const [colId, label] of Object.entries(seeded.labels)) {
+        if (!(colId in next)) next[colId] = label;
+      }
+      return next;
+    });
   }, [seedColumnMetaFromDefs]);
+
+  useEffect(() => {
+    const api = gridApiRef.current;
+    if (!api || !gridInitializedRef.current) return;
+    void applySavedLayout(api).then(() => syncColumnVisibilityState(api));
+  }, [applySavedLayout, columnDefs, syncColumnVisibilityState]);
 
   const getContextMenuItems = useCallback(
     (params: GetContextMenuItemsParams<T>): (string | MenuItemDef)[] => {
@@ -348,11 +390,10 @@ function DictionaryGridInternal<T extends { id: number }>({
         ...extraItems,
         'separator',
         'copy',
-        'copyWithHeaders',
-        'export',
+        ...(contextMenuMode === 'full' ? (['copyWithHeaders', 'export'] as const) : []),
       ];
     },
-    [additionalContextMenuItems, canEdit, canRead, hasLevel, onArchive, onDelete, onEdit, treeData],
+    [additionalContextMenuItems, canEdit, canRead, contextMenuMode, hasLevel, onArchive, onDelete, onEdit, treeData],
   );
 
   const openColumnConfig = () => {
@@ -370,13 +411,21 @@ function DictionaryGridInternal<T extends { id: number }>({
   const applyColumnVisibility = () => {
     const api = gridApiRef.current;
     if (!api) return;
+
+    const entries = Object.entries(columnVisibility);
+
+    entries.forEach(([colId, visible]) => {
+      api.setColumnsVisible([colId], visible !== false);
+    });
+
     const state = api.getColumnState().map((col) => ({
       ...col,
       hide: columnVisibility[col.colId] === false,
     }));
     api.applyColumnState({ state, applyOrder: true });
+    syncColumnVisibilityState(api);
     setColumnConfigOpen(false);
-    scheduleLayoutSave();
+    void persistLayoutNow();
   };
 
   const configurableColumnIds = useMemo(
@@ -393,7 +442,7 @@ function DictionaryGridInternal<T extends { id: number }>({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
       <Stack direction="row" spacing={0.5} sx={{ mb: 1, justifyContent: 'space-between', flexShrink: 0 }}>
         {treeData ? (
           <Stack direction="row" spacing={0.5}>
@@ -438,30 +487,7 @@ function DictionaryGridInternal<T extends { id: number }>({
         </Stack>
       </Stack>
 
-      <Box
-        className="ag-theme-alpine"
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-          opacity: loading ? 0.6 : 1,
-        }}
-      >
-        <Box
-          sx={{
-            flex: 1,
-            minHeight: 0,
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-            '& .ag-root-wrapper': { height: '100%' },
-            '& .ag-root-wrapper-body': { height: '100%' },
-            '& .ag-root': { height: '100%' },
-          }}
-        >
+      <GridViewport loading={loading}>
         <AgGridReact<T>
           containerStyle={{ height: '100%', width: '100%' }}
           ref={gridRef}
@@ -501,8 +527,7 @@ function DictionaryGridInternal<T extends { id: number }>({
           overlayLoadingTemplate='<span class="ag-overlay-loading-center">Загрузка...</span>'
           overlayNoRowsTemplate='<span class="ag-overlay-loading-center">Нет данных</span>'
         />
-        </Box>
-      </Box>
+      </GridViewport>
 
       <Dialog open={columnConfigOpen} onClose={() => setColumnConfigOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ color: wpColors.heading }}>Настройка столбцов</DialogTitle>

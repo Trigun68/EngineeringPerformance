@@ -3,27 +3,27 @@
     "summary": [
       {
         "workDirectionId": 1,
-        "parentId": null,
-        "name": "Направление А",
-        "unitName": "шт",
+        "displayName": "Направление А",
+        "normUnitName": "шт",
+        "factPhysicalVolume": 80,
         "normProductivity": 10,
-        "normEstimate": 2.3,
-        "normStandardDeviation": 0.5,
-        "plannedVolume": 100,
-        "optimisticHours": 950,
         "baseHours": 1000,
+        "optimisticHours": 950,
         "pessimisticHours": 1050,
-        "range": "950 – 1050",
-        "hierarchyPath": "Направление А"
+        "isTotal": false,
+        "level": 0
       }
     ],
     "facility": [
       {
         "facilityCode": "F1",
         "facilityName": "Объект 1",
-        "laborHours": 500,
+        "laborHours": null,
         "zScore": null,
-        "interpretation": ""
+        "interpretation": "",
+        "baseHours": 500,
+        "optimisticHours": 480,
+        "pessimisticHours": 520
       }
     ],
     "detail": [

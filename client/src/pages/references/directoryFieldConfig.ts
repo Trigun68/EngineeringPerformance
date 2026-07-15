@@ -51,17 +51,6 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
     { key: 'code', label: 'Код', type: 'text', required: true, showInGrid: false, gridWidth: 120, formOrder: 10 },
     { key: 'description', label: 'Описание', type: 'text', showInGrid: true, gridWidth: 200, formOrder: 30 },
     {
-      key: 'physicalVolumeKfoId',
-      label: 'Номенклатура КФО',
-      formLabel: 'Номенклатура физ.объёмов КФО',
-      type: 'lookup',
-      // Используем hierarchical lookup который загружается отдельно
-      hierarchical: true,
-      showInGrid: true,
-      gridWidth: 220,
-      formOrder: 45,
-    },
-    {
       key: 'kfoId',
       label: 'Классификатор (КФО)',
       formLabel: 'Классификатор (КФО/нормы ИИС)',
@@ -109,8 +98,9 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
       type: 'lookup',
       lookupKey: 'iicWorkDirections',
       hierarchical: true,
+      formatAsIisNorm: true,
       showInGrid: true,
-      gridWidth: 200,
+      gridWidth: 280,
       formOrder: 40,
     },
     { key: 'normPpr', label: 'Норма ПИР', type: 'number', showInGrid: false, showInForm: false, readOnly: true, gridWidth: 100 },
@@ -214,6 +204,7 @@ export function formatPropertyValue(
   getName: (key: DictionaryKey, id: number | null | undefined) => string,
   getItem?: (key: DictionaryKey, id: number) => DictionaryItem | undefined,
   getUnitName?: (id: number | null | undefined) => string,
+  resolveIicUnitName?: (directionId: number) => string,
 ): string {
   if (value == null || value === '') return '';
   if (field.type === 'lookup' && field.lookupKey) {
@@ -221,10 +212,13 @@ export function formatPropertyValue(
     if (field.formatAsIisNorm) {
       const item = getItem?.(field.lookupKey, id);
       if (item) {
+        const unitName = field.lookupKey === 'iicWorkDirections' && resolveIicUnitName
+          ? resolveIicUnitName(id)
+          : getUnitName?.(item.unitId ?? null);
         return formatIisNorm({
           code: item.code,
           name: item.name,
-          unitName: getUnitName?.(id),
+          unitName,
         });
       }
     }

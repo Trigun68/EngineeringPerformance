@@ -16,7 +16,7 @@ namespace EngineeringPerformance.Infrastructure.Dictionaries;
 /// </summary>
 public sealed class CachedDictionaryService : IDictionaryService
 {
-    public const string CacheKey = "dictionaries:all:v1";
+    public const string CacheKey = "dictionaries:all:v2";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
 
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -86,8 +86,13 @@ public sealed class CachedDictionaryService : IDictionaryService
             {
                 var cached = JsonSerializer.Deserialize<DictionariesAllDto>(cachedBytes);
                 if (cached is not null)
+                {
+                    _logger.LogInformation("Dictionary cache HIT for {CacheKey}", CacheKey);
                     return cached;
+                }
             }
+
+            _logger.LogInformation("Dictionary cache MISS for {CacheKey}", CacheKey);
         }
         catch (Exception ex)
         {
@@ -166,49 +171,49 @@ public sealed class CachedDictionaryService : IDictionaryService
         context.PhysicalVolumeTypes.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadVolumesKfoAsync(AppDbContext context, CancellationToken ct) =>
         context.PhysicalVolumesKfo.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadVolumesBerAsync(AppDbContext context, CancellationToken ct) =>
         context.PhysicalVolumesBer.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadEquipmentsAsync(AppDbContext context, CancellationToken ct) =>
         context.Equipments.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadDirectionsAsync(AppDbContext context, CancellationToken ct) =>
         context.IicWorkDirections.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, x.Description, x.ParentId, x.UnitId))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadUnitsAsync(AppDbContext context, CancellationToken ct) =>
         context.UnitsOfMeasurement.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadLaborIntensitiesAsync(AppDbContext context, CancellationToken ct) =>
         context.LaborIntensities.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, null, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, null, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadNormsAsync(AppDbContext context, CancellationToken ct) =>
@@ -219,13 +224,14 @@ public sealed class CachedDictionaryService : IDictionaryService
                 x.WorkDirectionId.ToString(),
                 null,
                 x.EffectiveFrom.ToString("yyyy-MM-dd"),
-                x.WorkDirectionId))
+                x.WorkDirectionId,
+                null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadCharacteristicsAsync(AppDbContext context, CancellationToken ct) =>
         context.ProjectCharacteristics.AsNoTracking()
             .Where(x => !x.IsArchived)
             .OrderBy(x => x.SortOrder)
-            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, null, x.ParentId))
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, null, null, x.ParentId, null))
             .ToListAsync(ct);
 }

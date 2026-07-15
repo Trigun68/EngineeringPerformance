@@ -22,4 +22,12 @@ internal static class IntegrationTestAuth
             return false;
         }
     }
+
+    /// <summary>Логин + проверка доступности БД в CI (C-04).</summary>
+    public static bool EnsureSqlAvailable(HttpClient client)
+    {
+        var available = TryLoginAsAdminAsync(client).GetAwaiter().GetResult();
+        IntegrationTestSqlGate.RequireAvailable(available);
+        return available;
+    }
 }

@@ -12,11 +12,17 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 public sealed partial class ProjectExcelDataImportService
 {
-    private async Task<DataImportResultDto> ImportPhysicalVolumesAsync(int projectId, int versionId, string filePath, string description)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+    private Task<DataImportResultDto> ImportPhysicalVolumesAsync(int projectId, int versionId, string filePath, string description) =>
+        ExecuteWithRetryableTransactionAsync(context =>
+            ImportPhysicalVolumesCoreAsync(context, projectId, versionId, filePath, description));
 
+    private async Task<DataImportResultDto> ImportPhysicalVolumesCoreAsync(
+        AppDbContext context,
+        int projectId,
+        int versionId,
+        string filePath,
+        string description)
+    {
         // Режим «замена»: удаляем все предыдущие данные ФО для данной версии проекта,
         // чтобы каждый импорт был полным пересозданием без дублей и без сворачивания строк.
         await ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
@@ -32,6 +38,8 @@ public sealed partial class ProjectExcelDataImportService
         };
         context.DataImportIterations.Add(iteration);
         await context.SaveChangesAsync();
+
+        await PhysicalVolumeCatalogBinding.EnsureCatalogTypeConfiguredAsync(context, versionId);
 
         var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, versionId);
         var physicalVolumeRows = isKfo
@@ -49,7 +57,6 @@ public sealed partial class ProjectExcelDataImportService
 
         if (!TryResolvePhysicalVolumeImportLayout(worksheet, out var columnMap, out var firstDataRowNumber))
         {
-            await transaction.CommitAsync();
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
             var emptySheetDetails =
@@ -61,7 +68,6 @@ public sealed partial class ProjectExcelDataImportService
         var rows = EnumeratePhysicalVolumeDataRows(worksheet, firstDataRowNumber).ToList();
         if (rows.Count == 0)
         {
-            await transaction.CommitAsync();
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
             var noDataRowsDetails =
@@ -117,7 +123,6 @@ public sealed partial class ProjectExcelDataImportService
         {
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
-            await transaction.CommitAsync();
             var catalogCount = physicalVolumes.Count;
             var zeroDetails = BuildPhysicalVolumeZeroImportDetails(
                 rows.Count,
@@ -140,8 +145,6 @@ public sealed partial class ProjectExcelDataImportService
         var recordsImported = newEntities.Count;
         iteration.RecordCount = recordsImported;
         await context.SaveChangesAsync();
-        await transaction.CommitAsync();
-
         // ISS-007: даже при успешном импорте показываем пропущенные строки,
         // чтобы пользователь видел, какие данные не попали в БД и мог дозаполнить
         // шифр в файле. На реальных проектах потеря 0.001% незаметна в общем итоге,

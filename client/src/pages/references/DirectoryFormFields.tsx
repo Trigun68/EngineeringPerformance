@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { Checkbox, FormControlLabel, MenuItem, TextField, Typography } from '@mui/material';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { fetchIicNormsByKfo } from '../../api/iicNormsApi';
-import { fetchDirectoryTree, flattenDirectoryTree, type DirectoryTreeRow } from '../../api/directoriesApi';
 import type { DirectoryFieldDef } from './directoryFieldConfig';
 import { DirectoryFormRow } from './DirectoryEditDialog';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import type { DictionaryKey } from '../../types/dictionary';
 import { formatIisNorm } from '../../utils/formatIisNorm';
+import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
 
 interface DirectoryFormFieldsProps {
   fields: DirectoryFieldDef[];
@@ -37,33 +37,6 @@ export function DirectoryFormFields({
   const [normOptions, setNormOptions] = useState<NormOption[]>([]);
   const [normsLoading, setNormsLoading] = useState(false);
 
-  // Загрузка дерева КФО для hierarchical lookup
-  const [kfoTree, setKfoTree] = useState<DirectoryTreeRow[]>([]);
-  const [kfoTreeLoading, setKfoTreeLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    // Проверяем наличие поля physicalVolumeKfoId (БЕР -> КФО)
-    const needsKfoTree = fields.some((f) => f.key === 'physicalVolumeKfoId');
-    if (!needsKfoTree) return;
-
-    setKfoTreeLoading(true);
-    fetchDirectoryTree('physical-volumes-kfo', false)
-      .then((tree) => {
-        if (!cancelled) setKfoTree(flattenDirectoryTree(tree));
-      })
-      .catch(() => {
-        if (!cancelled) setKfoTree([]);
-      })
-      .finally(() => {
-        if (!cancelled) setKfoTreeLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fields]);
-
   const kfoId = properties.kfoId == null || properties.kfoId === '' ? null : Number(properties.kfoId);
 
   const loadNorms = useCallback(async (kfo: number | null) => {
@@ -86,7 +59,7 @@ export function DirectoryFormFields({
             ]
               .filter(Boolean)
               .join(' '),
-            unitName: norm.unitId ? getUnitName(norm.unitId) : undefined,
+            unitName: norm.unitName ?? (norm.resolvedUnitId ? getUnitName(norm.resolvedUnitId) : undefined),
           }),
         })),
       );
@@ -101,11 +74,13 @@ export function DirectoryFormFields({
     void loadNorms(kfoId);
   }, [kfoId, loadNorms]);
 
+  const directions = getList('iicWorkDirections');
+
   const formatIicLabel = (item: { id: number; name: string; code?: string | null }) =>
     formatIisNorm({
       code: item.code,
       name: item.name,
-      unitName: getUnitName(item.id),
+      unitName: resolveIicDirectionUnitName(item.id, directions, getUnitName),
     });
 
   const handleKfoChange = (key: string, next: number | null) => {
@@ -137,24 +112,6 @@ export function DirectoryFormFields({
                   Сначала выберите КФО
                 </Typography>
               )}
-            </DirectoryFormRow>
-          );
-        }
-
-        // Специальная обработка для поля physicalVolumeKfoId (БЕР -> КФО)
-        if (field.key === 'physicalVolumeKfoId') {
-          const raw = properties[field.key];
-          const value = raw == null || raw === '' ? null : Number(raw);
-
-          return (
-            <DirectoryFormRow key={field.key} label={label}>
-              <HierarchicalSelect
-                items={kfoTree}
-                value={value}
-                onChange={(next) => onPropertyChange(field.key, next)}
-                disabled={kfoTreeLoading}
-                emptyLabel="Не выбрана"
-              />
             </DirectoryFormRow>
           );
         }
@@ -196,9 +153,7 @@ export function DirectoryFormFields({
                 <MenuItem value="">(не выбрано)</MenuItem>
                 {items.map((item) => (
                   <MenuItem key={item.id} value={item.id}>
-                    {field.formatAsIisNorm
-                      ? formatIisNorm({ code: item.code, name: item.name, unitName: getUnitName(item.id) })
-                      : item.name}
+                    {field.formatAsIisNorm ? formatIicLabel(item) : item.name}
                   </MenuItem>
                 ))}
               </TextField>

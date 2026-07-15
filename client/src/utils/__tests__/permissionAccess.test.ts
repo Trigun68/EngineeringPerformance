@@ -19,10 +19,12 @@ describe('permissionAccess', () => {
   });
 
   it('hides nav items without read permission', () => {
-    expect(isMainNavItemVisible(MAIN_NAV_ITEMS[0], observerPermissions, 'Observer')).toBe(false);
-    expect(isMainNavItemVisible(MAIN_NAV_ITEMS[1], observerPermissions, 'Observer')).toBe(true);
-    expect(isMainNavItemVisible(MAIN_NAV_ITEMS[2], observerPermissions, 'Observer')).toBe(true);
-    expect(isMainNavItemVisible(MAIN_NAV_ITEMS[3], observerPermissions, 'Observer')).toBe(false);
+    const byPath = Object.fromEntries(MAIN_NAV_ITEMS.map((item) => [item.path, item]));
+    expect(isMainNavItemVisible(byPath['/'], observerPermissions, 'Observer')).toBe(false);
+    expect(isMainNavItemVisible(byPath['/projects'], observerPermissions, 'Observer')).toBe(true);
+    expect(isMainNavItemVisible(byPath['/analytics/trends'], observerPermissions, 'Observer')).toBe(false);
+    expect(isMainNavItemVisible(byPath['/references'], observerPermissions, 'Observer')).toBe(true);
+    expect(isMainNavItemVisible(byPath['/settings/users'], observerPermissions, 'Observer')).toBe(false);
   });
 
   it('shows settings when Users permission exists', () => {

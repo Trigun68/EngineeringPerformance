@@ -1,6 +1,8 @@
 # Runbook: Cutover WPF → Web
 
-**Обновлено:** 2026-06-08  
+> **Статус (2026-07-14):** cutover с точки зрения **разработки завершён** — активен только web. Runbook сохранён для ops/rollback. Политика: [web-only-development-plan.md](./web-only-development-plan.md).
+
+**Обновлено:** 2026-07-14  
 **Связано:** `_install/DEPLOY.md`, `uat-phase4-checklist.md`
 
 ---

@@ -1,8 +1,11 @@
 using EngineeringPerformance.Application.Auth;
+using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Domain.Norms;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +21,9 @@ public sealed class ProjectsPageVersionBundle
     public required IReadOnlyList<ProjectLaborIntensity> LaborIntensities { get; init; }
     public required IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection { get; init; }
     public required IReadOnlyDictionary<int, IicWorkDirection> ClassifierMap { get; init; }
+    public required IReadOnlyDictionary<int, PlanningZParameters> PlanningZByDirection { get; init; }
+    public required IReadOnlyDictionary<int, int> NormIdByDirection { get; init; }
+    public PlanningScenario PlanningScenario { get; init; } = PlanningScenario.ByEachValue;
 }
 
 /// <summary>
@@ -53,9 +59,12 @@ public sealed class ProjectsPageRawDataLoader
 
         // Batch 1: IIC + version
         var workDirections = await GetWorkDirectionsAsync(cancellationToken);
-        var versionExists = await _context.ProjectAnalysisVersions
+        var version = await _context.ProjectAnalysisVersions
             .AsNoTracking()
-            .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
+            .Where(v => v.Id == versionId && v.ProjectId == projectId)
+            .Select(v => new { v.Id, v.PlanningScenario })
+            .FirstOrDefaultAsync(cancellationToken);
+        var versionExists = version is not null;
 
         // Batch 2: объёмы и оборудование
         var physicalVolumes = await _context.ProjectPhysicalVolumes
@@ -78,6 +87,7 @@ public sealed class ProjectsPageRawDataLoader
             .ToListAsync(cancellationToken);
 
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection;
+        IReadOnlyDictionary<int, int> normIdByDirection;
         if (versionExists)
         {
             var snapshots = await _context.AnalysisVersionSnapshots
@@ -94,16 +104,28 @@ public sealed class ProjectsPageRawDataLoader
                     g =>
                     {
                         var norm = g.First().Norm!;
-                        return new NormCalculationSnapshot(
-                            norm.Performance,
-                            norm.Estimate,
-                            norm.StandardDeviation);
+                        return NormSnapshotFactory.FromEntity(norm);
                     });
+
+            normIdByDirection = snapshots
+                .GroupBy(s => s.WorkDirectionId)
+                .ToDictionary(g => g.Key, g => g.First().NormId);
         }
         else
         {
             normsByDirection = new Dictionary<int, NormCalculationSnapshot>();
+            normIdByDirection = new Dictionary<int, int>();
         }
+
+        var planningRows = await _context.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync(cancellationToken);
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
 
         return new ProjectsPageVersionBundle
         {
@@ -114,6 +136,9 @@ public sealed class ProjectsPageRawDataLoader
             LaborIntensities = laborIntensities,
             NormsByDirection = normsByDirection,
             ClassifierMap = workDirections.ToDictionary(d => d.Id),
+            PlanningZByDirection = planningZByDirection,
+            NormIdByDirection = normIdByDirection,
+            PlanningScenario = version?.PlanningScenario ?? PlanningScenario.ByEachValue,
         };
     }
 

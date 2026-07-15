@@ -10,10 +10,12 @@ using EngineeringPerformance.Infrastructure.Logging;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Serilog;
+using StackExchange.Redis;
 using CorsOptions = EngineeringPerformance.Api.Configuration.CorsOptions;
 
 Log.Logger = new LoggerConfiguration()
@@ -93,6 +95,8 @@ try
 
     builder.Services.AddInfrastructure(builder.Configuration);
 
+    ConfigureDataProtection(builder);
+
     builder.Host.UseSerilog((context, services, configuration) =>
     {
         var store = services.GetRequiredService<SerilogLogStore>();
@@ -119,7 +123,8 @@ builder.Services.AddCors(options =>
             policy.WithOrigins(corsOrigins)
                 .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowCredentials();
+                .AllowCredentials()
+                .WithExposedHeaders("Content-Disposition");
         }
     });
 });
@@ -180,6 +185,20 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+static void ConfigureDataProtection(WebApplicationBuilder builder)
+{
+    var dataProtection = builder.Services
+        .AddDataProtection()
+        .SetApplicationName("EngineeringPerformance");
+
+    var redisConnection = builder.Configuration.GetConnectionString("Redis");
+    if (string.IsNullOrWhiteSpace(redisConnection))
+        return;
+
+    var redis = ConnectionMultiplexer.Connect(redisConnection);
+    dataProtection.PersistKeysToStackExchangeRedis(redis, "EngineeringPerformance-DataProtection-Keys");
 }
 
 static void ValidateRequiredConfiguration(IConfiguration configuration, IHostEnvironment environment)

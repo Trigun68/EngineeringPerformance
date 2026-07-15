@@ -1,16 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Alert,
   Box,
   Button,
   Card,
   CardContent,
-  Checkbox,
   Divider,
-  FormControlLabel,
-  Grid,
   IconButton,
   Paper,
   Stack,
@@ -21,17 +18,16 @@ import {
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import DeleteIcon from '@mui/icons-material/Delete';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import type { ColDef } from 'ag-grid-community';
+import { exportCombinedProjectPdf } from '../../api/visualReportsApi';
 import { fetchProjectPermissions, type ProjectPermission } from '../../api/projectPermissionsApi';
 import {
   fetchProjectVersions,
   type ProjectVersion,
 } from '../../api/projectVersionsApi';
-import { createProject, fetchProjects, updateProject } from '../../api/projectsApi';
-import { DataTable } from '../../components/DataTable/DataTable';
+import { createProject, fetchProjectById, fetchProjects, updateProject } from '../../api/projectsApi';
+import { fetchProjectCharacteristics } from '../../api/projectCharacteristicsApi';
+import { getApiErrorMessage } from '../../services/apiError';
 import { usePermission } from '../../hooks/usePermission';
 import type { Project } from '../../types/project';
 import type { ProjectFormData } from '../../types/project';
@@ -39,11 +35,27 @@ import { ProjectSelectionDialog } from '../../components/ProjectSelectionDialog/
 import { ParticipantsModal } from '../../components/ParticipantsModal/ParticipantsModal';
 import { EditModal } from '../../components/EditModal/EditModal';
 import { ProjectCharacteristicsDialog } from '../../components/ProjectCharacteristicsDialog/ProjectCharacteristicsDialog';
+import { ForecastPanel } from '../../features/projects/forecast/ForecastPanel';
+import { FactPanel } from '../../features/projects/fact/FactPanel';
+import { ComparePanel } from '../../features/projects/compare/ComparePanel';
+import { usePersistedTabState } from '../../hooks/usePersistedTabState';
+import { useAuthStore } from '../../store/useAuthStore';
+import { canReadPermission } from '../../utils/permissionAccess';
 
-// Типы для данных гридов
-type ForecastTabId = 'forecast-total' | 'forecast-facility' | 'forecast-detail';
-type FactTabId = 'fact-total' | 'fact-facility' | 'fact-detail';
-type CompareTabId = 'compare-total' | 'compare-facility' | 'compare-detail';
+type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'reports';
+
+const WORKSPACE_TAB_CONFIG: ReadonlyArray<{
+  value: WorkspaceMainTab;
+  label: string;
+  permission: string;
+}> = [
+  { value: 'forecast', label: 'Прогнозирование', permission: 'Planning' },
+  { value: 'fact', label: 'Оценка факта', permission: 'Assessment' },
+  { value: 'compare', label: 'Сравнение версий', permission: 'VersionComparison' },
+  { value: 'reports', label: 'Отчёты', permission: 'Reports' },
+];
+
+// Типы workspace query (верхняя панель проекта и вкладка «Отчёты»)
 
 interface ProjectsPageData {
   project: Project | null;
@@ -115,18 +127,28 @@ function toProjectForm(project: Project): ProjectFormData {
 }
 
 async function fetchWorkspaceData(projectId: number): Promise<ProjectsPageData> {
-  const [projectsData, versionsData, participantsData] = await Promise.all([
-    fetchProjects(),
+  const [project, versionsData, participantsData, characteristicsData] = await Promise.all([
+    fetchProjectById(projectId),
     fetchProjectVersions(projectId),
     fetchProjectPermissions(projectId).catch(() => [] as ProjectPermission[]),
+    fetchProjectCharacteristics(projectId).catch(() => []),
   ]);
+  if (!project) {
+    throw new Error('Проект не найден.');
+  }
+  const planVersion = versionsData.find((v) => v.direction === 1) ?? versionsData[0] ?? null;
+  const factVersion = versionsData.find((v) => v.direction === 2) ?? planVersion;
 
-  const currentProject = projectsData.find((p) => p.id === projectId) ?? null;
-  const planVersion = versionsData[0] ?? null;
-  const factVersion = versionsData[1] ?? planVersion;
+  const percents = characteristicsData
+    .map((c) => c.selectedValuePercent)
+    .filter((v): v is number => v != null);
+  const deviationPercent =
+    percents.length > 0
+      ? Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 100) / 100
+      : null;
 
   return {
-    project: currentProject,
+    project,
     versions: versionsData,
     participants: participantsData,
     planVersionId: planVersion?.id ?? null,
@@ -137,39 +159,69 @@ async function fetchWorkspaceData(projectId: number): Promise<ProjectsPageData> 
     compareVersionBId: factVersion?.id ?? null,
     compareShowOnlyDifferences: false,
     accuracyScore: null,
-    deviationPercent: null,
+    deviationPercent,
   };
+}
+
+function parseProjectId(raw: string | undefined): number | null {
+  if (!raw || !/^\d+$/.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 export function FullProjectsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { projectId: projectIdParam } = useParams<{ projectId: string }>();
-  const currentProjectId = projectIdParam ? Number(projectIdParam) : null;
+  const currentProjectId = parseProjectId(projectIdParam);
+  const navProject = (location.state as { project?: Project } | null)?.project ?? null;
 
-  const { canRead } = usePermission('Projects');
-  const { hasAccess: canImport } = usePermission('ProjectDataUpload');
+  const { canRead, canEdit } = usePermission('Projects');
+  const user = useAuthStore((s) => s.user);
+  const permissions = user?.permissions;
+  const roleName = user?.roleName;
 
-  // Диалоги
-  const [selectionDialogOpen, setSelectionDialogOpen] = useState(!currentProjectId);
+  const visibleWorkspaceTabs = useMemo(
+    () =>
+      WORKSPACE_TAB_CONFIG.filter((tab) =>
+        canReadPermission(permissions, tab.permission, roleName),
+      ),
+    [permissions, roleName],
+  );
+
+  // Активные вкладки
+  const [mainTab, setMainTab] = usePersistedTabState<WorkspaceMainTab>(
+    currentProjectId ? `projects.${currentProjectId}.mainTab` : 'projects.mainTab',
+    'forecast',
+  );
+
+  useEffect(() => {
+    if (visibleWorkspaceTabs.length === 0) return;
+    if (!visibleWorkspaceTabs.some((t) => t.value === mainTab)) {
+      setMainTab(visibleWorkspaceTabs[0].value);
+    }
+  }, [mainTab, setMainTab, visibleWorkspaceTabs]);
+
+  const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [characteristicsOpen, setCharacteristicsOpen] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
-  const [compareShowOnlyDifferences, setCompareShowOnlyDifferences] = useState(false);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalMode, setProjectModalMode] = useState<'create' | 'edit'>('edit');
   const [projectEditingId, setProjectEditingId] = useState<number | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectFormData>(EMPTY_PROJECT_FORM);
   const [projectSubmitting, setProjectSubmitting] = useState(false);
+  const [combinedExporting, setCombinedExporting] = useState(false);
 
-  // Активные вкладки
-  const [mainTab, setMainTab] = useState<'forecast' | 'fact' | 'compare' | 'reports'>('forecast');
-  const [forecastTab, setForecastTab] = useState<ForecastTabId>('forecast-total');
-  const [factTab, setFactTab] = useState<FactTabId>('fact-total');
-  const [compareTab, setCompareTab] = useState<CompareTabId>('compare-total');
+  useEffect(() => {
+    if (currentProjectId) {
+      setSelectionDialogOpen(false);
+    }
+  }, [currentProjectId]);
 
   const projectsQuery = useQuery<Project[]>({
     queryKey: ['projects', 'all'],
-    queryFn: fetchProjects,
+    queryFn: () => fetchProjects(),
     enabled: canRead,
   });
 
@@ -181,7 +233,10 @@ export function FullProjectsPage() {
 
   const projects = projectsQuery.data ?? [];
   const data = projectDataQuery.data ?? EMPTY_DATA;
-  const loading = projectsQuery.isLoading || projectDataQuery.isLoading;
+  const resolvedProject =
+    data.project ?? (navProject && navProject.id === currentProjectId ? navProject : null);
+  const hasProject = resolvedProject != null;
+  const loading = projectsQuery.isLoading || (Boolean(currentProjectId) && projectDataQuery.isLoading);
   const error = pageError
     ?? (projectsQuery.isError
       ? 'Не удалось загрузить список проектов.'
@@ -222,164 +277,35 @@ export function FullProjectsPage() {
   };
 
   const handleSaveProject = async () => {
+    if (!canEdit) return;
     setProjectSubmitting(true);
     setPageError(null);
     try {
       if (projectModalMode === 'edit' && projectEditingId) {
         await updateProject(projectEditingId, projectForm);
         setProjectModalOpen(false);
-        await Promise.all([projectsQuery.refetch(), projectDataQuery.refetch()]);
+        await projectDataQuery.refetch();
+        await projectsQuery.refetch();
       } else {
         const created = await createProject(projectForm);
         setProjectModalOpen(false);
         await projectsQuery.refetch();
         navigate(`/projects/${created.id}`);
       }
-    } catch {
-      setPageError('Не удалось сохранить проект.');
+    } catch (err) {
+      setPageError(getApiErrorMessage(err, 'Не удалось сохранить проект.'));
+      throw err;
     } finally {
       setProjectSubmitting(false);
     }
   };
 
-  // Заглушки для импорта/удаления
-  const handleImport = (type: string) => {
-    window.alert(`Импорт ${type} — в разработке`);
-  };
-
-  const handleDelete = (type: string) => {
-    if (window.confirm(`Удалить ${type}?`)) {
-      window.alert(`Удаление ${type} — в разработке`);
-    }
-  };
-
-  // Колонки для гридов (заглушки)
-  const forecastSummaryColumns: ColDef[] = useMemo(() => [
-    { field: 'name', headerName: 'Наименование', minWidth: 200 },
-    { field: 'unit', headerName: 'Ед. изм.', width: 100 },
-    { field: 'factVolume', headerName: 'Факт ФО', width: 120 },
-    { field: 'normProductivity', headerName: 'Норм. произв.', width: 140 },
-    { field: 'baseHours', headerName: 'Базовый, ч', width: 120 },
-    { field: 'optimisticHours', headerName: 'Оптимист., ч', width: 130 },
-    { field: 'pessimisticHours', headerName: 'Пессимист., ч', width: 140 },
-  ], []);
-
-  const forecastFacilityColumns: ColDef[] = useMemo(() => [
-    { field: 'facilityCode', headerName: 'Шифр объекта', width: 120 },
-    { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 200 },
-    { field: 'baseHours', headerName: 'Базовый, ч', width: 120 },
-    { field: 'optimisticHours', headerName: 'Оптимист., ч', width: 130 },
-    { field: 'pessimisticHours', headerName: 'Пессимист., ч', width: 140 },
-  ], []);
-
-  const forecastDetailColumns: ColDef[] = useMemo(() => [
-    { field: 'facilityCode', headerName: 'Шифр объекта', width: 100 },
-    { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 150 },
-    { field: 'bindingType', headerName: 'Тип привязки', width: 100 },
-    { field: 'documentSet', headerName: 'Комплект документов', width: 140 },
-    { field: 'catalogId', headerName: 'ID по каталогу', width: 110 },
-    { field: 'tag', headerName: 'TAG', width: 80 },
-    { field: 'workId', headerName: 'ID работы', width: 100 },
-    { field: 'itemName', headerName: 'Наименование', minWidth: 150 },
-    { field: 'pvCode', headerName: 'Код', width: 80 },
-    { field: 'pvName', headerName: 'Наименование ФО', minWidth: 150 },
-    { field: 'coefficient', headerName: 'Коэфф.', width: 80 },
-    { field: 'iicGroup', headerName: 'Группа ФО IIC', width: 130 },
-    { field: 'quantity', headerName: 'Кол-во', width: 90 },
-    { field: 'baseHours', headerName: 'Базовый, ч', width: 100 },
-    { field: 'optimisticHours', headerName: 'Оптимист., ч', width: 110 },
-    { field: 'pessimisticHours', headerName: 'Пессимист., ч', width: 120 },
-  ], []);
-
-  const factPerformanceColumns: ColDef[] = useMemo(() => [
-    { field: 'code', headerName: 'Код', width: 80 },
-    { field: 'name', headerName: 'Наименование', minWidth: 200 },
-    { field: 'unit', headerName: 'Ед. изм.', width: 80 },
-    { field: 'factLaborHours', headerName: 'Факт.трудоёмк., ч', width: 140 },
-    { field: 'factProductivity', headerName: 'Факт произв.', width: 120 },
-    { field: 'normProductivity', headerName: 'Норм произв.', width: 120 },
-    { field: 'zScore', headerName: 'Z-score', width: 100 },
-    { field: 'percentile', headerName: 'Перцентиль', width: 100 },
-    { field: 'interpretation', headerName: 'Интерпретация', minWidth: 180 },
-  ], []);
-
-  const factFacilityColumns: ColDef[] = useMemo(() => [
-    { field: 'code', headerName: 'Код', width: 100 },
-    { field: 'name', headerName: 'Наименование', minWidth: 200 },
-    { field: 'factLaborHours', headerName: 'Факт.трудоёмк., ч', width: 140 },
-    { field: 'zScore', headerName: 'Z-score', width: 100 },
-    { field: 'percentile', headerName: 'Перцентиль', width: 100 },
-    { field: 'interpretation', headerName: 'Интерпретация', minWidth: 180 },
-  ], []);
-
-  const factDetailColumns: ColDef[] = useMemo(() => [
-    { field: 'facilityCode', headerName: 'Шифр объекта', width: 100 },
-    { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 150 },
-    { field: 'documentSet', headerName: 'Комплект', width: 100 },
-    { field: 'pvCode', headerName: 'Код ФО', width: 80 },
-    { field: 'pvName', headerName: 'Наименование ФО', minWidth: 150 },
-    { field: 'workId', headerName: 'ID работы', width: 90 },
-    { field: 'workName', headerName: 'Наименование работы', minWidth: 150 },
-    { field: 'iicGroup', headerName: 'Группа IIC', width: 120 },
-    { field: 'unit', headerName: 'Ед. изм.', width: 70 },
-    { field: 'quantity', headerName: 'Кол-во', width: 80 },
-    { field: 'factLaborHours', headerName: 'Факт.трудоёмк., ч', width: 130 },
-    { field: 'factProductivity', headerName: 'Факт произв.', width: 110 },
-    { field: 'normProductivity', headerName: 'Норм произв.', width: 110 },
-    { field: 'zScore', headerName: 'Z-score', width: 90 },
-    { field: 'percentile', headerName: 'Перцентиль', width: 100 },
-    { field: 'interpretation', headerName: 'Интерпретация', minWidth: 150 },
-  ], []);
-
-  const compareSummaryColumns: ColDef[] = useMemo(() => [
-    { field: 'name', headerName: 'Направление', minWidth: 200 },
-    { field: 'zScoreA', headerName: 'Z-score А', width: 100 },
-    { field: 'interpretationA', headerName: 'Оценка А', width: 120 },
-    { field: 'zScoreB', headerName: 'Z-score Б', width: 100 },
-    { field: 'interpretationB', headerName: 'Оценка Б', width: 120 },
-    { field: 'zDelta', headerName: 'Δ Z-score', width: 100 },
-  ], []);
-
-  // Если нет проекта
-  if (!currentProjectId) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Card sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
-          <CardContent sx={{ textAlign: 'center', py: 6 }}>
-            <Typography variant="h5" gutterBottom>
-              Проект не выбран
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Для работы необходимо выбрать проект из списка
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={() => setSelectionDialogOpen(true)}
-            >
-              Выбрать проект
-            </Button>
-          </CardContent>
-        </Card>
-
-        <ProjectSelectionDialog
-          open={selectionDialogOpen}
-          projects={projects}
-          onSelect={handleSelectProject}
-          onClose={() => setSelectionDialogOpen(false)}
-          onCreateNew={openCreateProject}
-          onEditSelected={openEditProject}
-          onCopySelected={openCopyProject}
-        />
-      </Box>
-    );
-  }
-
+  // Вкладка «Отчёты» — навигация к функциям на других вкладках
   if (!canRead) {
     return <Alert severity="warning">Нет прав на просмотр проектов.</Alert>;
   }
 
-  const { project, versions: _versions, participants: _participants, planVersionId, planVersionLabel, factVersionId, factVersionLabel } = data;
+  const { planVersionId, factVersionId, compareVersionAId, compareVersionBId } = data;
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -387,98 +313,94 @@ export function FullProjectsPage() {
           ВЕРХНЯЯ ПАНЕЛЬ: Информация о проекте и кнопки действий
          ═════════════════════════════════════════════════════════════════ */}
       <Paper elevation={1} sx={{ p: 2, mb: 2, backgroundColor: '#F8F9FA' }}>
-        {/* Строка 1: Код, Название, Точность, Отклонение */}
+        {/* Строка 1: Выбор проекта, код, название, метрики */}
         <Box sx={{ mb: 2 }}>
-          {project ? (
-            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-              {/* Код проекта */}
-              <Box sx={{ 
-                backgroundColor: '#2C3E50', 
-                color: 'white', 
-                px: 1.5, 
-                py: 0.5, 
-                borderRadius: 1,
-                fontWeight: 'bold',
-                fontSize: '0.875rem'
-              }}>
-                {project.code}
-              </Box>
-              
-              {/* Название проекта */}
-              <Typography variant="h6" sx={{ color: '#2C3E50', fontWeight: 500 }}>
-                {project.name}
+          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+            <Button
+              variant="contained"
+              onClick={() => setSelectionDialogOpen(true)}
+              sx={{
+                backgroundColor: '#3498DB',
+                color: 'white',
+                '&:hover': { backgroundColor: '#2980B9' },
+              }}
+            >
+              Выбрать проект
+            </Button>
+
+            {hasProject ? (
+              <>
+                <Box
+                  sx={{
+                    backgroundColor: '#2C3E50',
+                    color: 'white',
+                    px: 1.5,
+                    py: 0.5,
+                    borderRadius: 1,
+                    fontWeight: 'bold',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  {resolvedProject!.code}
+                </Box>
+
+                <Typography variant="h6" sx={{ color: '#2C3E50', fontWeight: 500 }}>
+                  {resolvedProject!.name}
+                </Typography>
+
+                {data.deviationPercent !== null && (
+                  <Box
+                    sx={{
+                      backgroundColor: '#FDFEFE',
+                      border: '1px solid #D5D8DC',
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ color: '#616A6B' }}>
+                      Отклонение: <strong>{data.deviationPercent.toFixed(2)}%</strong>
+                    </Typography>
+                  </Box>
+                )}
+              </>
+            ) : loading && currentProjectId ? (
+              <Typography variant="body1" color="text.secondary">
+                Загрузка проекта…
               </Typography>
-
-              {/* Точность оценки */}
-              {data.accuracyScore !== null && (
-                <Box sx={{ 
-                  backgroundColor: '#EBF5FB', 
-                  border: '1px solid #AED6F1',
-                  px: 1.5, 
-                  py: 0.5, 
-                  borderRadius: 1 
-                }}>
-                  <Typography variant="body2" sx={{ color: '#1A5276' }}>
-                    Точность оценки: <strong>{data.accuracyScore.toFixed(1)}%</strong>
-                  </Typography>
-                </Box>
-              )}
-
-              {/* Отклонение */}
-              {data.deviationPercent !== null && (
-                <Box sx={{ 
-                  backgroundColor: '#FDFEFE', 
-                  border: '1px solid #D5D8DC',
-                  px: 1.5, 
-                  py: 0.5, 
-                  borderRadius: 1 
-                }}>
-                  <Typography variant="body2" sx={{ color: '#616A6B' }}>
-                    Отклонение: <strong>{data.deviationPercent.toFixed(2)}%</strong>
-                  </Typography>
-                </Box>
-              )}
-            </Stack>
-          ) : (
-            <Typography variant="body1" color="text.secondary">
-              Проект не выбран
-            </Typography>
-          )}
+            ) : currentProjectId && projectDataQuery.isError ? (
+              <Typography variant="body1" color="error">
+                Не удалось загрузить проект
+              </Typography>
+            ) : (
+              <Typography variant="body2" sx={{ color: '#95A5A6' }}>
+                Проект не выбран
+              </Typography>
+            )}
+          </Stack>
         </Box>
 
-        {/* Строка 2: Кнопки действий */}
+        {/* Строка 2: Основные данные, характеристики, участники */}
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Button
-            variant="contained"
-            onClick={() => setSelectionDialogOpen(true)}
-            sx={{ 
-              backgroundColor: '#3498DB', 
-              color: 'white',
-              '&:hover': { backgroundColor: '#2980B9' }
-            }}
-          >
-            Выбрать проект
-          </Button>
-          
-          <Button
             variant="outlined"
-            disabled={!project}
-            onClick={() => project && openEditProject(project)}
+            disabled={!hasProject || !canEdit}
+            onClick={() => resolvedProject && openEditProject(resolvedProject)}
           >
             Основные данные
           </Button>
-          
+
           <Button
             variant="outlined"
-            disabled={!project}
+            disabled={!hasProject}
             onClick={() => setCharacteristicsOpen(true)}
           >
             Характеристики
           </Button>
-          
+
           <Button
             variant="outlined"
-            disabled={!project}
+            disabled={!hasProject}
             onClick={() => setParticipantsOpen(true)}
           >
             Участники
@@ -523,600 +445,61 @@ export function FullProjectsPage() {
               '& .MuiTabs-indicator': { display: 'none' },
             }}
           >
-            <Tab
-              label="Прогнозирование"
-              value="forecast"
-              sx={{
-                textTransform: 'none',
-                bgcolor: '#DCE5EE',
-                color: '#2C3E50',
-                '&.Mui-selected': {
-                  bgcolor: '#5D6D7E',
-                  color: '#FFFFFF',
-                },
-              }}
-            />
-            <Tab
-              label="Оценка факта"
-              value="fact"
-              sx={{
-                textTransform: 'none',
-                bgcolor: '#DCE5EE',
-                color: '#2C3E50',
-                '&.Mui-selected': {
-                  bgcolor: '#5D6D7E',
-                  color: '#FFFFFF',
-                },
-              }}
-            />
-            <Tab
-              label="Сравнение версий"
-              value="compare"
-              sx={{
-                textTransform: 'none',
-                bgcolor: '#DCE5EE',
-                color: '#2C3E50',
-                '&.Mui-selected': {
-                  bgcolor: '#5D6D7E',
-                  color: '#FFFFFF',
-                },
-              }}
-            />
-            <Tab
-              label="Отчёты"
-              value="reports"
-              sx={{
-                textTransform: 'none',
-                bgcolor: '#DCE5EE',
-                color: '#2C3E50',
-                '&.Mui-selected': {
-                  bgcolor: '#5D6D7E',
-                  color: '#FFFFFF',
-                },
-              }}
-            />
+            {visibleWorkspaceTabs.map((tab) => (
+              <Tab
+                key={tab.value}
+                label={tab.label}
+                value={tab.value}
+                sx={{
+                  textTransform: 'none',
+                  bgcolor: '#DCE5EE',
+                  color: '#2C3E50',
+                  '&.Mui-selected': {
+                    bgcolor: '#D6EAF8',
+                    color: '#2C3E50',
+                    fontWeight: 600,
+                  },
+                }}
+              />
+            ))}
           </Tabs>
         </Paper>
 
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: ПРОГНОЗИРОВАНИЕ
            ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'forecast' && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {/* Верхняя панель версии и кнопок импорта */}
-            <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-              <Grid item xs={12} md={6}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Button
-                    variant="contained"
-                    onClick={() => window.alert('Выбор версии плана — в разработке')}
-                    sx={{ 
-                      backgroundColor: '#2980B9', 
-                      color: 'white',
-                      '&:hover': { backgroundColor: '#2471A3' }
-                    }}
-                  >
-                    📋 Версия (план)
-                  </Button>
-                  {planVersionLabel && (
-                    <Box sx={{ 
-                      backgroundColor: '#EBF5FB', 
-                      border: '1px solid #AED6F1',
-                      px: 1.5, 
-                      py: 0.5, 
-                      borderRadius: 1 
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#1A5276' }}>
-                        {planVersionLabel}
-                      </Typography>
-                    </Box>
-                  )}
-                </Stack>
-              </Grid>
-              
-              <Grid item xs={12} md={6}>
-                <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
-                  {canImport && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!planVersionId}
-                        onClick={() => handleImport('физ.объёмов')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Импорт ФО
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!planVersionId}
-                        onClick={() => handleDelete('физ.объёмов')}
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                      >
-                        Удалить ФО
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!planVersionId}
-                        onClick={() => handleImport('оборудования')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Импорт оборуд.
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!planVersionId}
-                        onClick={() => handleDelete('оборудования')}
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                      >
-                        Удалить оборуд.
-                      </Button>
-                    </>
-                  )}
-                </Stack>
-              </Grid>
-            </Grid>
-
-            {/* Внутренние вкладки */}
-            <Tabs
-              value={forecastTab}
-              onChange={(_, value) => setForecastTab(value)}
-              sx={{ mb: 2 }}
-            >
-              <Tab label="Итого" value="forecast-total" />
-              <Tab label="По объектам" value="forecast-facility" />
-              <Tab label="Детально" value="forecast-detail" />
-            </Tabs>
-
-            {/* Содержимое вкладок */}
-            <Box sx={{ flex: 1 }}>
-              {forecastTab === 'forecast-total' && (
-                <Grid container spacing={2} sx={{ height: '100%' }}>
-                  <Grid item xs={12} md={10}>
-                    <DataTable
-                      rowData={[]} // TODO: загрузить данные
-                      columnDefs={forecastSummaryColumns}
-                      objectName="ForecastSummary"
-                      gridId="forecast-summary"
-                      loading={loading}
-                      height="100%"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      disabled={!planVersionId}
-                      onClick={() => window.alert('Открыть прогноз — в разработке')}
-                      sx={{ 
-                        backgroundColor: '#27AE60', 
-                        color: 'white',
-                        height: 40
-                      }}
-                    >
-                      📊 Прогноз
-                    </Button>
-                  </Grid>
-                </Grid>
-              )}
-
-              {forecastTab === 'forecast-facility' && (
-                <Grid container spacing={2} sx={{ height: '100%' }}>
-                  <Grid item xs={12} md={10}>
-                    <DataTable
-                      rowData={[]}
-                      columnDefs={forecastFacilityColumns}
-                      objectName="ForecastFacility"
-                      gridId="forecast-facility"
-                      loading={loading}
-                      height="100%"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <Stack spacing={1}>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!planVersionId}
-                        onClick={() => window.alert('Экспорт Excel — в разработке')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Экспорт Excel
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!planVersionId}
-                        onClick={() => window.alert('Экспорт PDF — в разработке')}
-                        startIcon={<PictureAsPdfIcon />}
-                      >
-                        Экспорт PDF
-                      </Button>
-                    </Stack>
-                  </Grid>
-                </Grid>
-              )}
-
-              {forecastTab === 'forecast-detail' && (
-                <Grid container spacing={2} sx={{ height: '100%' }}>
-                  <Grid item xs={12} md={10}>
-                    <DataTable
-                      rowData={[]}
-                      columnDefs={forecastDetailColumns}
-                      objectName="ForecastDetail"
-                      gridId="forecast-detail"
-                      loading={loading}
-                      height="100%"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <Stack spacing={1}>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!planVersionId}
-                        onClick={() => window.alert('Экспорт Excel — в разработке')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Экспорт Excel
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!planVersionId}
-                        onClick={() => window.alert('Сводная таблица — в разработке')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Сводная таблица
-                      </Button>
-                    </Stack>
-                  </Grid>
-                </Grid>
-              )}
-            </Box>
-          </Box>
+        {mainTab === 'forecast' && currentProjectId && hasProject && (
+          <ForecastPanel
+            projectId={currentProjectId}
+            projectName={resolvedProject!.name}
+            projectCode={resolvedProject!.code}
+          />
+        )}
+        {mainTab === 'forecast' && (!currentProjectId || !hasProject) && (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            Выберите проект для работы с прогнозированием.
+          </Alert>
         )}
 
-        {/* ═════════════════════════════════════════════════════════════════
-            ВКЛАДКА: ОЦЕНКА ФАКТА
-           ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'fact' && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {/* Верхняя панель версии и кнопок импорта */}
-            <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-              <Grid item xs={12} md={6}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Button
-                    variant="contained"
-                    onClick={() => window.alert('Выбор версии факта — в разработке')}
-                    sx={{ 
-                      backgroundColor: '#2980B9', 
-                      color: 'white',
-                      '&:hover': { backgroundColor: '#2471A3' }
-                    }}
-                  >
-                    📋 Версия (факт)
-                  </Button>
-                  {factVersionLabel && (
-                    <Box sx={{ 
-                      backgroundColor: '#EBF5FB', 
-                      border: '1px solid #AED6F1',
-                      px: 1.5, 
-                      py: 0.5, 
-                      borderRadius: 1 
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#1A5276' }}>
-                        {factVersionLabel}
-                      </Typography>
-                    </Box>
-                  )}
-                </Stack>
-              </Grid>
-              
-              <Grid item xs={12} md={6}>
-                <Stack direction="row" spacing={1} justifyContent="flex-end" flexWrap="wrap">
-                  {canImport && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleImport('физ.объёмов')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Импорт ФО
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleDelete('физ.объёмов')}
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                      >
-                        Удалить ФО
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleImport('оборудования')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Импорт оборуд.
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleDelete('оборудования')}
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                      >
-                        Удалить оборуд.
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleImport('трудоёмкости')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Импорт труд.
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        disabled={!factVersionId}
-                        onClick={() => handleDelete('трудоёмкости')}
-                        startIcon={<DeleteIcon />}
-                        color="error"
-                      >
-                        Удалить труд.
-                      </Button>
-                    </>
-                  )}
-                </Stack>
-              </Grid>
-            </Grid>
-
-            {/* Внутренние вкладки */}
-            <Tabs
-              value={factTab}
-              onChange={(_, value) => setFactTab(value)}
-              sx={{ mb: 2 }}
-            >
-              <Tab label="Итого" value="fact-total" />
-              <Tab label="По объектам" value="fact-facility" />
-              <Tab label="Детально" value="fact-detail" />
-            </Tabs>
-
-            {/* Содержимое вкладок */}
-            <Box sx={{ flex: 1 }}>
-              {factTab === 'fact-total' && (
-                <Grid container spacing={2} sx={{ height: '100%' }}>
-                  <Grid item xs={12} md={10}>
-                    <DataTable
-                      rowData={[]}
-                      columnDefs={factPerformanceColumns}
-                      objectName="FactPerformance"
-                      gridId="fact-performance"
-                      loading={loading}
-                      height="100%"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      disabled={!factVersionId}
-                      onClick={() => window.alert('Анализ версии — в разработке')}
-                      sx={{ 
-                        backgroundColor: '#3498DB', 
-                        color: 'white',
-                        height: 40
-                      }}
-                    >
-                      📊 Анализ версии
-                    </Button>
-                  </Grid>
-                </Grid>
-              )}
-
-              {factTab === 'fact-facility' && (
-                <Grid container spacing={2} sx={{ height: '100%' }}>
-                  <Grid item xs={12} md={10}>
-                    <DataTable
-                      rowData={[]}
-                      columnDefs={factFacilityColumns}
-                      objectName="FactFacility"
-                      gridId="fact-facility"
-                      loading={loading}
-                      height="100%"
-                    />
-                  </Grid>
-                  <Grid item xs={12} md={2}>
-                    <Stack spacing={1}>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!factVersionId}
-                        onClick={() => window.alert('Экспорт Excel — в разработке')}
-                        startIcon={<FileDownloadIcon />}
-                      >
-                        Экспорт Excel
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        disabled={!factVersionId}
-                        onClick={() => window.alert('Экспорт PDF — в разработке')}
-                        startIcon={<PictureAsPdfIcon />}
-                      >
-                        Экспорт PDF
-                      </Button>
-                    </Stack>
-                  </Grid>
-                </Grid>
-              )}
-
-              {factTab === 'fact-detail' && (
-                <Box sx={{ height: '100%' }}>
-                  <DataTable
-                    rowData={[]}
-                    columnDefs={factDetailColumns}
-                    objectName="FactDetail"
-                    gridId="fact-detail"
-                    loading={loading}
-                    height="100%"
-                  />
-                </Box>
-              )}
-            </Box>
-          </Box>
+        {mainTab === 'fact' && currentProjectId && hasProject && (
+          <FactPanel projectId={currentProjectId} />
+        )}
+        {mainTab === 'fact' && (!currentProjectId || !hasProject) && (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            Выберите проект для работы с оценкой факта.
+          </Alert>
         )}
 
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: СРАВНЕНИЕ ВЕРСИЙ
            ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'compare' && (
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-            {/* Выбор двух версий */}
-            <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-              <Grid item xs={12} md={5}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Button
-                    variant="contained"
-                    onClick={() => window.alert('Выбор версии А — в разработке')}
-                    sx={{ 
-                      backgroundColor: '#2980B9', 
-                      color: 'white'
-                    }}
-                  >
-                    📋 Версия А
-                  </Button>
-                  {data.compareVersionAId && (
-                    <Box sx={{ 
-                      backgroundColor: '#EBF5FB', 
-                      border: '1px solid #AED6F1',
-                      px: 1.5, 
-                      py: 0.5, 
-                      borderRadius: 1 
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#1A5276' }}>
-                        Версия {data.compareVersionAId}
-                      </Typography>
-                    </Box>
-                  )}
-                </Stack>
-              </Grid>
-              
-              <Grid item xs={12} md={5}>
-                <Stack direction="row" spacing={2} alignItems="center">
-                  <Button
-                    variant="contained"
-                    onClick={() => window.alert('Выбор версии Б — в разработке')}
-                    sx={{ 
-                      backgroundColor: '#8E44AD', 
-                      color: 'white'
-                    }}
-                  >
-                    📋 Версия Б
-                  </Button>
-                  {data.compareVersionBId && (
-                    <Box sx={{ 
-                      backgroundColor: '#F5EEF8', 
-                      border: '1px solid #D7BDE2',
-                      px: 1.5, 
-                      py: 0.5, 
-                      borderRadius: 1 
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#6C3483' }}>
-                        Версия {data.compareVersionBId}
-                      </Typography>
-                    </Box>
-                  )}
-                </Stack>
-              </Grid>
-            </Grid>
-
-            {/* Кнопки импорта для сравнения */}
-            {canImport && (
-              <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => handleImport('оборудования (версия А)')}
-                  startIcon={<FileDownloadIcon />}
-                >
-                  Импорт оборуд.
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={() => handleDelete('оборудования (версия А)')}
-                  startIcon={<DeleteIcon />}
-                  color="error"
-                >
-                  Удалить оборуд.
-                </Button>
-              </Stack>
-            )}
-
-            {/* Чекбокс различий */}
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={compareShowOnlyDifferences}
-                  onChange={(e) => setCompareShowOnlyDifferences(e.target.checked)}
-                />
-              }
-              label="Показывать различия"
-              sx={{ mb: 2 }}
-            />
-
-            {/* Внутренние вкладки */}
-            <Tabs
-              value={compareTab}
-              onChange={(_, value) => setCompareTab(value)}
-              sx={{ mb: 2 }}
-            >
-              <Tab label="Итого" value="compare-total" />
-              <Tab label="По объектам" value="compare-facility" />
-              <Tab label="Детально" value="compare-detail" />
-            </Tabs>
-
-            {/* Содержимое вкладок */}
-            <Box sx={{ flex: 1 }}>
-              {compareTab === 'compare-total' && (
-                <DataTable
-                  rowData={[]}
-                  columnDefs={compareSummaryColumns}
-                  objectName="CompareSummary"
-                  gridId="compare-summary"
-                  loading={loading}
-                  height="100%"
-                />
-              )}
-
-              {compareTab === 'compare-facility' && (
-                <Typography variant="body2" color="text.secondary">
-                  Сравнение по объектам — в разработке
-                </Typography>
-              )}
-
-              {compareTab === 'compare-detail' && (
-                <Typography variant="body2" color="text.secondary">
-                  Детальное сравнение — в разработке
-                </Typography>
-              )}
-            </Box>
-          </Box>
+        {mainTab === 'compare' && currentProjectId && hasProject && (
+          <ComparePanel projectId={currentProjectId} />
+        )}
+        {mainTab === 'compare' && (!currentProjectId || !hasProject) && (
+          <Alert severity="info" sx={{ mt: 1 }}>
+            Выберите проект для сравнения версий.
+          </Alert>
         )}
 
         {/* ═════════════════════════════════════════════════════════════════
@@ -1125,6 +508,47 @@ export function FullProjectsPage() {
         {mainTab === 'reports' && (
           <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
             <Stack spacing={3}>
+              <Card sx={{ backgroundColor: '#F4F6F7', border: '1px solid #D5D8DC' }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ color: '#2C3E50', mb: 1 }}>
+                    Сводный отчёт PDF
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#5D6D7E', mb: 2 }}>
+                    Единый документ с KPI и ключевыми графиками: прогноз, факт, сравнение версий, тренды.
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap">
+                    <Button
+                      variant="contained"
+                      disabled={
+                        !currentProjectId
+                        || !planVersionId
+                        || !factVersionId
+                        || !compareVersionAId
+                        || !compareVersionBId
+                        || combinedExporting
+                      }
+                      startIcon={<PictureAsPdfIcon />}
+                      onClick={async () => {
+                        if (!currentProjectId || !planVersionId || !factVersionId || !compareVersionAId || !compareVersionBId) return;
+                        setCombinedExporting(true);
+                        try {
+                          await exportCombinedProjectPdf(currentProjectId, {
+                            planVersionId,
+                            factVersionId,
+                            compareVersionAId,
+                            compareVersionBId,
+                          });
+                        } finally {
+                          setCombinedExporting(false);
+                        }
+                      }}
+                    >
+                      Скачать сводный PDF
+                    </Button>
+                  </Stack>
+                </CardContent>
+              </Card>
+
               {/* Группа: Оценка факта */}
               <Card sx={{ backgroundColor: '#EBF5FB', border: '1px solid #AED6F1' }}>
                 <CardContent>
@@ -1140,29 +564,14 @@ export function FullProjectsPage() {
                     <Button
                       variant="contained"
                       disabled={!factVersionId}
-                      onClick={() => window.alert('Анализ версии — в разработке')}
+                      onClick={() => setMainTab('fact')}
                       sx={{ backgroundColor: '#3498DB', color: 'white' }}
                     >
-                      📊 Анализ версии (экран)
+                      📊 Перейти к оценке факта
                     </Button>
-                    <Button
-                      variant="contained"
-                      disabled={!factVersionId}
-                      onClick={() => window.alert('Экспорт Excel — в разработке')}
-                      sx={{ backgroundColor: '#27AE60', color: 'white' }}
-                      startIcon={<FileDownloadIcon />}
-                    >
-                      Экспорт в Excel
-                    </Button>
-                    <Button
-                      variant="contained"
-                      disabled={!factVersionId}
-                      onClick={() => window.alert('Экспорт PDF — в разработке')}
-                      sx={{ backgroundColor: '#E74C3C', color: 'white' }}
-                      startIcon={<PictureAsPdfIcon />}
-                    >
-                      Экспорт в PDF
-                    </Button>
+                    <Typography variant="body2" sx={{ color: '#5D6D7E', width: '100%' }}>
+                      Экспорт Excel/PDF и анализ версии доступны на вкладке «Оценка факта» → «По объектам» / «Итого».
+                    </Typography>
                   </Stack>
                 </CardContent>
               </Card>
@@ -1180,11 +589,10 @@ export function FullProjectsPage() {
                   <Button
                     variant="contained"
                     disabled={!planVersionId}
-                    onClick={() => window.alert('Экспорт прогноза — в разработке')}
+                    onClick={() => setMainTab('forecast')}
                     sx={{ backgroundColor: '#27AE60', color: 'white' }}
-                    startIcon={<FileDownloadIcon />}
                   >
-                    Экспорт прогноза в Excel
+                    Перейти к прогнозированию
                   </Button>
                 </CardContent>
               </Card>
@@ -1218,16 +626,17 @@ export function FullProjectsPage() {
       />
 
       <ParticipantsModal
-        open={participantsOpen}
-        projectId={currentProjectId}
+        open={participantsOpen && hasProject}
+        projectId={currentProjectId ?? 0}
         onClose={() => setParticipantsOpen(false)}
         onSaved={() => void projectDataQuery.refetch()}
       />
 
       <ProjectCharacteristicsDialog
-        open={characteristicsOpen}
-        projectId={currentProjectId}
+        open={characteristicsOpen && hasProject}
+        projectId={currentProjectId ?? 0}
         onClose={() => setCharacteristicsOpen(false)}
+        onSaved={() => void projectDataQuery.refetch()}
       />
 
       <EditModal

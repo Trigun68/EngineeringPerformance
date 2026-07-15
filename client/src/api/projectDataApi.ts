@@ -78,3 +78,121 @@ export async function fetchEquipment(
   );
   return data;
 }
+
+export interface ProjectPhysicalVolumeWriteRequest {
+  physicalVolumeId: number;
+  quantity: number;
+  facilityCode?: string | null;
+  facilityName?: string | null;
+  workName?: string | null;
+  laborHoursPerUnit?: number | null;
+}
+
+export interface ProjectEquipmentWriteRequest {
+  equipmentId: number;
+  quantity: number;
+  quantityInWork?: number | null;
+}
+
+async function findInPaged<T>(
+  fetchPage: (query: PagedQuery) => Promise<Paged<T>>,
+  predicate: (item: T) => boolean,
+): Promise<T | null> {
+  let page = 1;
+  const pageSize = 500;
+  while (true) {
+    const result = await fetchPage({ page, pageSize });
+    const found = result.items.find(predicate);
+    if (found) return found;
+    if (page * pageSize >= result.totalCount) return null;
+    page += 1;
+  }
+}
+
+export async function fetchPhysicalVolumeById(
+  projectId: number,
+  versionId: number,
+  id: number,
+): Promise<ProjectPhysicalVolume | null> {
+  return findInPaged(
+    (query) => fetchPhysicalVolumes(projectId, versionId, query),
+    (item) => item.id === id,
+  );
+}
+
+export async function fetchEquipmentById(
+  projectId: number,
+  versionId: number,
+  id: number,
+): Promise<ProjectEquipment | null> {
+  return findInPaged(
+    (query) => fetchEquipment(projectId, versionId, query),
+    (item) => item.id === id,
+  );
+}
+
+export async function createPhysicalVolume(
+  projectId: number,
+  versionId: number,
+  request: ProjectPhysicalVolumeWriteRequest,
+): Promise<ProjectPhysicalVolume> {
+  const { data } = await apiClient.post<ProjectPhysicalVolume>(
+    `/projects/${projectId}/versions/${versionId}/physical-volumes`,
+    request,
+  );
+  return data;
+}
+
+export async function createEquipment(
+  projectId: number,
+  versionId: number,
+  request: ProjectEquipmentWriteRequest,
+): Promise<ProjectEquipment> {
+  const { data } = await apiClient.post<ProjectEquipment>(
+    `/projects/${projectId}/versions/${versionId}/equipment`,
+    request,
+  );
+  return data;
+}
+
+export async function updatePhysicalVolume(
+  projectId: number,
+  versionId: number,
+  id: number,
+  request: ProjectPhysicalVolumeWriteRequest,
+): Promise<ProjectPhysicalVolume> {
+  const { data } = await apiClient.put<ProjectPhysicalVolume>(
+    `/projects/${projectId}/versions/${versionId}/physical-volumes/${id}`,
+    request,
+  );
+  return data;
+}
+
+export async function deletePhysicalVolume(
+  projectId: number,
+  versionId: number,
+  id: number,
+): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}/versions/${versionId}/physical-volumes/${id}`);
+}
+
+export async function updateEquipment(
+  projectId: number,
+  versionId: number,
+  id: number,
+  request: ProjectEquipmentWriteRequest,
+): Promise<ProjectEquipment> {
+  const { data } = await apiClient.put<ProjectEquipment>(
+    `/projects/${projectId}/versions/${versionId}/equipment/${id}`,
+    request,
+  );
+  return data;
+}
+
+export async function deleteEquipment(
+  projectId: number,
+  versionId: number,
+  id: number,
+): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}/versions/${versionId}/equipment/${id}`);
+}

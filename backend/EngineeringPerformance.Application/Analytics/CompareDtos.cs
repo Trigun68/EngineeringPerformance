@@ -47,5 +47,3 @@ public sealed record VersionCompareResultDto(
     IReadOnlyList<VersionCompareRowDto> Summary,
     IReadOnlyList<VersionCompareFacilityRowDto> Facility,
     IReadOnlyList<VersionCompareDetailRowDto> Detail);
-
-public sealed record GroupAnalyticsPlaceholderDto(string Message);

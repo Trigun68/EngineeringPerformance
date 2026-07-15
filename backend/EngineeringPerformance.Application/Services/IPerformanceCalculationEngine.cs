@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Application.Services;
 
@@ -20,12 +21,18 @@ public interface IPerformanceCalculationEngine
         decimal laborHours,
         string method);
 
-    /// <summary>Сценарные часы (оптимистичный / пессимистичный) по Z-score нормы.</summary>
-    (decimal Optimistic, decimal Pessimistic, string Range) ComputeForecastScenarioHours(
-        decimal baseHours,
-        decimal? performance,
-        decimal? standardDeviation,
-        decimal plannedVolume,
-        decimal zOptimistic,
-        decimal zPessimistic);
+    /// <summary>Прогнозные часы по параметрической норме и Z-параметрам планирования.</summary>
+    (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
+        NormFormula normFormula,
+        DeviationFormula deviationFormula,
+        decimal volume,
+        decimal effectiveVolume,
+        PlanningZParameters z);
+
+    /// <summary>Legacy scalar overload.</summary>
+    (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
+        decimal volume,
+        decimal? productivity,
+        decimal? stdDev,
+        PlanningZParameters z);
 }

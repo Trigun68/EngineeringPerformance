@@ -32,6 +32,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<ProjectCharacteristicOption> ProjectCharacteristicOptions => Set<ProjectCharacteristicOption>();
     public DbSet<ProjectCharacteristicSelection> ProjectCharacteristicSelections => Set<ProjectCharacteristicSelection>();
     public DbSet<AnalysisVersionSnapshot> AnalysisVersionSnapshots => Set<AnalysisVersionSnapshot>();
+    public DbSet<ProjectVersionPlanningParameter> ProjectVersionPlanningParameters => Set<ProjectVersionPlanningParameter>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<UserActionLog> UserActionLogs => Set<UserActionLog>();
 
@@ -45,6 +46,15 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ProjectLaborIntensityConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeKfoConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeBerConfiguration());
+        modelBuilder.ApplyConfiguration(new ProjectVersionPlanningParameterConfiguration());
+
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+                     .SelectMany(entityType => entityType.GetProperties())
+                     .Where(p => p.ClrType == typeof(decimal) || p.ClrType == typeof(decimal?)))
+        {
+            property.SetPrecision(18);
+            property.SetScale(4);
+        }
 
         base.OnModelCreating(modelBuilder);
     }

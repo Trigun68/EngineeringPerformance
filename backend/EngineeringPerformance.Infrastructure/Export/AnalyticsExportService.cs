@@ -1,9 +1,7 @@
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
-using QuestPDF.Fluent;
-using QuestPDF.Helpers;
-using QuestPDF.Infrastructure;
 
 namespace EngineeringPerformance.Infrastructure.Export;
 
@@ -11,14 +9,16 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 {
     private readonly IProjectVersionAnalysisService _analysisService;
     private readonly IProjectForecastService _forecastService;
+    private readonly IVisualReportService _visualReports;
 
     public AnalyticsExportService(
         IProjectVersionAnalysisService analysisService,
-        IProjectForecastService forecastService)
+        IProjectForecastService forecastService,
+        IVisualReportService visualReports)
     {
         _analysisService = analysisService;
         _forecastService = forecastService;
-        QuestPDF.Settings.License = LicenseType.Community;
+        _visualReports = visualReports;
     }
 
     public async Task<byte[]> ExportAnalysisExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -56,121 +56,70 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
         return stream.ToArray();
     }
 
-    public async Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
-    {
-        var report = await _analysisService.GenerateReportAsync(projectId, versionId);
-        var summary = report.Summary;
-
-        var document = Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.Margin(40);
-                page.Header().Text("Анализ версии проекта").SemiBold().FontSize(16);
-                page.Content().Column(column =>
-                {
-                    column.Spacing(8);
-                    column.Item().Text($"Проект: {report.ProjectName}");
-                    column.Item().Text($"Версия: {report.VersionName}");
-                    column.Item().Text($"Направлений IIC: {report.Directions.Count}");
-                    column.Item().Text($"Суммарные факт. часы: {summary.TotalFactLaborHours?.ToString("N2") ?? "—"}");
-                    column.Item().Text($"Взвешенный Z-score: {summary.WeightedZScore?.ToString("N4") ?? "—"} ({summary.WeightedZScorePercentile})");
-                    column.Item().Text($"Интерпретация: {summary.WeightedZScoreInterpretation?.ToRussian() ?? "—"}");
-                });
-                page.Footer().AlignCenter().Text($"Сформировано {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
-            });
-        });
-
-        return document.GeneratePdf();
-    }
+    public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
+        _visualReports.ExportAnalysisPdfAsync(projectId, versionId, cancellationToken);
 
     public async Task<byte[]> ExportForecastExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var report = await _forecastService.GenerateForecastAsync(projectId, versionId);
 
         using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Прогноз");
+        sheet.Cell(1, 1).Value = $"Прогноз трудозатрат: {report.ProjectName} ({report.VersionName})";
+        sheet.Cell(1, 1).Style.Font.Bold = true;
+        sheet.Cell(1, 1).Style.Font.FontSize = 13;
+        sheet.Range(1, 1, 1, 6).Merge();
 
-        var scenariosSheet = workbook.Worksheets.Add("Scenarios");
-        scenariosSheet.Cell(1, 1).Value = "Scenario";
-        scenariosSheet.Cell(1, 2).Value = "Z-Score";
-        scenariosSheet.Cell(1, 3).Value = "Total Labor Hours";
+        var headers = new[] { "Сценарий", "Z-Score", "Трудоёмкость, ч", "Направление", "Ед. изм.", "План. объём" };
+        for (var c = 0; c < headers.Length; c++)
+        {
+            sheet.Cell(2, c + 1).Value = headers[c];
+            sheet.Cell(2, c + 1).Style.Font.Bold = true;
+            sheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            sheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
+        }
 
-        var scenarioRow = 2;
+        var row = 3;
         foreach (var scenario in report.Scenarios)
         {
-            scenariosSheet.Cell(scenarioRow, 1).Value = scenario.ScenarioName;
-            scenariosSheet.Cell(scenarioRow, 2).Value = scenario.ZScore;
-            scenariosSheet.Cell(scenarioRow, 3).Value = scenario.TotalLaborHours;
-            scenarioRow++;
+            sheet.Cell(row, 1).Value = scenario.ScenarioName;
+            sheet.Cell(row, 2).Value = scenario.ZScore;
+            sheet.Cell(row, 3).Value = scenario.TotalLaborHours;
+            row++;
         }
 
-        var volumesSheet = workbook.Worksheets.Add("Planned Volumes");
-        volumesSheet.Cell(1, 1).Value = "Work Direction";
-        volumesSheet.Cell(1, 2).Value = "Unit";
-        volumesSheet.Cell(1, 3).Value = "Planned Volume";
-        volumesSheet.Cell(1, 4).Value = "Base Hours";
-        volumesSheet.Cell(1, 5).Value = "Optimistic Hours";
-        volumesSheet.Cell(1, 6).Value = "Pessimistic Hours";
-
-        var volumeRow = 2;
+        row += 1;
+        sheet.Cell(row, 1).Value = "Плановые объёмы";
+        sheet.Cell(row, 1).Style.Font.Bold = true;
+        row++;
+        var volHeaders = new[] { "Направление", "Ед. изм.", "План. объём", "Базовый", "Оптимистический", "Пессимистический" };
+        for (var c = 0; c < volHeaders.Length; c++)
+        {
+            sheet.Cell(row, c + 1).Value = volHeaders[c];
+            sheet.Cell(row, c + 1).Style.Font.Bold = true;
+            sheet.Cell(row, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            sheet.Cell(row, c + 1).Style.Font.FontColor = XLColor.White;
+        }
+        row++;
         foreach (var volume in report.PlannedVolumes)
         {
-            volumesSheet.Cell(volumeRow, 1).Value = volume.HierarchyPath;
-            volumesSheet.Cell(volumeRow, 2).Value = volume.UnitName ?? string.Empty;
-            volumesSheet.Cell(volumeRow, 3).Value = volume.PlannedVolume;
-            volumesSheet.Cell(volumeRow, 4).Value = volume.BaseHours;
-            volumesSheet.Cell(volumeRow, 5).Value = volume.OptimisticHours;
-            volumesSheet.Cell(volumeRow, 6).Value = volume.PessimisticHours;
-            volumeRow++;
+            sheet.Cell(row, 1).Value = volume.HierarchyPath;
+            sheet.Cell(row, 2).Value = volume.UnitName ?? string.Empty;
+            sheet.Cell(row, 3).Value = volume.PlannedVolume;
+            sheet.Cell(row, 4).Value = volume.BaseHours;
+            sheet.Cell(row, 5).Value = volume.OptimisticHours;
+            sheet.Cell(row, 6).Value = volume.PessimisticHours;
+            row++;
         }
+
+        sheet.Columns().AdjustToContents();
+        sheet.SheetView.FreezeRows(2);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
     }
 
-    public async Task<byte[]> ExportForecastPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
-    {
-        var report = await _forecastService.GenerateForecastAsync(projectId, versionId);
-
-        var document = Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(30);
-                page.Header().Text("Прогноз трудозатрат").SemiBold().FontSize(16);
-                page.Content().Table(table =>
-                {
-                    table.ColumnsDefinition(columns =>
-                    {
-                        columns.RelativeColumn(2);
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
-                    });
-
-                    table.Header(header =>
-                    {
-                        header.Cell().Element(CellStyle).Text("Сценарий");
-                        header.Cell().Element(CellStyle).Text("Z-Score");
-                        header.Cell().Element(CellStyle).Text("Часы");
-                    });
-
-                    foreach (var scenario in report.Scenarios)
-                    {
-                        table.Cell().Element(CellStyle).Text(scenario.ScenarioName);
-                        table.Cell().Element(CellStyle).Text(scenario.ZScore.ToString("N4"));
-                        table.Cell().Element(CellStyle).Text(scenario.TotalLaborHours.ToString("N2"));
-                    }
-                });
-                page.Footer().AlignCenter().Text($"{report.ProjectName} — {report.VersionName}");
-            });
-        });
-
-        return document.GeneratePdf();
-
-        static IContainer CellStyle(IContainer container) =>
-            container.BorderBottom(1).BorderColor(Colors.Grey.Lighten2).PaddingVertical(4);
-    }
+    public Task<byte[]> ExportForecastPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
+        _visualReports.ExportForecastSummaryPdfAsync(projectId, versionId, cancellationToken);
 }

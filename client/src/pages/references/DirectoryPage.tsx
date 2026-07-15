@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, MenuItem, Stack, TextField } from '@mui/material';
-import type { ColDef, ValueGetterParams } from 'ag-grid-community';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Box, TextField } from '@mui/material';
+import type { ColDef, GridApi, ValueGetterParams } from 'ag-grid-community';
 import {
   archiveDirectoryEntry,
   createDirectoryEntry,
@@ -16,6 +17,7 @@ import {
   type DirectoryTreeRow,
 } from '../../api/directoriesApi';
 import { getApiErrorMessage } from '../../services/apiError';
+import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { usePermission } from '../../hooks/usePermission';
@@ -32,20 +34,18 @@ import {
   getFormFields,
   propertiesFromEntry,
 } from './directoryFieldConfig';
+import { validateDirectoryWrite } from './directoryWriteSchema';
+import { z } from 'zod';
 import type { DirectoryFieldDef } from './directoryFieldConfig';
 import type { ReferenceRouteConfig } from './referenceConfig';
 import { isPhysicalVolumeCatalogResource } from './referenceConfig';
 import { formatAsIisNorm } from '../../utils/formatIisNorm';
+import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
+import { collectGridExportData } from '../../utils/directoryExport';
 
 interface DirectoryPageProps {
   config: ReferenceRouteConfig;
 }
-
-const ASSESSMENT_FILTER_OPTIONS = [
-  { value: '', label: 'Все' },
-  { value: 'true', label: 'Да' },
-  { value: 'false', label: 'Нет' },
-];
 
 function boolArchive(value: boolean): string {
   return value ? 'Да' : 'Нет';
@@ -63,6 +63,12 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const getName = useDictionaryStore((s) => s.getName);
   const getById = useDictionaryStore((s) => s.getById);
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
+  const directions = useDictionaryStore((s) => s.lists.iicWorkDirections);
+
+  const resolveIicUnitName = useCallback(
+    (directionId: number) => resolveIicDirectionUnitName(directionId, directions, getUnitName),
+    [directions, getUnitName],
+  );
 
   const isPhysicalVolumeCatalog = isPhysicalVolumeCatalogResource(config.resource);
 
@@ -74,6 +80,24 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const showArchivedPrefKey = `references.${config.resource}.showArchived`;
+
+  useEffect(() => {
+    let cancelled = false;
+    void getUserPreferences().then((prefs) => {
+      if (!cancelled && prefs[showArchivedPrefKey] === 'true') {
+        setShowArchived(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showArchivedPrefKey]);
+
+  const handleShowArchivedChange = useCallback((value: boolean) => {
+    setShowArchived(value);
+    void putUserPreferences({ [showArchivedPrefKey]: value ? 'true' : 'false' });
+  }, [showArchivedPrefKey]);
   const [selected, setSelected] = useState<DirectoryEntry | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | null>(null);
@@ -86,95 +110,66 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
 
   const [optionCounts, setOptionCounts] = useState<Record<number, number>>({});
 
-  const [assessmentFilter, setAssessmentFilter] = useState('');
+  const gridApiRef = useRef<GridApi | null>(null);
 
   useEffect(() => {
     void fetchAllDictionaries();
   }, [fetchAllDictionaries]);
 
-  // Сброс фильтров и словарей при смене вкладки справочника.
+  // Сброс выбора при смене вкладки справочника.
   useEffect(() => {
-    setAssessmentFilter('');
     setSelected(null);
     void fetchAllDictionaries();
   }, [config.resource, fetchAllDictionaries]);
 
-  // AbortController для отмены запросов при смене вкладки
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const directoryQuery = useQuery({
+    queryKey: ['directory-page', config.resource, showArchived],
+    enabled: canRead,
+    staleTime: 30_000,
+    queryFn: async () => {
+      if (config.isHierarchical) {
+        const tree = await fetchDirectoryTree(config.resource, showArchived);
+        const flattened = flattenDirectoryTree(tree, [], {
+          hierarchyByCode: isPhysicalVolumeCatalogResource(config.resource),
+        });
+        return { kind: 'tree' as const, treeRows: flattened, rows: [] as DirectoryEntry[], optionCounts: {} as Record<number, number> };
+      }
+
+      const paged = await fetchDirectory(config.resource, showArchived, 1, 100);
+      const counts: Record<number, number> = {};
+      if (config.resource === 'project-characteristics') {
+        for (const item of paged.items) {
+          try {
+            const opts = await fetchCharacteristicOptions(item.id);
+            counts[item.id] = opts.length;
+          } catch {
+            counts[item.id] = 0;
+          }
+        }
+      }
+      return { kind: 'flat' as const, treeRows: [] as DirectoryTreeRow[], rows: paged.items, optionCounts: counts };
+    },
+  });
 
   const load = useCallback(async () => {
-    if (!canRead) return;
+    await directoryQuery.refetch();
+  }, [directoryQuery]);
 
-    // Отменяем предыдущий запрос
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+  useEffect(() => {
+    if (!directoryQuery.data) return;
+    if (directoryQuery.data.kind === 'tree') {
+      setTreeRows(directoryQuery.data.treeRows);
+    } else {
+      setRows(directoryQuery.data.rows);
+      setOptionCounts(directoryQuery.data.optionCounts);
     }
-    abortControllerRef.current = new AbortController();
+    setSelected(null);
+  }, [directoryQuery.data]);
 
-    console.log(`[DirectoryPage] Loading started: resource=${config.resource}, isHierarchical=${config.isHierarchical}`);
-
-    setLoading(true);
-    setError(null);
-
-    // Очищаем предыдущие данные перед загрузкой новых
-    setRows([]);
-    setTreeRows([]);
-
-    try {
-      if (config.isHierarchical) {
-        console.log(`[DirectoryPage] Fetching tree for ${config.resource}...`);
-        const tree = await fetchDirectoryTree(config.resource, showArchived);
-        console.log(`[DirectoryPage] Tree fetched: ${tree.length} root nodes`);
-
-        // Проверяем не был ли запрос отменён
-        if (abortControllerRef.current?.signal.aborted) {
-          console.log('[DirectoryPage] Request aborted, skipping setTreeRows');
-          return;
-        }
-
-        const flattened = flattenDirectoryTree(tree, [], { hierarchyByCode: isPhysicalVolumeCatalogResource(config.resource) });
-        console.log(`[DirectoryPage] Flattened: ${flattened.length} rows, sample:`, flattened.slice(0, 3));
-        setTreeRows(flattened);
-        console.log(`[DirectoryPage] setTreeRows called with ${flattened.length} rows`);
-      } else {
-        console.log(`[DirectoryPage] Fetching flat list for ${config.resource}...`);
-        const paged = await fetchDirectory(config.resource, showArchived, 1, 100);
-        console.log(`[DirectoryPage] List fetched: ${paged.items.length} items, total=${paged.totalCount}`);
-
-        if (abortControllerRef.current?.signal.aborted) {
-          console.log('[DirectoryPage] Request aborted, skipping setRows');
-          return;
-        }
-
-        setRows(paged.items);
-        console.log(`[DirectoryPage] setRows called with ${paged.items.length} items`);
-
-        if (config.resource === 'project-characteristics') {
-          console.log('[DirectoryPage] Loading characteristic options...');
-          const counts: Record<number, number> = {};
-          // Последовательно загружаем options чтобы избежать race conditions
-          for (const item of paged.items) {
-            if (abortControllerRef.current?.signal.aborted) return;
-            try {
-              const opts = await fetchCharacteristicOptions(item.id);
-              counts[item.id] = opts.length;
-            } catch {
-              counts[item.id] = 0;
-            }
-          }
-          setOptionCounts(counts);
-          console.log('[DirectoryPage] Option counts loaded:', counts);
-        }
-      }
-      setSelected(null);
-      console.log('[DirectoryPage] Loading completed successfully');
-    } catch (err) {
-      if ((err as { name?: string })?.name === 'AbortError') {
-        console.log('[DirectoryPage] Aborted');
-        return;
-      }
-
-      console.error('[DirectoryPage] Loading error:', err);
+  useEffect(() => {
+    setLoading(directoryQuery.isFetching);
+    if (directoryQuery.error) {
+      const err = directoryQuery.error;
       const status = (err as { response?: { status?: number } })?.response?.status;
       const hint =
         status === 401
@@ -185,42 +180,32 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
               ? ' Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).'
               : '';
       setError(`${getApiErrorMessage(err, 'Не удалось загрузить справочник.')}${hint}`);
-    } finally {
-      setLoading(false);
-      console.log(`[DirectoryPage] Loading finished, loading=false`);
+    } else if (!directoryQuery.isFetching) {
+      setError(null);
     }
-  }, [canRead, config.resource, config.isHierarchical, showArchived]);
-
-  useEffect(() => {
-    void load();
-    // Cleanup при размонтировании или смене зависимостей
-    return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-    };
-  }, [load]);
+  }, [directoryQuery.error, directoryQuery.isFetching]);
 
   const buildPropertyColumns = useCallback(
     <T extends DirectoryEntry>(): ColDef<T>[] =>
       fieldDefs
         .filter((f) => f.showInGrid)
         .map((field) => ({
+          colId: field.key,
           headerName: field.label,
           minWidth: field.gridWidth ?? 120,
           valueGetter: (params: ValueGetterParams<T>) => {
             const row = params.data;
             if (!row) return '';
             const value = propertyValue(row, field);
-            return formatPropertyValue(field, value, getName, getById, getUnitName);
+            return formatPropertyValue(field, value, getName, getById, getUnitName, resolveIicUnitName);
           },
         })),
-    [fieldDefs, getById, getName, getUnitName],
+    [fieldDefs, getById, getName, getUnitName, resolveIicUnitName],
   );
 
   const archiveColDef = useMemo<ColDef>(
     () => ({
+      colId: 'isArchived',
       field: 'isArchived',
       headerName: 'Архив',
       maxWidth: 80,
@@ -235,8 +220,9 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const flatColumnDefs = useMemo<ColDef<DirectoryEntry>[]>(() => {
     if (config.resource === 'project-characteristics') {
       return [
-        { field: 'name', headerName: 'Наименование характеристики', minWidth: 280 },
+        { colId: 'name', field: 'name', headerName: 'Наименование характеристики', minWidth: 280 },
         {
+          colId: 'optionCount',
           headerName: 'Кол-во вариантов',
           maxWidth: 140,
           valueGetter: (p) => (p.data ? (optionCounts[p.data.id] ?? 0) : 0),
@@ -247,6 +233,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     if (isPhysicalVolumeCatalog) {
       return [
         {
+          colId: 'code',
           headerName: 'Код',
           minWidth: 120,
           valueGetter: (p) => {
@@ -254,20 +241,20 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             return code != null ? String(code) : '';
           },
         },
-        { field: 'name', headerName: 'Наименование', minWidth: 240 },
+        { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 },
         ...propertyColumns,
         archiveColDef,
       ];
     }
     return [
-      { field: 'name', headerName: 'Наименование', minWidth: 240 },
+      { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 },
       ...propertyColumns,
       archiveColDef,
     ];
   }, [archiveColDef, config.resource, isPhysicalVolumeCatalog, optionCounts, propertyColumns]);
 
   const nameColumnDef = useMemo<ColDef<DirectoryTreeRow>>(
-    () => ({ field: 'name', headerName: 'Наименование', minWidth: 240 }),
+    () => ({ colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 }),
     [],
   );
 
@@ -283,42 +270,21 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     [config.isHierarchical, rows, treeRows],
   );
 
-  const filteredTreeRows = useMemo(() => {
-    if (config.resource !== 'equipment' && !isPhysicalVolumeCatalog) {
-      return treeRows;
-    }
-    if (assessmentFilter === '') {
-      return treeRows;
-    }
+  const handleGridApiReady = useCallback((api: GridApi) => {
+    gridApiRef.current = api;
+  }, []);
 
-    const matchesFilter = (row: DirectoryTreeRow): boolean => {
-      if (assessmentFilter !== '') {
-        const raw = row.properties.isAssessment;
-        const val = raw === true || raw === 'true' ? 'true' : raw === false || raw === 'false' ? 'false' : '';
-        if (val !== assessmentFilter) return false;
-      }
-      return true;
-    };
-
-    const byId = new Map(treeRows.map((r) => [r.id, r]));
-    const visibleIds = new Set<number>();
-
-    for (const row of treeRows) {
-      if (!matchesFilter(row)) continue;
-      visibleIds.add(row.id);
-      let parentId = row.parentId;
-      while (parentId != null) {
-        visibleIds.add(parentId);
-        parentId = byId.get(parentId)?.parentId ?? null;
-      }
-    }
-
-    return treeRows.filter((row) => visibleIds.has(row.id));
-  }, [assessmentFilter, config.resource, isPhysicalVolumeCatalog, treeRows]);
+  const handleExport = useCallback(async () => {
+    const api = gridApiRef.current;
+    if (!api) return;
+    const { headers, rows: exportRows } = collectGridExportData(api);
+    await exportDirectoryExcel(config.resource, config.title, headers, exportRows);
+  }, [config.resource, config.title]);
 
   const autoGroupColumnDef = useMemo<ColDef<DirectoryTreeRow>>(() => {
     if (isPhysicalVolumeCatalog) {
       return {
+        colId: 'ag-Grid-AutoColumn',
         headerName: 'Код',
         minWidth: 280,
         valueGetter: (params) => {
@@ -332,6 +298,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     }
 
     const base: ColDef<DirectoryTreeRow> = {
+      colId: 'ag-Grid-AutoColumn',
       headerName: 'Наименование',
       minWidth: 280,
       field: 'name',
@@ -408,6 +375,12 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       sortOrder: editing?.sortOrder ?? 0,
       properties: buildPropertiesPayload(config.resource, properties),
     };
+    try {
+      validateDirectoryWrite(body);
+    } catch (err) {
+      setError(err instanceof z.ZodError ? err.issues[0]?.message ?? 'Некорректные данные формы.' : 'Некорректные данные формы.');
+      return;
+    }
     if (editing) {
       await updateDirectoryEntry(config.resource, editing.id, body);
       await syncArchiveState(editing.id, editing.isArchived);
@@ -515,16 +488,16 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   }
 
   const gridId = `ref-${config.resource}`;
-  const showFilters = isPhysicalVolumeCatalog || config.resource === 'equipment';
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden' }}>
-      <DirectoryToolbar
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <Box sx={{ flexShrink: 0 }}>
+        <DirectoryToolbar
         canEdit={canEdit}
         hasSelection={selected !== null}
         showExcel={config.showExcel !== false}
         showArchived={showArchived}
-        onShowArchivedChange={setShowArchived}
+        onShowArchivedChange={handleShowArchivedChange}
         onAdd={openCreate}
         onEdit={() => {
           if (!selected) return;
@@ -538,33 +511,17 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
         onArchive={() => void handleArchive()}
         onUnarchive={() => void handleUnarchive()}
         onRefresh={() => void load()}
-        onExport={() => void exportDirectoryExcel(config.resource)}
-      />
+        onExport={() => void handleExport()}
+        />
+      </Box>
 
-      {showFilters && (
-        <Stack direction="row" spacing={2} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
-          <TextField
-            select
-            label="Оценка"
-            size="small"
-            value={assessmentFilter}
-            onChange={(e) => setAssessmentFilter(e.target.value)}
-            sx={{ minWidth: 120 }}
-          >
-            {ASSESSMENT_FILTER_OPTIONS.map((o) => (
-              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
-            ))}
-          </TextField>
-        </Stack>
-      )}
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>{error}</Alert>}
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {config.isHierarchical ? (
           <DictionaryGrid<DirectoryTreeRow>
             key={`${gridId}-tree`}
-            rowData={filteredTreeRows}
+            rowData={treeRows}
             columnDefs={treeColumnDefs}
             loading={loading}
             objectName={config.permission}
@@ -572,6 +529,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             treeData
             hierarchyField="hierarchy"
             autoGroupColumnDef={autoGroupColumnDef}
+            onGridApiReady={handleGridApiReady}
             canEdit={canEdit}
             onRowClicked={handleSelectRow}
             onRowDoubleClicked={canEdit ? handleRowDoubleClick : undefined}
@@ -587,6 +545,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             loading={loading}
             objectName={config.permission}
             gridId={gridId}
+            onGridApiReady={handleGridApiReady}
             canEdit={canEdit}
             onRowClicked={handleSelectRow}
             onRowDoubleClicked={canEdit ? handleRowDoubleClick : undefined}

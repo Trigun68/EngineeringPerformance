@@ -12,7 +12,7 @@ public sealed class PerformanceApiTests : IClassFixture<ApiWebApplicationFactory
     public PerformanceApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]

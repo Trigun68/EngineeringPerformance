@@ -1,5 +1,6 @@
 using EngineeringPerformance.Domain.Common;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Domain.Entities;
 
@@ -14,6 +15,8 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
     public AnalysisDirection Direction { get; set; }
 
     public int? PhysicalVolumeTypeId { get; set; }
+
+    public PlanningScenario PlanningScenario { get; set; } = PlanningScenario.ByEachValue;
 
     public Project Project { get; set; } = null!;
 

@@ -63,6 +63,10 @@ scripts/
 # Misc artifacts
 backups/
 
+# Frontend
+node_modules/
+*.tsbuildinfo
+
 # Playwright E2E
 client/e2e-report/
 client/test-results/

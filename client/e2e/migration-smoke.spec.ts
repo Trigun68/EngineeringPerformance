@@ -32,7 +32,7 @@ test.describe('Migration UAT smoke (Playwright)', () => {
   test('references — physical volumes BER directory', async ({ page }) => {
     await page.goto('/references/physical-volumes-ber');
     await page.waitForSelector('.ag-root', { timeout: 15_000 });
-    await expect(page.getByRole('link', { name: 'Нормы ИИС' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Нормы физобъёмов (IIC)' })).toBeVisible();
   });
 
   test('help page — interpretation guide', async ({ page }) => {
@@ -64,12 +64,10 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     test.skip(projectId === null, 'No projects in database');
 
     for (const tabName of [
-      'Оценка',
-      'Прогноз',
-      'Сравнение',
-      'Группа',
-      'Тренд',
-      'Импорт',
+      'Прогнозирование',
+      'Оценка факта',
+      'Сравнение версий',
+      'Отчёты',
     ]) {
       await page.getByRole('tab', { name: tabName, exact: true }).first().click();
       await expect(page.getByRole('tab', { name: tabName, exact: true }).first()).toHaveAttribute('aria-selected', 'true');

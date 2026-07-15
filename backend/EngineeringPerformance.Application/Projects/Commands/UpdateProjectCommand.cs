@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Audit;
+using EngineeringPerformance.Application.Common.Exceptions;
 using EngineeringPerformance.Application.Common.Interfaces;
 using EngineeringPerformance.Application.Projects.DTOs;
 using EngineeringPerformance.Domain.Enums;
@@ -32,7 +33,7 @@ public sealed class UpdateProjectCommandHandler
         var request = command.Request;
 
         if (await _repository.CodeExistsAsync(request.Code, command.Id, cancellationToken))
-            return null;
+            throw new ConflictException("Project code already exists.");
 
         project.Code = request.Code.Trim();
         project.Name = request.Name.Trim();

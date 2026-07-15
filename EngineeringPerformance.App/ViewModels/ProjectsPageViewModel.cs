@@ -299,6 +299,7 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
             var data = perfTask.Result;
             var grid = gridTask.Result;
             var classifierMap = grid.ClassifierMap;
+            var planningZByDirection = grid.PlanningZByDirection;
             var physicalVolumes = grid.AssessmentPhysicalVolumes;
             var physicalVolumesAll = grid.AllPhysicalVolumes;
             var equipmentAll = grid.AllEquipment;
@@ -331,13 +332,11 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 var vol = row.FactPhysicalVolume ?? 0m;
                 if (vol <= 0 || !row.NormProductivity.HasValue)
                     return (null, null, null);
-                var p = row.NormProductivity.Value;
-                var std = row.NormStdDev ?? 0m;
-                return (
-                    Math.Round(vol * p, 2),
-                    std > 0 ? Math.Round(vol * Math.Max(0m, p - 0.5m * std), 2) : Math.Round(vol * p, 2),
-                    std > 0 ? Math.Round(vol * (p + 0.5m * std), 2) : Math.Round(vol * p, 2)
-                );
+                return ForecastCalculation.ComputeForecastHours(
+                    vol,
+                    row.NormProductivity,
+                    row.NormStdDev,
+                    ForecastCalculation.ResolvePlanningZ(planningZByDirection, row.WorkDirectionId));
             }
 
             (decimal baseH, decimal optH, decimal pesH) BuildSubtree(PerformanceRowDto row, int level)
@@ -467,12 +466,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                         continue;
 
                     var vol = pv.Quantity * pv.GetCoefficient();
-                    var p   = norm.NormProductivity!.Value;
-                    var std = norm.NormStdDev ?? 0m;
-
-                    baseH += vol * p;
-                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
-                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                    var (fb, fo, fp) = ForecastCalculation.ComputeForecastHours(
+                        vol, norm.NormProductivity, norm.NormStdDev,
+                        ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId));
+                    baseH += fb ?? 0m;
+                    optH += fo ?? 0m;
+                    pesH += fp ?? 0m;
                 }
 
                 foreach (var eq in equipmentAll.Where(e =>
@@ -486,11 +485,12 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                         continue;
 
                     var vol = eq.QuantityInIicGroupUnits();
-                    var p = norm.NormProductivity!.Value;
-                    var std = norm.NormStdDev ?? 0m;
-                    baseH += vol * p;
-                    optH  += vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m));
-                    pesH  += vol * (p + (std > 0 ? 0.5m * std : 0m));
+                    var (eb, eo, ep) = ForecastCalculation.ComputeForecastHours(
+                        vol, norm.NormProductivity, norm.NormStdDev,
+                        ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId.Value));
+                    baseH += eb ?? 0m;
+                    optH += eo ?? 0m;
+                    pesH += ep ?? 0m;
                 }
 
                 facilityResult.Add(new FacilityForecastItem
@@ -522,10 +522,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 decimal? baseH = null, optH = null, pesH = null;
                 if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
                 {
-                    var std = norm.NormStdDev ?? 0m;
-                    baseH = Math.Round(vol * p, 2);
-                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
-                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                    (baseH, optH, pesH) = ForecastCalculation.ComputeForecastHours(
+                        vol, p, norm.NormStdDev,
+                        ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId ?? -1));
                 }
 
                 detailRows.Add(new DetailForecastItem
@@ -576,10 +575,9 @@ public sealed partial class ProjectsPageViewModel : ObservableObject, ILoadableV
                 decimal? baseH = null, optH = null, pesH = null;
                 if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
                 {
-                    var std = norm.NormStdDev ?? 0m;
-                    baseH = Math.Round(vol * p, 2);
-                    optH  = Math.Round(vol * Math.Max(0m, p - (std > 0 ? 0.5m * std : 0m)), 2);
-                    pesH  = Math.Round(vol * (p + (std > 0 ? 0.5m * std : 0m)), 2);
+                    (baseH, optH, pesH) = ForecastCalculation.ComputeForecastHours(
+                        vol, p, norm.NormStdDev,
+                        ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId ?? -1));
                 }
 
                 detailRows.Add(new DetailForecastItem

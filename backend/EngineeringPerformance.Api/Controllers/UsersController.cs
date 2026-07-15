@@ -43,9 +43,10 @@ public sealed class UsersController : ControllerBase
             : !string.IsNullOrWhiteSpace(identityName)
                 ? identityName
                 : user.Username;
+        // Windows-учётка только из БД; не подставляем portal Username в WindowsAccount.
         var windowsAccount = !string.IsNullOrWhiteSpace(user.WindowsUsername)
             ? user.WindowsUsername
-            : identityName;
+            : null;
 
         return Ok(new CurrentUserProfileDto(
             user.Id,

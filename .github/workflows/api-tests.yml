@@ -15,8 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
-      EP_TEST_CONNECTION: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
+      SQL_SA_PASSWORD: Your_strong_SA_password1!
+      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Your_strong_SA_password1!;TrustServerCertificate=True;"
+      EP_TEST_CONNECTION: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Your_strong_SA_password1!;TrustServerCertificate=True;"
       Jwt__Secret: test-jwt-secret-minimum-32-characters-long
       Jwt__Issuer: EngineeringPerformance
       Jwt__Audience: EngineeringPerformance

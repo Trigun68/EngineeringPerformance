@@ -62,6 +62,16 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Select(s => s.Norm)
             .ToListAsync();
 
+        var planningRows = await context.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync();
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
+
         var workDirections = await context.IicWorkDirections
             .AsNoTracking()
             .Include(d => d.Unit)
@@ -97,7 +107,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             workDirections,
             normByDirection,
             volumeByDirection,
-            hoursByDirection);
+            hoursByDirection,
+            planningZByDirection);
 
         var scenarioFlatRows = BuildScenarioDisciplineRows(plannedTree, workDirections);
 
@@ -172,7 +183,8 @@ public sealed class ProjectForecastService : IProjectForecastService
         IReadOnlyList<IicWorkDirection> workDirections,
         IReadOnlyDictionary<int, IicWorkDirectionNorm> normByDirection,
         IReadOnlyDictionary<int, decimal> volumeByDirection,
-        IReadOnlyDictionary<int, decimal> hoursByDirection)
+        IReadOnlyDictionary<int, decimal> hoursByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
     {
         var byId = workDirections.ToDictionary(d => d.Id);
         var childrenByParent = workDirections
@@ -229,6 +241,60 @@ public sealed class ProjectForecastService : IProjectForecastService
         var walkedIds = new HashSet<int>();
         var leafHoursVisitedIds = new HashSet<int>();
 
+        static (decimal Base, decimal Opt, decimal Pes, string Range) CalcLeafHours(
+            decimal vol,
+            IicWorkDirectionNorm? norm,
+            decimal laborHours,
+            PlanningZParameters z)
+        {
+            if (vol <= 0)
+                return (0m, 0m, 0m, "—");
+
+            var (baseH, optH, pesH) = ForecastCalculation.ComputeForecastHours(
+                vol, norm?.Performance, norm?.StandardDeviation, z);
+            if (baseH.HasValue)
+            {
+                var b = baseH.Value;
+                var o = optH ?? b;
+                var p = pesH ?? b;
+                return (b, o, p, $"{o:F2} - {p:F2}");
+            }
+
+            return laborHours > 0
+                ? (laborHours, laborHours, laborHours, $"{laborHours:F2} - {laborHours:F2}")
+                : (0m, 0m, 0m, "—");
+        }
+
+        (decimal Base, decimal Opt, decimal Pes) GetLeafScenarioHours(int id)
+        {
+            if (!leafHoursVisitedIds.Add(id))
+                return (0m, 0m, 0m);
+
+            if (!byId.ContainsKey(id))
+                return (0m, 0m, 0m);
+
+            if (!hasChildren.Contains(id))
+            {
+                normByDirection.TryGetValue(id, out var n);
+                var v = totalVolume.GetValueOrDefault(id);
+                var lh = hoursByDirection.GetValueOrDefault(id);
+                var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, id);
+                var (b, o, p, _) = CalcLeafHours(v, n, lh, z);
+                return (b, o, p);
+            }
+
+            decimal sumBase = 0m, sumOpt = 0m, sumPes = 0m;
+            foreach (var c in childrenByParent.GetValueOrDefault(id) ?? [])
+            {
+                var (cb, co, cp) = GetLeafScenarioHours(c.Id);
+                sumBase += cb;
+                sumOpt += co;
+                sumPes += cp;
+            }
+
+            return (sumBase, sumOpt, sumPes);
+        }
+
         void Walk(IicWorkDirection d, string pathPrefix)
         {
             if (!walkedIds.Add(d.Id))
@@ -242,25 +308,25 @@ public sealed class ProjectForecastService : IProjectForecastService
 
             var vol = totalVolume.GetValueOrDefault(d.Id);
             var laborHours = hoursByDirection.GetValueOrDefault(d.Id);
+            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, d.Id);
 
-            var baseHours = ComputeBaseHours(vol, norm, laborHours);
-
-            var (opt, pes, range) = ComputeScenarioHours(baseHours, norm, vol);
+            decimal baseHours;
+            decimal opt;
+            decimal pes;
+            string range;
 
             var isLeaf = !hasChildren.Contains(d.Id);
-            if (!isLeaf)
+            if (isLeaf)
             {
-                baseHours = 0m;
-                opt = 0m;
-                pes = 0m;
-                range = "—";
-                var childSumHours = childrenByParent.GetValueOrDefault(d.Id)?
-                    .Sum(c => GetLeafHours(c.Id)) ?? 0m;
-                if (childSumHours > 0)
-                {
-                    baseHours = Math.Round(childSumHours, 2);
-                    (opt, pes, range) = ComputeScenarioHours(baseHours, norm, vol);
-                }
+                (baseHours, opt, pes, range) = CalcLeafHours(vol, norm, laborHours, z);
+            }
+            else
+            {
+                var (cb, co, cp) = GetLeafScenarioHours(d.Id);
+                baseHours = Math.Round(cb, 2);
+                opt = Math.Round(co, 2);
+                pes = Math.Round(cp, 2);
+                range = baseHours > 0 ? $"{opt:F2} - {pes:F2}" : "—";
             }
 
             results.Add(new ForecastIicVolumeRowDto(
@@ -284,66 +350,12 @@ public sealed class ProjectForecastService : IProjectForecastService
             }
         }
 
-        decimal GetLeafHours(int id)
-        {
-            if (!leafHoursVisitedIds.Add(id))
-            {
-                return 0m;
-            }
-
-            if (!byId.TryGetValue(id, out var dir))
-            {
-                return 0m;
-            }
-
-            if (!hasChildren.Contains(id))
-            {
-                normByDirection.TryGetValue(id, out var n);
-                var v = totalVolume.GetValueOrDefault(id);
-                var lh = hoursByDirection.GetValueOrDefault(id);
-                var bh = ComputeBaseHours(v, n, lh);
-                return bh;
-            }
-
-            return childrenByParent.GetValueOrDefault(id)?.Sum(c => GetLeafHours(c.Id)) ?? 0m;
-        }
-
         foreach (var root in workDirections.Where(d => d.ParentId == null).OrderBy(d => d.SortOrder).ThenBy(d => d.Name))
         {
             Walk(root, string.Empty);
         }
 
         return results;
-
-        static decimal ComputeBaseHours(decimal plannedVolume, IicWorkDirectionNorm? norm, decimal laborHours)
-        {
-            // Базовый: ФактФО × НормПроизводительность (20%)
-            if (plannedVolume > 0 && norm?.Performance is { } p && p > 0)
-            {
-                return Math.Round(plannedVolume * p, 2);
-            }
-
-            return laborHours;
-        }
-
-        static (decimal Opt, decimal Pes, string Range) ComputeScenarioHours(decimal baseHours, IicWorkDirectionNorm? norm, decimal plannedVolume)
-        {
-            if (baseHours <= 0 || plannedVolume <= 0)
-            {
-                return (0m, 0m, "—");
-            }
-
-            // Оптимистичный (15%): ФО × (Performance − 0.5 × StdDev)
-            // Пессимистичный (15%): ФО × (Performance + 0.5 × StdDev)
-            if (norm?.Performance is { } p && p > 0 && norm.StandardDeviation is { } std && std > 0)
-            {
-                var opt = Math.Round(plannedVolume * Math.Max(0m, p - 0.5m * std), 2);
-                var pes = Math.Round(plannedVolume * (p + 0.5m * std), 2);
-                return (opt, pes, $"{opt:F2} - {pes:F2}");
-            }
-
-            return (baseHours, baseHours, $"{baseHours:F2} - {baseHours:F2}");
-        }
     }
 
     /// <summary>Строки для сценариев: только листья дерева с ненулевой базой или все листья с объёмом/часами.</summary>

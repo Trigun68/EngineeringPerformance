@@ -1,4 +1,5 @@
 import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
+import { buildExportFileName } from '../utils/directoryExport';
 
 export interface DirectoryEntry {
   id: number;
@@ -124,6 +125,11 @@ export async function fetchDirectory(
   };
 }
 
+export async function fetchDirectoryEntry(resource: string, id: number): Promise<DirectoryEntry> {
+  const { data } = await apiClient.get<DirectoryEntry>(`/directories/${resource}/${id}`);
+  return normalizeEntry(data);
+}
+
 export async function createDirectoryEntry(resource: string, body: DirectoryWriteRequest): Promise<DirectoryEntry> {
   const { data } = await apiClient.post<DirectoryEntry>(`/directories/${resource}`, body);
   return data;
@@ -183,7 +189,26 @@ export async function deleteCharacteristicOption(characteristicId: number, optio
   await apiClient.delete(`/characteristics/${characteristicId}/options/${optionId}`);
 }
 
-export async function exportDirectoryExcel(resource: string): Promise<void> {
+export async function exportDirectoryExcel(
+  resource: string,
+  tabName: string,
+  headers: string[],
+  rows: string[][],
+): Promise<void> {
+  const { data } = await apiClient.post<ArrayBuffer>(
+    `/directories/${resource}/export`,
+    { tabName, headers, rows },
+    { responseType: 'arraybuffer' },
+  );
+
+  const filename = buildExportFileName(tabName);
+  const blob = new Blob([data], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportDirectoryExcelLegacy(resource: string): Promise<void> {
   const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`, undefined, `${resource}.xlsx`);
   triggerBrowserDownload(blob, filename);
 }

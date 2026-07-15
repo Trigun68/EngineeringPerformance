@@ -7,9 +7,31 @@ public sealed record ProjectsPageDataDto(
     ProjectsPageCompareGridsDto? Compare);
 
 public sealed record ProjectsPageForecastGridsDto(
-    IReadOnlyList<ForecastIicVolumeRowDto> Summary,
+    IReadOnlyList<ProjectsPageForecastSummaryRowDto> Summary,
     IReadOnlyList<ProjectsPageFacilityRowDto> Facility,
-    IReadOnlyList<ProjectsPageDetailRowDto> Detail);
+    IReadOnlyList<ProjectsPageDetailRowDto> Detail,
+    ForecastScenarioTotalsDto GrandTotals);
+
+public sealed record ForecastScenarioTotalsDto(
+    decimal BaseHours,
+    decimal OptimisticHours,
+    decimal PessimisticHours);
+
+/// <summary>Строка вкладки «Итого» прогноза (паритет WPF ForecastPerformanceItem).</summary>
+public sealed record ProjectsPageForecastSummaryRowDto(
+    int WorkDirectionId,
+    string DisplayName,
+    string NormUnitName,
+    decimal? FactPhysicalVolume,
+    decimal? NormProductivity,
+    decimal? BaseHours,
+    decimal? OptimisticHours,
+    decimal? PessimisticHours,
+    bool IsTotal,
+    int Level,
+    int? ParentId = null,
+    string Code = "",
+    IReadOnlyList<string>? Hierarchy = null);
 
 public sealed record ProjectsPageFactGridsDto(
     IReadOnlyList<PerformanceRowDto> Performance,
@@ -26,7 +48,10 @@ public sealed record ProjectsPageFacilityRowDto(
     string FacilityName,
     decimal? LaborHours,
     decimal? ZScore,
-    string Interpretation);
+    string Interpretation,
+    decimal? BaseHours = null,
+    decimal? OptimisticHours = null,
+    decimal? PessimisticHours = null);
 
 public sealed record ProjectsPageDetailRowDto(
     int? RowId,
@@ -47,4 +72,21 @@ public sealed record ProjectsPageDetailRowDto(
     decimal? FactProductivity,
     decimal? ZScore,
     string Interpretation,
-    bool IsEquipment);
+    bool IsEquipment,
+    string BindingType = "",
+    string CatalogId = "",
+    string Tag = "",
+    string ItemName = "",
+    string WorkComment = "",
+    string EstimationBasis = "",
+    string PvCode = "",
+    string PvName = "",
+    string IsAssessment = "",
+    decimal? Coefficient = null,
+    decimal? NormProductivity = null,
+    decimal? NormStdDev = null,
+    int? ClassifierId = null,
+    int? NormId = null,
+    int? CatalogVolumeId = null,
+    int? CatalogEquipmentId = null,
+    string CatalogResource = "");

@@ -91,7 +91,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
 
     [HttpGet("forecast/assessment-volumes")]
     [RequireProjectAccess]
-    [HasPermission(PermissionType.Planning, AccessLevel.Read)]
+    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
     public Task<ProjectForecastAssessmentVolumesDto> ForecastAssessmentVolumes(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
         _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId);

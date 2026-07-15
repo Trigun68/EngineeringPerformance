@@ -5,7 +5,8 @@ public sealed record DictionaryItemDto(
     string Name,
     string? Code,
     string? Description,
-    int? ParentId = null);
+    int? ParentId,
+    int? UnitId);
 
 /// <summary>
 /// Все 8 справочников страницы «Справочники» + регистр норм ИИС (кэшируется на фронте).

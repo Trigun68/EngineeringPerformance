@@ -12,7 +12,8 @@ public sealed record ProjectVersionAnalysisDto(
     string VersionName,
     IReadOnlyList<ProjectVersionDirectionDto> Directions,
     IReadOnlyList<ProjectVersionLaborIntensityDto> LaborIntensities,
-    ProjectVersionAnalysisSummaryDto Summary);
+    ProjectVersionAnalysisSummaryDto Summary,
+    IReadOnlyDictionary<int, PlanningZParameters> PlanningZByDirection);
 
 /// <summary>Итоговые показатели отчёта «Анализ версии проекта».</summary>
 public sealed record ProjectVersionAnalysisSummaryDto(

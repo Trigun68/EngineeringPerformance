@@ -16,7 +16,9 @@ public sealed class PermissionDriftService : IPermissionDriftService
 
     public async Task<PermissionDriftDto> GetPermissionDriftAsync(CancellationToken cancellationToken = default)
     {
-        var expectedObjects = PermissionObjectCatalog.AllObjectNames
+        var catalogObjects = PermissionObjectCatalog.AllObjectNames
+            .ToHashSet(StringComparer.Ordinal);
+        var expectedInDatabase = PermissionObjectCatalog.MatrixObjectNames
             .ToHashSet(StringComparer.Ordinal);
 
         var roles = await _context.Roles
@@ -30,12 +32,13 @@ public sealed class PermissionDriftService : IPermissionDriftService
 
         var unknownObjects = rights
             .Select(r => r.ObjectName)
-            .Where(name => !expectedObjects.Contains(name))
+            .Where(name => !catalogObjects.Contains(name))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
 
         var missingByRole = roles
+            .Where(role => !string.Equals(role.Name, PermissionObjectCatalog.AdministratorRoleName, StringComparison.Ordinal))
             .Select(role =>
             {
                 var grantedObjects = rights
@@ -43,7 +46,7 @@ public sealed class PermissionDriftService : IPermissionDriftService
                     .Select(r => r.ObjectName)
                     .ToHashSet(StringComparer.Ordinal);
 
-                var missing = expectedObjects
+                var missing = expectedInDatabase
                     .Where(expected => !grantedObjects.Contains(expected))
                     .OrderBy(x => x, StringComparer.Ordinal)
                     .ToList();

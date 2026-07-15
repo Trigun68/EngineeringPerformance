@@ -13,7 +13,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
     public SnapshotApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]
@@ -30,6 +30,22 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
         var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
+        var dictResponse = await _client.GetAsync("/api/dictionaries/all");
+        dictResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var dictJson = await dictResponse.Content.ReadAsStringAsync();
+        using var dictDoc = System.Text.Json.JsonDocument.Parse(dictJson);
+        int? kfoTypeId = null;
+        foreach (var item in dictDoc.RootElement.GetProperty("physicalVolumeTypes").EnumerateArray())
+        {
+            if (item.GetProperty("name").GetString() == "КФО")
+            {
+                kfoTypeId = item.GetProperty("id").GetInt32();
+                break;
+            }
+        }
+
+        kfoTypeId.Should().NotBeNull();
+
         var createResponse = await _client.PostAsJsonAsync(
             $"/api/projects/{projectId}/versions",
             new
@@ -37,7 +53,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
                 versionName = $"snapshot-test-{suffix}",
                 description = "snapshot api test",
                 direction = 1,
-                physicalVolumeTypeId = (int?)null,
+                physicalVolumeTypeId = kfoTypeId!.Value,
             });
 
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created);

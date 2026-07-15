@@ -19,6 +19,7 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
     private readonly ICurrentUserService _currentUser;
     private readonly IPermissionService _permissionService;
     private readonly IProjectVisibilityService _visibility;
+    private readonly IProjectVersionPlanningParameterService _planningParameters;
     private readonly ILogger<ProjectVersionDeepCopyService> _logger;
 
     public ProjectVersionDeepCopyService(
@@ -26,12 +27,14 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
         ICurrentUserService currentUser,
         IPermissionService permissionService,
         IProjectVisibilityService visibility,
+        IProjectVersionPlanningParameterService planningParameters,
         ILogger<ProjectVersionDeepCopyService> logger)
     {
         _context = context;
         _currentUser = currentUser;
         _permissionService = permissionService;
         _visibility = visibility;
+        _planningParameters = planningParameters;
         _logger = logger;
     }
 
@@ -83,6 +86,7 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
                 Description = string.IsNullOrWhiteSpace(newDescription) ? source.Description : newDescription.Trim(),
                 Direction = source.Direction,
                 PhysicalVolumeTypeId = source.PhysicalVolumeTypeId,
+                PlanningScenario = source.PlanningScenario,
                 SortOrder = source.SortOrder,
                 IsArchived = false,
                 CreatedAt = createdAt,
@@ -113,6 +117,8 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             // 8. Новый снимок норм на copy.CreatedAt (не клон старого).
             await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
                 _context, copy.Id, createdAt, cancellationToken);
+
+            await _planningParameters.CopyFromVersionAsync(source.Id, copy.Id, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -283,6 +289,9 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             CatalogCode = src.CatalogCode,
             CatalogName = src.CatalogName,
             LaborHoursPerUnit = src.LaborHoursPerUnit,
+            LaborIntensityBase = src.LaborIntensityBase,
+            LaborIntensityPessimistic = src.LaborIntensityPessimistic,
+            LaborIntensityOptimistic = src.LaborIntensityOptimistic,
             MachineHoursPerUnit = src.MachineHoursPerUnit,
             TotalMachineHours = src.TotalMachineHours,
             Status = src.Status,
@@ -299,5 +308,6 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             v.Direction,
             v.PhysicalVolumeTypeId,
             v.SortOrder,
-            v.IsArchived);
+            v.IsArchived,
+            v.CreatedAt);
 }

@@ -4,22 +4,30 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
+  FormControlLabel,
   Stack,
   TextField,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import UnarchiveIcon from '@mui/icons-material/Unarchive';
 import type { ColDef } from 'ag-grid-community';
 import {
+  archiveProject,
   createProject,
   deleteProject,
   fetchProjects,
+  unarchiveProject,
   updateProject,
 } from '../../api/projectsApi';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { EditModal } from '../../components/EditModal/EditModal';
 import { usePermission } from '../../hooks/usePermission';
+import { getApiErrorMessage } from '../../services/apiError';
 import type { Project, ProjectFormData } from '../../types/project';
 
 const OBJECT_NAME = 'Projects';
@@ -52,22 +60,22 @@ export function ProjectsPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
 
   const loadProjects = useCallback(async () => {
-    if (!canRead) {
-      return;
-    }
+    if (!canRead) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchProjects();
+      const data = await fetchProjects(showArchived);
       setProjects(data);
-    } catch {
-      setError('Не удалось загрузить проекты.');
+      setSelectedProject((prev) => (prev ? data.find((p) => p.id === prev.id) ?? null : null));
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось загрузить проекты.'));
     } finally {
       setLoading(false);
     }
-  }, [canRead]);
+  }, [canRead, showArchived]);
 
   useEffect(() => {
     void loadProjects();
@@ -89,8 +97,15 @@ export function ProjectsPage() {
       { field: 'gip', headerName: 'ГИП' },
       { field: 'workStatus', headerName: 'Статус' },
       { field: 'versionCount', headerName: 'Версии', maxWidth: 110 },
+      {
+        field: 'isArchived',
+        headerName: 'Архив',
+        maxWidth: 90,
+        valueFormatter: (p) => (p.value ? 'Да' : ''),
+        hide: !showArchived,
+      },
     ],
-    [],
+    [showArchived],
   );
 
   const openCreate = () => {
@@ -100,7 +115,7 @@ export function ProjectsPage() {
   };
 
   const openDetail = (project: Project) => {
-    navigate(`/projects/${project.id}`);
+    navigate(`/projects/${project.id}`, { state: { project } });
   };
 
   const openEdit = (project: Project) => {
@@ -132,17 +147,48 @@ export function ProjectsPage() {
       }
       setModalOpen(false);
       await loadProjects();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось сохранить изменения.'));
+      throw err;
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (project: Project) => {
-    if (!window.confirm(`Удалить проект «${project.name}»?`)) {
+  const handleHardDelete = async (project: Project) => {
+    if (
+      !window.confirm(
+        `Удалить проект «${project.name}» безвозвратно?\nВсе версии и связанные данные будут удалены. Это действие необратимо.`,
+      )
+    ) {
       return;
     }
-    await deleteProject(project.id);
-    await loadProjects();
+    try {
+      await deleteProject(project.id);
+      setSelectedProject(null);
+      await loadProjects();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось удалить проект.'));
+    }
+  };
+
+  const handleArchive = async (project: Project) => {
+    try {
+      await archiveProject(project.id);
+      setSelectedProject(null);
+      await loadProjects();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось поместить проект в архив.'));
+    }
+  };
+
+  const handleUnarchive = async (project: Project) => {
+    try {
+      await unarchiveProject(project.id);
+      await loadProjects();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось извлечь проект из архива.'));
+    }
   };
 
   const filteredProjects = useMemo(() => {
@@ -174,9 +220,11 @@ export function ProjectsPage() {
     return <Alert severity="warning">Нет доступа к разделу «Проекты».</Alert>;
   }
 
+  const selectedIsArchived = selectedProject?.isArchived === true;
+
   return (
-    <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} spacing={1}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden' }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} spacing={1} flexShrink={0} flexWrap="wrap" useFlexGap>
         <TextField
           size="small"
           label="Поиск по проектам"
@@ -185,7 +233,17 @@ export function ProjectsPage() {
           onChange={(e) => setSearchQuery(e.target.value)}
           sx={{ minWidth: 360, maxWidth: 520 }}
         />
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+            }
+            label="Отображать архивные элементы"
+          />
           {canEdit && (
             <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
               Добавить
@@ -198,43 +256,71 @@ export function ProjectsPage() {
               onClick={() => selectedProject && openEdit(selectedProject)}
               disabled={!selectedProject}
             >
-              Редактировать выбранную строку таблицы
+              Редактировать
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => selectedProject && void handleHardDelete(selectedProject)}
+              disabled={!selectedProject}
+            >
+              Удалить
+            </Button>
+          )}
+          {canEdit && (
+            <Button
+              variant="outlined"
+              startIcon={<ArchiveIcon />}
+              onClick={() => selectedProject && void handleArchive(selectedProject)}
+              disabled={!selectedProject || selectedIsArchived}
+            >
+              Поместить в архив
+            </Button>
+          )}
+          {canEdit && showArchived && (
+            <Button
+              variant="outlined"
+              startIcon={<UnarchiveIcon />}
+              onClick={() => selectedProject && void handleUnarchive(selectedProject)}
+              disabled={!selectedProject || !selectedIsArchived}
+            >
+              Извлечь из архива
             </Button>
           )}
         </Stack>
       </Stack>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      {loading && projects.length === 0 ? (
-        <Stack alignItems="center" py={4}>
-          <CircularProgress />
-        </Stack>
-      ) : (
-        <DictionaryGrid<Project>
-          rowData={filteredProjects}
-          columnDefs={columnDefs}
-          gridId="projects-list"
-          loading={loading}
-          objectName={OBJECT_NAME}
-          canEdit={canEdit}
-          onRowClicked={setSelectedProject}
-          onRowDoubleClicked={openDetail}
-          onEdit={canEdit ? openEdit : undefined}
-          onDelete={canEdit ? (row) => void handleDelete(row) : undefined}
-          additionalContextMenuItems={[
-            {
-              name: 'Открыть карточку',
-              requiredLevel: 1,
-              action: (row) => row && openDetail(row),
-            },
-          ]}
-        />
-      )}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        {loading && projects.length === 0 ? (
+          <Stack alignItems="center" py={4}>
+            <CircularProgress />
+          </Stack>
+        ) : (
+          <DictionaryGrid<Project>
+            rowData={filteredProjects}
+            columnDefs={columnDefs}
+            gridId="projects-list"
+            loading={loading}
+            objectName={OBJECT_NAME}
+            canEdit={canEdit}
+            onRowClicked={setSelectedProject}
+            onRowDoubleClicked={openDetail}
+            onEdit={canEdit ? openEdit : undefined}
+            onDelete={canEdit ? (row) => void handleHardDelete(row) : undefined}
+            onArchive={canEdit ? (row) => void handleArchive(row) : undefined}
+            contextMenuMode="compact"
+          />
+        )}
+      </Box>
 
       <EditModal
         open={modalOpen}

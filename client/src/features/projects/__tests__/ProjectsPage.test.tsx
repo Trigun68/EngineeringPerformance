@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ValueFormatterFunc } from 'ag-grid-community';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import gridFixture from '../../../../tests/fixtures/grid-data.json';
@@ -104,20 +103,11 @@ describe('ProjectsPage grids', () => {
     });
   });
 
-  it('applies dictionary valueFormatter from useDictionaryStore', () => {
-    const cols = createForecastSummaryColumns(dictionaryState);
-    const nameCol = cols.find((c) => c.field === 'name');
-    const formatter = nameCol?.valueFormatter;
-
-    // ColDef.valueFormatter — string | function; в gridColumns это функция
-    expect(typeof formatter).toBe('function');
-
-    const formatted = (formatter as ValueFormatterFunc)({
-      data: { workDirectionId: 1 },
-      value: 'fallback',
-    } as Parameters<ValueFormatterFunc>[0]);
-
-    expect(formatted).toBe('Направление А');
+  it('creates WPF-style forecast summary columns', () => {
+    const cols = createForecastSummaryColumns();
+    expect(cols.find((c) => c.field === 'factPhysicalVolume')).toBeDefined();
+    expect(cols.find((c) => c.field === 'baseHours')).toBeDefined();
+    expect(cols.find((c) => c.field === 'normUnitName')).toBeUndefined();
   });
 
   it('renders export toolbar buttons and calls export API', async () => {

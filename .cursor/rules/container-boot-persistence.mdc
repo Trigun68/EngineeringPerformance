@@ -1,0 +1,12 @@
+---
+description: Key changes must survive container restart/recreate (boot SoT)
+alwaysApply: true
+---
+
+# Boot persistence (containers)
+
+Глобальное правило: `~/.cursor/rules/container-boot-persistence.mdc`.
+
+После ключевых правок runtime/сети/compose/systemd — закодировать SoT в
+entrypoint/compose/unit, прогнать recreate и проверить инвариант без ручных
+команд и без отключения healers.

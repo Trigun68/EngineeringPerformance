@@ -152,7 +152,9 @@ export function ProjectWorkspacePage() {
 
   const handleCopyVersion = async (version: ProjectVersion) => {
     if (!currentPid) return;
-    const copied = await copyProjectVersion(currentPid, version.id);
+    const copied = await copyProjectVersion(currentPid, version.id, {
+      newVersionName: `${version.versionName} (копия)`,
+    });
     setSelectedVersionId(copied.id);
     await loadProject(currentPid);
   };

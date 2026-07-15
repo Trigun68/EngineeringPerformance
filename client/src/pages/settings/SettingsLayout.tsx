@@ -26,6 +26,7 @@ export function SettingsLayout() {
   const tabs = [
     { to: '/settings/users', label: 'Пользователи', visible: canReadUsers },
     { to: '/settings/access-rights', label: 'Права пользователей', visible: canReadAccessRights },
+    { to: '/settings/system', label: 'Общие настройки', visible: isAdmin },
   ].filter((tab) => tab.visible);
 
   const location = useLocation();

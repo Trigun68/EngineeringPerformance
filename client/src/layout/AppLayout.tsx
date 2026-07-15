@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import apiClient from '../services/apiClient';
 import {
   Box,
   Divider,
@@ -23,6 +24,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { UserMenu } from '../components/auth/UserMenu';
 import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
+import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
 import { isAdministrator } from '../utils/permissionAccess';
 import { wpColors } from '../theme/wpColors';
 import { useAuthStore } from '../store/useAuthStore';
@@ -31,6 +33,7 @@ import { useDictionaryStore } from '../store/useDictionaryStore';
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/': <HomeOutlinedIcon fontSize="small" />,
   '/projects': <FolderOutlinedIcon fontSize="small" />,
+  '/analytics/trends': <MenuBookOutlinedIcon fontSize="small" />,
   '/references': <MenuBookOutlinedIcon fontSize="small" />,
   '/settings/users': <SettingsOutlinedIcon fontSize="small" />,
   '/help': <HelpOutlineIcon fontSize="small" />,
@@ -40,6 +43,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
 
 function resolvePageTitle(pathname: string): string {
   if (pathname.startsWith('/projects/') && pathname !== '/projects') return 'Проекты';
+  if (pathname.startsWith('/analytics')) return 'Аналитика';
   if (pathname.startsWith('/references')) return 'Справочники';
   if (pathname.startsWith('/settings')) return 'Настройки';
   if (pathname.startsWith('/admin')) {
@@ -75,6 +79,18 @@ export function AppLayout() {
   const { visibleItems } = useAccessibleNavigation();
   const isAdmin = isAdministrator(user?.roleName);
 
+  usePersistLastRoute();
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const intervalId = window.setInterval(() => {
+      void apiClient.post('/auth/refresh').catch(() => {
+        // 401 обработает interceptor apiClient.
+      });
+    }, 15 * 60 * 1000);
+    return () => window.clearInterval(intervalId);
+  }, [user]);
+
   useEffect(() => {
     if (user) {
       void fetchDictionaries();
@@ -93,7 +109,7 @@ export function AppLayout() {
   const pageTitle = projectMatch ? 'Проекты' : resolvePageTitle(location.pathname);
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: wpColors.pageBg }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', bgcolor: wpColors.pageBg }}>
       <Box
         component="nav"
         sx={{
@@ -147,7 +163,7 @@ export function AppLayout() {
         <Divider sx={{ borderColor: '#34495E' }} />
       </Box>
 
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <Box
           sx={{
             bgcolor: wpColors.cardBg,

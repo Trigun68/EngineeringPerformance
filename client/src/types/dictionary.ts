@@ -4,6 +4,7 @@ export interface DictionaryItem {
   code?: string | null;
   description?: string | null;
   parentId?: number | null;
+  unitId?: number | null;
 }
 
 /** 8 справочников + регистр норм ИИС (camelCase — как в API). */

@@ -17,17 +17,20 @@ import {
   saveProjectCharacteristics,
   type ProjectCharacteristicSelection,
 } from '../../api/projectCharacteristicsApi';
+import { getApiErrorMessage } from '../../services/apiError';
 
 interface ProjectCharacteristicsDialogProps {
   open: boolean;
   projectId: number | null;
   onClose: () => void;
+  onSaved?: () => void;
 }
 
 export function ProjectCharacteristicsDialog({
   open,
   projectId,
   onClose,
+  onSaved,
 }: ProjectCharacteristicsDialogProps) {
   const [rows, setRows] = useState<ProjectCharacteristicSelection[]>([]);
   const [draft, setDraft] = useState<Record<number, number | null>>({});
@@ -72,9 +75,10 @@ export function ProjectCharacteristicsDialog({
           optionId: optionId as number,
         }));
       await saveProjectCharacteristics(projectId, selections);
+      onSaved?.();
       onClose();
-    } catch {
-      setError('Не удалось сохранить характеристики проекта.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось сохранить характеристики проекта.'));
     } finally {
       setSaving(false);
     }

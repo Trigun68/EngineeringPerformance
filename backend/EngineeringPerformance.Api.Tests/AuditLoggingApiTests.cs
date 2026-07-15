@@ -11,7 +11,7 @@ public sealed class AuditLoggingApiTests : IClassFixture<ApiWebApplicationFactor
     public AuditLoggingApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]

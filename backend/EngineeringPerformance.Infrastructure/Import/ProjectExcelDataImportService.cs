@@ -96,12 +96,28 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
             .ToListAsync(cancellationToken);
     }
 
-    private async Task<int> DeleteIterationCoreAsync(
-        int projectId, int versionId, DataImportType dataType, DateTime importedAt, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// EnableRetryOnFailure требует оборачивать пользовательские транзакции в CreateExecutionStrategy.
+    /// </summary>
+    private async Task<T> ExecuteWithRetryableTransactionAsync<T>(
+        Func<AppDbContext, Task<T>> action,
+        CancellationToken cancellationToken = default)
     {
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+        var strategy = context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+            var result = await action(context);
+            await transaction.CommitAsync(cancellationToken);
+            return result;
+        });
+    }
 
+    private Task<int> DeleteIterationCoreAsync(
+        int projectId, int versionId, DataImportType dataType, DateTime importedAt, CancellationToken cancellationToken = default) =>
+        ExecuteWithRetryableTransactionAsync(async context =>
+        {
         var iteration = await context.DataImportIterations
             .FirstOrDefaultAsync(i => i.ProjectId == projectId
                                    && i.ProjectAnalysisVersionId == versionId
@@ -116,11 +132,10 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         var deletedRecords = await DeleteImportedRecordsAsync(context, dataType, projectId, versionId, importedAt);
 
         context.DataImportIterations.Remove(iteration);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(cancellationToken);
 
-        await transaction.CommitAsync();
         return deletedRecords;
-    }
+        }, cancellationToken);
 
     private static string? GetCellValue(IXLRangeRow row, int columnNumber)
     {

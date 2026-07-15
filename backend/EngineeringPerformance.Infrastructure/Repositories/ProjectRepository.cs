@@ -29,9 +29,13 @@ public sealed class ProjectRepository : IProjectRepository
         int userId,
         IReadOnlyList<int> accessibleProjectIds,
         bool isAdministrator,
+        bool includeArchived = false,
         CancellationToken cancellationToken = default)
     {
-        var query = _context.Projects.AsNoTracking().Where(p => !p.IsArchived);
+        var query = _context.Projects.AsNoTracking();
+
+        if (!includeArchived)
+            query = query.Where(p => !p.IsArchived);
 
         if (!isAdministrator)
             query = query.Where(p => accessibleProjectIds.Contains(p.Id));
@@ -66,6 +70,12 @@ public sealed class ProjectRepository : IProjectRepository
         _context.Projects.AddAsync(project, cancellationToken).AsTask();
 
     public void Update(Project project) => _context.Projects.Update(project);
+
+    public Task DeleteAsync(Project project, CancellationToken cancellationToken = default)
+    {
+        _context.Projects.Remove(project);
+        return Task.CompletedTask;
+    }
 
     private static System.Linq.Expressions.Expression<Func<Project, ProjectDto>> MapToDto() =>
         p => new ProjectDto(

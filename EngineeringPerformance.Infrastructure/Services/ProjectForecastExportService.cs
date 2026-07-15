@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using EngineeringPerformance.Core.DTOs;
 using EngineeringPerformance.Core.Services;
 using PdfSharp.Drawing;
 using PdfSharp.Fonts;
@@ -602,24 +601,21 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
 
     // ─── Вычисление прогнозных часов (та же формула, что в ForecastDirectionViewModel) ──
 
-    private static (decimal Base, decimal Opt, decimal Pes) CalcHours(ProjectVersionDirectionDto d)
+    private static (decimal Base, decimal Opt, decimal Pes) CalcHours(
+        ProjectVersionDirectionDto d,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
     {
         if (!d.FactPhysicalVolume.HasValue || !d.NormProductivity.HasValue || d.NormProductivity.Value <= 0)
             return (0m, 0m, 0m);
 
-        var fo = d.FactPhysicalVolume.Value;
-        var p = d.NormProductivity.Value;
-        var baseH = Math.Round(fo * p, 2);
+        var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, d.Id);
+        var (baseH, optH, pesH) = ForecastCalculation.ComputeForecastHours(
+            d.FactPhysicalVolume.Value,
+            d.NormProductivity,
+            d.NormStdDev,
+            z);
 
-        if (d.NormStdDev.HasValue && d.NormStdDev.Value > 0)
-        {
-            var std = d.NormStdDev.Value;
-            return (baseH,
-                Math.Round(fo * Math.Max(0m, p - 0.5m * std), 2),
-                Math.Round(fo * (p + 0.5m * std), 2));
-        }
-
-        return (baseH, baseH, baseH);
+        return (baseH ?? 0m, optH ?? 0m, pesH ?? 0m);
     }
 
     // ─── Excel ───────────────────────────────────────────────────────────────
@@ -651,7 +647,7 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         foreach (var d in report.Directions)
         {
             var indent = new string(' ', Math.Max(0, d.Level) * 2);
-            var (baseH, optH, pesH) = CalcHours(d);
+            var (baseH, optH, pesH) = CalcHours(d, report.PlanningZByDirection);
 
             ws.Cell(row, 1).Value = d.Code;
             ws.Cell(row, 2).Value = indent + d.Name;
@@ -1102,7 +1098,7 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         foreach (var d in report.Directions)
         {
             if (y + 13 > page.Height.Point - margin) break;
-            var (baseH, optH, pesH) = CalcHours(d);
+            var (baseH, optH, pesH) = CalcHours(d, report.PlanningZByDirection);
             if (d.ParentId == null) { totalBase += baseH; totalOpt += optH; totalPes += pesH; }
 
             var indent = new string(' ', Math.Max(0, d.Level) * 2);
@@ -1147,7 +1143,7 @@ public sealed class ProjectForecastExportService : IProjectForecastExportService
         var pageW = page.Width.Point;
         var y = margin;
 
-        var (baseH, optH, pesH) = CalcHours(d);
+        var (baseH, optH, pesH) = CalcHours(d, report.PlanningZByDirection);
 
         gfx.DrawString($"[{d.Code}] {d.Name}", fontTitle, XBrushes.Black,
             new XRect(margin, y, pageW - margin * 2, 16), XStringFormats.TopLeft);

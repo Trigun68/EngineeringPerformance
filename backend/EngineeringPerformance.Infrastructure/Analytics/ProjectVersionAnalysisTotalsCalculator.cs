@@ -13,25 +13,9 @@ public static class ProjectVersionAnalysisTotalsCalculator
         decimal totalPlannedHours,
         decimal unallocatedPlannedHours)
     {
-        var roots = performanceRows
-            .Where(r => r.WorkDirectionId >= 0 && r.ParentId == null)
-            .ToList();
-
-        var weightedRoots = roots
-            .Where(r => r.ZScore.HasValue && r.SubtreeHours is > 0)
-            .ToList();
-
-        decimal? weightedZ = null;
-        if (weightedRoots.Count > 0)
-        {
-            var denominator = weightedRoots.Sum(r => r.SubtreeHours!.Value);
-            if (denominator > 0)
-            {
-                weightedZ = Math.Round(
-                    weightedRoots.Sum(r => r.ZScore!.Value * r.SubtreeHours!.Value) / denominator,
-                    2);
-            }
-        }
+        var weightedZ = WeightedZScoreCalculator.FromRootPerformanceRows(
+            performanceRows,
+            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
 
         var physicalVolumeTotalsByUnit = performanceRows
             .Where(r => r.WorkDirectionId >= 0

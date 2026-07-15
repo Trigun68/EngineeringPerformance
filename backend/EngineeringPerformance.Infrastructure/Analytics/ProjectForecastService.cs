@@ -1,6 +1,9 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.LaborIntensity;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Norms;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,6 +40,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             throw new InvalidOperationException($"Version {versionId} not found for project {projectId}");
         }
 
+        var planningScenario = version.PlanningScenario;
+
         var laborIntensities = await context.ProjectLaborIntensities
             .AsNoTracking()
             .Include(li => li.WorkDirection)
@@ -67,6 +72,16 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Select(s => s.Norm)
             .ToListAsync();
 
+        var planningRows = await context.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync();
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
+
         var workDirections = await context.IicWorkDirections
             .AsNoTracking()
             .Include(d => d.Unit)
@@ -76,6 +91,40 @@ public sealed class ProjectForecastService : IProjectForecastService
             .ToListAsync();
 
         var normByDirection = snapshotNorms.ToDictionary(n => n.WorkDirectionId);
+        var normsByDirection = snapshotNorms
+            .GroupBy(n => n.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => NormSnapshotFactory.FromEntity(g.First()));
+
+        var ppvLines = physicalVolumes
+            .Where(pv => pv.GetIsAssessment() == true)
+            .Select(pv => new LaborIntensityCalculator.PpvLine(
+                pv.Id,
+                pv.GetClassifierId(),
+                pv.FacilityCode,
+                pv.Quantity,
+                pv.GetCoefficient(),
+                IsAssessment: true))
+            .ToList();
+
+        var deviationCalculator = new DeviationCalculator(new NormCalculator());
+        var ppvHoursById = ForecastHoursAggregator.ComputePpvHours(
+            planningScenario,
+            ppvLines,
+            normsByDirection,
+            planningZByDirection,
+            deviationCalculator);
+
+        var equipmentVolumes = equipmentRows
+            .Where(eq => eq.Equipment?.IsAssessment == true && eq.Equipment.ClassifierId.HasValue)
+            .Select(eq => (eq.Equipment!.ClassifierId!.Value, eq.QuantityInIicGroupUnits()));
+
+        var scenarioHoursByDirection = ForecastHoursAggregator.AggregateByDirection(
+            ppvLines,
+            ppvHoursById,
+            equipmentVolumes,
+            normsByDirection,
+            planningZByDirection,
+            deviationCalculator);
 
         var volumeByDirection = physicalVolumes
             .Where(pv => pv.GetClassifierId().HasValue == true && pv.GetIsAssessment() == true)
@@ -105,6 +154,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             normByDirection,
             volumeByDirection,
             hoursByDirection,
+            scenarioHoursByDirection,
+            planningZByDirection,
             calc,
             _calculationEngine);
 
@@ -182,6 +233,8 @@ public sealed class ProjectForecastService : IProjectForecastService
         IReadOnlyDictionary<int, IicWorkDirectionNorm> normByDirection,
         IReadOnlyDictionary<int, decimal> volumeByDirection,
         IReadOnlyDictionary<int, decimal> hoursByDirection,
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> scenarioHoursByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
         ForecastCalculationOptionsDto calculation,
         IPerformanceCalculationEngine calculationEngine)
     {
@@ -240,6 +293,75 @@ public sealed class ProjectForecastService : IProjectForecastService
         var walkedIds = new HashSet<int>();
         var leafHoursVisitedIds = new HashSet<int>();
 
+        static (decimal Base, decimal Opt, decimal Pes, string Range) CalcLeafHours(
+            decimal vol,
+            IicWorkDirectionNorm? norm,
+            decimal laborHours,
+            PlanningZParameters z,
+            string method,
+            IPerformanceCalculationEngine engine)
+        {
+            if (vol <= 0)
+                return (0m, 0m, 0m, "—");
+
+            var (baseH, optH, pesH) = engine.ComputeForecastHours(vol, norm?.Performance, norm?.StandardDeviation, z);
+            if (baseH.HasValue)
+            {
+                var b = baseH.Value;
+                var o = optH ?? b;
+                var p = pesH ?? b;
+                return (b, o, p, $"{o:F2} - {p:F2}");
+            }
+
+            var fallback = engine.ComputeForecastBaseHours(
+                vol, norm?.Performance, norm?.Estimate, laborHours, method);
+            return fallback > 0
+                ? (fallback, fallback, fallback, $"{fallback:F2} - {fallback:F2}")
+                : (0m, 0m, 0m, "—");
+        }
+
+        (decimal Base, decimal Opt, decimal Pes) GetLeafScenarioHours(int id)
+        {
+            if (!leafHoursVisitedIds.Add(id))
+                return (0m, 0m, 0m);
+
+            if (!byId.ContainsKey(id))
+                return (0m, 0m, 0m);
+
+            if (!hasChildren.Contains(id))
+            {
+                // Тот же путь, что Walk для листьев: scenarioHoursByDirection → fallback CalcLeafHours.
+                if (scenarioHoursByDirection.TryGetValue(id, out var scenarioHours)
+                    && ((scenarioHours.Base ?? 0m) > 0
+                        || (scenarioHours.Optimistic ?? 0m) > 0
+                        || (scenarioHours.Pessimistic ?? 0m) > 0))
+                {
+                    return (
+                        scenarioHours.Base ?? 0m,
+                        scenarioHours.Optimistic ?? scenarioHours.Base ?? 0m,
+                        scenarioHours.Pessimistic ?? scenarioHours.Base ?? 0m);
+                }
+
+                normByDirection.TryGetValue(id, out var n);
+                var v = totalVolume.GetValueOrDefault(id);
+                var lh = hoursByDirection.GetValueOrDefault(id);
+                var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, id);
+                var (b, o, p, _) = CalcLeafHours(v, n, lh, z, calculation.Method, calculationEngine);
+                return (b, o, p);
+            }
+
+            decimal sumBase = 0m, sumOpt = 0m, sumPes = 0m;
+            foreach (var c in childrenByParent.GetValueOrDefault(id) ?? [])
+            {
+                var (cb, co, cp) = GetLeafScenarioHours(c.Id);
+                sumBase += cb;
+                sumOpt += co;
+                sumPes += cp;
+            }
+
+            return (sumBase, sumOpt, sumPes);
+        }
+
         void Walk(IicWorkDirection d, string pathPrefix)
         {
             if (!walkedIds.Add(d.Id))
@@ -253,42 +375,39 @@ public sealed class ProjectForecastService : IProjectForecastService
 
             var vol = totalVolume.GetValueOrDefault(d.Id);
             var laborHours = hoursByDirection.GetValueOrDefault(d.Id);
+            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, d.Id);
 
-            var baseHours = calculationEngine.ComputeForecastBaseHours(
-                vol,
-                norm?.Performance,
-                norm?.Estimate,
-                laborHours,
-                calculation.Method);
-
-            var (opt, pes, range) = calculationEngine.ComputeForecastScenarioHours(
-                baseHours,
-                norm?.Performance,
-                norm?.StandardDeviation,
-                vol,
-                calculation.ZOptimistic,
-                calculation.ZPessimistic);
+            decimal baseHours;
+            decimal opt;
+            decimal pes;
+            string range;
 
             var isLeaf = !hasChildren.Contains(d.Id);
-            if (!isLeaf)
+            if (isLeaf)
             {
-                baseHours = 0m;
-                opt = 0m;
-                pes = 0m;
-                range = "—";
-                var childSumHours = childrenByParent.GetValueOrDefault(d.Id)?
-                    .Sum(c => GetLeafHours(c.Id)) ?? 0m;
-                if (childSumHours > 0)
+                if (scenarioHoursByDirection.TryGetValue(d.Id, out var scenarioHours)
+                    && ((scenarioHours.Base ?? 0m) > 0
+                        || (scenarioHours.Optimistic ?? 0m) > 0
+                        || (scenarioHours.Pessimistic ?? 0m) > 0))
                 {
-                    baseHours = Math.Round(childSumHours, 2);
-                    (opt, pes, range) = calculationEngine.ComputeForecastScenarioHours(
-                        baseHours,
-                        norm?.Performance,
-                        norm?.StandardDeviation,
-                        vol,
-                        calculation.ZOptimistic,
-                        calculation.ZPessimistic);
+                    baseHours = Math.Round(scenarioHours.Base ?? 0m, 2);
+                    opt = Math.Round(scenarioHours.Optimistic ?? scenarioHours.Base ?? 0m, 2);
+                    pes = Math.Round(scenarioHours.Pessimistic ?? scenarioHours.Base ?? 0m, 2);
+                    range = baseHours > 0 ? $"{opt:F2} - {pes:F2}" : "—";
                 }
+                else
+                {
+                    (baseHours, opt, pes, range) = CalcLeafHours(
+                        vol, norm, laborHours, z, calculation.Method, calculationEngine);
+                }
+            }
+            else
+            {
+                var (cb, co, cp) = GetLeafScenarioHours(d.Id);
+                baseHours = Math.Round(cb, 2);
+                opt = Math.Round(co, 2);
+                pes = Math.Round(cp, 2);
+                range = baseHours > 0 ? $"{opt:F2} - {pes:F2}" : "—";
             }
 
             results.Add(new ForecastIicVolumeRowDto(
@@ -310,35 +429,6 @@ public sealed class ProjectForecastService : IProjectForecastService
             {
                 Walk(child, path);
             }
-        }
-
-        decimal GetLeafHours(int id)
-        {
-            if (!leafHoursVisitedIds.Add(id))
-            {
-                return 0m;
-            }
-
-            if (!byId.TryGetValue(id, out var dir))
-            {
-                return 0m;
-            }
-
-            if (!hasChildren.Contains(id))
-            {
-                normByDirection.TryGetValue(id, out var n);
-                var v = totalVolume.GetValueOrDefault(id);
-                var lh = hoursByDirection.GetValueOrDefault(id);
-                var bh = calculationEngine.ComputeForecastBaseHours(
-                    v,
-                    n?.Performance,
-                    n?.Estimate,
-                    lh,
-                    calculation.Method);
-                return bh;
-            }
-
-            return childrenByParent.GetValueOrDefault(id)?.Sum(c => GetLeafHours(c.Id)) ?? 0m;
         }
 
         foreach (var root in workDirections.Where(d => d.ParentId == null).OrderBy(d => d.SortOrder).ThenBy(d => d.Name))
@@ -492,11 +582,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             .AsNoTracking()
             .Include(pv => pv.PhysicalVolumeKfo).ThenInclude(k => k!.Unit)
             .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
-            .Where(pv => pv.ProjectId == projectId
-                         && pv.ProjectAnalysisVersionId == versionId
-                         && pv.Quantity > 0
-                         && pv.GetIsAssessment() == true
-                         && pv.GetClassifierId() != null)
+            .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
+            .WherePositiveAssessmentWithClassifier()
             .ToListAsync();
 
         var pvByDirection = pvList

@@ -47,6 +47,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
 
     public async Task<DirectoryEntryDto> CreateAsync(string resource, DirectoryWriteRequest request, CancellationToken cancellationToken)
     {
+        await ValidateReferencesAsync(resource, request, entityId: null, cancellationToken);
         var created = await DispatchCreate(resource, request, cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         return DirectoryEntityMapper.ToDto(created);
@@ -54,6 +55,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
 
     public async Task<DirectoryEntryDto?> UpdateAsync(string resource, int id, DirectoryWriteRequest request, CancellationToken cancellationToken)
     {
+        await ValidateReferencesAsync(resource, request, entityId: id, cancellationToken);
         var updated = await DispatchUpdate(resource, id, request, cancellationToken);
         if (updated is not null)
             await _cacheInvalidator.InvalidateAsync(cancellationToken);
@@ -78,10 +80,48 @@ public sealed class DirectoryFacade : IDirectoryFacade
 
     public async Task<bool> DeleteAsync(string resource, int id, CancellationToken cancellationToken)
     {
+        await EnsureNotInUseAsync(resource, id, cancellationToken);
         var result = await DispatchDelete(resource, id, cancellationToken);
         if (result)
             await _cacheInvalidator.InvalidateAsync(cancellationToken);
         return result;
+    }
+
+    /// <summary>IMP-01: не удалять справочник, если на него ссылаются проектные/дочерние записи.</summary>
+    private async Task EnsureNotInUseAsync(string resource, int id, CancellationToken cancellationToken)
+    {
+        var inUse = resource.ToLowerInvariant() switch
+        {
+            "physical-volumes-kfo" =>
+                await _context.ProjectPhysicalVolumes.AsNoTracking().AnyAsync(x => x.PhysicalVolumeKfoId == id, cancellationToken)
+                || await _context.PhysicalVolumesKfo.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken),
+            "physical-volumes-ber" =>
+                await _context.ProjectPhysicalVolumes.AsNoTracking().AnyAsync(x => x.PhysicalVolumeBerId == id, cancellationToken)
+                || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken),
+            "equipment" =>
+                await _context.ProjectEquipments.AsNoTracking().AnyAsync(x => x.EquipmentId == id, cancellationToken)
+                || await _context.Equipments.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken),
+            "labor-intensities" =>
+                await _context.ProjectLaborIntensities.AsNoTracking().AnyAsync(x => x.LaborIntensityId == id, cancellationToken)
+                || await _context.LaborIntensities.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken),
+            "iic-work-directions" =>
+                await _context.IicWorkDirections.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken)
+                || await _context.IicWorkDirectionNorms.AsNoTracking().AnyAsync(x => x.WorkDirectionId == id, cancellationToken)
+                || await _context.PhysicalVolumesKfo.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)
+                || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)
+                || await _context.Equipments.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)
+                || await _context.LaborIntensities.AsNoTracking().AnyAsync(x => x.IicWorkDirectionId == id, cancellationToken),
+            "units-of-measurement" =>
+                await _context.PhysicalVolumesKfo.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
+                || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
+                || await _context.Equipments.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
+                || await _context.IicWorkDirections.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken),
+            _ => false,
+        };
+
+        if (inUse)
+            throw new InvalidOperationException(
+                $"Cannot delete '{resource}' id={id}: the entry is referenced by other records. Archive it instead.");
     }
 
     public async Task<bool> UpdateSortOrderAsync(string resource, int id, SortOrderRequest request, CancellationToken cancellationToken)
@@ -153,6 +193,16 @@ public sealed class DirectoryFacade : IDirectoryFacade
             .AnyAsync(x => x.Id == characteristicId, cancellationToken);
         if (!exists)
             throw new KeyNotFoundException($"ProjectCharacteristic {characteristicId} not found.");
+    }
+
+    private async Task ValidateReferencesAsync(
+        string resource,
+        DirectoryWriteRequest request,
+        int? entityId,
+        CancellationToken cancellationToken)
+    {
+        var validator = new DirectoryReferenceValidator(_context);
+        await validator.ValidateAsync(resource, request, entityId, cancellationToken);
     }
 
     private async Task<IReadOnlyList<DirectoryTreeNodeDto>> MapTree<T>(bool includeArchived, CancellationToken cancellationToken)

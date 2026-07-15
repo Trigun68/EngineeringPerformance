@@ -12,6 +12,8 @@ export interface ProjectVersion {
   physicalVolumeTypeId?: number | null;
   sortOrder: number;
   isArchived: boolean;
+  createdAt?: string;
+  planningScenario?: number;
 }
 
 export interface ProjectVersionWriteRequest {
@@ -20,6 +22,12 @@ export interface ProjectVersionWriteRequest {
   direction: number;
   physicalVolumeTypeId?: number | null;
   name?: string | null;
+  planningScenario?: number | null;
+}
+
+export interface CopyVersionRequest {
+  newVersionName: string;
+  description?: string | null;
 }
 
 const projectVersionSchema = z.object({
@@ -32,6 +40,7 @@ const projectVersionSchema = z.object({
   physicalVolumeTypeId: z.number().int().nullable().optional(),
   sortOrder: z.number().int(),
   isArchived: z.boolean(),
+  createdAt: z.string().optional(),
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 
@@ -57,11 +66,53 @@ export async function updateProjectVersion(
   return parseApiContract(`/projects/${projectId}/versions/${versionId}`, projectVersionSchema, data);
 }
 
-export async function copyProjectVersion(projectId: number, versionId: number): Promise<ProjectVersion> {
-  const { data } = await apiClient.post<ProjectVersion>(`/projects/${projectId}/versions/${versionId}/copy`);
+export async function copyProjectVersion(
+  projectId: number,
+  versionId: number,
+  body: CopyVersionRequest,
+): Promise<ProjectVersion> {
+  const { data } = await apiClient.post<ProjectVersion>(
+    `/projects/${projectId}/versions/${versionId}/copy`,
+    body,
+  );
   return parseApiContract(`/projects/${projectId}/versions/${versionId}/copy`, projectVersionSchema, data);
 }
 
 export async function deleteProjectVersion(projectId: number, versionId: number): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/versions/${versionId}`);
+}
+
+export async function recalculateLaborIntensities(
+  projectId: number,
+  versionId: number,
+): Promise<{ updatedRows: number }> {
+  const { data } = await apiClient.post<{ updatedRows: number }>(
+    `/projects/${projectId}/versions/${versionId}/recalculate`,
+  );
+  return data;
+}
+
+export interface AggregatedLaborIntensitiesResponse {
+  level: number;
+  rows: AggregatedLaborIntensityRow[];
+}
+
+export interface AggregatedLaborIntensityRow {
+  key: string;
+  label: string;
+  totalBase: number;
+  totalOptimistic: number;
+  totalPessimistic: number;
+}
+
+export async function fetchAggregatedLaborIntensities(
+  projectId: number,
+  versionId: number,
+  level: 'Total' | 'ByObject' = 'Total',
+): Promise<AggregatedLaborIntensitiesResponse> {
+  const { data } = await apiClient.get<AggregatedLaborIntensitiesResponse>(
+    `/projects/${projectId}/versions/${versionId}/aggregated-labor-intensities`,
+    { params: { level: level === 'ByObject' ? 2 : 1 } },
+  );
+  return data;
 }

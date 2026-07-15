@@ -14,6 +14,7 @@ export interface Project {
   workStart?: string | null;
   program?: string | null;
   versionCount: number;
+  isArchived?: boolean;
 }
 
 export type ProjectFormData = Omit<Project, 'id' | 'versionCount'> & {

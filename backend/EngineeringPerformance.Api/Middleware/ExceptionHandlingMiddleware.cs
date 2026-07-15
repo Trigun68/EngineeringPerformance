@@ -1,4 +1,5 @@
 using System.Text.Json;
+using EngineeringPerformance.Application.Common.Exceptions;
 using FluentValidation;
 
 namespace EngineeringPerformance.Api.Middleware;
@@ -79,6 +80,12 @@ public sealed class ExceptionHandlingMiddleware
                 "Invalid operation.",
                 exception.Message,
                 "invalid_operation",
+                null),
+            ConflictException conflict => (
+                StatusCodes.Status409Conflict,
+                "Conflict.",
+                conflict.Message,
+                "conflict",
                 null),
             _ => (
                 StatusCodes.Status500InternalServerError,

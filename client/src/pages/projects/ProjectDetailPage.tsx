@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -45,6 +46,7 @@ import { CompareTab } from './CompareTab';
 import { GroupAnalysisTab } from './GroupAnalysisTab';
 import { GroupTrendTab } from './GroupTrendTab';
 import { ForecastPage } from '../../features/forecast/ForecastPage';
+import { createVersionSchema } from './projectWriteSchema';
 
 type ProjectTabId =
   | 'versions'
@@ -99,59 +101,94 @@ export function ProjectDetailPage() {
   const [versionModalOpen, setVersionModalOpen] = useState(false);
   const [versionName, setVersionName] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!pid) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const projects = await fetchProjects();
-      setProject(projects.find((p) => p.id === pid) ?? null);
+  const metaQuery = useQuery({
+    queryKey: ['project-detail-meta', pid],
+    enabled: Number.isFinite(pid) && pid > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const [projects, vers, participantsList] = await Promise.all([
+        fetchProjects(),
+        fetchProjectVersions(pid),
+        fetchProjectPermissions(pid).catch(() => [] as ProjectPermission[]),
+      ]);
+      return {
+        project: projects.find((p) => p.id === pid) ?? null,
+        versions: vers,
+        participants: participantsList,
+      };
+    },
+  });
 
-      const vers = await fetchProjectVersions(pid);
-      setVersions(vers);
-      const versionId = selectedVersionId ?? vers[0]?.id ?? null;
-      if (!selectedVersionId && vers[0]) {
-        setSelectedVersionId(vers[0].id);
-      }
-
-      if (versionId) {
-        const [ppv, pli, peq] = await Promise.all([
-          fetchPhysicalVolumes(pid, versionId, { page: ppvPage, pageSize, sort: 'id' }),
-          fetchLaborIntensities(pid, versionId, { page: pliPage, pageSize, sort: 'id' }),
-          fetchEquipment(pid, versionId, { page: peqPage, pageSize, sort: 'id' }),
-        ]);
-        setPpvRows(ppv.items);
-        setPpvTotal(ppv.totalCount);
-        setPliRows(pli.items);
-        setPliTotal(pli.totalCount);
-        setPeqRows(peq.items);
-        setPeqTotal(peq.totalCount);
-      }
-
-      try {
-        setParticipants(await fetchProjectPermissions(pid));
-      } catch {
-        setParticipants([]);
-      }
-    } catch {
-      setError('Не удалось загрузить данные проекта.');
-    } finally {
-      setLoading(false);
-    }
-  }, [pid, selectedVersionId, ppvPage, pliPage, peqPage, pageSize]);
+  const versionIdForData = selectedVersionId ?? metaQuery.data?.versions[0]?.id ?? null;
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!selectedVersionId && metaQuery.data?.versions[0]) {
+      setSelectedVersionId(metaQuery.data.versions[0].id);
+    }
+  }, [metaQuery.data?.versions, selectedVersionId]);
+
+  const dataQuery = useQuery({
+    queryKey: ['project-detail-data', pid, versionIdForData, ppvPage, pliPage, peqPage, pageSize],
+    enabled: Number.isFinite(pid) && pid > 0 && versionIdForData != null,
+    staleTime: 15_000,
+    queryFn: async () => {
+      const [ppv, pli, peq] = await Promise.all([
+        fetchPhysicalVolumes(pid, versionIdForData!, { page: ppvPage, pageSize, sort: 'id' }),
+        fetchLaborIntensities(pid, versionIdForData!, { page: pliPage, pageSize, sort: 'id' }),
+        fetchEquipment(pid, versionIdForData!, { page: peqPage, pageSize, sort: 'id' }),
+      ]);
+      return { ppv, pli, peq };
+    },
+  });
+
+  useEffect(() => {
+    if (metaQuery.data) {
+      setProject(metaQuery.data.project);
+      setVersions(metaQuery.data.versions);
+      setParticipants(metaQuery.data.participants);
+    }
+  }, [metaQuery.data]);
+
+  useEffect(() => {
+    if (!dataQuery.data) return;
+    setPpvRows(dataQuery.data.ppv.items);
+    setPpvTotal(dataQuery.data.ppv.totalCount);
+    setPliRows(dataQuery.data.pli.items);
+    setPliTotal(dataQuery.data.pli.totalCount);
+    setPeqRows(dataQuery.data.peq.items);
+    setPeqTotal(dataQuery.data.peq.totalCount);
+  }, [dataQuery.data]);
+
+  const loading = metaQuery.isFetching || dataQuery.isFetching;
+
+  useEffect(() => {
+    if (metaQuery.isError || dataQuery.isError) {
+      setError('Не удалось загрузить данные проекта.');
+    } else if (!metaQuery.isFetching && !dataQuery.isFetching) {
+      setError(null);
+    }
+  }, [metaQuery.isError, dataQuery.isError, metaQuery.isFetching, dataQuery.isFetching]);
+
+  const load = useCallback(async () => {
+    await Promise.all([metaQuery.refetch(), dataQuery.refetch()]);
+  }, [metaQuery, dataQuery]);
 
   const handleCreateVersion = async () => {
-    if (!versionName.trim()) return;
-    const created = await createProjectVersion(pid, {
+    const parsed = createVersionSchema.safeParse({
       versionName: versionName.trim(),
-      direction: 0,
       name: versionName.trim(),
+      direction: 0,
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? 'Некорректное имя версии');
+      return;
+    }
+    const created = await createProjectVersion(pid, {
+      versionName: parsed.data.versionName,
+      name: parsed.data.name ?? parsed.data.versionName,
+      description: parsed.data.description ?? undefined,
+      direction: parsed.data.direction ?? 0,
     });
     setVersionModalOpen(false);
     setVersionName('');
@@ -160,7 +197,9 @@ export function ProjectDetailPage() {
   };
 
   const handleCopyVersion = async (version: ProjectVersion) => {
-    const copied = await copyProjectVersion(pid, version.id);
+    const copied = await copyProjectVersion(pid, version.id, {
+      newVersionName: `${version.versionName} (копия)`,
+    });
     setSelectedVersionId(copied.id);
     await load();
   };

@@ -26,6 +26,7 @@ import {
 } from '../../api/analyticsApi';
 import { DataTable } from '../../components/DataTable/DataTable';
 import { usePermission } from '../../hooks/usePermission';
+import { collectNormFallbackWarnings } from '../../features/projects/forecast/normFallbackWarning';
 
 interface PlanningTabProps {
   projectId: number;
@@ -101,6 +102,20 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
   );
 
   const leafRows = useMemo(() => treeRows.filter((r) => r.isLeaf), [treeRows]);
+
+  const normFallbackWarnings = useMemo(
+    () =>
+      collectNormFallbackWarnings(
+        leafRows.map((r) => ({
+          workDirectionId: r.workDirectionId,
+          name: r.name,
+          plannedVolume: r.plannedVolume,
+          normProductivity: r.normProductivity,
+          baseHours: r.baseHours,
+        })),
+      ),
+    [leafRows],
+  );
 
   const runPreview = async (edits: Record<number, string>) => {
     if (!versionId) return;
@@ -189,6 +204,13 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
             PDF
           </Button>
         </Stack>
+      )}
+      {normFallbackWarnings.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {normFallbackWarnings.map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </Alert>
       )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {canEdit && dirtyIds.size > 0 && (

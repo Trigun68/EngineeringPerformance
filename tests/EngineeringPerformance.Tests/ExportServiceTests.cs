@@ -17,14 +17,14 @@ public sealed class ExportServiceTests
             new ProjectsPageForecastGridsDto(
                 Summary:
                 [
-                    new ForecastIicVolumeRowDto(
-                        1, null, "Направление А", "шт",
-                        10m, 2.3m, 0.5m,
-                        100m, 950m, 1000m, 1050m,
-                        "950 – 1050", "Направление А"),
+                    new ProjectsPageForecastSummaryRowDto(
+                        1, "Направление А", "шт",
+                        80m, 10m, 1000m, 950m, 1050m,
+                        false, 0),
                 ],
                 Facility: [],
-                Detail: []),
+                Detail: [],
+                GrandTotals: new ForecastScenarioTotalsDto(1000m, 950m, 1050m)),
             new ProjectsPageFactGridsDto(
                 Performance:
                 [
@@ -51,7 +51,7 @@ public sealed class ExportServiceTests
     public async Task ExportToExcelAsync_ReturnsNonEmptyBytes_AndUsesDataFetcher()
     {
         var fetcher = new StubProjectsPageDataFetcher(CreateSampleData());
-        var service = new ProjectExportService(fetcher);
+        var service = new ProjectExportService(fetcher, new StubForecastDetailSummaryTableContext());
 
         var bytes = await service.ExportToExcelAsync(1, 10);
 
@@ -72,7 +72,7 @@ public sealed class ExportServiceTests
     public async Task ExportToPdfAsync_ReturnsNonEmptyBytes_AndUsesDataFetcher()
     {
         var fetcher = new StubProjectsPageDataFetcher(CreateSampleData());
-        var service = new ProjectExportService(fetcher);
+        var service = new ProjectExportService(fetcher, new StubForecastDetailSummaryTableContext());
 
         var bytes = await service.ExportToPdfAsync(2, 20, compareVersionId: 15);
 
@@ -101,5 +101,15 @@ public sealed class ExportServiceTests
             LastCompareVersionId = compareVersionId;
             return Task.FromResult(data);
         }
+    }
+
+    private sealed class StubForecastDetailSummaryTableContext : IForecastDetailSummaryTableContext
+    {
+        public Task<(string ProjectCode, string VersionName, IReadOnlyList<IicDirectionNodeDto> Directions)> LoadAsync(
+            int projectId,
+            int versionId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<(string, string, IReadOnlyList<IicDirectionNodeDto>)>(
+                ("P-01", "Plan v1", Array.Empty<IicDirectionNodeDto>()));
     }
 }

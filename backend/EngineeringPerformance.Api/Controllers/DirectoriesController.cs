@@ -1,6 +1,7 @@
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Directories;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Export;
 using Microsoft.AspNetCore.Authorization;
@@ -21,14 +22,27 @@ namespace EngineeringPerformance.Api.Controllers;
 public sealed class DirectoriesController : ControllerBase
 {
     private readonly IDirectoryFacade _directories;
+    private readonly IDirectoryExportService _directoryExport;
 
-    public DirectoriesController(IDirectoryFacade directories)
+    public DirectoriesController(IDirectoryFacade directories, IDirectoryExportService directoryExport)
     {
         _directories = directories;
+        _directoryExport = directoryExport;
     }
 
     // === GENERIC DIRECTORY ROUTES ===
     // NOTE: regex constraint only on {resource}/{id:int} routes to avoid conflict with project-characteristics/{id}/options
+    [HttpPost("{resource}/export")]
+    [DirectoryPermission(AccessLevel.Read)]
+    public IActionResult ExportExcelPost(string resource, [FromBody] DirectoryExportRequest request)
+    {
+        var bytes = _directoryExport.ExportToExcel(request);
+        var safeName = SanitizeFileName(request.TabName);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        var filename = $"{safeName}_{timestamp}.xlsx";
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+    }
+
     [HttpGet("{resource}/export.xlsx")]
     [DirectoryPermission(AccessLevel.Read)]
     public async Task<IActionResult> ExportExcel(string resource, CancellationToken cancellationToken)
@@ -160,5 +174,12 @@ public sealed class DirectoriesController : ControllerBase
     {
         var ok = await _directories.DeleteAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
+    }
+
+    private static string SanitizeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
+        return string.IsNullOrWhiteSpace(cleaned) ? "Справочник" : cleaned;
     }
 }

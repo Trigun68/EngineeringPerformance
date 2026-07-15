@@ -43,4 +43,57 @@ test.describe('Dictionary filtering', () => {
     await expect(dialog.getByText('Наименование')).toBeVisible();
     await expect(dialog.getByText('Архив')).toBeVisible();
   });
+
+  test('dictionary page scrolls inside grid, not the whole page', async ({ page }) => {
+    await page.goto('/references/physical-volumes-kfo');
+    await page.waitForSelector('.ag-body-viewport', { timeout: 15_000 });
+
+    const pageScroll = await page.evaluate(() => ({
+      docScrollHeight: document.documentElement.scrollHeight,
+      windowHeight: window.innerHeight,
+    }));
+    expect(pageScroll.docScrollHeight).toBeLessThanOrEqual(pageScroll.windowHeight + 2);
+
+    const gridScroll = await page.locator('.ag-body-viewport').first().evaluate((el) => ({
+      scrollHeight: el.scrollHeight,
+      clientHeight: el.clientHeight,
+    }));
+    expect(gridScroll.scrollHeight).toBeGreaterThan(gridScroll.clientHeight);
+  });
+
+  test('KFO tree grid keeps header visible when scrolling body', async ({ page }) => {
+    await page.goto('/references/physical-volumes-kfo');
+    await page.waitForSelector('.ag-body-viewport', { timeout: 15_000 });
+
+    const viewport = page.locator('.ag-body-viewport').first();
+    const header = page.locator('.ag-header').first();
+
+    await viewport.evaluate((el) => {
+      el.scrollTop = 400;
+    });
+
+    const headerBox = await header.boundingBox();
+    const viewportBox = await viewport.boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(viewportBox).not.toBeNull();
+    expect(headerBox!.y).toBeLessThan(viewportBox!.y);
+  });
+
+  test('BER tree grid keeps header visible when scrolling body', async ({ page }) => {
+    await page.goto('/references/physical-volumes-ber');
+    await page.waitForSelector('.ag-body-viewport', { timeout: 15_000 });
+
+    const viewport = page.locator('.ag-body-viewport').first();
+    const header = page.locator('.ag-header').first();
+
+    await viewport.evaluate((el) => {
+      el.scrollTop = 400;
+    });
+
+    const headerBox = await header.boundingBox();
+    const viewportBox = await viewport.boundingBox();
+    expect(headerBox).not.toBeNull();
+    expect(viewportBox).not.toBeNull();
+    expect(headerBox!.y).toBeLessThan(viewportBox!.y);
+  });
 });

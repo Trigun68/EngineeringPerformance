@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+### Added (2026-07-14)
+- **Оценка факта → Детально:** группировка строк перетаскиванием заголовков столбцов в панель группировки (как в прогнозе); подитоги по кол-ву и факт.трудоёмкости.
+
+### Changed (2026-07-13)
+- **Прогноз:** зелёная надпись Z-параметров только в диалоге «Параметры планирования»; формулировка **IIC** (не EES). С вкладки «Прогнозирование» убрана.
+
+### Fixed (2026-07-13)
+- **Проекты:** белый экран при открытии проекта — `interpretationCellStyle` падал на не-строковых значениях (`toLowerCase is not a function`); защита через `String(...)`.
+
+### Fixed (2026-07-12, вход admin в Docker)
+- **Авторизация:** пароль `admin` в БД был изменён (хэш не совпадал с seed); восстановлен `admin`/`admin`. В `002_SeedData.sql` добавлена идемпотентная синхронизация паролей тестовых учёток при `docker-db-init`.
+
+### Added (2026-07-12, портал — 8 UX-исправлений)
+- **Меню пользователя:** в dropdown отображаются `displayName` и логин портала из БД; учётная запись Windows — только если отличается от логина.
+- **Прогноз:** постоянная зелёная надпись `ZParametersCaption` на панели и в «Параметры планирования»; терминология **EES** вместо EAC/ЕАС/ЕЕС в UI.
+- **Гриды:** подитоги сценариев при группировке на вкладке «Детально» (`sumNullable`, `grandTotalRow`); персистенция фильтров, группировки и layout через `userPreferencesApi` с fallback на старые ключи.
+- **Версии проекта:** обязательный выбор справочника **КФО/БЭР** при создании/редактировании; блокировка импорта ФО без типа; chip «Справочник ФО» на панелях прогноза и факта.
+- **Итоги прогноза:** единый `GrandTotals` в API; pinned ИТОГО на «Итого по объекту» из backend, не client-side sum.
+- **Расчёт:** `Math.Max(0, …)` для производительности и часов сценариев (parity с WPF).
+- **Справочники:** сохранение `showArchived` per resource в user preferences.
+- **Тесты:** Vitest `dataTableAggFuncs`, E2E grouping/catalog в `forecast-module.spec.ts`, `ProjectsPageGridBuilderTests` facility vs grand totals, API guard catalog type.
+
+### Added (2026-06-08, параметрические нормы + сценарии + агрегация)
+- **Domain/Application:** `FormulaTemplates` (8 типов), `INormCalculator`, `IDeviationCalculator` с `GenerateBand`, мультипликативная LI `N(V)·(1+σ·z)·V_eff`.
+- **Миграции БД:** `101_ParametricNorms.sql`, `102_PlanningScenarios.sql` — JSON-коэффициенты норм, `PlanningScenario`, колонки `LaborIntensity*` на PPV.
+- **API:** `GET /api/formula-templates`, `POST /api/norms/preview`, `POST .../recalculate`, `GET .../aggregated-labor-intensities`.
+- **Web UI:** редакторы `NormFormulaEditor` / `DeviationFormulaEditor`, `NormBandChart`, `PlanningScenarioSelector`; цветные колонки трудоёмкости в прогнозе.
+- **Тесты:** `EngineeringPerformance.Application.Tests` (30 unit-тестов); Playwright `parametric-norms`, `planning-scenarios`, `forecast-aggregation`.
+
 ### Added (2026-07-01, AI workflow)
 - **Playwright E2E rule:** `.cursor/rules/playwright-e2e-verify.mdc` — обязательная проверка UI через docker stack (`:8081`), не через Vite dev; правила в git (`.cursor/rules/`).
 

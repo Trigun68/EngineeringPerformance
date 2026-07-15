@@ -52,6 +52,7 @@ const ANALYSIS_FORECAST = 3;
 
 interface ForecastPageProps {
   projectId: number;
+  initialVersionId?: number | null;
 }
 
 interface VolumeTreeRow extends ForecastIicVolumeRow {
@@ -181,7 +182,7 @@ function toCalculationOptions(method: ForecastMethod, zScores: ZScoreRow[]): For
   };
 }
 
-export function ForecastPage({ projectId }: ForecastPageProps) {
+export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps) {
   const { canRead } = usePermission('Planning');
   const { canEdit: canEditVersions } = usePermission('ProjectAnalysisVersions');
   const { canEdit: canImport } = usePermission('ProjectDataUpload');
@@ -234,11 +235,13 @@ export function ForecastPage({ projectId }: ForecastPageProps) {
   const loadVersions = useCallback(async () => {
     const list = await fetchProjectVersions(projectId);
     setVersions(list);
-    if (!selectedVersionId && list.length > 0) {
+    if (initialVersionId && list.some((v) => v.id === initialVersionId)) {
+      setSelectedVersionId(initialVersionId);
+    } else if (!selectedVersionId && list.length > 0) {
       const plan = list.find((v) => v.direction === ANALYSIS_PLAN) ?? list[0];
       setSelectedVersionId(plan.id);
     }
-  }, [projectId, selectedVersionId]);
+  }, [initialVersionId, projectId, selectedVersionId]);
 
   const loadPlanData = useCallback(
     async (versionId: number, force = false) => {
@@ -413,7 +416,9 @@ export function ForecastPage({ projectId }: ForecastPageProps) {
 
   const handleCopyVersion = async () => {
     if (!selectedVersionId) return;
-    const copied = await copyProjectVersion(projectId, selectedVersionId);
+    const copied = await copyProjectVersion(projectId, selectedVersionId, {
+      newVersionName: `${versions.find((v) => v.id === selectedVersionId)?.versionName ?? 'Version'} (копия)`,
+    });
     setSelectedVersionId(copied.id);
     await loadVersions();
   };

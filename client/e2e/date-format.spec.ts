@@ -19,13 +19,13 @@ test.describe('Date/time formatting', () => {
   });
 
   test('config audit shows datetime in YYYY-MM-DD HH:mm:ss format', async ({ page }) => {
-    await page.goto('/admin/config-audit');
-    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-    
-    const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
+    await page.goto('/admin/audit');
+    await page.waitForSelector('[data-testid="admin-config-audit-grid"] .ag-row', { timeout: 15_000 });
+
+    const firstRow = page.locator('[data-testid="admin-config-audit-grid"] .ag-center-cols-container .ag-row').first();
     const timeCell = firstRow.locator('.ag-cell[col-id="timestampUtc"]');
     const timeText = await timeCell.textContent();
-    
+
     if (timeText && timeText.trim()) {
       expect(timeText).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     }

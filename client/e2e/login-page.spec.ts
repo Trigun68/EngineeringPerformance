@@ -47,11 +47,18 @@ test.describe('Login page identity', () => {
 
   test('after logout login page has no dev windows block', async ({ page }) => {
     await page.goto('/');
-    const auth = page.getByText('Авторизация');
-    if (!(await auth.isVisible().catch(() => false))) {
+    const authHeading = page.getByText('Авторизация');
+    const userMenu = page.locator('[aria-label="Меню пользователя"]');
+    await Promise.race([
+      authHeading.waitFor({ state: 'visible', timeout: 20_000 }),
+      userMenu.waitFor({ state: 'visible', timeout: 20_000 }),
+    ]).catch(() => undefined);
+
+    if (await userMenu.isVisible().catch(() => false)) {
       await logoutViaUserMenu(page);
     }
-    await expect(page.getByText('Авторизация')).toBeVisible({ timeout: 15_000 });
+
+    await expect(authHeading).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/LAPTOP-ANTON/i)).toHaveCount(0);
     await expect(page.getByText(/Windows-пользователь/i)).toHaveCount(0);
   });

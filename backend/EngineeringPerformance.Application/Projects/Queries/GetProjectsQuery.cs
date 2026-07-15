@@ -3,7 +3,7 @@ using EngineeringPerformance.Application.Projects.DTOs;
 
 namespace EngineeringPerformance.Application.Projects.Queries;
 
-public sealed record GetProjectsQuery;
+public sealed record GetProjectsQuery(bool IncludeArchived = false);
 
 public sealed class GetProjectsQueryHandler
 {
@@ -28,6 +28,6 @@ public sealed class GetProjectsQueryHandler
 
         var isAdmin = await _visibility.IsAdministratorAsync(userId, cancellationToken);
         var accessibleIds = await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken);
-        return await _repository.GetAllForUserAsync(userId, accessibleIds, isAdmin, cancellationToken);
+        return await _repository.GetAllForUserAsync(userId, accessibleIds, isAdmin, query.IncludeArchived, cancellationToken);
     }
 }

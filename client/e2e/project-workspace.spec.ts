@@ -12,9 +12,7 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByLabel('Поиск по проектам')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Добавить' })).toBeVisible();
 
-    const editSelectedButton = page.getByRole('button', {
-      name: 'Редактировать выбранную строку таблицы',
-    });
+    const editSelectedButton = page.getByRole('button', { name: 'Редактировать' });
     await expect(editSelectedButton).toBeVisible();
     await expect(editSelectedButton).toBeDisabled();
 

@@ -1,0 +1,31 @@
+# Docker: изменения кода применяются при следующем запуске контейнеров
+
+## Правило
+
+После любых правок в `backend/`, `client/`, `migrations/` или `docker-compose.yml` агент **обязан** поднимать стек с пересборкой образов. Простой `docker compose up -d` **без** `--build` оставляет старые образы — код в контейнере не обновится.
+
+## Обязательная команда
+
+```bash
+cd /home/antony/project/EngineeringPerformance
+docker compose build backend frontend
+docker compose up -d
+```
+
+Или одной строкой:
+
+```bash
+docker compose up -d --build
+```
+
+`db-init` при `up` выполняется снова (идемпотентные миграции/seed). **Запрещено** в seed принудительно `UPDATE` паролей существующих пользователей — только `INSERT` при первом создании.
+
+## Проверка после подъёма
+
+- `docker images` / `docker inspect` — `Created` у `engineeringperformance-backend` и `…-frontend` не старше текущих правок
+- `curl -sS http://127.0.0.1:8081/api/health` → Healthy
+- Логин seed: `admin` / `admin` (если пароль не меняли вручную)
+
+## Не путать с туннелем
+
+Восстановление Cloudflare/`tech-lab24-cloudflared` **не** заменяет rebuild EP. После чужого recreate сети/контейнеров — всё равно `docker compose up -d --build` для EP, если менялся код.

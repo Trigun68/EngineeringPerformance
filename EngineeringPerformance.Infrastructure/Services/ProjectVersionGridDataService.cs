@@ -1,4 +1,5 @@
 using EngineeringPerformance.Core.DTOs;
+using EngineeringPerformance.Core.Services;
 using EngineeringPerformance.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,6 +27,8 @@ public sealed class ProjectVersionGridLoadResult
     public required IReadOnlyList<ProjectPhysicalVolume> AllPhysicalVolumes { get; init; }
     public required IReadOnlyList<ProjectEquipment> AllEquipment { get; init; }
     public required IReadOnlyDictionary<int, int> SnapshotNormIdByDirection { get; init; }
+    public IReadOnlyDictionary<int, PlanningZParameters> PlanningZByDirection { get; init; }
+        = new Dictionary<int, PlanningZParameters>();
     public IReadOnlyList<ProjectLaborIntensityLoadRow> LaborIntensities { get; init; } = [];
 }
 
@@ -78,6 +81,16 @@ public sealed class ProjectVersionGridDataService
             .Where(s => s.ProjectAnalysisVersionId == versionId)
             .ToDictionaryAsync(s => s.WorkDirectionId, s => s.NormId, cancellationToken);
 
+        var planningRows = await ctx.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync(cancellationToken);
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
+
         IReadOnlyList<ProjectLaborIntensityLoadRow> laborIntensities = [];
         if (options.IncludeLaborIntensities)
         {
@@ -117,6 +130,7 @@ public sealed class ProjectVersionGridDataService
             AllPhysicalVolumes = allPhysicalVolumes,
             AllEquipment = allEquipment,
             SnapshotNormIdByDirection = snapshotNormIdByDirection,
+            PlanningZByDirection = planningZByDirection,
             LaborIntensities = laborIntensities,
         };
     }

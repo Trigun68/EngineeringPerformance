@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using EngineeringPerformance.Application.Auth;
+using EngineeringPerformance.Application.Settings;
 using EngineeringPerformance.Domain.Entities;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -11,10 +12,12 @@ namespace EngineeringPerformance.Infrastructure.Auth;
 public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSettings _settings;
+    private readonly ISystemSettingsService _systemSettings;
 
-    public JwtTokenService(IOptions<JwtSettings> settings)
+    public JwtTokenService(IOptions<JwtSettings> settings, ISystemSettingsService systemSettings)
     {
         _settings = settings.Value;
+        _systemSettings = systemSettings;
     }
 
     public string GenerateToken(User user)
@@ -42,6 +45,9 @@ public sealed class JwtTokenService : IJwtTokenService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    public DateTime GetExpiration() =>
-        DateTime.UtcNow.AddMinutes(_settings.ExpirationMinutes);
+    public DateTime GetExpiration()
+    {
+        var minutes = _systemSettings.GetSessionExpirationMinutesAsync().GetAwaiter().GetResult();
+        return DateTime.UtcNow.AddMinutes(minutes);
+    }
 }

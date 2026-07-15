@@ -140,6 +140,42 @@ BEGIN
 END;
 GO
 
+-- V2-C: ProjectPermissions заменяет ProjectUserAccess + Projects.Visibility (идемпотентно).
+-- Dynamic SQL: иначе компилятор падает на Visibility, если колонка уже удалена.
+IF COL_LENGTH('dbo.Projects', 'Visibility') IS NOT NULL
+BEGIN
+    EXEC(N'
+        IF OBJECT_ID(N''dbo.ProjectUserAccess'', N''U'') IS NOT NULL
+        BEGIN
+            INSERT INTO [ProjectPermissions] ([ProjectId], [UserId], [Level])
+            SELECT DISTINCT pua.[ProjectId], pua.[UserId], 1
+            FROM [ProjectUserAccess] pua
+            INNER JOIN [Projects] p ON p.[Id] = pua.[ProjectId]
+            WHERE p.[Visibility] = 1
+              AND NOT EXISTS (
+                  SELECT 1 FROM [ProjectPermissions] pp
+                  WHERE pp.[ProjectId] = pua.[ProjectId] AND pp.[UserId] = pua.[UserId]);
+
+            INSERT INTO [ProjectPermissions] ([ProjectId], [UserId], [Level])
+            SELECT p.[Id], u.[Id], 1
+            FROM [Projects] p
+            CROSS JOIN [Users] u
+            INNER JOIN [Roles] r ON r.[Id] = u.[RoleId]
+            WHERE p.[Visibility] = 0
+              AND r.[Name] <> N''Administrator''
+              AND NOT EXISTS (
+                  SELECT 1 FROM [ProjectPermissions] pp
+                  WHERE pp.[ProjectId] = p.[Id] AND pp.[UserId] = u.[Id]);
+
+            DROP TABLE [ProjectUserAccess];
+        END;
+
+        IF COL_LENGTH(''dbo.Projects'', ''Visibility'') IS NOT NULL
+            ALTER TABLE [Projects] DROP COLUMN [Visibility];
+    ');
+END;
+GO
+
 IF OBJECT_ID(N'dbo.Equipments', N'U') IS NULL
 BEGIN
     CREATE TABLE [Equipments] (
@@ -190,8 +226,9 @@ BEGIN
 END;
 GO
 
--- PhysicalVolumes.UnitId (EF AddPhysicalVolumeUnit)
-IF COL_LENGTH('dbo.PhysicalVolumes', 'UnitId') IS NULL
+-- PhysicalVolumes.UnitId (EF AddPhysicalVolumeUnit) — legacy table removed by schema 017
+IF OBJECT_ID(N'dbo.PhysicalVolumes', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PhysicalVolumes', 'UnitId') IS NULL
 BEGIN
     ALTER TABLE [PhysicalVolumes] ADD [UnitId] int NULL;
     CREATE INDEX [IX_PhysicalVolumes_UnitId] ON [PhysicalVolumes]([UnitId]);
@@ -202,13 +239,15 @@ END;
 GO
 
 -- PhysicalVolumes.IicNormId (каскад КФО → нормы ИИС)
-IF COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NULL
+IF OBJECT_ID(N'dbo.PhysicalVolumes', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NULL
 BEGIN
     ALTER TABLE [PhysicalVolumes] ADD [IicNormId] int NULL;
 END;
 GO
 
-IF COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NOT NULL
+IF OBJECT_ID(N'dbo.PhysicalVolumes', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NOT NULL
    AND NOT EXISTS (
        SELECT 1 FROM sys.indexes
        WHERE name = N'IX_PhysicalVolumes_IicNormId' AND object_id = OBJECT_ID(N'dbo.PhysicalVolumes')
@@ -218,7 +257,8 @@ BEGIN
 END;
 GO
 
-IF COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NOT NULL
+IF OBJECT_ID(N'dbo.PhysicalVolumes', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PhysicalVolumes', 'IicNormId') IS NOT NULL
    AND OBJECT_ID(N'dbo.IicWorkDirectionNorms', N'U') IS NOT NULL
    AND NOT EXISTS (
        SELECT 1 FROM sys.foreign_keys
@@ -412,6 +452,27 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectEquipments_Projects_ProjectId')
         ALTER TABLE [ProjectEquipments] ADD CONSTRAINT [FK_ProjectEquipments_Projects_ProjectId]
             FOREIGN KEY ([ProjectId]) REFERENCES [Projects]([Id]) ON DELETE NO ACTION;
+END;
+GO
+
+-- WPF parity: ExpandEquipmentTextFields — длинные «Наименование по каталогу» из Excel.
+IF OBJECT_ID(N'dbo.Equipments', N'U') IS NOT NULL
+BEGIN
+    ALTER TABLE [Equipments] ALTER COLUMN [Name] nvarchar(max) NOT NULL;
+    ALTER TABLE [Equipments] ALTER COLUMN [Description] nvarchar(max) NOT NULL;
+END;
+GO
+
+IF OBJECT_ID(N'dbo.ProjectEquipments', N'U') IS NOT NULL
+BEGIN
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [CatalogName] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [ShortName] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [TypeMark] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [SupplyStandard] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [OlReference] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [FacilityName] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [EstimationBasis] nvarchar(max) NULL;
+    ALTER TABLE [ProjectEquipments] ALTER COLUMN [DiagramNumber] nvarchar(max) NULL;
 END;
 GO
 

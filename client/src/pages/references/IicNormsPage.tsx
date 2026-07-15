@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { Alert, Box, Button, IconButton, Stack, TextField, Typography } from '@mui/material';
-import type { ColDef } from 'ag-grid-community';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
+import type { ColDef, GridApi } from 'ag-grid-community';
 import { useQuery } from '@tanstack/react-query';
 import {
   createIicNorm,
   deleteIicNorm,
-  exportIicNormsExcel,
+  exportIicNormsExcelFromGrid,
   fetchIicNormHistory,
   fetchIicNorms,
-  updateIicNorm,
   type IicNorm,
   type IicNormHistoryItem,
   type IicNormWriteRequest,
@@ -21,8 +19,18 @@ import { useDictionaryStore } from '../../store/useDictionaryStore';
 import type { DictionaryItem } from '../../types/dictionary';
 import { formatIisNorm } from '../../utils/formatIisNorm';
 import { formatDate } from '../../utils/formatDateTime';
+import { collectGridExportData } from '../../utils/directoryExport';
+import {
+  resolveIicDirectionUnitId,
+  resolveIicDirectionUnitName,
+} from '../../utils/resolveIicDirectionUnit';
 import { DirectoryEditDialog, DirectoryFormRow } from './DirectoryEditDialog';
 import { DirectoryToolbar } from './DirectoryToolbar';
+import { IicNormHistoryDialog } from './IicNormHistoryDialog';
+import { DeviationFormulaEditor } from '../../features/norms/DeviationFormulaEditor';
+import { NormFormulaEditor } from '../../features/norms/NormFormulaEditor';
+import { defaultDeviationFormula, defaultNormFormula } from '../../types/norms';
+import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
 
 const OBJECT_NAME = 'IicWorkDirectionNorms';
 
@@ -38,35 +46,35 @@ const emptyForm = (): IicNormWriteRequest => ({
   unitId: null,
   effectiveFrom: new Date().toISOString().slice(0, 10),
   effectiveTo: null,
+  normFormula: defaultNormFormula(),
+  deviationFormula: defaultDeviationFormula(),
 });
 
 function normToHistoryItem(norm: IicNorm): IicNormHistoryItem {
+  const normFormula = normalizeNormFormula(norm.normFormula, norm.performance);
+  const deviationFormula = normalizeDeviationFormula(
+    norm.deviationFormula,
+    norm.performance,
+    norm.standardDeviation,
+  );
   return {
     id: norm.id,
     effectiveFrom: norm.effectiveFrom.slice(0, 10),
     effectiveTo: norm.effectiveTo?.slice(0, 10) ?? null,
-    performance: norm.performance ?? null,
+    performance: normFormula.coefficients.a ?? norm.performance ?? null,
     estimate: norm.estimate ?? null,
     standardDeviation: norm.standardDeviation ?? null,
-    unitId: norm.unitId ?? null,
-  };
-}
-
-function emptyHistoryItem(): IicNormHistoryItem {
-  return {
-    effectiveFrom: new Date().toISOString().slice(0, 10),
-    effectiveTo: null,
-    performance: 0,
-    estimate: null,
-    standardDeviation: null,
-    unitId: null,
+    unitId: norm.resolvedUnitId ?? norm.unitId ?? null,
+    normFormula,
+    deviationFormula,
+    migratedAt: norm.migratedAt ?? null,
   };
 }
 
 function buildDirectionPath(
   directionId: number,
   directions: DictionaryItem[],
-  getUnitName: (id: number | null | undefined) => string,
+  getUnitLabel: (directionId: number) => string,
 ): string[] {
   const byId = new Map(directions.map((d) => [d.id, d]));
   const segments: string[] = [];
@@ -76,7 +84,7 @@ function buildDirectionPath(
       formatIisNorm({
         code: current.code,
         name: current.name,
-        unitName: getUnitName(current.id),
+        unitName: getUnitLabel(current.id),
       }),
     );
     current = current.parentId != null ? byId.get(current.parentId) : undefined;
@@ -87,13 +95,11 @@ function buildDirectionPath(
 function toTreeRows(
   norms: IicNorm[],
   directions: DictionaryItem[],
-  getUnitName: (id: number | null | undefined) => string,
+  getUnitLabel: (directionId: number) => string,
 ): IicNormTreeRow[] {
-  // Нормы отображаются на том же уровне, что и группы физобъёмов:
-  // одна строка на направление, без искусственного дочернего leaf-узла.
   return norms.map((norm) => ({
     ...norm,
-    hierarchy: buildDirectionPath(norm.workDirectionId, directions, getUnitName),
+    hierarchy: buildDirectionPath(norm.workDirectionId, directions, getUnitLabel),
   }));
 }
 
@@ -103,13 +109,23 @@ export function IicNormsPage() {
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
   const fetchAll = useDictionaryStore((s) => s.fetchAll);
 
+  const getUnitLabel = useCallback(
+    (directionId: number) => resolveIicDirectionUnitName(directionId, directions, getUnitName),
+    [directions, getUnitName],
+  );
+
   const [actionError, setActionError] = useState<string | null>(null);
   const [selected, setSelected] = useState<IicNorm | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<IicNorm | null>(null);
   const [form, setForm] = useState<IicNormWriteRequest>(emptyForm);
-  const [historyDraft, setHistoryDraft] = useState<IicNormHistoryItem[]>([]);
+  const [historyRows, setHistoryRows] = useState<IicNormHistoryItem[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<IicNormHistoryItem | null>(null);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [historyDialogInitial, setHistoryDialogInitial] = useState<IicNormHistoryItem | null>(null);
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
+  const gridApiRef = useRef<GridApi<IicNormTreeRow> | null>(null);
+
   const {
     data: rows = [],
     isLoading: loading,
@@ -122,16 +138,23 @@ export function IicNormsPage() {
     staleTime: 60_000,
   });
 
-  const treeRows = useMemo(() => {
-    return toTreeRows(rows, directions, getUnitName);
-  }, [directions, getUnitName, rows]);
+  const treeRows = useMemo(
+    () => toTreeRows(rows, directions, getUnitLabel),
+    [directions, getUnitLabel, rows],
+  );
+
+  const resolvedUnitLabel = useMemo(() => {
+    if (editing?.unitName) return editing.unitName;
+    if (form.workDirectionId > 0) return getUnitLabel(form.workDirectionId);
+    return '';
+  }, [editing?.unitName, form.workDirectionId, getUnitLabel]);
 
   const directionLabel = useMemo(() => {
     const direction = directions.find((d) => d.id === form.workDirectionId);
     return direction
-      ? formatIisNorm({ code: direction.code, name: direction.name, unitName: getUnitName(direction.id) })
+      ? formatIisNorm({ code: direction.code, name: direction.name, unitName: getUnitLabel(direction.id) })
       : '';
-  }, [directions, form.workDirectionId, getUnitName]);
+  }, [directions, form.workDirectionId, getUnitLabel]);
 
   const load = useCallback(async () => {
     await refetch();
@@ -140,7 +163,8 @@ export function IicNormsPage() {
 
   const loadHistory = useCallback(async (workDirectionId: number) => {
     const history = await fetchIicNormHistory(workDirectionId);
-    setHistoryDraft(history.map(normToHistoryItem));
+    setHistoryRows(history.map(normToHistoryItem));
+    setSelectedHistory(null);
   }, []);
 
   useEffect(() => {
@@ -148,33 +172,40 @@ export function IicNormsPage() {
   }, [fetchAll]);
 
   useEffect(() => {
-    if (modalOpen && form.workDirectionId > 0) {
+    if (modalOpen && editing && form.workDirectionId > 0) {
       void loadHistory(form.workDirectionId);
-    } else {
-      setHistoryDraft([]);
+    } else if (!editing) {
+      setHistoryRows([]);
+      setSelectedHistory(null);
     }
-  }, [form.workDirectionId, loadHistory, modalOpen]);
+  }, [editing, form.workDirectionId, loadHistory, modalOpen]);
 
   const columnDefs = useMemo<ColDef<IicNormTreeRow>[]>(
     () => [
       { field: 'performance', headerName: 'Производительность', minWidth: 130 },
+      {
+        headerName: 'Тип формулы',
+        minWidth: 120,
+        valueGetter: (p) => (p.data?.normFormula?.type === 1 ? 'Линейная' : p.data?.normFormula?.type ?? '—'),
+      },
+      {
+        colId: 'migration',
+        headerName: 'Миграция',
+        minWidth: 130,
+        valueGetter: (p) => (p.data?.migratedAt ? 'Автоконверт.' : ''),
+      },
       { field: 'estimate', headerName: 'Оценка', minWidth: 100 },
       { field: 'standardDeviation', headerName: 'Станд. отклонение', minWidth: 140 },
       {
         headerName: 'Ед. изм.',
         minWidth: 100,
-        valueGetter: (p) => {
-          const unitId = p.data?.unitId;
-          if (!unitId) return '';
-          return getUnitName(unitId);
-        },
+        valueGetter: (p) => p.data?.unitName ?? getUnitLabel(p.data?.workDirectionId ?? 0),
       },
       {
         field: 'effectiveFrom',
         headerName: 'Действует с',
         minWidth: 120,
         valueFormatter: (p) => formatDate(p.value),
-        // Also filter properly as date
         filter: 'agDateColumnFilter',
         filterParams: {
           comparator: (filterDate: Date, cellValue: string) => {
@@ -203,7 +234,7 @@ export function IicNormsPage() {
         },
       },
     ],
-    [getUnitName],
+    [getUnitLabel],
   );
 
   const autoGroupColumnDef = useMemo<ColDef<IicNormTreeRow>>(
@@ -215,7 +246,6 @@ export function IicNormsPage() {
       valueFormatter: (p) => {
         const hierarchy = p.value as string[] | undefined;
         if (!hierarchy || hierarchy.length === 0) return '';
-        // Показываем только последний элемент иерархии (лист или группа)
         return hierarchy[hierarchy.length - 1];
       },
     }),
@@ -225,7 +255,7 @@ export function IicNormsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm());
-    setHistoryDraft([]);
+    setHistoryRows([]);
     setModalOpen(true);
   };
 
@@ -236,45 +266,58 @@ export function IicNormsPage() {
       performance: row.performance ?? null,
       estimate: row.estimate ?? null,
       standardDeviation: row.standardDeviation ?? null,
-      unitId: row.unitId ?? null,
+      unitId: row.resolvedUnitId ?? row.unitId ?? null,
       effectiveFrom: row.effectiveFrom.slice(0, 10),
       effectiveTo: row.effectiveTo?.slice(0, 10) ?? null,
+      normFormula: normalizeNormFormula(row.normFormula, row.performance),
+      deviationFormula: normalizeDeviationFormula(row.deviationFormula, row.performance, row.standardDeviation),
     });
     setModalOpen(true);
   };
 
-  const handleAddHistoryRow = () => {
-    setHistoryDraft((prev) => [...prev, emptyHistoryItem()]);
+  const openAddHistory = () => {
+    setHistoryDialogInitial(null);
+    setHistoryDialogOpen(true);
   };
 
-  const handleRemoveHistoryRow = (index: number) => {
-    setHistoryDraft((prev) => prev.filter((_, i) => i !== index));
+  const openEditHistory = () => {
+    if (!selectedHistory) return;
+    setHistoryDialogInitial(selectedHistory);
+    setHistoryDialogOpen(true);
   };
 
-  const updateHistoryRow = (index: number, patch: Partial<IicNormHistoryItem>) => {
-    setHistoryDraft((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  const handleDeleteHistory = async () => {
+    if (!selectedHistory?.id || !window.confirm('Удалить запись истории?')) return;
+    setActionError(null);
+    try {
+      await deleteIicNorm(selectedHistory.id);
+      await loadHistory(form.workDirectionId);
+      await load();
+    } catch {
+      setActionError('Не удалось удалить запись истории.');
+    }
+  };
+
+  const handleHistorySaved = async () => {
+    await loadHistory(form.workDirectionId);
+    await load();
   };
 
   const handleSubmit = async () => {
     if (!form.workDirectionId) return;
     setActionError(null);
     try {
-      const payload: IicNormWriteRequest = {
-        ...form,
-        history: historyDraft,
-      };
       if (editing) {
-        await updateIicNorm(editing.id, payload);
-      } else {
-        const created = await createIicNorm(form);
-        if (historyDraft.length > 0) {
-          await updateIicNorm(created.id, payload);
-        }
+        setModalOpen(false);
+        return;
       }
+      const unitId = resolveIicDirectionUnitId(form.workDirectionId, directions);
+      await createIicNorm({ ...form, unitId });
       setModalOpen(false);
       await load();
     } catch {
       setActionError('Не удалось сохранить норму.');
+      throw new Error('save failed');
     }
   };
 
@@ -289,11 +332,23 @@ export function IicNormsPage() {
     }
   };
 
+  const handleGridApiReady = useCallback((api: GridApi<IicNormTreeRow>) => {
+    gridApiRef.current = api;
+  }, []);
+
+  const handleExport = useCallback(async () => {
+    const api = gridApiRef.current;
+    if (!api) return;
+    const { headers, rows: exportRows } = collectGridExportData(api);
+    await exportIicNormsExcelFromGrid('Нормы физобъёмов (IIC)', headers, exportRows);
+  }, []);
+
   if (!canRead) return <Alert severity="warning">Нет прав на просмотр регистра норм.</Alert>;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden' }}>
-      <DirectoryToolbar
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <Box sx={{ flexShrink: 0 }}>
+        <DirectoryToolbar
         canEdit={canEdit}
         hasSelection={selected !== null}
         showArchiveActions={false}
@@ -306,10 +361,11 @@ export function IicNormsPage() {
         onArchive={() => undefined}
         onUnarchive={() => undefined}
         onRefresh={() => void load()}
-        onExport={() => void exportIicNormsExcel()}
-      />
+        onExport={() => void handleExport()}
+        />
+      </Box>
 
-      <Box sx={{ mb: 1.5, maxWidth: 220 }}>
+      <Box sx={{ mb: 1.5, maxWidth: 220, flexShrink: 0 }}>
         <TextField
           label="Дата"
           type="date"
@@ -321,7 +377,11 @@ export function IicNormsPage() {
         />
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>
+          {error}
+        </Alert>
+      )}
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <DictionaryGrid<IicNormTreeRow>
@@ -334,6 +394,8 @@ export function IicNormsPage() {
           hierarchyField="hierarchy"
           autoGroupColumnDef={autoGroupColumnDef}
           canEdit={canEdit}
+          showExportButton={false}
+          onGridApiReady={handleGridApiReady}
           onRowClicked={setSelected}
           onRowDoubleClicked={canEdit ? openEdit : undefined}
           onEdit={canEdit ? openEdit : undefined}
@@ -358,9 +420,15 @@ export function IicNormsPage() {
             <HierarchicalSelect
               items={directions}
               value={form.workDirectionId || null}
-              onChange={(value) => setForm({ ...form, workDirectionId: value ?? 0 })}
+              onChange={(value) =>
+                setForm({
+                  ...form,
+                  workDirectionId: value ?? 0,
+                  unitId: value ? resolveIicDirectionUnitId(value, directions) : null,
+                })
+              }
               formatLabel={(item) =>
-                formatIisNorm({ code: item.code, name: item.name, unitName: getUnitName(item.id) })
+                formatIisNorm({ code: item.code, name: item.name, unitName: getUnitLabel(item.id) })
               }
               allowEmpty={false}
               required
@@ -369,78 +437,90 @@ export function IicNormsPage() {
         </DirectoryFormRow>
         <DirectoryFormRow label="Ед. изм.">
           <TextField
-            value={getUnitName(form.unitId) || '—'}
+            value={resolvedUnitLabel || '—'}
             fullWidth
             size="small"
             InputProps={{ readOnly: true }}
           />
         </DirectoryFormRow>
-        <DirectoryFormRow label="Производительность">
-          <TextField
-            type="number"
-            value={form.performance ?? ''}
-            onChange={(e) => setForm({ ...form, performance: e.target.value ? Number(e.target.value) : null })}
-            fullWidth
-            size="small"
-          />
-        </DirectoryFormRow>
-        <DirectoryFormRow label="Оценка">
-          <TextField
-            type="number"
-            value={form.estimate ?? ''}
-            onChange={(e) => setForm({ ...form, estimate: e.target.value ? Number(e.target.value) : null })}
-            fullWidth
-            size="small"
-          />
-        </DirectoryFormRow>
-        <DirectoryFormRow label="Станд. отклонение">
-          <TextField
-            type="number"
-            value={form.standardDeviation ?? ''}
-            onChange={(e) =>
-              setForm({ ...form, standardDeviation: e.target.value ? Number(e.target.value) : null })
-            }
-            fullWidth
-            size="small"
-          />
-        </DirectoryFormRow>
-        <DirectoryFormRow label="Действует с">
-          <TextField
-            type="date"
-            value={form.effectiveFrom}
-            onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
-            fullWidth
-            size="small"
-            InputLabelProps={{ shrink: true }}
-            required
-          />
-        </DirectoryFormRow>
-        <DirectoryFormRow label="Действует по">
-          <TextField
-            type="date"
-            value={form.effectiveTo ?? ''}
-            onChange={(e) => setForm({ ...form, effectiveTo: e.target.value || null })}
-            fullWidth
-            size="small"
-            InputLabelProps={{ shrink: true }}
-          />
-        </DirectoryFormRow>
 
-        {form.workDirectionId > 0 && (
+        {!editing && (
+          <>
+            <DirectoryFormRow label="Параметрическая норма N(V)">
+              <NormFormulaEditor
+                value={form.normFormula ?? defaultNormFormula(form.performance ?? 0)}
+                deviationFormula={form.deviationFormula ?? defaultDeviationFormula()}
+                onChange={(normFormula) => setForm({ ...form, normFormula, performance: normFormula.coefficients.a ?? form.performance })}
+              />
+            </DirectoryFormRow>
+            <DirectoryFormRow label="Отклонение от нормы, %">
+              <DeviationFormulaEditor
+                value={form.deviationFormula ?? defaultDeviationFormula()}
+                onChange={(deviationFormula) => {
+                  const sigma = deviationFormula.coefficients.sigma ?? 0;
+                  const perf = form.normFormula?.coefficients.a ?? form.performance ?? 0;
+                  setForm({
+                    ...form,
+                    deviationFormula,
+                    standardDeviation: perf > 0 ? sigma * perf : form.standardDeviation,
+                  });
+                }}
+              />
+            </DirectoryFormRow>
+            <DirectoryFormRow label="Действует с">
+              <TextField
+                type="date"
+                value={form.effectiveFrom}
+                onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+                required
+              />
+            </DirectoryFormRow>
+            <DirectoryFormRow label="Действует по">
+              <TextField
+                type="date"
+                value={form.effectiveTo ?? ''}
+                onChange={(e) => setForm({ ...form, effectiveTo: e.target.value || null })}
+                fullWidth
+                size="small"
+                InputLabelProps={{ shrink: true }}
+              />
+            </DirectoryFormRow>
+          </>
+        )}
+
+        {editing && form.workDirectionId > 0 && (
           <DirectoryFormRow label="Исторические записи">
             <Box sx={{ width: '100%' }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Даты действия и значения нормы
-                </Typography>
+              <Stack direction="row" spacing={1} sx={{ mb: 1 }} flexWrap="wrap">
                 {canEdit && (
-                  <Button size="small" variant="outlined" onClick={handleAddHistoryRow}>
-                    Добавить строку
-                  </Button>
+                  <>
+                    <Button size="small" variant="outlined" onClick={openAddHistory}>
+                      Добавить строку
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={openEditHistory}
+                      disabled={!selectedHistory}
+                    >
+                      Редактировать
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      onClick={() => void handleDeleteHistory()}
+                      disabled={!selectedHistory}
+                    >
+                      Удалить
+                    </Button>
+                  </>
                 )}
               </Stack>
 
-              {/* Заголовки колонок */}
               <Stack
                 direction="row"
                 spacing={1}
@@ -454,95 +534,69 @@ export function IicNormsPage() {
                   fontSize: '0.75rem',
                   color: 'text.secondary',
                 }}
-                alignItems="center"
               >
                 <Box sx={{ width: 140 }}>Действует с</Box>
                 <Box sx={{ width: 140 }}>Действует по</Box>
                 <Box sx={{ width: 110 }}>Производительность</Box>
+                <Box sx={{ width: 90 }}>Тип формулы</Box>
                 <Box sx={{ width: 80 }}>Оценка</Box>
                 <Box sx={{ width: 110 }}>Станд. отклонение</Box>
-                <Box sx={{ width: 40 }}></Box>
               </Stack>
 
-              {historyDraft.map((row, index) => (
-                <Stack
-                  key={row.id ?? `new-${index}`}
-                  direction="row"
-                  spacing={1}
-                  sx={{ mb: 1, px: 1, py: 0.5, alignItems: 'center' }}
-                  alignItems="center"
-                >
-                  <TextField
-                    type="date"
-                    size="small"
-                    value={row.effectiveFrom}
-                    onChange={(e) => updateHistoryRow(index, { effectiveFrom: e.target.value })}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ width: 140 }}
-                    disabled={!canEdit}
-                  />
-                  <TextField
-                    type="date"
-                    size="small"
-                    value={row.effectiveTo ?? ''}
-                    onChange={(e) => updateHistoryRow(index, { effectiveTo: e.target.value || null })}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ width: 140 }}
-                    disabled={!canEdit}
-                  />
-                  <TextField
-                    type="number"
-                    size="small"
-                    value={row.performance ?? ''}
-                    onChange={(e) =>
-                      updateHistoryRow(index, {
-                        performance: e.target.value === '' ? null : Number(e.target.value),
-                      })
-                    }
-                    sx={{ width: 110 }}
-                    disabled={!canEdit}
-                  />
-                  <TextField
-                    type="number"
-                    size="small"
-                    value={row.estimate ?? ''}
-                    onChange={(e) =>
-                      updateHistoryRow(index, {
-                        estimate: e.target.value === '' ? null : Number(e.target.value),
-                      })
-                    }
-                    sx={{ width: 80 }}
-                    disabled={!canEdit}
-                  />
-                  <TextField
-                    type="number"
-                    size="small"
-                    value={row.standardDeviation ?? ''}
-                    onChange={(e) =>
-                      updateHistoryRow(index, {
-                        standardDeviation: e.target.value === '' ? null : Number(e.target.value),
-                      })
-                    }
-                    sx={{ width: 110 }}
-                    disabled={!canEdit}
-                  />
-                  {canEdit && (
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => handleRemoveHistoryRow(index)}
-                      aria-label="Удалить строку"
-                      sx={{ width: 40 }}
-                    >
-                      <DeleteOutlineIcon fontSize="small" />
-                    </IconButton>
-                  )}
-                </Stack>
-              ))}
+              {historyRows.map((row) => {
+                const isSelected = selectedHistory?.id === row.id;
+                return (
+                  <Stack
+                    key={row.id ?? row.effectiveFrom}
+                    direction="row"
+                    spacing={1}
+                    onClick={() => setSelectedHistory(row)}
+                    sx={{
+                      mb: 0.5,
+                      px: 1,
+                      py: 0.75,
+                      cursor: 'pointer',
+                      borderRadius: 1,
+                      bgcolor: isSelected ? 'action.selected' : undefined,
+                      '&:hover': { bgcolor: isSelected ? 'action.selected' : 'action.hover' },
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ width: 140 }}>
+                      {formatDate(row.effectiveFrom)}
+                    </Typography>
+                    <Typography variant="body2" sx={{ width: 140 }}>
+                      {row.effectiveTo ? formatDate(row.effectiveTo) : '—'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ width: 110 }}>
+                      {row.performance ?? '—'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ width: 90 }}>
+                      {row.normFormula?.type === 1 ? 'Линейная' : row.normFormula?.type ?? '—'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ width: 80 }}>
+                      {row.estimate ?? '—'}
+                    </Typography>
+                    <Typography variant="body2" sx={{ width: 110 }}>
+                      {row.standardDeviation ?? '—'}
+                    </Typography>
+                  </Stack>
+                );
+              })}
             </Box>
           </DirectoryFormRow>
         )}
       </DirectoryEditDialog>
+
+      <IicNormHistoryDialog
+        open={historyDialogOpen}
+        title={historyDialogInitial ? 'Редактирование записи' : 'Новая запись истории'}
+        groupLabel={directionLabel}
+        unitLabel={resolvedUnitLabel}
+        workDirectionId={form.workDirectionId}
+        initial={historyDialogInitial}
+        onClose={() => setHistoryDialogOpen(false)}
+        onSaved={() => void handleHistorySaved()}
+      />
     </Box>
   );
 }

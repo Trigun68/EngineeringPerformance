@@ -2,8 +2,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ep-redis
-    ports:
-      - "127.0.0.1:6381:6379"
+    # No host port: avoids clash with system-docker orphan hr-portal-redis:6381.
+    # Backend uses redis:6379 on compose network `internal` only.
+    restart: unless-stopped
     networks:
       - internal
     healthcheck:
@@ -55,6 +56,7 @@ services:
       dockerfile: backend/Dockerfile
       network: host
     container_name: ep-backend
+    restart: unless-stopped
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -69,12 +71,13 @@ services:
       Jwt__Secret: ${JWT_SECRET:?JWT_SECRET is required}
       Jwt__Issuer: ${JWT_ISSUER:-EngineeringPerformance}
       Jwt__Audience: ${JWT_AUDIENCE:-EngineeringPerformance}
-      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-60}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       Spnego__Enabled: ${SPNEGO_ENABLED:-false}
       Spnego__TrustedProxySecret: ${PROXY_TRUSTED_SECRET:-}
       DevWindowsAuth__SimulatedWindowsUser: ${DEV_WINDOWS_USER:-}
-      AllowedHosts: ${ALLOWED_HOSTS:-localhost;127.0.0.1;eng-perf.tech-lab24.ru}
+      # Host filtering: значение с `;` только в кавычках YAML (иначе Compose обрезает).
+      AllowedHosts: "localhost;127.0.0.1;eng-perf.tech-lab24.ru"
       Cors__AllowedOrigins__0: ${CORS_ORIGIN_0:-https://eng-perf.tech-lab24.ru}
       Cors__AllowedOrigins__1: ${CORS_ORIGIN_1:-http://127.0.0.1:8081}
     expose:
@@ -87,6 +90,7 @@ services:
       context: ./client
       dockerfile: Dockerfile
     container_name: ep-frontend
+    restart: unless-stopped
     depends_on:
       - backend
     ports:

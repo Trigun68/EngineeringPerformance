@@ -58,7 +58,7 @@ export function DirectoryToolbar({
   onExport,
 }: DirectoryToolbarProps) {
   return (
-    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5 }}>
+    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1, flexWrap: 'wrap', gap: 0.5, flexShrink: 0 }}>
       {canEdit && (
         <>
           <ToolbarIconButton title="Добавить" icon={ICON('icons8-add-96.png')} onClick={onAdd} />

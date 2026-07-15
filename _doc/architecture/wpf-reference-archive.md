@@ -1,43 +1,35 @@
-# WPF reference archive (политика legacy)
+# WPF — архив (вне scope разработки)
 
-**Обновлено:** 2026-06-08  
-**Статус:** `EngineeringPerformance.App` — reference implementation до cutover
-
----
-
-## Назначение
-
-Папка `EngineeringPerformance.App/` и связанные проекты (`EngineeringPerformance.Core`, `EngineeringPerformance.Infrastructure` в корне решения) — **эталонная desktop-реализация**. После Phase 4 они не используются в production, но **не удаляются** из репозитория.
+**Обновлено:** 2026-07-14  
+**Статус:** **заморожен** — не развиваем, не цель паритета
 
 ---
 
-## Правила
+## Политика (с 2026-07-14)
 
 | Правило | Описание |
 |---------|----------|
-| Freeze features | После Phase 2 — новый функционал только в `backend/` + `client/` |
-| Bugfix only | Критические баги WPF — по согласованию, дублировать fix в web |
-| Reference | При портировании сверять бизнес-логику с WPF ViewModels/Services |
-| Build | Solution `EngineeringPerformance.slnx` должен собираться для сравнения |
+| **Вне scope** | Новый функционал **только** в `backend/` + `client/` |
+| **Не эталон** | WPF **не используется** для сверки бизнес-логики и приёмки |
+| **Не блокер** | Сборка `EngineeringPerformance.App` не входит в критерии релиза web |
+| **Архив в репо** | Код остаётся до явного удаления; документация — историческая |
+
+Актуальный план: [_doc/plans/web-only-development-plan.md](../plans/web-only-development-plan.md).
 
 ---
 
-## Cutover (MIG4-006)
+## Что было (историческая справка)
 
-1. Параллельная эксплуатация 2 недели (web + WPF на одной БД).
-2. UAT по `_doc/plans/uat-phase4-checklist.md`.
-3. Объявление отключения WPF-distributive.
-4. Архивация установочных пакетов WPF (хранить 1 год).
-5. README в `EngineeringPerformance.App/` — пометка «Archived / Reference only».
+Папка `EngineeringPerformance.App/` и корневые `EngineeringPerformance.Core` / `EngineeringPerformance.Infrastructure` — desktop-реализация этапа миграции WPF → Web.
+
+При миграции использовались:
+- `*ViewModel` → `client/src/pages/*` + API
+- `EngineeringPerformance.Infrastructure/Services/*` → `backend/EngineeringPerformance.Infrastructure/*`
+
+Инвентаризация WPF-логики (устарела как operational doc): [docs/inventory/business_logic_inventory.md](../../docs/inventory/business_logic_inventory.md).
 
 ---
 
-## Связь с web-стеком
+## Cutover
 
-| WPF | Web |
-|-----|-----|
-| `EngineeringPerformance.Infrastructure/Services/*` | `backend/EngineeringPerformance.Infrastructure/*` |
-| `*ViewModel` | `client/src/pages/*` + API |
-| PdfSharp exports | QuestPDF в `AnalyticsExportService` |
-
-См. `docs/migration_map.md` для полной карты миграции.
+Параллельная эксплуатация web + WPF **завершена** с точки зрения разработки: production-развитие — **только web**. UAT и sign-off — по web-клиенту (`_doc/plans/uat-phase4-checklist.md`).

@@ -12,12 +12,33 @@ public static class PhysicalVolumeCatalogBinding
 
     public static async Task<bool> IsKfoVersionAsync(AppDbContext context, int versionId, CancellationToken cancellationToken = default)
     {
-        var typeName = await context.ProjectAnalysisVersions.AsNoTracking()
+        var typeName = await GetCatalogTypeNameAsync(context, versionId, cancellationToken);
+        return string.Equals(typeName, KfoTypeName, StringComparison.Ordinal);
+    }
+
+    public static async Task<string?> GetCatalogTypeNameAsync(
+        AppDbContext context,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        await context.ProjectAnalysisVersions.AsNoTracking()
             .Where(v => v.Id == versionId)
-            .Select(v => v.PhysicalVolumeType!.Name)
+            .Select(v => v.PhysicalVolumeType != null ? v.PhysicalVolumeType.Name : null)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return string.Equals(typeName, KfoTypeName, StringComparison.Ordinal);
+    /// <summary>Проверяет, что для версии выбран справочник КФО или БЭР.</summary>
+    public static async Task EnsureCatalogTypeConfiguredAsync(
+        AppDbContext context,
+        int versionId,
+        CancellationToken cancellationToken = default)
+    {
+        var typeName = await GetCatalogTypeNameAsync(context, versionId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(typeName)
+            || (!string.Equals(typeName, KfoTypeName, StringComparison.Ordinal)
+                && !string.Equals(typeName, BerTypeName, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "Для версии проекта не выбран справочник физобъёмов. Укажите КФО или БЭР в параметрах версии.");
+        }
     }
 
     public static async Task<bool> CatalogEntryExistsAsync(

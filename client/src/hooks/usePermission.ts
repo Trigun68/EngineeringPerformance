@@ -25,8 +25,11 @@ export interface PermissionResult {
  * const { hasAccess: canImport } = usePermission('ProjectDataUpload');
  * <Button disabled={!canImport}>Загрузить</Button>
  */
+const EMPTY_PERMISSIONS: Record<string, AccessLevel> = {};
+
 export function usePermission(objectName: string): PermissionResult {
-  const permissions = useAuthStore((state) => state.user?.permissions ?? {});
+  // Стабильная ссылка: `?? {}` в селекторе даёт новый объект на каждый snapshot → риск #185.
+  const permissions = useAuthStore((state) => state.user?.permissions) ?? EMPTY_PERMISSIONS;
   const roleName = useAuthStore((state) => state.user?.roleName);
   const admin = isAdministrator(roleName);
 

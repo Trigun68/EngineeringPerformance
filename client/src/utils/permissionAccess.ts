@@ -43,6 +43,7 @@ export interface MainNavItemConfig {
 export const MAIN_NAV_ITEMS: readonly MainNavItemConfig[] = [
   { path: '/', label: 'Главная', objectName: 'Dashboard', end: true },
   { path: '/projects', label: 'Проекты', objectName: 'Projects' },
+  { path: '/analytics/trends', label: 'Аналитика', objectName: 'GroupTrend' },
   { path: '/references', label: 'Справочники', objectName: 'References' },
   { path: '/settings/users', label: 'Настройки', objectName: 'SettingsPage' },
   { path: '/help', label: 'Справка', objectName: 'HelpPage' },

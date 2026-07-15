@@ -67,7 +67,7 @@ public static class IicWorkDirectionDisplayUnit
     {
         var baseName = string.IsNullOrWhiteSpace(direction.Code)
             ? direction.Name
-            : $"{direction.Code} {direction.Name}".Trim();
+            : $"{direction.Code.Trim()} — {direction.Name}".Trim();
         var unitName = ResolveUnitName(direction, byId);
         return string.IsNullOrWhiteSpace(unitName) ? baseName : $"{baseName} ({unitName})";
     }

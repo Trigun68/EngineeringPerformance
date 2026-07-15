@@ -13,7 +13,7 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
     public MonitoringApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]

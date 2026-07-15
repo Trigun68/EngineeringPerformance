@@ -218,6 +218,30 @@ export async function saveForecastPlannedVolumes(
   );
 }
 
+export interface ProjectVersionPhysicalVolume {
+  code: string;
+  name: string;
+  unitName: string | null;
+  quantity: number;
+  coefficient: number;
+  total: number;
+}
+
+export interface ForecastAssessmentVolumes {
+  physicalVolumesByDirection: Record<string, ProjectVersionPhysicalVolume[]>;
+  equipmentVolumesByDirection: Record<string, ProjectVersionPhysicalVolume[]>;
+}
+
+export async function fetchForecastAssessmentVolumes(
+  projectId: number,
+  versionId: number,
+): Promise<ForecastAssessmentVolumes> {
+  const { data } = await apiClient.get<ForecastAssessmentVolumes>(
+    `/projects/${projectId}/versions/${versionId}/forecast/assessment-volumes`,
+  );
+  return data;
+}
+
 export interface VersionCompareRow {
   workDirectionId: number;
   parentId: number | null;
@@ -281,13 +305,131 @@ export async function fetchVersionCompare(
   return data;
 }
 
-export async function fetchGroupAnalysis(projectId: number): Promise<{ message: string }> {
-  const { data } = await apiClient.get<{ message: string }>(`/projects/${projectId}/group-analysis`);
+export interface CompareChartPoint {
+  category: string;
+  workDirectionId: number | null;
+  valueA: number | null;
+  valueB: number | null;
+  delta: number | null;
+}
+
+export interface CompareChartResult {
+  level: string;
+  metric: string;
+  versionAName: string;
+  versionBName: string;
+  points: CompareChartPoint[];
+}
+
+export async function fetchCompareChart(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+  level: 'iic' | 'facility' = 'iic',
+  metric: 'zScore' | 'hours' = 'zScore',
+  top = 20,
+): Promise<CompareChartResult> {
+  const { data } = await apiClient.get<CompareChartResult>(`/projects/${projectId}/compare/chart`, {
+    params: { versionA, versionB, level, metric, top },
+  });
   return data;
 }
 
-export async function fetchGroupTrend(projectId: number): Promise<{ message: string }> {
-  const { data } = await apiClient.get<{ message: string }>(`/projects/${projectId}/group-trend`);
+export interface TrendPoint {
+  timestamp: string;
+  versionId: number;
+  versionName: string;
+  metric: string;
+  value: number | null;
+  label?: string | null;
+}
+
+export interface TrendSeries {
+  metric: string;
+  displayName: string;
+  points: TrendPoint[];
+}
+
+export interface TrendAnalyticsResult {
+  granularity: string;
+  formula: { id: string; displayName: string; description: string };
+  series: TrendSeries[];
+  events: { timestamp: string; type: string; label: string; versionId?: number | null }[];
+}
+
+export interface TrendDetailRow {
+  timestamp: string;
+  versionId: number;
+  facilityCode: string;
+  facilityName: string;
+  pvCode: string;
+  pvName: string;
+  factLaborHours: number | null;
+  zScore: number | null;
+  interpretation: string;
+}
+
+export async function fetchTrendFormulas(): Promise<{ id: string; displayName: string; description: string }[]> {
+  const { data } = await apiClient.get<{ id: string; displayName: string; description: string }[]>(
+    '/analytics/trends/formulas',
+  );
+  return data;
+}
+
+export async function fetchTrends(params: {
+  projectId: number;
+  dateFrom?: string;
+  dateTo?: string;
+  granularity?: string;
+  formulaId?: string;
+}): Promise<TrendAnalyticsResult> {
+  const { data } = await apiClient.get<TrendAnalyticsResult>('/analytics/trends', { params });
+  return data;
+}
+
+export async function fetchTrendDetail(
+  projectId: number,
+  versionId: number,
+  formulaId?: string,
+): Promise<TrendDetailRow[]> {
+  const { data } = await apiClient.get<TrendDetailRow[]>('/analytics/trends/detail', {
+    params: { projectId, versionId, formulaId },
+  });
+  return data;
+}
+
+export interface GroupAnalysisProjectRow {
+  projectId: number;
+  projectCode: string;
+  projectName: string;
+  versionId: number | null;
+  versionName: string | null;
+  totalFactLaborHours: number | null;
+  weightedZScore: number | null;
+  weightedZInterpretation: string | null;
+}
+
+export interface GroupAnalysisResult {
+  groupCriterion: string;
+  groupValue: string | null;
+  projects: GroupAnalysisProjectRow[];
+  aggregateWeightedZScore: number | null;
+  aggregateWeightedZInterpretation: string | null;
+}
+
+export interface GroupTrendInfo {
+  message: string;
+  trendsPagePath: string;
+  peerProjectCount: number;
+}
+
+export async function fetchGroupAnalysis(projectId: number): Promise<GroupAnalysisResult> {
+  const { data } = await apiClient.get<GroupAnalysisResult>(`/projects/${projectId}/group-analysis`);
+  return data;
+}
+
+export async function fetchGroupTrend(projectId: number): Promise<GroupTrendInfo> {
+  const { data } = await apiClient.get<GroupTrendInfo>(`/projects/${projectId}/group-trend`);
   return data;
 }
 

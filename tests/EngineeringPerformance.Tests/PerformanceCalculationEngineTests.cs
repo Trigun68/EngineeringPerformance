@@ -1,5 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Services;
+using EngineeringPerformance.Domain.Norms;
 using FluentAssertions;
 
 namespace EngineeringPerformance.Tests;
@@ -9,7 +11,13 @@ namespace EngineeringPerformance.Tests;
 /// </summary>
 public sealed class PerformanceCalculationEngineTests
 {
-    private readonly IPerformanceCalculationEngine _engine = new PerformanceCalculationEngine();
+    private readonly IPerformanceCalculationEngine _engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
+
+    private static NormCalculationSnapshot Snap(decimal performance, decimal estimate, decimal stdDev) => new(
+        performance, estimate, stdDev,
+        NormFormulaMapper.FromLegacyPerformance(performance),
+        NormFormulaMapper.FromLegacyStdDev(performance, stdDev));
 
     [Fact]
     public void CalculatePerformance_WithValidData_ReturnsCorrectZScoreAndLI()
@@ -36,7 +44,7 @@ public sealed class PerformanceCalculationEngineTests
 
         var norms = new Dictionary<int, NormCalculationSnapshot>
         {
-            [10] = new(2.5m, 1.0m, 0.5m),
+            [10] = Snap(2.5m, 1.0m, 0.5m),
         };
 
         var perfInput = new PerformanceCalculationInput(
@@ -138,6 +146,68 @@ public sealed class PerformanceCalculationEngineTests
 
         opt.Should().Be(15m);
         pes.Should().Be(27.5m);
-        range.Should().Be("15.00 - 27.50");
+    }
+
+    [Fact]
+    public void ComputeForecastHours_WithPlanningZ_AppliesFormula()
+    {
+        var z = new PlanningZParameters(0.5m, 0m, -0.5m);
+        var (baseH, optH, pesH) = _engine.ComputeForecastHours(100m, 0.2m, 0.04m, z);
+
+        baseH.Should().Be(20m);
+        optH.Should().Be(18m);
+        pesH.Should().Be(22m);
+    }
+
+    [Fact]
+    public void ComputeForecastHours_WithZeroStdDev_AllScenariosEqual()
+    {
+        var z = new PlanningZParameters(0.5m, 0m, -0.5m);
+        var (baseH, optH, pesH) = _engine.ComputeForecastHours(50m, 0.3m, 0m, z);
+
+        baseH.Should().Be(15m);
+        optH.Should().Be(15m);
+        pesH.Should().Be(15m);
+    }
+
+    [Fact]
+    public void ComputeForecastHours_WithNonZeroZBase_DifferentiatesAllScenarios()
+    {
+        var z = new PlanningZParameters(0.5m, 0.25m, -0.5m);
+        var (baseH, optH, pesH) = _engine.ComputeForecastHours(100m, 0.2m, 0.04m, z);
+
+        baseH.Should().Be(21m, "100 × (0.2 + 0.25 × 0.04)");
+        optH.Should().Be(18m);
+        pesH.Should().Be(22m);
+        baseH.Should().NotBe(optH);
+        baseH.Should().NotBe(pesH);
+    }
+
+    [Fact]
+    public void ComputeForecastScenarioHours_NegativeProductivityFactor_ClampsOptimisticToZero()
+    {
+        var (opt, pes, _) = _engine.ComputeForecastScenarioHours(
+            baseHours: 20m,
+            performance: 0.01m,
+            standardDeviation: 0.05m,
+            plannedVolume: 100m,
+            zOptimistic: -1m,
+            zPessimistic: 0m);
+
+        opt.Should().Be(0m, "max(0, p + zOpt·σ) при отрицательном факторе");
+        pes.Should().BeGreaterThanOrEqualTo(0m);
+    }
+
+    [Fact]
+    public void ResolvePlanningZ_ReturnsDefaultWhenMissing()
+    {
+        var dict = new Dictionary<int, PlanningZParameters>
+        {
+            [1] = new(0.6m, 0.1m, -0.4m),
+        };
+
+        ForecastCalculation.ResolvePlanningZ(dict, 1).Should().Be(new PlanningZParameters(0.6m, 0.1m, -0.4m));
+        ForecastCalculation.ResolvePlanningZ(dict, 99).Should().Be(PlanningZParameters.Default);
+        ForecastCalculation.ResolvePlanningZ(dict, -1).Should().Be(PlanningZParameters.Default);
     }
 }

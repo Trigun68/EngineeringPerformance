@@ -11,7 +11,10 @@ public sealed class PhysicalVolumeKfo : DirectoryItem
 
     public int? ClassifierId { get; set; }
 
-    /// <summary>Выбранная норма ИИС для классификатора (КФО).</summary>
+    /// <summary>
+    /// Выбранная норма ИИС для классификатора (КФО).
+    /// Поле зарезервировано; web-расчёт использует снимок норм версии, не это FK (см. A-06).
+    /// </summary>
     public int? IicNormId { get; set; }
 
     public bool? IsAssessment { get; set; }

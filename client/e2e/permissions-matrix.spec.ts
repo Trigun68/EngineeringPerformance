@@ -27,7 +27,13 @@ test.describe('Permissions matrix', () => {
   test('shows Settings and UserActionLog in matrix', async ({ page }) => {
     await page.goto('/settings/access-rights');
     await page.waitForSelector('[data-testid="permission-matrix-grid"] .ag-root', { timeout: 15_000 });
-    await expect(page.getByTestId('object-cell-SettingsPage')).toBeVisible();
+
+    // Нижние строки виртуализированы — прокручиваем viewport грида.
+    await page.locator('[data-testid="permission-matrix-grid"] .ag-body-viewport').evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+
+    await expect(page.getByTestId('object-cell-SettingsPage')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('object-cell-Users')).toBeVisible();
     await expect(page.getByTestId('object-cell-UserActionLog')).toBeVisible();
   });

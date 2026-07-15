@@ -68,11 +68,23 @@ public sealed partial class ProjectExcelDataImportService
         return new LaborImportPreviewDto(unmatched.ToList(), totalDataRows);
     }
 
-    private async Task<DataImportResultDto> ImportLaborIntensitiesAsync(int projectId, int versionId, string filePath, string description, bool addMissingToCatalog)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+    private Task<DataImportResultDto> ImportLaborIntensitiesAsync(
+        int projectId,
+        int versionId,
+        string filePath,
+        string description,
+        bool addMissingToCatalog) =>
+        ExecuteWithRetryableTransactionAsync(context =>
+            ImportLaborIntensitiesCoreAsync(context, projectId, versionId, filePath, description, addMissingToCatalog));
 
+    private async Task<DataImportResultDto> ImportLaborIntensitiesCoreAsync(
+        AppDbContext context,
+        int projectId,
+        int versionId,
+        string filePath,
+        string description,
+        bool addMissingToCatalog)
+    {
         // Удаляем все предыдущие данные трудоёмкости для этой версии (стратегия: очистка + вставка)
         await ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
 
@@ -126,7 +138,6 @@ public sealed partial class ProjectExcelDataImportService
 
         if (worksheet.RangeUsed() is null)
         {
-            await transaction.CommitAsync();
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
             return new DataImportResultDto(true, 0, null, iteration.Id);
@@ -134,10 +145,8 @@ public sealed partial class ProjectExcelDataImportService
 
         if (!TryResolveLaborIntensityImportLayout(worksheet, out var layout))
         {
-            await transaction.RollbackAsync();
-            return new DataImportResultDto(false, 0,
-                "Не удалось определить структуру файла трудоёмкости. Ожидаются колонки: «Наименование проектного направления», «Наименование типа документа TF», «Сумма Плановая трудоемкость, чч».",
-                iteration.Id);
+            throw new InvalidOperationException(
+                "Не удалось определить структуру файла трудоёмкости. Ожидаются колонки: «Наименование проектного направления», «Наименование типа документа TF», «Сумма Плановая трудоемкость, чч».");
         }
 
         var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? 0;
@@ -290,7 +299,6 @@ public sealed partial class ProjectExcelDataImportService
 
         iteration.RecordCount = newEntities.Count;
         await context.SaveChangesAsync();
-        await transaction.CommitAsync();
 
         var details = new List<string>();
         if (newCatalogEntriesCreated > 0)

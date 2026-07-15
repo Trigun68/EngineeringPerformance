@@ -25,7 +25,7 @@ public sealed class IicWorkDirectionDisplayUnitTests
         var byId = new Dictionary<int, IicWorkDirection> { [1] = root, [2] = leaf };
 
         IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(leaf, byId)
-            .Should().Be("IIC-01 Проектирование (час)");
+            .Should().Be("IIC-01 — Проектирование (час)");
     }
 
     [Fact]

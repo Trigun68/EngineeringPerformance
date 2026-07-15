@@ -1,5 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Application.Services;
 
@@ -8,6 +10,12 @@ namespace EngineeringPerformance.Application.Services;
 /// </summary>
 public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 {
+    private readonly IDeviationCalculator _deviationCalculator;
+
+    public PerformanceCalculationEngine(IDeviationCalculator deviationCalculator)
+    {
+        _deviationCalculator = deviationCalculator;
+    }
     public IReadOnlyList<PerformanceRowDto> CalculatePerformance(PerformanceCalculationInput input)
     {
         if (input.WorkDirections.Count == 0 && !input.VersionExists)
@@ -97,7 +105,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 {
                     factHours = Math.Round(setHours * (vol / setVol), 2);
                     totalMatchedHours += factHours.Value;
-                    factProductivity = Math.Round(setHours / setVol, 4);
+                    factProductivity = Math.Max(0m, Math.Round(setHours / setVol, 4));
                     if (factProductivity > 0
                         && norm?.NormEstimate is decimal ne
                         && norm.NormStdDev is decimal nsd
@@ -262,8 +270,8 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         if (classifierId is not int cid || !classifierMap.TryGetValue(cid, out var node))
             return string.Empty;
         return string.IsNullOrWhiteSpace(node.UnitName)
-            ? $"{node.Code} {node.Name}"
-            : $"{node.Code} {node.Name} ({node.UnitName})";
+            ? $"{node.Code} — {node.Name}"
+            : $"{node.Code} — {node.Name} ({node.UnitName})";
     }
 
     private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
@@ -282,7 +290,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         var factVolume = volumeByDirection.GetValueOrDefault(direction.Id);
         var factHours = hoursByDirection.GetValueOrDefault(direction.Id);
 
-        decimal? factProductivity = factVolume > 0 ? factHours / factVolume : null;
+        decimal? factProductivity = factVolume > 0 ? Math.Max(0m, factHours / factVolume) : null;
 
         decimal? ownFactEstimate = null;
         if (factProductivity is > 0)
@@ -373,26 +381,18 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         return laborHours;
     }
 
-    public (decimal Optimistic, decimal Pessimistic, string Range) ComputeForecastScenarioHours(
-        decimal baseHours,
-        decimal? performance,
-        decimal? standardDeviation,
-        decimal plannedVolume,
-        decimal zOptimistic,
-        decimal zPessimistic)
-    {
-        if (baseHours <= 0 || plannedVolume <= 0)
-        {
-            return (0m, 0m, "—");
-        }
+    public (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
+        NormFormula normFormula,
+        DeviationFormula deviationFormula,
+        decimal volume,
+        decimal effectiveVolume,
+        PlanningZParameters z) =>
+        ForecastCalculation.ComputeForecastHours(normFormula, deviationFormula, volume, effectiveVolume, z, _deviationCalculator);
 
-        if (performance is { } p && p > 0 && standardDeviation is { } std && std > 0)
-        {
-            var opt = Math.Round(plannedVolume * Math.Max(0m, p + zOptimistic * std), 2);
-            var pes = Math.Round(plannedVolume * (p + zPessimistic * std), 2);
-            return (opt, pes, $"{opt:F2} - {pes:F2}");
-        }
-
-        return (baseHours, baseHours, $"{baseHours:F2} - {baseHours:F2}");
-    }
+    public (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
+        decimal volume,
+        decimal? productivity,
+        decimal? stdDev,
+        PlanningZParameters z) =>
+        ForecastCalculation.ComputeForecastHours(volume, productivity, stdDev, z);
 }

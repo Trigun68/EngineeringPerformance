@@ -10,7 +10,7 @@ using Testcontainers.MsSql;
 namespace EngineeringPerformance.Tests;
 
 /// <summary>
-/// Replace-стратегия импорта оборудования на MS SQL (Testcontainers): upsert, skip ошибок без rollback.
+/// Импорт оборудования на MS SQL (Testcontainers): полная замена данных версии, как в WPF.
 /// </summary>
 public sealed class DataImportReplaceStrategyTests : IAsyncLifetime
 {
@@ -44,7 +44,7 @@ public sealed class DataImportReplaceStrategyTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Import_WithDuplicatesAndNewRows_ReplacesAndCommits()
+    public async Task ImportEquipment_ReplacesVersionDataLikeWpf()
     {
         _factory.Should().NotBeNull();
         var seeded = await SeedEquipmentRowsAsync(_factory!);
@@ -66,10 +66,7 @@ public sealed class DataImportReplaceStrategyTests : IAsyncLifetime
                 contentLength: new FileInfo(filePath).Length);
 
             result.Success.Should().BeTrue();
-            result.RecordsImported.Should().Be(2, "обновлена существующая строка и вставлена новая");
-            result.RowErrors.Should().NotBeNull();
-            result.RowErrors!.Should().ContainSingle(e =>
-                e.RowNumber == 4 && e.Message.Contains("Invalid", StringComparison.OrdinalIgnoreCase));
+            result.RecordsImported.Should().Be(2, "импортированы только валидные строки файла");
 
             await using var verify = await _factory!.CreateDbContextAsync();
             var rows = await verify.ProjectEquipments
@@ -77,11 +74,11 @@ public sealed class DataImportReplaceStrategyTests : IAsyncLifetime
                 .OrderBy(e => e.Id)
                 .ToListAsync();
 
-            rows.Should().HaveCount(4, "строки 1 и 3 сохранены, одна обновлена, добавлена новая");
-            rows.Should().Contain(r => r.Id == seeded.KeepRowId1 && r.Quantity == 1m);
-            rows.Should().Contain(r => r.Id == seeded.ReplaceRowId && r.Quantity == 99m, "REPLACE по Id из файла");
-            rows.Should().Contain(r => r.Id == seeded.KeepRowId3 && r.Quantity == 3m);
+            rows.Should().HaveCount(2, "предыдущие строки версии удалены перед импортом (паритет WPF)");
+            rows.Should().Contain(r => r.CatalogName == "Pump B" && r.Quantity == 99m);
             rows.Should().Contain(r => r.CatalogName == "New Pump" && r.Quantity == 5m);
+            rows.Should().NotContain(r => r.Id == seeded.KeepRowId1);
+            rows.Should().NotContain(r => r.Id == seeded.KeepRowId3);
         }
         finally
         {

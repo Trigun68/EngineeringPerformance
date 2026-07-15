@@ -11,6 +11,9 @@ if [[ ! -f ".env" ]]; then
   cp .env.example .env
 fi
 
+echo "===> Cleaning orphan compose-run containers"
+"${ROOT_DIR}/scripts/docker-cleanup-run-containers.sh"
+
 echo "===> Starting docker stack"
 docker compose up -d --wait
 

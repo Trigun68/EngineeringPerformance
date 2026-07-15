@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Domain.Enums;
 
+using EngineeringPerformance.Domain.Norms;
+
 namespace EngineeringPerformance.Application.Services;
 
 /// <summary>Входные данные для расчёта иерархии производительности (без EF).</summary>
@@ -38,7 +40,9 @@ public sealed record LaborIntensityCalculationLine(
 public sealed record NormCalculationSnapshot(
     decimal? Performance,
     decimal? Estimate,
-    decimal? StandardDeviation);
+    decimal? StandardDeviation,
+    NormFormula NormFormula,
+    DeviationFormula DeviationFormula);
 
 /// <summary>Вход для распределения LI по строкам факта (порт ComputeFactRows).</summary>
 public sealed record FactAssessmentCalculationInput(

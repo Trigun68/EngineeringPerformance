@@ -1,10 +1,11 @@
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Security;
-using EngineeringPerformance.Application.Export;
-using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Application.Projects.Commands;
 using EngineeringPerformance.Application.Projects.DTOs;
 using EngineeringPerformance.Application.Projects.Queries;
+using EngineeringPerformance.Application.Export;
+using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,8 +22,11 @@ public sealed class ProjectsController : ControllerBase
     private readonly CreateProjectCommandHandler _createProject;
     private readonly UpdateProjectCommandHandler _updateProject;
     private readonly ArchiveProjectCommandHandler _archiveProject;
+    private readonly UnarchiveProjectCommandHandler _unarchiveProject;
+    private readonly DeleteProjectCommandHandler _deleteProject;
     private readonly IProjectExportService _exportService;
     private readonly IProjectsCatalogExportService _catalogExportService;
+    private readonly IVisualReportService _visualReports;
     private readonly IProjectImportService _importService;
 
     public ProjectsController(
@@ -31,8 +35,11 @@ public sealed class ProjectsController : ControllerBase
         CreateProjectCommandHandler createProject,
         UpdateProjectCommandHandler updateProject,
         ArchiveProjectCommandHandler archiveProject,
+        UnarchiveProjectCommandHandler unarchiveProject,
+        DeleteProjectCommandHandler deleteProject,
         IProjectExportService exportService,
         IProjectsCatalogExportService catalogExportService,
+        IVisualReportService visualReports,
         IProjectImportService importService)
     {
         _getProjects = getProjects;
@@ -40,16 +47,21 @@ public sealed class ProjectsController : ControllerBase
         _createProject = createProject;
         _updateProject = updateProject;
         _archiveProject = archiveProject;
+        _unarchiveProject = unarchiveProject;
+        _deleteProject = deleteProject;
         _exportService = exportService;
         _catalogExportService = catalogExportService;
+        _visualReports = visualReports;
         _importService = importService;
     }
 
     [HttpGet]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
-    public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetAll(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<ProjectDto>>> GetAll(
+        CancellationToken cancellationToken,
+        [FromQuery] bool includeArchived = false)
     {
-        var items = await _getProjects.HandleAsync(new GetProjectsQuery(), cancellationToken);
+        var items = await _getProjects.HandleAsync(new GetProjectsQuery(includeArchived), cancellationToken);
         return Ok(items);
     }
 
@@ -77,12 +89,28 @@ public sealed class ProjectsController : ControllerBase
         return updated is null ? NotFound() : Ok(updated);
     }
 
-    [HttpDelete("{id:int}")]
+    [HttpPost("{id:int}/archive")]
     [HasPermission(PermissionType.Projects, AccessLevel.Edit)]
     public async Task<ActionResult<ProjectDto>> Archive(int id, CancellationToken cancellationToken)
     {
         var archived = await _archiveProject.HandleAsync(new ArchiveProjectCommand(id), cancellationToken);
         return archived is null ? NotFound() : Ok(archived);
+    }
+
+    [HttpPost("{id:int}/unarchive")]
+    [HasPermission(PermissionType.Projects, AccessLevel.Edit)]
+    public async Task<ActionResult<ProjectDto>> Unarchive(int id, CancellationToken cancellationToken)
+    {
+        var restored = await _unarchiveProject.HandleAsync(new UnarchiveProjectCommand(id), cancellationToken);
+        return restored is null ? NotFound() : Ok(restored);
+    }
+
+    [HttpDelete("{id:int}")]
+    [HasPermission(PermissionType.Projects, AccessLevel.Edit)]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        var deleted = await _deleteProject.HandleAsync(new DeleteProjectCommand(id), cancellationToken);
+        return deleted ? NoContent() : NotFound();
     }
 
     [HttpGet("export/excel")]
@@ -125,13 +153,36 @@ public sealed class ProjectsController : ControllerBase
         return File(bytes, "application/pdf", $"project-{id}.pdf");
     }
 
+    [HttpGet("{id:int}/export/combined.pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    public async Task<IActionResult> ExportCombinedPdf(
+        int id,
+        [FromQuery] int planVersionId,
+        [FromQuery] int factVersionId,
+        [FromQuery] int compareVersionAId,
+        [FromQuery] int compareVersionBId,
+        [FromQuery] string formulaId = DocSetProportionalFormula.Id,
+        [FromQuery] bool includeAppendix = false,
+        CancellationToken cancellationToken = default)
+    {
+        var bytes = await _visualReports.ExportCombinedPdfAsync(
+            id,
+            planVersionId,
+            factVersionId,
+            compareVersionAId,
+            compareVersionBId,
+            formulaId,
+            includeAppendix,
+            cancellationToken);
+        return File(bytes, "application/pdf", $"Combined_{id}.pdf");
+    }
+
     [HttpPost("import/excel")]
     [HasPermission(PermissionType.Projects, AccessLevel.Edit)]
     [RequestSizeLimit(ExcelUploadValidator.MaxFileSizeBytes)]
     public Task<IActionResult> ImportExcel(IFormFile file, CancellationToken cancellationToken)
     {
-        // S0-02: Импорт списка проектов из Excel — не реализован (legacy WPF-функция).
-        // Endpoint сохранён для совместимости, но возвращает 501.
         return Task.FromResult<IActionResult>(StatusCode(StatusCodes.Status501NotImplemented, new
         {
             message = "Import projects from Excel is not implemented.",

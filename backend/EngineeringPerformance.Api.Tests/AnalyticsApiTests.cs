@@ -12,7 +12,7 @@ public sealed class AnalyticsApiTests : IClassFixture<ApiWebApplicationFactory>
     public AnalyticsApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]
@@ -99,7 +99,95 @@ public sealed class AnalyticsApiTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
-    public async Task GroupAnalytics_ReturnsPlaceholder()
+    public async Task CompareChart_ReturnsBoundedPoints_WhenTwoVersionsExist()
+    {
+        if (!_sqlAvailable) return;
+
+        var projectsResponse = await _client.GetAsync("/api/projects");
+        projectsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var projectsJson = await projectsResponse.Content.ReadAsStringAsync();
+        using var projectsDoc = System.Text.Json.JsonDocument.Parse(projectsJson);
+        if (projectsDoc.RootElement.GetArrayLength() == 0) return;
+
+        var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
+        var versionsResponse = await _client.GetAsync($"/api/projects/{projectId}/versions");
+        versionsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var versionsJson = await versionsResponse.Content.ReadAsStringAsync();
+        using var versionsDoc = System.Text.Json.JsonDocument.Parse(versionsJson);
+        if (versionsDoc.RootElement.GetArrayLength() < 2) return;
+
+        var versionA = versionsDoc.RootElement[0].GetProperty("id").GetInt32();
+        var versionB = versionsDoc.RootElement[1].GetProperty("id").GetInt32();
+
+        var chartResponse = await _client.GetAsync(
+            $"/api/projects/{projectId}/compare/chart?versionA={versionA}&versionB={versionB}&level=iic&metric=zScore&top=20");
+        chartResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var chartJson = await chartResponse.Content.ReadAsStringAsync();
+        chartJson.Should().Contain("points");
+        using var chartDoc = System.Text.Json.JsonDocument.Parse(chartJson);
+        var points = chartDoc.RootElement.GetProperty("points");
+        points.GetArrayLength().Should().BeLessThanOrEqualTo(20);
+    }
+
+    [Fact]
+    public async Task Trends_ReturnsSeries_WhenProjectHasVersions()
+    {
+        if (!_sqlAvailable) return;
+
+        var projectsResponse = await _client.GetAsync("/api/projects");
+        projectsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var projectsJson = await projectsResponse.Content.ReadAsStringAsync();
+        using var projectsDoc = System.Text.Json.JsonDocument.Parse(projectsJson);
+        if (projectsDoc.RootElement.GetArrayLength() == 0) return;
+
+        var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
+
+        var formulasResponse = await _client.GetAsync("/api/analytics/trends/formulas");
+        formulasResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var trendsResponse = await _client.GetAsync(
+            $"/api/analytics/trends?projectId={projectId}&formulaId=v1-docset-proportional&granularity=version");
+        trendsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var trendsJson = await trendsResponse.Content.ReadAsStringAsync();
+        trendsJson.Should().Contain("factLaborHours");
+    }
+
+    [Fact]
+    public async Task CompareExportPdf_ReturnsPdfMagic_WhenTwoVersionsExist()
+    {
+        if (!_sqlAvailable) return;
+
+        var (projectId, versionA, versionB) = await TryGetTwoVersionsAsync();
+        if (projectId is null || versionA is null || versionB is null) return;
+
+        var response = await _client.GetAsync(
+            $"/api/projects/{projectId}/compare/export.pdf?versionA={versionA}&versionB={versionB}&section=summary");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        bytes[0].Should().Be(0x25);
+    }
+
+    [Fact]
+    public async Task TrendsExportPdf_ReturnsPdfMagic_WhenProjectExists()
+    {
+        if (!_sqlAvailable) return;
+
+        var projectsResponse = await _client.GetAsync("/api/projects");
+        if (projectsResponse.StatusCode != HttpStatusCode.OK) return;
+        var projectsJson = await projectsResponse.Content.ReadAsStringAsync();
+        using var projectsDoc = System.Text.Json.JsonDocument.Parse(projectsJson);
+        if (projectsDoc.RootElement.GetArrayLength() == 0) return;
+        var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
+
+        var response = await _client.GetAsync(
+            $"/api/analytics/trends/export.pdf?projectId={projectId}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        bytes[0].Should().Be(0x25);
+    }
+
+    [Fact]
+    public async Task GroupAnalytics_ReturnsStructuredResult()
     {
         if (!_sqlAvailable) return;
 
@@ -113,9 +201,13 @@ public sealed class AnalyticsApiTests : IClassFixture<ApiWebApplicationFactory>
 
         var analysisResponse = await _client.GetAsync($"/api/projects/{projectId}/group-analysis");
         analysisResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var analysisJson = await analysisResponse.Content.ReadAsStringAsync();
+        analysisJson.Should().Contain("projects");
 
         var trendResponse = await _client.GetAsync($"/api/projects/{projectId}/group-trend");
         trendResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        var trendJson = await trendResponse.Content.ReadAsStringAsync();
+        trendJson.Should().Contain("trendsPagePath");
     }
 
     [Fact]
@@ -155,5 +247,27 @@ public sealed class AnalyticsApiTests : IClassFixture<ApiWebApplicationFactory>
 
         var versionId = versionsDoc.RootElement[0].GetProperty("id").GetInt32();
         return (projectId, versionId);
+    }
+
+    private async Task<(int? ProjectId, int? VersionA, int? VersionB)> TryGetTwoVersionsAsync()
+    {
+        var projectsResponse = await _client.GetAsync("/api/projects");
+        if (projectsResponse.StatusCode != HttpStatusCode.OK) return (null, null, null);
+
+        var projectsJson = await projectsResponse.Content.ReadAsStringAsync();
+        using var projectsDoc = System.Text.Json.JsonDocument.Parse(projectsJson);
+        if (projectsDoc.RootElement.GetArrayLength() == 0) return (null, null, null);
+
+        var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
+        var versionsResponse = await _client.GetAsync($"/api/projects/{projectId}/versions");
+        if (versionsResponse.StatusCode != HttpStatusCode.OK) return (projectId, null, null);
+
+        var versionsJson = await versionsResponse.Content.ReadAsStringAsync();
+        using var versionsDoc = System.Text.Json.JsonDocument.Parse(versionsJson);
+        if (versionsDoc.RootElement.GetArrayLength() < 2) return (projectId, null, null);
+
+        var versionA = versionsDoc.RootElement[0].GetProperty("id").GetInt32();
+        var versionB = versionsDoc.RootElement[1].GetProperty("id").GetInt32();
+        return (projectId, versionA, versionB);
     }
 }

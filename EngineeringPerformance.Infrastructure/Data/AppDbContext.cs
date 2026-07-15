@@ -33,6 +33,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<AnalysisVersionSnapshot> AnalysisVersionSnapshots => Set<AnalysisVersionSnapshot>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<UserActionLog> UserActionLogs => Set<UserActionLog>();
+    public DbSet<ProjectVersionPlanningParameter> ProjectVersionPlanningParameters => Set<ProjectVersionPlanningParameter>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -60,6 +61,7 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new AnalysisVersionSnapshotConfiguration());
         modelBuilder.ApplyConfiguration(new UserSettingConfiguration());
         modelBuilder.ApplyConfiguration(new UserActionLogConfiguration());
+        modelBuilder.ApplyConfiguration(new ProjectVersionPlanningParameterConfiguration());
 
         base.OnModelCreating(modelBuilder);
     }

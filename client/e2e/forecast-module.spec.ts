@@ -28,7 +28,7 @@ test.describe('Forecast module - WPF Style', () => {
     await expect(page.getByRole('button', { name: 'Удалить оборуд.' })).toBeVisible();
   });
 
-  test('forecast tab has sub-tabs: Итого, По объектам, Детально', async ({ page }) => {
+  test('forecast tab has sub-tabs: Итого, Итого по объекту, Детально', async ({ page }) => {
     // Navigate to a project
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
@@ -41,8 +41,8 @@ test.describe('Forecast module - WPF Style', () => {
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
 
     // Check for sub-tabs
-    await expect(page.getByRole('tab', { name: 'Итого' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'По объектам' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Итого', exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Итого по объекту' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 
@@ -65,24 +65,75 @@ test.describe('Forecast module - WPF Style', () => {
     await expect(page.getByRole('button', { name: /Прогноз$/ })).toBeVisible();
   });
 
-  test('forecast facility tab shows export buttons', async ({ page }) => {
-    // Navigate to a project
+  test('forecast report dialog opens from Прогноз button', async ({ page }) => {
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-
-    // Double click first project to open it
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
+    await page.getByRole('tab', { name: 'Прогнозирование' }).click();
+    await page.getByRole('button', { name: /Прогноз$/ }).click();
+    await expect(page.getByTestId('forecast-report-dialog')).toBeVisible();
+  });
 
-    // Click on Прогнозирование tab
+  test('planning parameters dialog shows Z-parameters caption', async ({ page }) => {
+    await page.goto('/projects');
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
+    await page.waitForURL(/\/projects\/\d+/);
+    await page.getByRole('tab', { name: 'Прогнозирование' }).click();
+    await page.getByRole('button', { name: /Параметры планирования/i }).click();
+    await expect(page.getByTestId('planning-parameters-dialog')).toBeVisible();
+    await expect(
+      page.getByTestId('z-parameters-caption').getByText(
+        /Z-параметры сценариев по группам физобъёмов IIC для выбранной версии плана/,
+      ),
+    ).toBeVisible();
+  });
+
+  test('forecast detail tab shows export actions after version select', async ({ page }) => {
+    await page.goto('/projects');
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
+    await page.waitForURL(/\/projects\/\d+/);
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
 
-    // Click on По объектам sub-tab
-    const facilityTab = page.getByRole('tab', { name: 'По объектам' }).first();
-    await facilityTab.click();
+    await page.getByRole('button', { name: /Версия \(план\)/ }).click();
+    const dialog = page.getByTestId('version-picker-dialog');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const versionRow = dialog.locator('.ag-center-cols-container .ag-row').first();
+    if ((await versionRow.count()) === 0) {
+      test.skip(true, 'No plan versions in seed data');
+      return;
+    }
+    await versionRow.click();
+    await dialog.getByRole('button', { name: 'Выбрать' }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
 
-    // Check for export buttons
+    await page.getByRole('tab', { name: 'Детально' }).click();
     await expect(page.getByRole('button', { name: 'Экспорт Excel' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Сводная таблица' })).toBeVisible();
+  });
+
+  test('import FO enabled after plan version selected', async ({ page }) => {
+    await page.goto('/projects');
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
+    await page.waitForURL(/\/projects\/\d+/);
+    await page.getByRole('tab', { name: 'Прогнозирование' }).click();
+
+    await page.getByRole('button', { name: /Версия \(план\)/ }).click();
+    const dialog = page.getByTestId('version-picker-dialog');
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    const versionRow = dialog.locator('.ag-center-cols-container .ag-row').first();
+    if ((await versionRow.count()) === 0) {
+      test.skip(true, 'No plan versions in seed data');
+      return;
+    }
+    await versionRow.click();
+    await dialog.getByRole('button', { name: 'Выбрать' }).click();
+    await expect(dialog).toBeHidden({ timeout: 10_000 });
+
+    await expect(page.getByRole('button', { name: 'Импорт ФО' })).toBeEnabled({ timeout: 15_000 });
   });
 });

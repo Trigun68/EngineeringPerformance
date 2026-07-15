@@ -1,5 +1,7 @@
 # Business Logic Inventory — Engineering Performance (WPF)
 
+> **⚠️ УСТАРЕЛО (2026-07-14):** документ описывает **замороженный** WPF-стек. Актуальная бизнес-логика — [_doc/architecture/business-logic.md](../_doc/architecture/business-logic.md). WPF вне scope разработки.
+
 **Дата:** 2026-06-08  
 **Версия:** 1.0  
 **Связанные документы:** [ui_inventory.md](./ui_inventory.md), [equipment-module.md](../plans/equipment-module.md)  

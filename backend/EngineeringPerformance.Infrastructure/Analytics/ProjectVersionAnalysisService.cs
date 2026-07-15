@@ -121,15 +121,23 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 ActualHours: li.ActualHours))
             .ToList();
 
-        var totalPlannedHours = laborIntensities.Sum(li => li.PlannedHours);
-        var unallocatedPlannedHours = laborIntensities
-            .Where(li => !li.WorkDirectionId.HasValue)
-            .Sum(li => li.PlannedHours);
+        var totalPlannedHours = FactLaborHoursTotals.FromLaborIntensities(laborIntensities) ?? 0m;
+        var unallocatedPlannedHours = FactLaborHoursTotals.UnallocatedPlannedHours(laborIntensities);
 
         var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
             performanceData,
             totalPlannedHours,
             unallocatedPlannedHours);
+
+        var planningRows = await ctx1.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync();
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
 
         return new ProjectVersionAnalysisDto(
             ProjectName: version.Project.Name,
@@ -137,7 +145,8 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
             VersionName: version.VersionName,
             Directions: directions,
             LaborIntensities: laborRows,
-            Summary: summary);
+            Summary: summary,
+            PlanningZByDirection: planningZByDirection);
     }
 
     private static IReadOnlyList<ProjectVersionPhysicalVolumeDto> BuildPhysicalVolumes(

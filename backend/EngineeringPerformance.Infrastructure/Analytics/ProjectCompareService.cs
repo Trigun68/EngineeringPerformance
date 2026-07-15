@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
@@ -12,15 +14,18 @@ public sealed class ProjectCompareService : IProjectCompareService
     private readonly IPerformanceService _performanceService;
     private readonly ProjectVersionGridDataLoader _gridLoader;
     private readonly IPerformanceCalculationEngine _calculationEngine;
+    private readonly AppDbContext _db;
 
     public ProjectCompareService(
         IPerformanceService performanceService,
         ProjectVersionGridDataLoader gridLoader,
-        IPerformanceCalculationEngine calculationEngine)
+        IPerformanceCalculationEngine calculationEngine,
+        AppDbContext db)
     {
         _performanceService = performanceService;
         _gridLoader = gridLoader;
         _calculationEngine = calculationEngine;
+        _db = db;
     }
 
     public async Task<VersionCompareResultDto> CompareAsync(
@@ -38,6 +43,55 @@ public sealed class ProjectCompareService : IProjectCompareService
         var detail = VersionCompareMerge.BuildDetailRows(factA.Detail, factB.Detail);
 
         return new VersionCompareResultDto(summary, facility, detail);
+    }
+
+    public async Task<CompareChartResultDto> GetChartAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        string level = "iic",
+        string metric = "zScore",
+        int top = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var compare = await CompareAsync(projectId, versionAId, versionBId, cancellationToken);
+        var versionNames = await _db.ProjectAnalysisVersions
+            .AsNoTracking()
+            .Where(v => v.ProjectId == projectId && (v.Id == versionAId || v.Id == versionBId))
+            .ToDictionaryAsync(v => v.Id, v => v.VersionName, cancellationToken);
+
+        versionNames.TryGetValue(versionAId, out var nameA);
+        versionNames.TryGetValue(versionBId, out var nameB);
+
+        if (string.Equals(level, "facility", StringComparison.OrdinalIgnoreCase))
+        {
+            var points = compare.Facility
+                .Select(f => new CompareChartPointDto(
+                    f.FacilityName,
+                    null,
+                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.FactLaborHoursA : f.ZScoreA,
+                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.FactLaborHoursB : f.ZScoreB,
+                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.HoursDelta : f.ZDelta))
+                .OrderByDescending(p => Math.Abs(p.Delta ?? 0m))
+                .Take(Math.Clamp(top, 1, 100))
+                .ToList();
+
+            return new CompareChartResultDto("facility", metric, nameA ?? "A", nameB ?? "B", points);
+        }
+
+        var iicPoints = compare.Summary
+            .Where(r => r.WorkDirectionId >= 0)
+            .Select(r => new CompareChartPointDto(
+                r.Name,
+                r.WorkDirectionId,
+                metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? null : r.ZScoreA,
+                metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? null : r.ZScoreB,
+                r.ZDelta))
+            .OrderByDescending(p => Math.Abs(p.Delta ?? 0m))
+            .Take(Math.Clamp(top, 1, 100))
+            .ToList();
+
+        return new CompareChartResultDto("iic", metric, nameA ?? "A", nameB ?? "B", iicPoints);
     }
 
     private async Task<IReadOnlyList<VersionCompareRowDto>> BuildSummaryAsync(

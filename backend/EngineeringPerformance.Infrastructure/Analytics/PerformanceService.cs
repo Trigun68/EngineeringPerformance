@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
@@ -84,10 +85,7 @@ public sealed class PerformanceService : IPerformanceService
                     g =>
                     {
                         var norm = g.First().Norm!;
-                        return new NormCalculationSnapshot(
-                            norm.Performance,
-                            norm.Estimate,
-                            norm.StandardDeviation);
+                        return NormSnapshotFactory.FromEntity(norm);
                     });
         }
         else

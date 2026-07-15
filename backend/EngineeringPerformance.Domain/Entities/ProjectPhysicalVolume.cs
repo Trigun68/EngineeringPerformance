@@ -41,6 +41,12 @@ public sealed class ProjectPhysicalVolume : DataTableRecord
 
     public decimal? LaborHoursPerUnit { get; set; }
 
+    public decimal? LaborIntensityBase { get; set; }
+
+    public decimal? LaborIntensityPessimistic { get; set; }
+
+    public decimal? LaborIntensityOptimistic { get; set; }
+
     public decimal? MachineHoursPerUnit { get; set; }
 
     public decimal? TotalMachineHours { get; set; }

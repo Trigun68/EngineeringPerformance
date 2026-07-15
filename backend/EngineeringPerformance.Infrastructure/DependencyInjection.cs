@@ -9,6 +9,7 @@ using EngineeringPerformance.Application.Directories;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Registers;
+using EngineeringPerformance.Application.Settings;
 using EngineeringPerformance.Application.Users;
 using EngineeringPerformance.Infrastructure.Dictionaries;
 using EngineeringPerformance.Infrastructure.Directories;
@@ -17,7 +18,7 @@ using EngineeringPerformance.Infrastructure.Registers;
 using EngineeringPerformance.Infrastructure.Users;
 using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Import;
-using EngineeringPerformance.Application.Monitoring;
+using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects.Commands;
 using EngineeringPerformance.Application.Projects.Queries;
@@ -28,11 +29,14 @@ using EngineeringPerformance.Infrastructure.Audit;
 using EngineeringPerformance.Infrastructure.Auth;
 using EngineeringPerformance.Infrastructure.Export;
 using EngineeringPerformance.Infrastructure.Logging;
+using EngineeringPerformance.Application.Monitoring;
 using EngineeringPerformance.Infrastructure.Metrics;
 using EngineeringPerformance.Infrastructure.Monitoring;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Import;
 using EngineeringPerformance.Infrastructure.Persistence;
 using EngineeringPerformance.Infrastructure.Repositories;
+using EngineeringPerformance.Infrastructure.Settings;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -72,8 +76,12 @@ public static class DependencyInjection
         services.AddScoped<CreateProjectCommandHandler>();
         services.AddScoped<UpdateProjectCommandHandler>();
         services.AddScoped<ArchiveProjectCommandHandler>();
+        services.AddScoped<UnarchiveProjectCommandHandler>();
+        services.AddScoped<DeleteProjectCommandHandler>();
 
         services.AddScoped<IProjectExportService, ProjectExportService>();
+        services.AddScoped<IDirectoryExportService, DirectoryExportService>();
+        services.AddScoped<IForecastDetailSummaryTableContext, ForecastDetailSummaryTableContext>();
         services.AddScoped<IProjectsCatalogExportService, ProjectsCatalogExportService>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
         services.AddSingleton<SerilogLogStore>();
@@ -85,10 +93,15 @@ public static class DependencyInjection
         services.AddScoped<IProjectImportService, ProjectExcelDataImportService>();
         services.AddScoped<IDirectoryFacade, DirectoryFacade>();
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
+        services.AddScoped<ILaborIntensityRecalculationService, LaborIntensityRecalculationService>();
+        services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();
+        services.AddSingleton<INormCalculator, NormCalculator>();
+        services.AddSingleton<IDeviationCalculator, DeviationCalculator>();
         services.AddSingleton<IPerformanceCalculationEngine, PerformanceCalculationEngine>();
         services.AddScoped<IProjectVisibilityService, ProjectVisibilityService>();
         services.AddScoped<IProjectCharacteristicSelectionService, ProjectCharacteristicSelectionService>();
         services.AddScoped<IProjectVersionDeepCopyService, ProjectVersionDeepCopyService>();
+        services.AddScoped<IProjectVersionPlanningParameterService, ProjectVersionPlanningParameterService>();
         services.AddScoped<IProjectVersionService, ProjectVersionService>();
         services.AddScoped<IProjectDataService, ProjectDataService>();
         services.AddScoped<IPerformanceService, PerformanceService>();
@@ -99,8 +112,12 @@ public static class DependencyInjection
         services.AddScoped<ProjectsPageRawDataLoader>();
         services.AddScoped<IProjectsPageDataFetcher, ProjectsPageDataFetcher>();
         services.AddScoped<IProjectCompareService, ProjectCompareService>();
+        services.AddScoped<IFactAssessmentPipeline, FactAssessmentPipeline>();
+        services.AddScoped<ITrendAnalyticsService, TrendAnalyticsService>();
         services.AddScoped<IGroupAnalyticsService, GroupAnalyticsService>();
         services.AddScoped<IAnalyticsExportService, AnalyticsExportService>();
+        services.AddScoped<IChartImageRenderer, ScottPlotChartRenderer>();
+        services.AddScoped<IVisualReportService, VisualReportService>();
         services.AddScoped<IUserActionLogService, UserActionLogService>();
         services.AddScoped<IUserActionLogger, UserActionLogger>();
         services.AddScoped<IAccessRightsService, AccessRightsService>();
@@ -158,6 +175,7 @@ public static class DependencyInjection
 
         services.AddScoped<IDictionaryService, CachedDictionaryService>();
         services.AddScoped<ICacheInvalidator, DictionaryCacheInvalidator>();
+        services.AddScoped<ISystemSettingsService, SystemSettingsService>();
 
         var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
             ?? new JwtSettings();

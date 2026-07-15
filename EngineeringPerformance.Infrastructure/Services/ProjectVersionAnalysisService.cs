@@ -131,13 +131,24 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
             totalPlannedHours,
             unallocatedPlannedHours);
 
+        var planningRows = await ctx1.ProjectVersionPlanningParameters
+            .AsNoTracking()
+            .Where(p => p.ProjectAnalysisVersionId == versionId)
+            .Select(p => new { p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+            .ToListAsync();
+
+        var planningZByDirection = planningRows.ToDictionary(
+            p => p.IicWorkDirectionId,
+            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
+
         return new ProjectVersionAnalysisDto(
             ProjectName: version.Project.Name,
             ProjectCode: version.Project.Code,
             VersionName: version.VersionName,
             Directions: directions,
             LaborIntensities: laborRows,
-            Summary: summary);
+            Summary: summary,
+            PlanningZByDirection: planningZByDirection);
     }
 
     private static IReadOnlyList<ProjectVersionPhysicalVolumeDto> BuildPhysicalVolumes(

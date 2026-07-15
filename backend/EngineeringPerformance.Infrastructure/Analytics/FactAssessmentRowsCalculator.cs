@@ -17,6 +17,8 @@ internal sealed class FactFacilityRowInternal
 
 internal sealed class FactDetailRowInternal
 {
+    public int? RowId { get; init; }
+    public bool IsEquipment { get; init; }
     public string FacilityCode { get; init; } = string.Empty;
     public string FacilityName { get; init; } = string.Empty;
     public string DocumentSet { get; init; } = string.Empty;
@@ -102,6 +104,8 @@ internal static class FactAssessmentRowsCalculator
 
             detailRows.Add(new FactDetailRowInternal
             {
+                RowId = pv.Id,
+                IsEquipment = false,
                 FacilityCode = pv.FacilityCode ?? string.Empty,
                 FacilityName = pv.FacilityName ?? string.Empty,
                 DocumentSet = pv.DocumentSet ?? string.Empty,
@@ -135,6 +139,8 @@ internal static class FactAssessmentRowsCalculator
 
             detailRows.Add(new FactDetailRowInternal
             {
+                RowId = eq.Id,
+                IsEquipment = true,
                 FacilityCode = eq.FacilityCode ?? string.Empty,
                 FacilityName = eq.FacilityName ?? string.Empty,
                 DocumentSet = eq.DocumentSet ?? string.Empty,

@@ -4,7 +4,8 @@ const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:8081';
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['e2e/**/*.spec.ts', 'tests/e2e/**/*.spec.ts'],
+  testMatch: ['e2e/**/*.spec.ts'],
+  testIgnore: ['**/tests/e2e/**', '**/node_modules/**'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

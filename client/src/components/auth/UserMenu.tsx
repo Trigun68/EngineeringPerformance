@@ -42,8 +42,13 @@ export function UserMenu() {
 
   if (!user) return null;
 
-  const displayName = profile?.displayName?.trim() || '';
-  const showNameBlock = displayName.length > 0;
+  const portalDisplayName = (profile?.displayName || user.displayName || '').trim();
+  const portalLogin = (profile?.login || user.username || '').trim();
+  const windowsAccount = profile?.windowsAccount?.trim() || '';
+  const showWindowsAccount =
+    windowsAccount.length > 0 &&
+    windowsAccount.localeCompare(portalLogin, undefined, { sensitivity: 'accent' }) !== 0;
+  const showNameBlock = portalDisplayName.length > 0;
 
   return (
     <>
@@ -69,12 +74,12 @@ export function UserMenu() {
         }}
       >
         <Avatar sx={{ width: 36, height: 36, bgcolor: wpColors.accent, fontSize: 14 }}>
-          {(displayName.charAt(0) || user.displayName?.charAt(0) || '?').toUpperCase()}
+          {(portalDisplayName.charAt(0) || portalLogin.charAt(0) || '?').toUpperCase()}
         </Avatar>
         {showNameBlock && (
           <Box>
             <Typography sx={{ color: wpColors.heading, fontSize: 14, fontWeight: 600, lineHeight: 1.2 }}>
-              {displayName}
+              {portalDisplayName}
             </Typography>
             <Typography sx={{ color: wpColors.muted, fontSize: 12 }}>
               {profile?.role || user.roleName}
@@ -89,8 +94,33 @@ export function UserMenu() {
         onClose={() => setAnchorEl(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { minWidth: 220, mt: 0.5 } } }}
+        slotProps={{ paper: { sx: { minWidth: 260, mt: 0.5 } } }}
       >
+        {(portalDisplayName || portalLogin) && (
+          <>
+            <Box sx={{ px: 2, py: 1.25 }}>
+              <Typography variant="caption" sx={{ color: wpColors.muted, display: 'block' }}>
+                Пользователь
+              </Typography>
+              {portalDisplayName && (
+                <Typography variant="body2" sx={{ fontWeight: 600, color: wpColors.heading, wordBreak: 'break-all' }}>
+                  {portalDisplayName}
+                </Typography>
+              )}
+              {portalLogin && (
+                <Typography variant="caption" sx={{ color: wpColors.muted, display: 'block', mt: 0.25 }}>
+                  {portalLogin}
+                </Typography>
+              )}
+              {showWindowsAccount && (
+                <Typography variant="caption" sx={{ color: wpColors.muted, display: 'block', mt: 0.5 }}>
+                  Windows: {windowsAccount}
+                </Typography>
+              )}
+            </Box>
+            <Divider />
+          </>
+        )}
         <MenuItem
           onClick={() => {
             setAnchorEl(null);

@@ -14,7 +14,7 @@ public sealed class DirectoriesApiTests : IClassFixture<ApiWebApplicationFactory
     public DirectoriesApiTests(ApiWebApplicationFactory factory)
     {
         _client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
-        _sqlAvailable = IntegrationTestAuth.TryLoginAsAdminAsync(_client).GetAwaiter().GetResult();
+        _sqlAvailable = IntegrationTestAuth.EnsureSqlAvailable(_client);
     }
 
     [Fact]
@@ -63,6 +63,21 @@ public sealed class DirectoriesApiTests : IClassFixture<ApiWebApplicationFactory
 
         var childrenResponse = await _client.GetAsync("/api/directories/physical-volumes-kfo/children?parentId=1");
         childrenResponse.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task PhysicalVolumesKfo_InvalidClassifierId_ReturnsNotFound()
+    {
+        if (!_sqlAvailable) return;
+
+        var response = await _client.PostAsJsonAsync("/api/directories/physical-volumes-kfo", new
+        {
+            name = $"fk-test-{Guid.NewGuid():N}"[..20],
+            sortOrder = 0,
+            properties = new { classifierId = 9_999_999 },
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Theory]

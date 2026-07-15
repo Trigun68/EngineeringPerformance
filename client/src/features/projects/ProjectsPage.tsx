@@ -33,6 +33,7 @@ import {
   createCompareSummaryColumns,
   createDetailColumns,
   createFacilityColumns,
+  createForecastFacilityColumns,
   createForecastSummaryColumns,
   createPerformanceColumns,
 } from './gridColumns';
@@ -156,13 +157,13 @@ export function ProjectsPage() {
       case 'forecast-summary':
         return {
           rowData: pageData.forecast.summary,
-          columnDefs: createForecastSummaryColumns(formatters),
+          columnDefs: createForecastSummaryColumns(),
           gridId: `pp-${projectId}-forecast-summary`,
         };
       case 'forecast-facility':
         return {
           rowData: pageData.forecast.facility,
-          columnDefs: createFacilityColumns(),
+          columnDefs: createForecastFacilityColumns(),
           gridId: `pp-${projectId}-forecast-facility`,
         };
       case 'forecast-detail':

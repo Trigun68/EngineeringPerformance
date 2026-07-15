@@ -1,4 +1,4 @@
-import type { ForecastIicVolumeRow, PerformanceRow, VersionCompareDetailRow, VersionCompareFacilityRow, VersionCompareRow } from '../../api/analyticsApi';
+import type { PerformanceRow, VersionCompareDetailRow, VersionCompareFacilityRow, VersionCompareRow } from '../../api/analyticsApi';
 
 export type GridTabId =
   | 'forecast-summary'
@@ -11,16 +11,36 @@ export type GridTabId =
   | 'compare-facility'
   | 'compare-detail';
 
+export interface ProjectsPageForecastSummaryRow {
+  workDirectionId: number;
+  displayName: string;
+  normUnitName: string;
+  factPhysicalVolume: number | null;
+  normProductivity: number | null;
+  baseHours: number | null;
+  optimisticHours: number | null;
+  pessimisticHours: number | null;
+  isTotal: boolean;
+  level: number;
+  parentId?: number | null;
+  code?: string;
+  hierarchy?: string[];
+}
+
 export interface ProjectsPageFacilityRow {
   facilityCode: string;
   facilityName: string;
   laborHours: number | null;
   zScore: number | null;
   interpretation: string;
+  baseHours?: number | null;
+  optimisticHours?: number | null;
+  pessimisticHours?: number | null;
 }
 
 export interface ProjectsPageDetailRow {
   rowId: number | null;
+  classifierId?: number | null;
   facilityCode: string;
   facilityName: string;
   documentSet: string;
@@ -39,12 +59,35 @@ export interface ProjectsPageDetailRow {
   zScore: number | null;
   interpretation: string;
   isEquipment: boolean;
+  bindingType?: string;
+  catalogId?: string;
+  tag?: string;
+  itemName?: string;
+  workComment?: string;
+  estimationBasis?: string;
+  pvCode?: string;
+  pvName?: string;
+  isAssessment?: string;
+  coefficient?: number | null;
+  normProductivity?: number | null;
+  normStdDev?: number | null;
+  normId?: number | null;
+  catalogVolumeId?: number | null;
+  catalogEquipmentId?: number | null;
+  catalogResource?: string;
+}
+
+export interface ForecastScenarioTotals {
+  baseHours: number;
+  optimisticHours: number;
+  pessimisticHours: number;
 }
 
 export interface ProjectsPageForecastGrids {
-  summary: ForecastIicVolumeRow[];
+  summary: ProjectsPageForecastSummaryRow[];
   facility: ProjectsPageFacilityRow[];
   detail: ProjectsPageDetailRow[];
+  grandTotals: ForecastScenarioTotals;
 }
 
 export interface ProjectsPageFactGrids {

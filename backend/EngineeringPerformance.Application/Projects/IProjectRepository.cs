@@ -7,7 +7,12 @@ public interface IProjectRepository
 {
     Task<IReadOnlyList<ProjectDto>> GetAllAsync(CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<ProjectDto>> GetAllForUserAsync(int userId, IReadOnlyList<int> accessibleProjectIds, bool isAdministrator, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<ProjectDto>> GetAllForUserAsync(
+        int userId,
+        IReadOnlyList<int> accessibleProjectIds,
+        bool isAdministrator,
+        bool includeArchived = false,
+        CancellationToken cancellationToken = default);
 
     Task<ProjectDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
@@ -18,4 +23,6 @@ public interface IProjectRepository
     Task AddAsync(Project project, CancellationToken cancellationToken = default);
 
     void Update(Project project);
+
+    Task DeleteAsync(Project project, CancellationToken cancellationToken = default);
 }

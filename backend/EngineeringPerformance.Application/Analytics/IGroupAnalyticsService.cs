@@ -2,7 +2,7 @@ namespace EngineeringPerformance.Application.Analytics;
 
 public interface IGroupAnalyticsService
 {
-    Task<GroupAnalyticsPlaceholderDto> GetGroupAnalysisAsync(CancellationToken cancellationToken = default);
+    Task<GroupAnalysisResultDto> GetGroupAnalysisAsync(int projectId, CancellationToken cancellationToken = default);
 
-    Task<GroupAnalyticsPlaceholderDto> GetGroupTrendAsync(CancellationToken cancellationToken = default);
+    Task<GroupTrendInfoDto> GetGroupTrendAsync(int projectId, CancellationToken cancellationToken = default);
 }

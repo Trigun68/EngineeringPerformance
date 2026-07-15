@@ -11,7 +11,12 @@ alwaysApply: true
 
 1. **Client** — `cd client && npm run build` (0 ошибок), если затронут frontend.
 2. **API tests** — `EngineeringPerformance.Api.Tests` (18+ тестов green), если затронут backend/логика.
-3. **Docker** — `docker compose build api web && docker compose up -d`, если менялись deploy/UI/API образы.
+3. **Docker** — всегда с пересборкой образов (см. `docker-rebuild-on-up.mdc`):
+   ```bash
+   docker compose build backend frontend && docker compose up -d
+   # или: docker compose up -d --build
+   ```
+   Имена сервисов: `backend` / `frontend` (не `api` / `web`). Без `--build` контейнеры стартуют со **старым** кодом.
 4. **Smoke API** — `./scripts/uat-smoke.sh http://localhost:8081` при API правках.
 5. **Playwright E2E** — обязательно при UI/frontend правках; см. `playwright-e2e-verify.mdc`.
    ```bash

@@ -1,0 +1,47 @@
+---
+description: Все проверки (сборка, тесты, smoke) агент выполняет сам — без делегирования пользователю
+alwaysApply: true
+---
+
+# Самостоятельная верификация
+
+Агент **сам** запускает все проверки. Не просить пользователя «запустите тесты», «проверьте в браузере», «выполните smoke» — делать это через Shell.
+
+## Обязательно после изменений кода
+
+| Шаг | Когда | Команда |
+|-----|-------|---------|
+| Client build | затронут `client/` | `cd client && npm run build` |
+| API tests | затронут `backend/` или логика | Docker SDK (см. ниже) |
+| Docker rebuild | UI/API/миграции | `docker compose build backend frontend && docker compose up -d` (всегда `--build`; см. `docker-rebuild-on-up.mdc`) |
+| Smoke API | после deploy или крупных фич | `./scripts/uat-smoke.sh` и/или `./scripts/perf-smoke.sh` |
+| E2E Playwright | затронут `client/` или UI-поведение | `cd client && npm run test:e2e:docker` (Docker; web на `E2E_BASE_URL`, default :8081) |
+
+### API tests (если `dotnet` недоступен на хосте)
+
+```bash
+docker run --rm --network host \
+  -v "$(pwd)/backend:/src" -w /src \
+  mcr.microsoft.com/dotnet/sdk:8.0 \
+  dotnet test EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.Tests.csproj --verbosity minimal
+```
+
+### Полная сборка solution (если `dotnet` на хосте)
+
+```bash
+dotnet build EngineeringPerformance.slnx
+dotnet test EngineeringPerformance.slnx
+```
+
+## Правила поведения
+
+1. **Не считать задачу выполненной**, пока проверки не прогнаны и не зелёные (или явно задокументирован блокер среды).
+2. **Не предлагать пользователю** ручной чеклист вместо автоматического прогона — сначала выполнить самому.
+3. **При падении** — исправить и перезапустить проверки (до 3 попыток), не останавливаться на «нужно проверить».
+4. **В отчёте** кратко: что запускалось, результат (OK / N failed / причина skip).
+5. **Исключения**: пользователь явно написал «не запускай», «только ревью», «без shell» — тогда не запускать, но указать что не проверено.
+
+## Web vs WPF
+
+- Prod-целевой стек: `backend/` + `client/` + Docker (`http://localhost:${WEB_PORT:-8081}`).
+- `EngineeringPerformance.App` — reference only; не запускать WPF, если задача про web.

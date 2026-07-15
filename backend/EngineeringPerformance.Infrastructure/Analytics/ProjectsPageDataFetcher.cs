@@ -38,7 +38,7 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
 
         var forecastTask = Task.Run(() =>
         {
-            return ProjectsPageGridBuilder.BuildForecastGrids(primaryBundle, primaryPerformance);
+            return ProjectsPageGridBuilder.BuildForecastGrids(primaryBundle, primaryPerformance, _calculationEngine);
         }, cancellationToken);
 
         var factTask = Task.Run(() =>

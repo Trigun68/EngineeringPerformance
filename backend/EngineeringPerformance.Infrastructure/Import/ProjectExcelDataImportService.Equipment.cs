@@ -11,11 +11,19 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 public sealed partial class ProjectExcelDataImportService
 {
-    private async Task<DataImportResultDto> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description)
+    private Task<DataImportResultDto> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description) =>
+        ExecuteWithRetryableTransactionAsync(context =>
+            ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description));
+
+    private async Task<DataImportResultDto> ImportEquipmentCoreAsync(
+        AppDbContext context,
+        int projectId,
+        int versionId,
+        string filePath,
+        string description)
     {
-        // Один DbContext + одна транзакция на весь импорт (Replace/Upsert, skip ошибок ≠ rollback).
-        await using var context = await _contextFactory.CreateDbContextAsync();
-        await using var transaction = await context.Database.BeginTransactionAsync();
+        // Паритет WPF: полная замена данных оборудования версии перед импортом.
+        await ClearEquipmentDataForVersionAsync(context, projectId, versionId);
 
         var iteration = new DataImportIteration
         {
@@ -35,7 +43,6 @@ public sealed partial class ProjectExcelDataImportService
 
         if (!TryResolveEquipmentImportLayout(worksheet, out var columnMap, out var firstDataRowNumber))
         {
-            await transaction.CommitAsync();
             iteration.RecordCount = 0;
             await context.SaveChangesAsync();
             return new DataImportResultDto(
@@ -64,7 +71,7 @@ public sealed partial class ProjectExcelDataImportService
         var skippedDuplicateCount = 0;
         var skippedDuplicateRows = new List<(int RowNumber, string Name, string Unit)>();
         var importTimestamp = iteration.ImportedAt;
-        var rowInputs = new List<EquipmentImportReplaceProcessor.RowInput>();
+        var newEntities = new List<ProjectEquipment>();
         var dictionaryValidator = new EquipmentImportDictionaryValidator(_dictionaryService);
         var dictionaryColumnFlags = new EquipmentImportDictionaryValidator.EquipmentDictionaryColumnFlags(
             columnMap.HasUnitIdColumn,
@@ -80,14 +87,7 @@ public sealed partial class ProjectExcelDataImportService
 
             var catalogName = GetWorksheetCellString(worksheet, rowNumber, columnMap.CatalogName)?.Trim();
             if (string.IsNullOrWhiteSpace(catalogName))
-            {
-                rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
-                    rowNumber,
-                    TryParseEquipmentRowId(row, columnMap),
-                    new ProjectEquipment(),
-                    IsValid: false));
                 continue;
-            }
 
             var dictionaryRefs = ParseEquipmentDictionaryRefs(row, columnMap);
             var validationError = await dictionaryValidator.ValidateRowAsync(
@@ -115,11 +115,6 @@ public sealed partial class ProjectExcelDataImportService
             {
                 skippedDuplicateCount++;
                 skippedDuplicateRows.Add((rowNumber, catalogName, rawUnitName));
-                rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
-                    rowNumber,
-                    TryParseEquipmentRowId(row, columnMap),
-                    new ProjectEquipment(),
-                    IsValid: false));
                 _logger.LogWarning(
                     "Equipment import row {Row}: skipped duplicate catalog key Name='{Name}', Unit='{Unit}' (UnitId={UnitId})",
                     rowNumber,
@@ -135,63 +130,54 @@ public sealed partial class ProjectExcelDataImportService
             if (dictionaryRefs.DirectionId is int directionId)
                 resolveResult.Equipment.ClassifierId = directionId;
 
-            var draft = BuildProjectEquipmentFromImportRow(
-                row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp);
+            newEntities.Add(BuildProjectEquipmentFromImportRow(
+                row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp));
+        }
 
-            rowInputs.Add(new EquipmentImportReplaceProcessor.RowInput(
-                rowNumber,
-                TryParseEquipmentRowId(row, columnMap),
-                draft,
-                IsValid: true));
+        if (newEntities.Count == 0)
+        {
+            iteration.RecordCount = 0;
+            await context.SaveChangesAsync();
+            var emptyDetails = EquipmentImportCatalogMatcher.BuildImportSummary(
+                0,
+                autoCreatedCount,
+                skippedDuplicateCount,
+                skippedDuplicateRows);
+            return new DataImportResultDto(
+                true,
+                0,
+                null,
+                iteration.Id,
+                emptyDetails,
+                dictionaryErrors);
         }
 
         if (pendingCatalogCreates.Count > 0)
             context.Equipments.AddRange(pendingCatalogCreates);
 
-        // Replace-стратегия: upsert по Id / натуральному ключу; ошибки строк — в RowErrors, транзакция коммитится.
-        var replaceResult = await EquipmentImportReplaceProcessor.ApplyAsync(
-            context,
-            projectId,
-            versionId,
-            rowInputs,
-            _logger);
+        context.ProjectEquipments.AddRange(newEntities);
+        iteration.RecordCount = newEntities.Count;
+        await context.SaveChangesAsync();
 
-        var allErrors = dictionaryErrors
-            .Concat(replaceResult.Errors)
+        var details = EquipmentImportCatalogMatcher.BuildImportSummary(
+            newEntities.Count,
+            autoCreatedCount,
+            skippedDuplicateCount,
+            skippedDuplicateRows);
+
+        var rowErrors = dictionaryErrors
             .Concat(skippedDuplicateRows.Select(s => new ImportRowErrorDto(
                 s.RowNumber,
                 $"Duplicate catalog key: {s.Name} ({s.Unit})")))
             .ToList();
 
-        await context.SaveChangesAsync();
-        iteration.RecordCount = replaceResult.ProcessedCount;
-        await context.SaveChangesAsync();
-        await transaction.CommitAsync();
-
-        var details = EquipmentImportCatalogMatcher.BuildImportSummary(
-            replaceResult.ProcessedCount,
-            autoCreatedCount,
-            skippedDuplicateCount,
-            skippedDuplicateRows);
-
         return new DataImportResultDto(
             true,
-            replaceResult.ProcessedCount,
+            newEntities.Count,
             null,
             iteration.Id,
             details,
-            allErrors);
-    }
-
-    private static int? TryParseEquipmentRowId(IXLRow row, EquipmentColumnMap map)
-    {
-        if (map.RowId <= 0)
-            return null;
-
-        var text = row.Cell(map.RowId).GetString()?.Trim();
-        return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) && id > 0
-            ? id
-            : null;
+            rowErrors.Count > 0 ? rowErrors : null);
     }
 
     private static bool EquipmentImportRowHasData(IXLRow row, EquipmentColumnMap map)
@@ -211,11 +197,10 @@ public sealed partial class ProjectExcelDataImportService
         var fbsSource = row.Cell(map.FacilitySource).GetString()?.Trim();
         var (facilityCode, facilityName) = SplitEquipmentFbs(fbsSource);
 
-        return new ProjectEquipment
+        var entity = new ProjectEquipment
         {
             ProjectId = projectId,
             ProjectAnalysisVersionId = versionId,
-            Equipment = equipment,
             CreatedAt = importTimestamp,
             Quantity = ParseDecimal(row.Cell(map.Quantity).GetString()),
             QuantityInWork = ParseNullableDecimal(row.Cell(map.QuantityInWork).GetString()),
@@ -234,6 +219,14 @@ public sealed partial class ProjectExcelDataImportService
             OlReference = TrimEquipmentField(row.Cell(map.OlReference).GetString()),
             EstimationBasis = TrimEquipmentField(row.Cell(map.EstimationBasis).GetString()),
         };
+
+        // Существующая номенклатура из справочника — только FK; иначе EF пытается INSERT с явным Id.
+        if (equipment.Id > 0)
+            entity.EquipmentId = equipment.Id;
+        else
+            entity.Equipment = equipment;
+
+        return entity;
     }
 
     private static (string? Code, string? Name) SplitEquipmentFbs(string? fbs)

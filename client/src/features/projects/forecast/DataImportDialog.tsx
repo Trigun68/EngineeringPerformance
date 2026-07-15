@@ -1,0 +1,239 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Checkbox,
+  FormControlLabel,
+  List,
+  ListItem,
+  ListItemText,
+  Typography,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import {
+  importProjectData,
+  previewLaborImport,
+  type ImportDataType,
+  type ImportRowError,
+} from '../../../api/importApi';
+import { getApiErrorMessage } from '../../../services/apiError';
+
+export interface DataImportDialogProps {
+  open: boolean;
+  dataType: ImportDataType;
+  projectId: number;
+  versionId: number;
+  onClose: () => void;
+  onSuccess?: () => void;
+}
+
+const DATA_TYPE_LABELS: Record<ImportDataType, string> = {
+  'physical-volumes': 'физические объёмы',
+  equipment: 'оборудование',
+  'labor-intensities': 'трудоёмкость',
+};
+
+function formatRowError(error: ImportRowError): string {
+  return `Строка ${error.rowNumber}: ${error.message}`;
+}
+
+export function DataImportDialog({
+  open,
+  dataType,
+  projectId,
+  versionId,
+  onClose,
+  onSuccess,
+}: DataImportDialogProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<ImportRowError[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [laborPreview, setLaborPreview] = useState<string[]>([]);
+  const [laborPreviewInfo, setLaborPreviewInfo] = useState<string | null>(null);
+  const [addMissingLabor, setAddMissingLabor] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+
+  const title = useMemo(
+    () => `Импорт: ${DATA_TYPE_LABELS[dataType]}`,
+    [dataType],
+  );
+
+  const resetState = useCallback(() => {
+    setPendingFile(null);
+    setImporting(false);
+    setResult(null);
+    setRowErrors([]);
+    setError(null);
+    setLaborPreview([]);
+    setLaborPreviewInfo(null);
+    setAddMissingLabor(false);
+    setPreviewing(false);
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      resetState();
+    }
+  }, [open, dataType, resetState]);
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xls')) {
+      setError('Выберите файл Excel (.xlsx или .xls).');
+      setPendingFile(null);
+      return;
+    }
+
+    setError(null);
+    setResult(null);
+    setRowErrors([]);
+    setLaborPreview([]);
+    setLaborPreviewInfo(null);
+    setPendingFile(file);
+
+    if (dataType === 'labor-intensities') {
+      setPreviewing(true);
+      try {
+        const preview = await previewLaborImport(projectId, versionId, file);
+        setLaborPreview(preview.unmatchedDocumentTypes);
+        setLaborPreviewInfo(
+          `Строк в файле: ${preview.totalDataRows}. Не найдено в справочнике: ${preview.unmatchedDocumentTypes.length}`,
+        );
+      } catch (err) {
+        setError(getApiErrorMessage(err, 'Не удалось выполнить предпросмотр файла.'));
+        setPendingFile(null);
+      } finally {
+        setPreviewing(false);
+      }
+    }
+  };
+
+  const handleImport = async () => {
+    if (!pendingFile) return;
+    setImporting(true);
+    setError(null);
+    setRowErrors([]);
+    try {
+      const res = await importProjectData(projectId, versionId, dataType, pendingFile, {
+        addMissingLaborToCatalog: dataType === 'labor-intensities' ? addMissingLabor : undefined,
+      });
+      setResult(`Импортировано записей: ${res.importedRows}${res.details ? `. ${res.details}` : ''}`);
+      setRowErrors(res.rowErrors ?? []);
+      setPendingFile(null);
+      onSuccess?.();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выполнить импорт.'));
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const rowErrorLines = useMemo(
+    () => rowErrors.map(formatRowError),
+    [rowErrors],
+  );
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth data-testid="data-import-dialog">
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
+        {title}
+        <IconButton aria-label="Закрыть" onClick={onClose} size="small">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Загрузите Excel-файл для импорта {DATA_TYPE_LABELS[dataType]} в выбранную версию.
+        </Typography>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx,.xls"
+          hidden
+          onChange={handleFileChange}
+        />
+        <Button
+          variant="outlined"
+          startIcon={<UploadFileIcon />}
+          disabled={importing}
+          onClick={() => inputRef.current?.click()}
+        >
+          Выбрать файл
+        </Button>
+        {pendingFile && (
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Файл: <strong>{pendingFile.name}</strong>
+          </Typography>
+        )}
+        {laborPreviewInfo && (
+          <Alert severity="info" sx={{ mt: 2 }}>{laborPreviewInfo}</Alert>
+        )}
+        {dataType === 'labor-intensities' && laborPreview.length > 0 && (
+          <FormControlLabel
+            sx={{ mt: 1, display: 'block' }}
+            control={
+              <Checkbox
+                checked={addMissingLabor}
+                onChange={(e) => setAddMissingLabor(e.target.checked)}
+              />
+            }
+            label="Добавить отсутствующие типы документов в справочник"
+          />
+        )}
+        {previewing && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
+        {result && <Alert severity="success" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{result}</Alert>}
+        {rowErrors.length > 0 && (
+          <Alert severity="warning" sx={{ mt: 2 }} role="alert" aria-label="Ошибки строк импорта">
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Часть строк пропущена:
+            </Typography>
+            <List dense disablePadding>
+              {rowErrorLines.map((line) => (
+                <ListItem key={line} disablePadding sx={{ py: 0.25 }}>
+                  <ListItemText primary={line} primaryTypographyProps={{ variant: 'body2' }} />
+                </ListItem>
+              ))}
+            </List>
+          </Alert>
+        )}
+        {importing && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+            <CircularProgress size={28} />
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Закрыть</Button>
+        <Button
+          variant="contained"
+          disabled={!pendingFile || importing}
+          onClick={() => void handleImport()}
+        >
+          {importing ? 'Импорт…' : 'Импортировать'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
