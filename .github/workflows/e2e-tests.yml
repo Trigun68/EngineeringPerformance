@@ -5,10 +5,23 @@ on:
     branches: [master, main, feat/*, fix/*]
     paths:
       - 'client/**'
+      - 'backend/**'
+      - 'migrations/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.ci.yml'
+      - 'scripts/docker-db-init.sh'
       - '.github/workflows/e2e-tests.yml'
   pull_request:
     paths:
       - 'client/**'
+      - 'backend/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.ci.yml'
+
+env:
+  COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+  SQL_SA_PASSWORD: Test_SA_password1!
+  JWT_SECRET: test-jwt-secret-minimum-32-characters-long
 
 jobs:
   e2e:
@@ -38,10 +51,18 @@ jobs:
       - name: Start stack
         run: |
           cp .env.example .env
-          echo "SQL_SA_PASSWORD=Test_SA_password1!" >> .env
-          echo "JWT_SECRET=test-jwt-secret-minimum-32-characters-long" >> .env
+          sed -i 's/^SQL_SA_PASSWORD=.*/SQL_SA_PASSWORD=Test_SA_password1!/' .env
+          sed -i 's/^JWT_SECRET=.*/JWT_SECRET=test-jwt-secret-minimum-32-characters-long/' .env
           echo "WEB_PORT=8081" >> .env
-          docker compose up -d --wait
+          docker compose up -d --build --wait || {
+            echo "=== ep-db-init logs ==="
+            docker logs ep-db-init || true
+            echo "=== ep-backend logs (tail) ==="
+            docker logs --tail 80 ep-backend || true
+            echo "=== ep-frontend logs (tail) ==="
+            docker logs --tail 40 ep-frontend || true
+            exit 1
+          }
 
       - name: Playwright E2E
         working-directory: client

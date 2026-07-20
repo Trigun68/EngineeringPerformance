@@ -5,19 +5,31 @@ on:
     branches: [master, main, feat/*, fix/*]
     paths:
       - 'backend/**'
+      - 'migrations/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.ci.yml'
+      - 'scripts/docker-db-init.sh'
       - '.github/workflows/api-tests.yml'
   pull_request:
     paths:
       - 'backend/**'
+      - 'migrations/**'
+      - 'docker-compose.yml'
+      - 'docker-compose.ci.yml'
+      - 'scripts/docker-db-init.sh'
+
+env:
+  COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
+  SQL_SA_PASSWORD: Test_SA_password1!
+  JWT_SECRET: test-jwt-secret-minimum-32-characters-long
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     env:
-      SQL_SA_PASSWORD: Your_strong_SA_password1!
-      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Your_strong_SA_password1!;TrustServerCertificate=True;"
-      EP_TEST_CONNECTION: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Your_strong_SA_password1!;TrustServerCertificate=True;"
+      ConnectionStrings__DefaultConnection: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
+      EP_TEST_CONNECTION: "Server=localhost,1433;Database=EngineeringPerformance;User Id=sa;Password=Test_SA_password1!;TrustServerCertificate=True;"
       Jwt__Secret: test-jwt-secret-minimum-32-characters-long
       Jwt__Issuer: EngineeringPerformance
       Jwt__Audience: EngineeringPerformance
@@ -28,10 +40,17 @@ jobs:
       - name: Start SQL + Redis + DB init
         run: |
           cp .env.example .env
-          echo "SQL_SA_PASSWORD=Test_SA_password1!" >> .env
-          echo "JWT_SECRET=test-jwt-secret-minimum-32-characters-long" >> .env
+          # Compose reads process env first; keep .env in sync to avoid dual passwords.
+          sed -i 's/^SQL_SA_PASSWORD=.*/SQL_SA_PASSWORD=Test_SA_password1!/' .env
+          sed -i 's/^JWT_SECRET=.*/JWT_SECRET=test-jwt-secret-minimum-32-characters-long/' .env
           echo "WEB_PORT=8081" >> .env
-          docker compose up -d sqlserver redis db-init --wait
+          docker compose up -d sqlserver redis db-init --wait || {
+            echo "=== ep-db-init logs ==="
+            docker logs ep-db-init || true
+            echo "=== ep-sqlserver logs (tail) ==="
+            docker logs --tail 80 ep-sqlserver || true
+            exit 1
+          }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
