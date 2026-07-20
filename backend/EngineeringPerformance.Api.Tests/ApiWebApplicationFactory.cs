@@ -15,11 +15,16 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
                 Environment.GetEnvironmentVariable("EP_TEST_CONNECTION")
                 ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
 
+            var jwtSecret =
+                Environment.GetEnvironmentVariable("Jwt__Secret")
+                ?? Environment.GetEnvironmentVariable("JWT_SECRET")
+                ?? "dev-jwt-secret-change-in-production-32chars";
+
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] =
                     explicitConnection ?? BuildDefaultConnectionString(),
-                ["Jwt:Secret"] = "dev-jwt-secret-change-in-production-32chars",
+                ["Jwt:Secret"] = jwtSecret,
                 ["Jwt:ExpirationMinutes"] = "60",
             });
         });

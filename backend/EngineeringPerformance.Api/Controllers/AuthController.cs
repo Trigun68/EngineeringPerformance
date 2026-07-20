@@ -290,7 +290,10 @@ public sealed class AuthController : ControllerBase
         {
             HttpOnly = true,
             Secure = _environment.IsProduction() || Request.IsHttps,
-            SameSite = SameSiteMode.Strict,
+            // Strict ломает cookie jar HttpClient в интеграционных тестах (WebApplicationFactory).
+            SameSite = _environment.IsEnvironment("Development") || _environment.IsEnvironment("Testing")
+                ? SameSiteMode.Lax
+                : SameSiteMode.Strict,
             Expires = expires,
             Path = "/",
         });

@@ -21,7 +21,9 @@ on:
 env:
   COMPOSE_FILE: docker-compose.yml:docker-compose.ci.yml
   SQL_SA_PASSWORD: Test_SA_password1!
+  # Must match ApiWebApplicationFactory / Jwt__Secret used by WebApplicationFactory host.
   JWT_SECRET: test-jwt-secret-minimum-32-characters-long
+  Jwt__Secret: test-jwt-secret-minimum-32-characters-long
 
 jobs:
   test:
