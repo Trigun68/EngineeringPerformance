@@ -46,9 +46,9 @@ services:
       SQL_HOST: sqlserver
     volumes:
       - ./migrations:/migrations:ro
-      - ./scripts:/scripts:ro
-    # Явный путь в /scripts (не /init.sh) — надёжнее в CI/образах mssql.
-    entrypoint: ["/bin/bash", "/scripts/docker-db-init.sh"]
+      # Не монтировать в /scripts — в образе mssql этот путь занят/пустой volume.
+      - ./scripts/docker-db-init.sh:/ep-init/docker-db-init.sh:ro
+    entrypoint: ["/bin/bash", "/ep-init/docker-db-init.sh"]
     networks:
       - internal
     restart: "no"

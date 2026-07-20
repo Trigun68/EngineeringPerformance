@@ -57,8 +57,13 @@ _dev/
 # Session reports (рабочие артефакты)
 _work/
 
-# Utility scripts
-scripts/
+# Utility scripts — локальные хелперы вне git; SoT для Docker/CI — явно include
+scripts/*
+!scripts/docker-db-init.sh
+!scripts/uat-smoke.sh
+!scripts/perf-smoke.sh
+!scripts/quality-gates.sh
+!scripts/nginx-entrypoint.sh
 
 # Misc artifacts
 backups/
