@@ -3,7 +3,6 @@ import {
   Alert,
   Box,
   Button,
-  Grid,
   Stack,
   Tab,
   Tabs,
@@ -23,8 +22,10 @@ import {
   exportForecastFacilityPdf,
   fetchProjectsPageData,
 } from '../../../api/projectsPageApi';
+import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { exportForecastSummaryPdf } from '../../../api/visualReportsApi';
 import { DataTable, type ContextMenuItem } from '../../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import {
   ANALYSIS_PLAN,
   buildVersionLabel,
@@ -33,6 +34,11 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { getApiErrorMessage } from '../../../services/apiError';
+import {
+  LAST_PROJECT_PREF_KEY,
+  parsePrefId,
+  planVersionPrefKey,
+} from '../../../utils/projectWorkspacePrefs';
 import {
   createForecastDetailColumns,
   createForecastFacilityColumns,
@@ -43,12 +49,15 @@ import { DataImportDialog } from './DataImportDialog';
 import { ForecastReportDialog } from './ForecastReportDialog';
 import { IterationDeleteDialog } from './IterationDeleteDialog';
 import { PlanningParametersDialog } from './PlanningParametersDialog';
-import { importToolbarStackSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { panelPrimaryToolbarSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { PanelNotificationsButton } from '../shared/PanelNotificationsButton';
+import { useWorkspaceChrome } from '../shared/workspaceChromeContext';
+import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import { ProjectEquipmentQuickEditDialog } from './ProjectEquipmentQuickEditDialog';
 import { ProjectPhysicalVolumeQuickEditDialog } from './ProjectPhysicalVolumeQuickEditDialog';
 import { ForecastDetailCatalogDialog } from './ForecastDetailCatalogDialog';
 import { ForecastDetailNormDialog } from './ForecastDetailNormDialog';
-import { collectNormFallbackWarnings } from './normFallbackWarning';
+import { collectForecastVolumeWarnings } from './normFallbackWarning';
 
 type ForecastSubTab = 'forecast-total' | 'forecast-facility' | 'forecast-detail';
 type ImportDialogType = Extract<ImportDataType, 'physical-volumes' | 'equipment'> | null;
@@ -86,6 +95,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
   const { canEdit: canEditPvCatalog } = usePermission('PhysicalVolumes');
   const { canEdit: canEditEquipmentCatalog } = usePermission('Equipment');
   const { canEdit: canEditNorms } = usePermission('IicWorkDirectionNorms');
+  const { chromeExpanded, setVersionSummary } = useWorkspaceChrome();
 
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [planVersionId, setPlanVersionId] = useState<number | null>(null);
@@ -117,6 +127,8 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
     unitLabel: string;
   } | null>(null);
 
+  const planPrefKey = planVersionPrefKey(projectId);
+
   useEffect(() => {
     setPlanVersionId(null);
     setPlanVersionLabel('');
@@ -124,23 +136,40 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
     setError(null);
   }, [projectId]);
 
-  const loadVersions = useCallback(async () => {
-    const list = await fetchProjectVersions(projectId);
-    setVersions(list);
-    let chosen: ProjectVersion | null = null;
-    setPlanVersionId((prev) => {
-      if (prev != null) {
-        const existing = list.find((v) => v.id === prev);
-        if (existing) {
-          chosen = existing;
-          return prev;
-        }
-      }
-      chosen = list.find((v) => v.direction === ANALYSIS_PLAN) ?? list[0] ?? null;
-      return chosen?.id ?? null;
-    });
-    setPlanVersionLabel(chosen ? buildVersionLabel(chosen) : '');
+  // Запоминаем последний открытый проект для восстановления после входа/перезагрузки.
+  useEffect(() => {
+    void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(projectId) });
   }, [projectId]);
+
+  // Подпись версии в компактной строке; не сбрасываем на cleanup при каждом
+  // обновлении контекста chrome — иначе лишние ре-рендеры шапки.
+  useEffect(() => {
+    setVersionSummary(planVersionLabel || null);
+  }, [planVersionLabel, setVersionSummary]);
+
+  useEffect(() => () => setVersionSummary(null), [setVersionSummary]);
+
+  const loadVersions = useCallback(async () => {
+    const [list, prefs] = await Promise.all([
+      fetchProjectVersions(projectId),
+      getUserPreferences().catch(() => ({} as Record<string, string>)),
+    ]);
+    setVersions(list);
+    const savedId = parsePrefId(prefs[planPrefKey]);
+    const saved = savedId != null ? list.find((v) => v.id === savedId) : undefined;
+    const chosen =
+      saved
+      ?? list.find((v) => v.direction === ANALYSIS_PLAN)
+      ?? list[0]
+      ?? null;
+    if (chosen) {
+      setPlanVersionId(chosen.id);
+      setPlanVersionLabel(buildVersionLabel(chosen));
+    } else {
+      setPlanVersionId(null);
+      setPlanVersionLabel('');
+    }
+  }, [planPrefKey, projectId]);
 
   const loadPageData = useCallback(async () => {
     if (!planVersionId || !canRead) return;
@@ -168,6 +197,10 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
   const handleVersionSelect = (version: ProjectVersion) => {
     setPlanVersionId(version.id);
     setPlanVersionLabel(buildVersionLabel(version));
+    void putUserPreferences({
+      [planPrefKey]: String(version.id),
+      [LAST_PROJECT_PREF_KEY]: String(projectId),
+    });
   };
 
   const handleExportFacility = async (type: 'excel' | 'pdf') => {
@@ -386,9 +419,11 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
   const summaryColumns = useMemo(() => createForecastSummaryColumns(), []);
   const facilityColumns = useMemo(() => createForecastFacilityColumns(), []);
   const summaryRows = pageData?.forecast.summary ?? [];
+  const facilityRows = pageData?.forecast.facility ?? [];
+  const detailRows = pageData?.forecast.detail ?? [];
   const normFallbackWarnings = useMemo(
     () =>
-      collectNormFallbackWarnings(
+      collectForecastVolumeWarnings(
         summaryRows
           .filter((r) => !r.isTotal)
           .map((r) => ({
@@ -398,11 +433,14 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
             normProductivity: r.normProductivity,
             baseHours: r.baseHours,
           })),
+        detailRows.map((r) => ({
+          isAssessment: r.isAssessment,
+          classifierId: r.classifierId,
+          quantity: r.quantity,
+        })),
       ),
-    [summaryRows],
+    [summaryRows, detailRows],
   );
-  const facilityRows = pageData?.forecast.facility ?? [];
-  const detailRows = pageData?.forecast.detail ?? [];
 
   const facilityPinnedBottomRow = useMemo((): ProjectsPageFacilityRow[] => {
     if (facilityRows.length === 0) return [];
@@ -427,6 +465,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
     () => ({
       headerName: 'Направление',
       minWidth: 260,
+      flex: 1,
       field: 'displayName' as const,
       cellRendererParams: { suppressCount: true },
     }),
@@ -451,105 +490,110 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <Grid item xs={12} md={6}>
-          <Stack direction="row" spacing={2} alignItems="center">
+      <WorkingOverlay open={exporting} />
+      {chromeExpanded && (
+        <>
+      <Stack direction="row" sx={panelPrimaryToolbarSx}>
+        <Button
+          variant="contained"
+          onClick={() => setVersionPickerOpen(true)}
+          sx={{
+            backgroundColor: '#2980B9',
+            color: 'white',
+            '&:hover': { backgroundColor: '#2471A3' },
+          }}
+        >
+          📋 Версия (план)
+        </Button>
+        {planVersionLabel && (
+          <Box
+            data-testid="plan-version-label"
+            sx={{
+              backgroundColor: '#EBF5FB',
+              border: '1px solid #AED6F1',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 1,
+              maxWidth: { xs: '100%', sm: 320 },
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
+              {planVersionLabel}
+            </Typography>
+          </Box>
+        )}
+        {planVersionId && (
+          <Button
+            variant="outlined"
+            onClick={() => setPlanningOpen(true)}
+            sx={{ textTransform: 'none' }}
+          >
+            Параметры планирования
+          </Button>
+        )}
+        {canImport && (
+          <>
             <Button
-              variant="contained"
-              onClick={() => setVersionPickerOpen(true)}
-              sx={{
-                backgroundColor: '#2980B9',
-                color: 'white',
-                '&:hover': { backgroundColor: '#2471A3' },
-              }}
+              variant="outlined"
+              size="small"
+              disabled={!planVersionId || loading}
+              onClick={() => setImportDialogType('physical-volumes')}
+              startIcon={<FileDownloadIcon />}
             >
-              📋 Версия (план)
+              Импорт ФО
             </Button>
-            {planVersionLabel && (
-              <Box
-                sx={{
-                  backgroundColor: '#EBF5FB',
-                  border: '1px solid #AED6F1',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="body2" sx={{ color: '#1A5276' }}>
-                  {planVersionLabel}
-                </Typography>
-              </Box>
-            )}
-            {planVersionId && (
-              <Button
-                variant="outlined"
-                onClick={() => setPlanningOpen(true)}
-                sx={{ textTransform: 'none' }}
-              >
-                Параметры планирования
-              </Button>
-            )}
-          </Stack>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Stack direction="row" spacing={1} sx={importToolbarStackSx}>
-            {canImport && (
-              <>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={!planVersionId || loading}
-                  onClick={() => setImportDialogType('physical-volumes')}
-                  startIcon={<FileDownloadIcon />}
-                >
-                  Импорт ФО
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={!planVersionId || loading}
-                  onClick={() => setDeleteDialogType('physical-volumes')}
-                  startIcon={<DeleteIcon />}
-                  color="error"
-                >
-                  Удалить ФО
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={!planVersionId || loading}
-                  onClick={() => setImportDialogType('equipment')}
-                  startIcon={<FileDownloadIcon />}
-                >
-                  Импорт оборуд.
-                </Button>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  disabled={!planVersionId || loading}
-                  onClick={() => setDeleteDialogType('equipment')}
-                  startIcon={<DeleteIcon />}
-                  color="error"
-                >
-                  Удалить оборуд.
-                </Button>
-              </>
-            )}
-          </Stack>
-        </Grid>
-      </Grid>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={!planVersionId || loading}
+              onClick={() => setDeleteDialogType('physical-volumes')}
+              startIcon={<DeleteIcon />}
+              color="error"
+            >
+              Удалить ФО
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={!planVersionId || loading}
+              onClick={() => setImportDialogType('equipment')}
+              startIcon={<FileDownloadIcon />}
+            >
+              Импорт оборуд.
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={!planVersionId || loading}
+              onClick={() => setDeleteDialogType('equipment')}
+              startIcon={<DeleteIcon />}
+              color="error"
+            >
+              Удалить оборуд.
+            </Button>
+          </>
+        )}
+      </Stack>
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-        <Tabs
-          value={subTab}
-          onChange={(_, v: ForecastSubTab) => setSubTab(v)}
-          sx={projectsPageSubTabsSx}
-        >
-          <Tab label="Итого" value="forecast-total" />
-          <Tab label="Итого по объекту" value="forecast-facility" />
-          <Tab label="Детально" value="forecast-detail" />
-        </Tabs>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
+          <Tabs
+            value={subTab}
+            onChange={(_, v: ForecastSubTab) => setSubTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{ ...projectsPageSubTabsSx, width: 'auto', flex: '0 1 auto' }}
+          >
+            <Tab label="Итого" value="forecast-total" />
+            <Tab label="Итого по объектам" value="forecast-facility" />
+            <Tab label="Детально" value="forecast-detail" />
+          </Tabs>
+          <PanelNotificationsButton
+            messages={normFallbackWarnings}
+            title="Предупреждения по нормам"
+          />
+        </Stack>
 
         <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
           {subTab === 'forecast-total' && (
@@ -643,14 +687,11 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '' }:
         </Stack>
       </Box>
 
-      {normFallbackWarnings.length > 0 && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          {normFallbackWarnings.map((w) => (
-            <div key={w}>{w}</div>
-          ))}
-        </Alert>
-      )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        </>
+      )}
+
+      <WorkspaceChromeToggleRow />
 
       <Box sx={{ flex: 1, minHeight: 360 }}>
         {subTab === 'forecast-total' && (

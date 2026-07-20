@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
-import { LAST_ROUTE_PREF_KEY } from './hooks/usePersistLastRoute';
 import { AppLayout } from './layout/AppLayout';
 import { AdminRouteGuard } from './components/auth/AdminRouteGuard';
 import { PermissionGuard, SettingsGuard } from './components/auth/PermissionGuard';
@@ -29,7 +28,7 @@ import { LogViewer } from './features/admin/LogViewer';
 import { HealthDashboard } from './features/admin/HealthDashboard';
 import { ConfigAudit } from './features/admin/ConfigAudit';
 import { useAuthStore } from './store/useAuthStore';
-import { isRouteAccessible } from './utils/routeAccess';
+import { resolvePreferredPath } from './utils/projectWorkspacePrefs';
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -43,17 +42,8 @@ function DefaultRedirect() {
     let cancelled = false;
     void getUserPreferences()
       .then((prefs) => {
-        if (cancelled) return;
-        const lastRoute = prefs[LAST_ROUTE_PREF_KEY];
-        if (
-          lastRoute
-          && user
-          && isRouteAccessible(lastRoute, user.permissions, user.roleName)
-        ) {
-          setTarget(lastRoute);
-          return;
-        }
-        setTarget(fallbackPath);
+        if (cancelled || !user) return;
+        setTarget(resolvePreferredPath(prefs, user.permissions, user.roleName, fallbackPath));
       })
       .catch(() => {
         if (!cancelled) setTarget(fallbackPath);

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -24,6 +22,7 @@ import {
   type ImportDataType,
   type ImportRowError,
 } from '../../../api/importApi';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../../services/apiError';
 
 export interface DataImportDialogProps {
@@ -149,10 +148,20 @@ export function DataImportDialog({
   );
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth data-testid="data-import-dialog">
+    <>
+      <WorkingOverlay open={importing || previewing} />
+      <Dialog
+        open={open}
+        onClose={() => {
+          if (!importing && !previewing) onClose();
+        }}
+        maxWidth="sm"
+        fullWidth
+        data-testid="data-import-dialog"
+      >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
         {title}
-        <IconButton aria-label="Закрыть" onClick={onClose} size="small">
+        <IconButton aria-label="Закрыть" onClick={onClose} size="small" disabled={importing || previewing}>
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -171,7 +180,7 @@ export function DataImportDialog({
         <Button
           variant="outlined"
           startIcon={<UploadFileIcon />}
-          disabled={importing}
+          disabled={importing || previewing}
           onClick={() => inputRef.current?.click()}
         >
           Выбрать файл
@@ -196,11 +205,6 @@ export function DataImportDialog({
             label="Добавить отсутствующие типы документов в справочник"
           />
         )}
-        {previewing && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <CircularProgress size={24} />
-          </Box>
-        )}
 
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
         {result && <Alert severity="success" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>{result}</Alert>}
@@ -218,22 +222,18 @@ export function DataImportDialog({
             </List>
           </Alert>
         )}
-        {importing && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-            <CircularProgress size={28} />
-          </Box>
-        )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Закрыть</Button>
+        <Button onClick={onClose} disabled={importing || previewing}>Закрыть</Button>
         <Button
           variant="contained"
-          disabled={!pendingFile || importing}
+          disabled={!pendingFile || importing || previewing}
           onClick={() => void handleImport()}
         >
-          {importing ? 'Импорт…' : 'Импортировать'}
+          {importing ? 'Работаю…' : 'Импортировать'}
         </Button>
       </DialogActions>
     </Dialog>
+    </>
   );
 }

@@ -8,6 +8,9 @@ test.describe('User menu', () => {
 
   test('opens profile menu and change password dialog', async ({ page }) => {
     await page.locator('[aria-label="Меню пользователя"]').click();
+    await expect(page.getByText('Пользователь')).toBeVisible();
+    await expect(page.getByText(/^Логин:/)).toBeVisible();
+    await expect(page.getByText('Windows-сессия клиента')).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Сменить пароль' })).toBeVisible();
     await page.getByRole('menuitem', { name: 'Сменить пароль' }).click();
     await expect(page.getByText('Смена пароля')).toBeVisible();

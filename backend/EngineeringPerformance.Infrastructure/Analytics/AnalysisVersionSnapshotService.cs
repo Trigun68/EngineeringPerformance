@@ -40,4 +40,22 @@ public static class AnalysisVersionSnapshotService
             });
         }
     }
+
+    /// <summary>
+    /// Удаляет прежний снимок и заполняет заново на <paramref name="versionCreatedAt"/>.
+    /// </summary>
+    public static async Task RepopulateSnapshotAsync(
+        AppDbContext context,
+        int versionId,
+        DateTime versionCreatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await context.AnalysisVersionSnapshots
+            .Where(s => s.ProjectAnalysisVersionId == versionId)
+            .ToListAsync(cancellationToken);
+        if (existing.Count > 0)
+            context.AnalysisVersionSnapshots.RemoveRange(existing);
+
+        await PopulateSnapshotAsync(context, versionId, versionCreatedAt, cancellationToken);
+    }
 }

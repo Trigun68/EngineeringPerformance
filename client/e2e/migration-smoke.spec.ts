@@ -79,8 +79,8 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     test.skip(projectId === null, 'No projects in database');
 
     await page.getByRole('tab', { name: 'Сравнение' }).click();
-    await page.getByRole('tab', { name: 'По объектам' }).click();
-    await expect(page.getByRole('tab', { name: 'По объектам' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: 'Итого по объектам' }).click();
+    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: 'Детально' }).click();
     await page.waitForSelector('.ag-root', { timeout: 15_000 });
   });

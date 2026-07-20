@@ -108,6 +108,11 @@ describe('ProjectsPage grids', () => {
     expect(cols.find((c) => c.field === 'factPhysicalVolume')).toBeDefined();
     expect(cols.find((c) => c.field === 'baseHours')).toBeDefined();
     expect(cols.find((c) => c.field === 'normUnitName')).toBeUndefined();
+    // Колонки должны быть растягиваемыми: width без maxWidth.
+    for (const col of cols) {
+      expect(col.maxWidth, `${String(col.field)} must not cap resize`).toBeUndefined();
+      expect(col.width ?? col.minWidth, `${String(col.field)} needs initial width`).toBeTruthy();
+    }
   });
 
   it('renders export toolbar buttons and calls export API', async () => {

@@ -19,6 +19,7 @@ public sealed class PhysicalVolumeBerConfiguration : IEntityTypeConfiguration<Ph
 
         builder.HasIndex(pv => pv.Code);
         builder.HasIndex(pv => pv.ClassifierId);
+        builder.HasIndex(pv => pv.PhysicalVolumeKfoId);
         builder.HasIndex(pv => pv.ParentId);
         builder.HasIndex(pv => pv.IsArchived);
         builder.HasIndex(pv => pv.IsAssessment);
@@ -35,6 +36,11 @@ public sealed class PhysicalVolumeBerConfiguration : IEntityTypeConfiguration<Ph
         builder.HasOne(pv => pv.Classifier)
             .WithMany()
             .HasForeignKey(pv => pv.ClassifierId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(pv => pv.PhysicalVolumeKfo)
+            .WithMany()
+            .HasForeignKey(pv => pv.PhysicalVolumeKfoId)
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasOne(pv => pv.Unit)

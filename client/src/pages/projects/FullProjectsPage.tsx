@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
@@ -38,9 +38,18 @@ import { ProjectCharacteristicsDialog } from '../../components/ProjectCharacteri
 import { ForecastPanel } from '../../features/projects/forecast/ForecastPanel';
 import { FactPanel } from '../../features/projects/fact/FactPanel';
 import { ComparePanel } from '../../features/projects/compare/ComparePanel';
+import { WorkspaceChromeProvider, useWorkspaceChrome } from '../../features/projects/shared/workspaceChromeContext';
+import { WorkspaceChromeToggleRow } from '../../features/projects/shared/WorkspaceChromeToggleRow';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
 import { useAuthStore } from '../../store/useAuthStore';
 import { canReadPermission } from '../../utils/permissionAccess';
+import {
+  LAST_PROJECT_PREF_KEY,
+  readHeaderExpanded,
+  writeHeaderExpanded,
+} from '../../utils/projectWorkspacePrefs';
+import { putUserPreferences } from '../../api/userPreferencesApi';
 
 type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'reports';
 
@@ -194,6 +203,17 @@ export function FullProjectsPage() {
     currentProjectId ? `projects.${currentProjectId}.mainTab` : 'projects.mainTab',
     'forecast',
   );
+  // Только localStorage: сворачивание шапки не должно бить API / перезагружать данные.
+  const [headerExpanded, setHeaderExpandedState] = useState(readHeaderExpanded);
+  const setHeaderExpanded = useCallback((expanded: boolean) => {
+    setHeaderExpandedState(expanded);
+    writeHeaderExpanded(expanded);
+  }, []);
+
+  const activeMainTabLabel =
+    visibleWorkspaceTabs.find((t) => t.value === mainTab)?.label
+    ?? WORKSPACE_TAB_CONFIG.find((t) => t.value === mainTab)?.label
+    ?? '';
 
   useEffect(() => {
     if (visibleWorkspaceTabs.length === 0) return;
@@ -216,6 +236,7 @@ export function FullProjectsPage() {
   useEffect(() => {
     if (currentProjectId) {
       setSelectionDialogOpen(false);
+      void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(currentProjectId) });
     }
   }, [currentProjectId]);
 
@@ -247,6 +268,7 @@ export function FullProjectsPage() {
   // Обработчики
   const handleSelectProject = (pid: number) => {
     setSelectionDialogOpen(false);
+    void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(pid) });
     navigate(`/projects/${pid}`);
   };
 
@@ -308,162 +330,193 @@ export function FullProjectsPage() {
   const { planVersionId, factVersionId, compareVersionAId, compareVersionBId } = data;
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* ═════════════════════════════════════════════════════════════════
-          ВЕРХНЯЯ ПАНЕЛЬ: Информация о проекте и кнопки действий
-         ═════════════════════════════════════════════════════════════════ */}
-      <Paper elevation={1} sx={{ p: 2, mb: 2, backgroundColor: '#F8F9FA' }}>
-        {/* Строка 1: Выбор проекта, код, название, метрики */}
-        <Box sx={{ mb: 2 }}>
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-            <Button
-              variant="contained"
-              onClick={() => setSelectionDialogOpen(true)}
-              sx={{
-                backgroundColor: '#3498DB',
-                color: 'white',
-                '&:hover': { backgroundColor: '#2980B9' },
-              }}
-            >
-              Выбрать проект
-            </Button>
-
-            {hasProject ? (
-              <>
-                <Box
+    <WorkspaceChromeProvider
+      chromeExpanded={headerExpanded}
+      setChromeExpanded={setHeaderExpanded}
+    >
+      <WorkingOverlay open={combinedExporting} />
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        {headerExpanded ? (
+          <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 }, mb: 0.5, backgroundColor: '#F8F9FA' }}>
+            <Box sx={{ mb: 2 }}>
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => setSelectionDialogOpen(true)}
                   sx={{
-                    backgroundColor: '#2C3E50',
+                    backgroundColor: '#3498DB',
                     color: 'white',
-                    px: 1.5,
-                    py: 0.5,
-                    borderRadius: 1,
-                    fontWeight: 'bold',
-                    fontSize: '0.875rem',
+                    '&:hover': { backgroundColor: '#2980B9' },
                   }}
                 >
-                  {resolvedProject!.code}
-                </Box>
+                  Выбрать проект
+                </Button>
 
-                <Typography variant="h6" sx={{ color: '#2C3E50', fontWeight: 500 }}>
-                  {resolvedProject!.name}
-                </Typography>
+                {hasProject ? (
+                  <>
+                    <Box
+                      sx={{
+                        backgroundColor: '#2C3E50',
+                        color: 'white',
+                        px: 1.5,
+                        py: 0.5,
+                        borderRadius: 1,
+                        fontWeight: 'bold',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      {resolvedProject!.code}
+                    </Box>
 
-                {data.deviationPercent !== null && (
-                  <Box
-                    sx={{
-                      backgroundColor: '#FDFEFE',
-                      border: '1px solid #D5D8DC',
-                      px: 1.5,
-                      py: 0.5,
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ color: '#616A6B' }}>
-                      Отклонение: <strong>{data.deviationPercent.toFixed(2)}%</strong>
+                    <Typography
+                      variant="h6"
+                      sx={{
+                        color: '#2C3E50',
+                        fontWeight: 500,
+                        fontSize: { xs: '1rem', md: '1.25rem' },
+                        maxWidth: { xs: '100%', md: 'none' },
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {resolvedProject!.name}
                     </Typography>
-                  </Box>
+
+                    {data.deviationPercent !== null && (
+                      <Box
+                        sx={{
+                          backgroundColor: '#FDFEFE',
+                          border: '1px solid #D5D8DC',
+                          px: 1.5,
+                          py: 0.5,
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ color: '#616A6B' }}>
+                          Отклонение: <strong>{data.deviationPercent.toFixed(2)}%</strong>
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                ) : loading && currentProjectId ? (
+                  <Typography variant="body1" color="text.secondary">
+                    Загрузка проекта…
+                  </Typography>
+                ) : currentProjectId && projectDataQuery.isError ? (
+                  <Typography variant="body1" color="error">
+                    Не удалось загрузить проект
+                  </Typography>
+                ) : (
+                  <Typography variant="body2" sx={{ color: '#95A5A6' }}>
+                    Проект не выбран
+                  </Typography>
                 )}
-              </>
-            ) : loading && currentProjectId ? (
-              <Typography variant="body1" color="text.secondary">
-                Загрузка проекта…
-              </Typography>
-            ) : currentProjectId && projectDataQuery.isError ? (
-              <Typography variant="body1" color="error">
-                Не удалось загрузить проект
-              </Typography>
-            ) : (
-              <Typography variant="body2" sx={{ color: '#95A5A6' }}>
-                Проект не выбран
-              </Typography>
+              </Stack>
+            </Box>
+
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!hasProject || !canEdit}
+                onClick={() => resolvedProject && openEditProject(resolvedProject)}
+              >
+                Основные данные
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!hasProject}
+                onClick={() => setCharacteristicsOpen(true)}
+              >
+                Характеристики
+              </Button>
+
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!hasProject}
+                onClick={() => setParticipantsOpen(true)}
+              >
+                Участники
+              </Button>
+
+              <Tooltip title="Обновить">
+                <IconButton
+                  onClick={() => void projectDataQuery.refetch()}
+                  disabled={loading}
+                  size="small"
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+
+            {error && (
+              <Alert severity="error" sx={{ mt: 2 }} onClose={() => setPageError(null)}>
+                {error}
+              </Alert>
             )}
-          </Stack>
-        </Box>
-
-        {/* Строка 2: Основные данные, характеристики, участники */}
-        <Stack direction="row" spacing={1} flexWrap="wrap">
-          <Button
-            variant="outlined"
-            disabled={!hasProject || !canEdit}
-            onClick={() => resolvedProject && openEditProject(resolvedProject)}
-          >
-            Основные данные
-          </Button>
-
-          <Button
-            variant="outlined"
-            disabled={!hasProject}
-            onClick={() => setCharacteristicsOpen(true)}
-          >
-            Характеристики
-          </Button>
-
-          <Button
-            variant="outlined"
-            disabled={!hasProject}
-            onClick={() => setParticipantsOpen(true)}
-          >
-            Участники
-          </Button>
-
-          <Tooltip title="Обновить">
-            <IconButton 
-              onClick={() => void projectDataQuery.refetch()}
-              disabled={loading}
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Tooltip>
-        </Stack>
-
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }} onClose={() => setPageError(null)}>
-            {error}
-          </Alert>
+          </Paper>
+        ) : (
+          <WorkspaceCompactBar
+            projectName={
+              hasProject
+                ? (resolvedProject!.code
+                  ? `${resolvedProject!.code} — ${resolvedProject!.name}`
+                  : resolvedProject!.name)
+                : null
+            }
+            tabLabel={activeMainTabLabel}
+          />
         )}
-      </Paper>
 
-      <Divider sx={{ mb: 2 }} />
+        {headerExpanded && <Divider sx={{ mb: 2 }} />}
 
-      {/* ═════════════════════════════════════════════════════════════════
-          ГЛАВНЫЕ ВКЛАДКИ: Прогнозирование / Оценка факта / Сравнение / Отчёты
-         ═════════════════════════════════════════════════════════════════ */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            mb: 2,
-            p: 1,
-            border: '1px solid #D5DDE5',
-            backgroundColor: '#EAF0F6',
-          }}
-        >
-          <Tabs
-            value={mainTab}
-            onChange={(_, value) => setMainTab(value)}
-            sx={{
-              '& .MuiTabs-indicator': { display: 'none' },
-            }}
-          >
-            {visibleWorkspaceTabs.map((tab) => (
-              <Tab
-                key={tab.value}
-                label={tab.label}
-                value={tab.value}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {headerExpanded && (
+            <Paper
+              elevation={0}
+              sx={{
+                mb: 2,
+                p: 1,
+                border: '1px solid #D5DDE5',
+                backgroundColor: '#EAF0F6',
+              }}
+            >
+              <Tabs
+                value={mainTab}
+                onChange={(_, value) => setMainTab(value)}
+                variant="scrollable"
+                scrollButtons="auto"
+                allowScrollButtonsMobile
                 sx={{
-                  textTransform: 'none',
-                  bgcolor: '#DCE5EE',
-                  color: '#2C3E50',
-                  '&.Mui-selected': {
-                    bgcolor: '#D6EAF8',
-                    color: '#2C3E50',
-                    fontWeight: 600,
-                  },
+                  '& .MuiTabs-indicator': { display: 'none' },
+                  '& .MuiTab-root': { minWidth: { xs: 72, md: 120 }, px: { xs: 1, md: 2 } },
                 }}
-              />
-            ))}
-          </Tabs>
-        </Paper>
+              >
+                {visibleWorkspaceTabs.map((tab) => (
+                  <Tab
+                    key={tab.value}
+                    label={tab.label}
+                    value={tab.value}
+                    sx={{
+                      textTransform: 'none',
+                      bgcolor: '#DCE5EE',
+                      color: '#2C3E50',
+                      '&.Mui-selected': {
+                        bgcolor: '#D6EAF8',
+                        color: '#2C3E50',
+                        fontWeight: 600,
+                      },
+                    }}
+                  />
+                ))}
+              </Tabs>
+            </Paper>
+          )}
 
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: ПРОГНОЗИРОВАНИЕ
@@ -476,18 +529,24 @@ export function FullProjectsPage() {
           />
         )}
         {mainTab === 'forecast' && (!currentProjectId || !hasProject) && (
-          <Alert severity="info" sx={{ mt: 1 }}>
-            Выберите проект для работы с прогнозированием.
-          </Alert>
+          <>
+            <WorkspaceChromeToggleRow />
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Выберите проект для работы с прогнозированием.
+            </Alert>
+          </>
         )}
 
         {mainTab === 'fact' && currentProjectId && hasProject && (
           <FactPanel projectId={currentProjectId} />
         )}
         {mainTab === 'fact' && (!currentProjectId || !hasProject) && (
-          <Alert severity="info" sx={{ mt: 1 }}>
-            Выберите проект для работы с оценкой факта.
-          </Alert>
+          <>
+            <WorkspaceChromeToggleRow />
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Выберите проект для работы с оценкой факта.
+            </Alert>
+          </>
         )}
 
         {/* ═════════════════════════════════════════════════════════════════
@@ -497,9 +556,12 @@ export function FullProjectsPage() {
           <ComparePanel projectId={currentProjectId} />
         )}
         {mainTab === 'compare' && (!currentProjectId || !hasProject) && (
-          <Alert severity="info" sx={{ mt: 1 }}>
-            Выберите проект для сравнения версий.
-          </Alert>
+          <>
+            <WorkspaceChromeToggleRow />
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Выберите проект для сравнения версий.
+            </Alert>
+          </>
         )}
 
         {/* ═════════════════════════════════════════════════════════════════
@@ -507,6 +569,7 @@ export function FullProjectsPage() {
            ═════════════════════════════════════════════════════════════════ */}
         {mainTab === 'reports' && (
           <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+            <WorkspaceChromeToggleRow />
             <Stack spacing={3}>
               <Card sx={{ backgroundColor: '#F4F6F7', border: '1px solid #D5D8DC' }}>
                 <CardContent>
@@ -701,5 +764,72 @@ export function FullProjectsPage() {
         </Stack>
       </EditModal>
     </Box>
+    </WorkspaceChromeProvider>
+  );
+}
+
+function WorkspaceCompactBar({
+  projectName,
+  tabLabel,
+}: {
+  projectName: string | null;
+  tabLabel: string;
+}) {
+  const { versionSummary } = useWorkspaceChrome();
+  return (
+    <Paper
+      elevation={0}
+      data-testid="workspace-compact-bar"
+      sx={{
+        mb: 1,
+        px: { xs: 1.5, md: 2 },
+        py: 1,
+        border: '1px solid #D5DDE5',
+        backgroundColor: '#F8F9FA',
+      }}
+    >
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+        {projectName && (
+          <Typography
+            data-testid="workspace-compact-project"
+            sx={{
+              color: '#2C3E50',
+              fontWeight: 600,
+              fontSize: { xs: 14, md: 16 },
+              maxWidth: { xs: '100%', md: 360 },
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {projectName}
+          </Typography>
+        )}
+        <Typography
+          data-testid="workspace-compact-tab"
+          sx={{ color: '#5D6D7E', fontWeight: 500, fontSize: { xs: 13, md: 14 } }}
+        >
+          {tabLabel}
+        </Typography>
+        {versionSummary && (
+          <Box
+            data-testid="workspace-compact-version"
+            sx={{
+              backgroundColor: '#EBF5FB',
+              border: '1px solid #AED6F1',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 1,
+              maxWidth: { xs: '100%', sm: 420 },
+              minWidth: 0,
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
+              {versionSummary}
+            </Typography>
+          </Box>
+        )}
+      </Stack>
+    </Paper>
   );
 }

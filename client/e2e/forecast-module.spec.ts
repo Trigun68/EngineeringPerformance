@@ -28,7 +28,7 @@ test.describe('Forecast module - WPF Style', () => {
     await expect(page.getByRole('button', { name: 'Удалить оборуд.' })).toBeVisible();
   });
 
-  test('forecast tab has sub-tabs: Итого, Итого по объекту, Детально', async ({ page }) => {
+  test('forecast tab has sub-tabs: Итого, Итого по объектам, Детально', async ({ page }) => {
     // Navigate to a project
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
@@ -42,7 +42,7 @@ test.describe('Forecast module - WPF Style', () => {
 
     // Check for sub-tabs
     await expect(page.getByRole('tab', { name: 'Итого', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Итого по объекту' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 

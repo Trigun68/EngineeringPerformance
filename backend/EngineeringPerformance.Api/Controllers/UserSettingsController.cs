@@ -26,7 +26,8 @@ public sealed class UserSettingsController : ControllerBase
             return Unauthorized();
 
         var value = await _settings.GetAsync(userId, key, cancellationToken);
-        return value is null ? NotFound() : Ok(new { key, value });
+        // Отсутствие настройки — норма (первый заход); 404 засоряет nginx/API-логи.
+        return Ok(new { key, value });
     }
 
     [HttpPut("{key}")]

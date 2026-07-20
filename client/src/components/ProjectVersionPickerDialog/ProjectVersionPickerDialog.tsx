@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -20,6 +20,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
 import type { ColDef } from 'ag-grid-community';
 import {
   copyProjectVersion,
@@ -31,6 +32,7 @@ import {
   type ProjectVersionWriteRequest,
 } from '../../api/projectVersionsApi';
 import { DataTable } from '../DataTable/DataTable';
+import { WorkingOverlay } from '../WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../services/apiError';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { formatDateTime } from '../../utils/formatDateTime';
@@ -68,13 +70,22 @@ interface VersionFormState {
   versionName: string;
   description: string;
   physicalVolumeTypeId: string;
+  asOfDate: string;
 }
 
 const emptyForm = (): VersionFormState => ({
   versionName: '',
   description: '',
   physicalVolumeTypeId: '',
+  asOfDate: new Date().toISOString().slice(0, 10),
 });
+
+function toDateInputValue(iso?: string | null): string {
+  if (!iso) return new Date().toISOString().slice(0, 10);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  return d.toISOString().slice(0, 10);
+}
 
 export function ProjectVersionPickerDialog({
   open,
@@ -94,9 +105,11 @@ export function ProjectVersionPickerDialog({
   const [editMode, setEditMode] = useState<'create' | 'edit'>('create');
   const [form, setForm] = useState<VersionFormState>(emptyForm());
   const [copyOpen, setCopyOpen] = useState(false);
+  /** same — копия выделенной; from-plan — Plan→Fact (ФО + оборудование). */
+  const [copyMode, setCopyMode] = useState<'same' | 'from-plan'>('same');
   const [copyName, setCopyName] = useState('');
   const [copyDescription, setCopyDescription] = useState('');
-  // Нельзя .filter() внутри селектора Zustand — каждый вызов новый массив → React #185.
+  const [planSource, setPlanSource] = useState<ProjectVersion | null>(null);
   // Нельзя .filter() внутри селектора Zustand — каждый вызов новый массив → React #185.
   const physicalVolumeTypes = useDictionaryStore((s) => s.lists.physicalVolumeTypes);
   const catalogOptions = useMemo(
@@ -104,37 +117,78 @@ export function ProjectVersionPickerDialog({
     [physicalVolumeTypes],
   );
   const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  /** Id, выбранный пользователем кликом; не сбрасываем при перезагрузке списка. */
+  const userPickedIdRef = useRef<number | null>(null);
+  const wasOpenRef = useRef(false);
+  /** Версия, зафиксированная при открытии copy/delete/edit. */
+  const [actionTarget, setActionTarget] = useState<ProjectVersion | null>(null);
 
   const defaultDirection = directionFilter === 'any' ? ANALYSIS_PLAN : directionFilter;
+
+  const pickVersion = useCallback((version: ProjectVersion | null, fromUser = false) => {
+    if (fromUser) {
+      userPickedIdRef.current = version?.id ?? null;
+    }
+    setSelected(version);
+  }, []);
 
   const loadVersions = useCallback(async () => {
     try {
       const list = await fetchProjectVersions(projectId);
       setVersions(list);
       onVersionsChanged?.();
+      return list;
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось загрузить версии.'));
+      return [] as ProjectVersion[];
     }
   }, [onVersionsChanged, projectId]);
 
+  // При открытии всегда грузим с API — иначе после удаления/копирования
+  // устаревший versionsProp из родителя «возвращал» удалённую версию.
   useEffect(() => {
-    if (versionsProp) {
-      setVersions(versionsProp);
-    } else if (open) {
-      void loadVersions();
-    }
-  }, [loadVersions, open, versionsProp]);
+    if (!open) return;
+    void loadVersions();
+  }, [loadVersions, open]);
 
   const filteredVersions = useMemo(() => {
     if (directionFilter === 'any') return versions;
     return versions.filter((v) => v.direction === directionFilter);
   }, [directionFilter, versions]);
 
+  const planVersions = useMemo(
+    () => versions.filter((v) => v.direction === ANALYSIS_PLAN),
+    [versions],
+  );
+
+  const allowCopyFromPlan = directionFilter === ANALYSIS_FACT;
+
+  // При каждом открытии диалога сбрасываем пользовательский выбор,
+  // чтобы стартовать с версии родителя (selectedVersionId).
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      userPickedIdRef.current = null;
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
+  // Синхронизация выбора со списком: сохраняем клик пользователя,
+  // не откатываем на первую строку при каждом refresh списка.
   useEffect(() => {
     if (!open) return;
-    const initial =
-      filteredVersions.find((v) => v.id === selectedVersionId) ?? filteredVersions[0] ?? null;
-    setSelected(initial);
+    setSelected((prev) => {
+      const preferredId = userPickedIdRef.current ?? selectedVersionId ?? null;
+      if (preferredId != null) {
+        const match = filteredVersions.find((v) => v.id === preferredId);
+        if (match) return match;
+      }
+      if (prev) {
+        const still = filteredVersions.find((v) => v.id === prev.id);
+        if (still) return still;
+      }
+      return filteredVersions[0] ?? null;
+    });
   }, [filteredVersions, open, selectedVersionId]);
 
   const columnDefs = useMemo<ColDef<ProjectVersion>[]>(
@@ -165,36 +219,41 @@ export function ProjectVersionPickerDialog({
 
   const openEdit = () => {
     if (!selected) return;
+    setActionTarget(selected);
     setEditMode('edit');
     setForm({
       versionName: selected.versionName,
       description: selected.description ?? '',
       physicalVolumeTypeId: selected.physicalVolumeTypeId?.toString() ?? '',
+      asOfDate: toDateInputValue(selected.createdAt),
     });
     setEditOpen(true);
   };
 
   const handleSaveVersion = async () => {
-    if (!form.versionName.trim() || !form.physicalVolumeTypeId) return;
+    if (!form.versionName.trim() || !form.physicalVolumeTypeId || !form.asOfDate) return;
+    const editTarget = actionTarget ?? selected;
     setSubmitting(true);
     setError(null);
     try {
       const body: ProjectVersionWriteRequest = {
         versionName: form.versionName.trim(),
         description: form.description.trim() || null,
-        direction: editMode === 'edit' && selected ? selected.direction : defaultDirection,
+        direction: editMode === 'edit' && editTarget ? editTarget.direction : defaultDirection,
         physicalVolumeTypeId: form.physicalVolumeTypeId
           ? Number(form.physicalVolumeTypeId)
           : null,
+        asOfDate: `${form.asOfDate}T12:00:00Z`,
       };
-      if (editMode === 'edit' && selected) {
-        const updated = await updateProjectVersion(projectId, selected.id, body);
-        setSelected(updated);
+      if (editMode === 'edit' && editTarget) {
+        const updated = await updateProjectVersion(projectId, editTarget.id, body);
+        pickVersion(updated, true);
       } else {
         const created = await createProjectVersion(projectId, body);
-        setSelected(created);
+        pickVersion(created, true);
       }
       setEditOpen(false);
+      setActionTarget(null);
       await loadVersions();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось сохранить версию.'));
@@ -204,39 +263,73 @@ export function ProjectVersionPickerDialog({
   };
 
   const handleDelete = async () => {
-    if (!selected) return;
-    if (!window.confirm(`Удалить версию «${selected.versionName}»?`)) return;
+    const target = actionTarget ?? selected;
+    if (!target) return;
+    setDeleteConfirmOpen(false);
+    setSubmitting(true);
     setError(null);
     try {
-      await deleteProjectVersion(projectId, selected.id);
-      setSelected(null);
-      await loadVersions();
+      await deleteProjectVersion(projectId, target.id);
+      userPickedIdRef.current = null;
+      setActionTarget(null);
+      pickVersion(null);
+      const list = await loadVersions();
+      const stillVisible = list.filter((v) =>
+        directionFilter === 'any' ? true : v.direction === directionFilter,
+      );
+      pickVersion(stillVisible[0] ?? null);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось удалить версию.'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const openCopy = () => {
     if (!selected) return;
+    setCopyMode('same');
+    setActionTarget(selected);
+    setPlanSource(null);
     setCopyName(`${selected.versionName} (копия)`);
     setCopyDescription(selected.description ?? '');
     setCopyOpen(true);
   };
 
+  const openCopyFromPlan = () => {
+    const source = planVersions[0] ?? null;
+    setCopyMode('from-plan');
+    setActionTarget(null);
+    setPlanSource(source);
+    setCopyName(source ? `${source.versionName} (факт)` : '');
+    setCopyDescription(source?.description ?? '');
+    setCopyOpen(true);
+  };
+
   const handleCopy = async () => {
-    if (!selected || !copyName.trim()) return;
+    const target = copyMode === 'from-plan' ? planSource : (actionTarget ?? selected);
+    if (!target || !copyName.trim()) return;
     setSubmitting(true);
     setError(null);
     try {
-      const copy = await copyProjectVersion(projectId, selected.id, {
+      const copy = await copyProjectVersion(projectId, target.id, {
         newVersionName: copyName.trim(),
         description: copyDescription.trim() || null,
+        ...(copyMode === 'from-plan' ? { targetDirection: ANALYSIS_FACT } : {}),
       });
       setCopyOpen(false);
-      setSelected(copy);
+      setActionTarget(null);
+      setPlanSource(null);
+      pickVersion(copy, true);
       await loadVersions();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось скопировать версию.'));
+      setError(
+        getApiErrorMessage(
+          err,
+          copyMode === 'from-plan'
+            ? 'Не удалось скопировать версию из плана.'
+            : 'Не удалось скопировать версию.',
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -251,6 +344,8 @@ export function ProjectVersionPickerDialog({
 
   return (
     <>
+      <WorkingOverlay open={submitting} />
+
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth data-testid="version-picker-dialog">
         <DialogTitle sx={{ bgcolor: '#2C3E50', color: '#ECF0F1' }}>{title}</DialogTitle>
         <DialogContent dividers sx={{ p: 2 }}>
@@ -266,15 +361,46 @@ export function ProjectVersionPickerDialog({
               </IconButton>
             </Tooltip>
             <Tooltip title="Удалить версию">
-              <IconButton size="small" onClick={() => void handleDelete()} disabled={!selected} aria-label="Удалить версию">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  if (!selected) return;
+                  setActionTarget(selected);
+                  setDeleteConfirmOpen(true);
+                }}
+                disabled={!selected || submitting}
+                aria-label="Удалить версию"
+                data-testid="version-delete-button"
+              >
                 <DeleteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <Tooltip title="Копировать версию">
-              <IconButton size="small" onClick={openCopy} disabled={!selected} aria-label="Копировать версию">
+              <IconButton
+                size="small"
+                onClick={openCopy}
+                disabled={!selected || submitting}
+                aria-label="Копировать версию"
+                data-testid="version-copy-button"
+              >
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
             </Tooltip>
+            {allowCopyFromPlan && (
+              <Tooltip title="Копировать из плана (ФО и оборудование; трудоёмкость — отдельно)">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={openCopyFromPlan}
+                    disabled={submitting || planVersions.length === 0}
+                    aria-label="Копировать из плана"
+                    data-testid="version-copy-from-plan-button"
+                  >
+                    <DriveFileMoveIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
           </Stack>
 
           {error && (
@@ -293,8 +419,14 @@ export function ProjectVersionPickerDialog({
                 objectName="ProjectAnalysisVersions"
                 gridId="version-picker"
                 rowSelectionMode="single"
-                onRowClicked={(row) => setSelected(row)}
+                getRowIdValue={(row) => String(row.id)}
+                onRowClicked={(row) => pickVersion(row, true)}
+                onSelectionChanged={(rows) => {
+                  const row = rows[0];
+                  if (row) pickVersion(row, true);
+                }}
                 onRowDoubleClicked={(row) => {
+                  pickVersion(row, true);
                   onSelect(row);
                   onClose();
                 }}
@@ -354,26 +486,83 @@ export function ProjectVersionPickerDialog({
                 ))}
               </Select>
             </FormControl>
+            <TextField
+              label="Дата фиксации норм"
+              type="date"
+              value={form.asOfDate}
+              onChange={(e) => setForm({ ...form, asOfDate: e.target.value })}
+              required
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              helperText="Снимок норм IIC на эту дату. Смена БЭР↔КФО после импорта ФО недоступна."
+            />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditOpen(false)} disabled={submitting}>
             Отмена
           </Button>
-          <Button variant="contained" onClick={() => void handleSaveVersion()} disabled={submitting || !form.physicalVolumeTypeId}>
+          <Button
+            variant="contained"
+            onClick={() => void handleSaveVersion()}
+            disabled={submitting || !form.physicalVolumeTypeId || !form.asOfDate}
+          >
             Сохранить
           </Button>
         </DialogActions>
       </Dialog>
 
       <Dialog open={copyOpen} onClose={() => setCopyOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Копировать версию</DialogTitle>
+        <DialogTitle>
+          {copyMode === 'from-plan' ? 'Копировать версию из плана' : 'Копировать версию'}
+        </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ pt: 1 }}>
-            {selected && (
-              <Alert severity="info" variant="outlined">
-                Источник: {selected.versionName}
-              </Alert>
+            {copyMode === 'from-plan' ? (
+              <>
+                <Alert severity="info" variant="outlined">
+                  Будут скопированы физические объёмы и оборудование. Трудоёмкость добавьте
+                  импортом после создания версии факта.
+                </Alert>
+                {planVersions.length === 0 ? (
+                  <Alert severity="warning">Нет версий плана для копирования.</Alert>
+                ) : (
+                  <Box sx={{ height: 220 }}>
+                    <DataTable
+                      rowData={planVersions}
+                      columnDefs={columnDefs}
+                      objectName="ProjectAnalysisVersions"
+                      gridId="version-picker-plan-source"
+                      rowSelectionMode="single"
+                      getRowIdValue={(row) => String(row.id)}
+                      onRowClicked={(row) => {
+                        setPlanSource(row);
+                        setCopyName(`${row.versionName} (факт)`);
+                        setCopyDescription(row.description ?? '');
+                      }}
+                      onSelectionChanged={(rows) => {
+                        const row = rows[0];
+                        if (!row) return;
+                        setPlanSource(row);
+                        setCopyName(`${row.versionName} (факт)`);
+                        setCopyDescription(row.description ?? '');
+                      }}
+                      height="100%"
+                    />
+                  </Box>
+                )}
+                {planSource && (
+                  <Alert severity="success" variant="outlined">
+                    Источник (план): {planSource.versionName}
+                  </Alert>
+                )}
+              </>
+            ) : (
+              actionTarget && (
+                <Alert severity="info" variant="outlined">
+                  Источник: {actionTarget.versionName}
+                </Alert>
+              )
             )}
             <TextField
               label="Имя новой версии"
@@ -396,8 +585,47 @@ export function ProjectVersionPickerDialog({
           <Button onClick={() => setCopyOpen(false)} disabled={submitting}>
             Отмена
           </Button>
-          <Button variant="contained" onClick={() => void handleCopy()} disabled={submitting}>
-            Копировать
+          <Button
+            variant="contained"
+            onClick={() => void handleCopy()}
+            disabled={
+              submitting
+              || !copyName.trim()
+              || (copyMode === 'from-plan' ? !planSource : !(actionTarget ?? selected))
+            }
+            data-testid="version-copy-confirm-button"
+          >
+            {submitting ? 'Работаю…' : 'Копировать'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteConfirmOpen}
+        onClose={() => !submitting && setDeleteConfirmOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        data-testid="version-delete-confirm"
+      >
+        <DialogTitle>Удалить версию?</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="warning">
+            Версия «{actionTarget?.versionName ?? selected?.versionName}» будет скрыта из списка (архивирование).
+            Связанные данные сохраняются в БД, но версия перестанет отображаться в выборе.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmOpen(false)} disabled={submitting}>
+            Отмена
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => void handleDelete()}
+            disabled={submitting}
+            data-testid="version-delete-confirm-button"
+          >
+            Удалить
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,3 +1,5 @@
+using EngineeringPerformance.Domain.Enums;
+
 namespace EngineeringPerformance.Application.Projects;
 
 public interface IProjectVersionDeepCopyService
@@ -7,5 +9,6 @@ public interface IProjectVersionDeepCopyService
         int versionId,
         string newVersionName,
         string? newDescription = null,
+        AnalysisDirection? targetDirection = null,
         CancellationToken cancellationToken = default);
 }

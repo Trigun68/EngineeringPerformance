@@ -4,7 +4,6 @@ import {
   Alert,
   Box,
   Button,
-  Grid,
   Stack,
   Tab,
   Tabs,
@@ -20,6 +19,7 @@ import { fetchProjectVersions, type ProjectVersion } from '../../../api/projectV
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { fetchProjectsPageData } from '../../../api/projectsPageApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import {
   ANALYSIS_FACT,
   buildVersionLabel,
@@ -30,11 +30,19 @@ import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
 import { getApiErrorMessage } from '../../../services/apiError';
 import {
+  factVersionPrefKey,
+  LAST_PROJECT_PREF_KEY,
+  parsePrefId,
+} from '../../../utils/projectWorkspacePrefs';
+import {
   createFactDetailColumns,
   createFactFacilityColumns,
   createFactPerformanceColumns,
 } from '../gridColumns';
-import { importToolbarStackSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { panelPrimaryToolbarSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { PanelNotificationsButton } from '../shared/PanelNotificationsButton';
+import { useWorkspaceChrome } from '../shared/workspaceChromeContext';
+import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import type { ProjectsPageData, ProjectsPageDetailRow, ProjectsPageFacilityRow } from '../types';
 import { DataImportDialog } from '../forecast/DataImportDialog';
 import { IterationDeleteDialog } from '../forecast/IterationDeleteDialog';
@@ -57,6 +65,7 @@ function performanceRowId(row: PerformanceTreeRow, index: number): string {
 export function FactPanel({ projectId }: FactPanelProps) {
   const { canRead } = usePermission('Assessment');
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
+  const { chromeExpanded, setVersionSummary } = useWorkspaceChrome();
 
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [factVersionId, setFactVersionId] = useState<number | null>(null);
@@ -81,7 +90,13 @@ export function FactPanel({ projectId }: FactPanelProps) {
     setError(null);
   }, [projectId]);
 
-  const factVersionPrefKey = `projects.${projectId}.factVersionId`;
+  useEffect(() => {
+    setVersionSummary(factVersionLabel || null);
+  }, [factVersionLabel, setVersionSummary]);
+
+  useEffect(() => () => setVersionSummary(null), [setVersionSummary]);
+
+  const factPrefKey = factVersionPrefKey(projectId);
 
   const loadVersions = useCallback(async () => {
     const [list, prefs] = await Promise.all([
@@ -89,8 +104,8 @@ export function FactPanel({ projectId }: FactPanelProps) {
       getUserPreferences().catch(() => ({} as Record<string, string>)),
     ]);
     setVersions(list);
-    const savedId = Number.parseInt(prefs[factVersionPrefKey] ?? '', 10);
-    const saved = Number.isFinite(savedId) ? list.find((v) => v.id === savedId) : undefined;
+    const savedId = parsePrefId(prefs[factPrefKey]);
+    const saved = savedId != null ? list.find((v) => v.id === savedId) : undefined;
     const fact = saved
       ?? list.find((v) => v.direction === ANALYSIS_FACT)
       ?? null;
@@ -101,7 +116,7 @@ export function FactPanel({ projectId }: FactPanelProps) {
       setFactVersionId(null);
       setFactVersionLabel('');
     }
-  }, [factVersionPrefKey, projectId]);
+  }, [factPrefKey, projectId]);
 
   const loadPageData = useCallback(async () => {
     if (!factVersionId || !canRead) return;
@@ -129,7 +144,10 @@ export function FactPanel({ projectId }: FactPanelProps) {
   const handleVersionSelect = (version: ProjectVersion) => {
     setFactVersionId(version.id);
     setFactVersionLabel(buildVersionLabel(version));
-    void putUserPreferences({ [factVersionPrefKey]: String(version.id) });
+    void putUserPreferences({
+      [factPrefKey]: String(version.id),
+      [LAST_PROJECT_PREF_KEY]: String(projectId),
+    });
   };
 
   const selectedFactVersion = useMemo(
@@ -194,6 +212,7 @@ export function FactPanel({ projectId }: FactPanelProps) {
     () => ({
       headerName: 'Наименование',
       minWidth: 260,
+      flex: 1,
       field: 'workDirectionName' as const,
       cellRendererParams: { suppressCount: true },
     }),
@@ -220,139 +239,143 @@ export function FactPanel({ projectId }: FactPanelProps) {
     return <Alert severity="warning">Нет прав на просмотр оценки факта.</Alert>;
   }
 
+  const factNotifications = catalogTypeMissing && factVersionId
+    ? ['Выберите справочник физобъёмов (КФО или БЭР) в параметрах версии проекта перед импортом данных.']
+    : [];
+
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-        <Grid item xs={12} lg={5} xl={4}>
-          <Stack direction="row" spacing={2} alignItems="center">
+      <WorkingOverlay open={exporting} />
+      {chromeExpanded && (
+        <>
+      <Stack direction="row" sx={panelPrimaryToolbarSx}>
+        <Button
+          variant="contained"
+          onClick={() => setVersionPickerOpen(true)}
+          sx={{
+            backgroundColor: '#2980B9',
+            color: 'white',
+            flexShrink: 0,
+            '&:hover': { backgroundColor: '#2471A3' },
+          }}
+        >
+          📋 Версия (факт)
+        </Button>
+        {factVersionLabel && (
+          <Box
+            sx={{
+              backgroundColor: '#EBF5FB',
+              border: '1px solid #AED6F1',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 1,
+              minWidth: 0,
+              maxWidth: { xs: '100%', sm: 280 },
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
+              {factVersionLabel}
+            </Typography>
+          </Box>
+        )}
+        {catalogTypeName && (
+          <Box
+            sx={{
+              backgroundColor: '#FEF9E7',
+              border: '1px solid #F9E79F',
+              px: 1.5,
+              py: 0.5,
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#7D6608' }}>
+              Справочник ФО: {catalogTypeName}
+            </Typography>
+          </Box>
+        )}
+        {canImport && (
+          <>
             <Button
-              variant="contained"
-              onClick={() => setVersionPickerOpen(true)}
-              sx={{
-                backgroundColor: '#2980B9',
-                color: 'white',
-                flexShrink: 0,
-                '&:hover': { backgroundColor: '#2471A3' },
-              }}
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              title={catalogTypeMissing ? 'Укажите справочник КФО или БЭР в версии проекта' : undefined}
+              onClick={() => setImportDialogType('physical-volumes')}
+              startIcon={<FileDownloadIcon />}
             >
-              📋 Версия (факт)
+              Импорт ФО
             </Button>
-            {factVersionLabel && (
-              <Box
-                sx={{
-                  backgroundColor: '#EBF5FB',
-                  border: '1px solid #AED6F1',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                  minWidth: 0,
-                }}
-              >
-                <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
-                  {factVersionLabel}
-                </Typography>
-              </Box>
-            )}
-            {catalogTypeName && (
-              <Box
-                sx={{
-                  backgroundColor: '#FEF9E7',
-                  border: '1px solid #F9E79F',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="body2" sx={{ color: '#7D6608' }}>
-                  Справочник ФО: {catalogTypeName}
-                </Typography>
-              </Box>
-            )}
-          </Stack>
-        </Grid>
-
-        <Grid item xs={12} lg={7} xl={8}>
-          {canImport && (
-            <Stack direction="row" spacing={1} sx={importToolbarStackSx}>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                title={catalogTypeMissing ? 'Укажите справочник КФО или БЭР в версии проекта' : undefined}
-                onClick={() => setImportDialogType('physical-volumes')}
-                startIcon={<FileDownloadIcon />}
-              >
-                Импорт ФО
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                onClick={() => setDeleteDialogType('physical-volumes')}
-                startIcon={<DeleteIcon />}
-                color="error"
-              >
-                Удалить ФО
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                onClick={() => setImportDialogType('equipment')}
-                startIcon={<FileDownloadIcon />}
-              >
-                Импорт оборуд.
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                onClick={() => setDeleteDialogType('equipment')}
-                startIcon={<DeleteIcon />}
-                color="error"
-              >
-                Удалить оборуд.
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                onClick={() => setImportDialogType('labor-intensities')}
-                startIcon={<FileDownloadIcon />}
-              >
-                Импорт труд.
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={importBlocked || loading}
-                onClick={() => setDeleteDialogType('labor-intensities')}
-                startIcon={<DeleteIcon />}
-                color="error"
-              >
-                Удалить труд.
-              </Button>
-            </Stack>
-          )}
-        </Grid>
-      </Grid>
-
-      {catalogTypeMissing && factVersionId && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Выберите справочник физобъёмов (КФО или БЭР) в параметрах версии проекта перед импортом данных.
-        </Alert>
-      )}
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              onClick={() => setDeleteDialogType('physical-volumes')}
+              startIcon={<DeleteIcon />}
+              color="error"
+            >
+              Удалить ФО
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              onClick={() => setImportDialogType('equipment')}
+              startIcon={<FileDownloadIcon />}
+            >
+              Импорт оборуд.
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              onClick={() => setDeleteDialogType('equipment')}
+              startIcon={<DeleteIcon />}
+              color="error"
+            >
+              Удалить оборуд.
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              onClick={() => setImportDialogType('labor-intensities')}
+              startIcon={<FileDownloadIcon />}
+            >
+              Импорт труд.
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={importBlocked || loading}
+              onClick={() => setDeleteDialogType('labor-intensities')}
+              startIcon={<DeleteIcon />}
+              color="error"
+            >
+              Удалить труд.
+            </Button>
+          </>
+        )}
+      </Stack>
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-        <Tabs
-          value={subTab}
-          onChange={(_, v: FactSubTab) => setSubTab(v)}
-          sx={projectsPageSubTabsSx}
-        >
-          <Tab label="Итого" value="fact-total" />
-          <Tab label="По объектам" value="fact-facility" />
-          <Tab label="Детально" value="fact-detail" />
-        </Tabs>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
+          <Tabs
+            value={subTab}
+            onChange={(_, v: FactSubTab) => setSubTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            allowScrollButtonsMobile
+            sx={{ ...projectsPageSubTabsSx, width: 'auto', flex: '0 1 auto' }}
+          >
+            <Tab label="Итого" value="fact-total" />
+            <Tab label="Итого по объектам" value="fact-facility" />
+            <Tab label="Детально" value="fact-detail" />
+          </Tabs>
+          <PanelNotificationsButton
+            messages={factNotifications}
+            title="Предупреждения"
+          />
+        </Stack>
 
         <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
           {subTab === 'fact-total' && (
@@ -433,6 +456,10 @@ export function FactPanel({ projectId }: FactPanelProps) {
       </Box>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        </>
+      )}
+
+      <WorkspaceChromeToggleRow />
 
       <Box sx={{ flex: 1, minHeight: 360 }}>
         {subTab === 'fact-total' && (

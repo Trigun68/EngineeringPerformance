@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using EngineeringPerformance.Api.Diagnostics;
 using EngineeringPerformance.Api.Middleware;
 using Microsoft.Extensions.Options;
 
@@ -66,31 +65,10 @@ public sealed class AuthController : ControllerBase
     {
         var user = await FindUserForLoginAsync(request.Username, cancellationToken);
 
-        // #region agent log
-        DebugSessionLog.Write(
-            "A",
-            "AuthController.Login",
-            "login attempt",
-            new
-            {
-                username = request.Username,
-                userFound = user is not null,
-                hasPasswordHash = !string.IsNullOrEmpty(user?.PasswordHash),
-                hashPrefix = user?.PasswordHash is { Length: >= 20 } h ? h[..20] : null,
-            });
-        // #endregion
-
         if (user is null || string.IsNullOrEmpty(user.PasswordHash))
             return Unauthorized();
 
         var passwordOk = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
-        // #region agent log
-        DebugSessionLog.Write(
-            "A",
-            "AuthController.Login",
-            passwordOk ? "password ok" : "password mismatch",
-            new { username = user.Username, passwordOk });
-        // #endregion
         if (!passwordOk)
         {
             await _actionLogger.LogForUserAsync(

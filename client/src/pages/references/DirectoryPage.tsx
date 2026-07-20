@@ -220,7 +220,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const flatColumnDefs = useMemo<ColDef<DirectoryEntry>[]>(() => {
     if (config.resource === 'project-characteristics') {
       return [
-        { colId: 'name', field: 'name', headerName: 'Наименование характеристики', minWidth: 280 },
+        { colId: 'name', field: 'name', headerName: 'Наименование характеристики', minWidth: 280, flex: 1 },
         {
           colId: 'optionCount',
           headerName: 'Кол-во вариантов',
@@ -241,20 +241,20 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             return code != null ? String(code) : '';
           },
         },
-        { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 },
+        { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 },
         ...propertyColumns,
         archiveColDef,
       ];
     }
     return [
-      { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 },
+      { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 },
       ...propertyColumns,
       archiveColDef,
     ];
   }, [archiveColDef, config.resource, isPhysicalVolumeCatalog, optionCounts, propertyColumns]);
 
   const nameColumnDef = useMemo<ColDef<DirectoryTreeRow>>(
-    () => ({ colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240 }),
+    () => ({ colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 }),
     [],
   );
 

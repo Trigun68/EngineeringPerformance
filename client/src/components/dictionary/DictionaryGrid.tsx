@@ -31,6 +31,12 @@ import { getUserPreferences, putUserPreferences } from '../../api/userPreference
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
 import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
+import {
+  filterPrefKey,
+  loadGridLayout,
+  persistGridLayout,
+  setCachedGridLayout,
+} from '../../utils/gridLayoutPersistence';
 import { ExcelSetColumnFilter } from './ExcelSetColumnFilter';
 import { GridViewport } from './GridViewport';
 
@@ -76,14 +82,6 @@ const SET_FILTER_PARAMS = {
   suppressSorting: true,
   excelMode: 'windows' as const,
 };
-
-function layoutPrefKey(gridId: string): string {
-  return `grid.${gridId}.layout`;
-}
-
-function filterPrefKey(gridId: string): string {
-  return `grid.${gridId}.filter`;
-}
 
 /** Пустой set-filter (values: []) скрывает все строки — не восстанавливаем и не сохраняем. */
 function isBlockingEmptySetFilter(model: Record<string, unknown>): boolean {
@@ -134,6 +132,7 @@ function DictionaryGridInternal<T extends { id: number }>({
   const gridInitializedRef = useRef(false);
   const isFirstRenderRef = useRef(true);
   const filterAppliedRef = useRef(false);
+  const lastLayoutRef = useRef<ColumnState[] | null>(null);
 
   const { canRead, canEdit: canEditPermission, hasLevel } = usePermission(objectName);
   const canEdit = canEditProp ?? canEditPermission;
@@ -180,29 +179,36 @@ function DictionaryGridInternal<T extends { id: number }>({
       filter: ExcelSetColumnFilter,
       filterParams: SET_FILTER_PARAMS,
       resizable: true,
-      flex: 1,
-      minWidth: 120,
+      minWidth: 80,
     }),
     [],
   );
 
-  const persistLayoutNow = useCallback(async () => {
+  const captureLayoutFromApi = useCallback((): ColumnState[] | null => {
     const api = gridApiRef.current;
-    if (!api || !gridInitializedRef.current) return;
+    if (!api) return lastLayoutRef.current;
     const layout = api.getColumnState();
-    await putUserPreferences({
-      [layoutPrefKey(gridId)]: JSON.stringify(layout),
-    });
+    lastLayoutRef.current = layout;
+    setCachedGridLayout(gridId, layout);
+    return layout;
   }, [gridId]);
 
+  const persistLayoutNow = useCallback(async () => {
+    if (!gridInitializedRef.current) return;
+    const layout = captureLayoutFromApi() ?? lastLayoutRef.current;
+    if (!layout || layout.length === 0) return;
+    await persistGridLayout(gridId, layout, { legacyUserSetting: false });
+  }, [captureLayoutFromApi, gridId]);
+
   const scheduleLayoutSave = useCallback(() => {
-    if (!gridApiRef.current || !gridInitializedRef.current) return;
+    if (!gridInitializedRef.current) return;
     if (isFirstRenderRef.current) return;
+    captureLayoutFromApi();
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void persistLayoutNow();
     }, LAYOUT_DEBOUNCE_MS);
-  }, [gridId, persistLayoutNow]);
+  }, [captureLayoutFromApi, persistLayoutNow]);
 
   const filterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -238,12 +244,10 @@ function DictionaryGridInternal<T extends { id: number }>({
 
   const applySavedLayout = useCallback(async (api: GridApi<T>) => {
     try {
-      const prefs = await getUserPreferences();
-      const layoutRaw = prefs[layoutPrefKey(gridId)];
-      if (layoutRaw) {
-        const state = JSON.parse(layoutRaw) as ColumnState[];
-        api.applyColumnState({ state, applyOrder: true });
-      }
+      const state = await loadGridLayout(gridId);
+      if (!state || state.length === 0) return;
+      lastLayoutRef.current = state;
+      api.applyColumnState({ state, applyOrder: true });
     } catch {
       // Повреждённые настройки — игнорируем.
     }
@@ -289,9 +293,18 @@ function DictionaryGridInternal<T extends { id: number }>({
   );
 
   useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
-  }, []);
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (filterTimerRef.current) {
+      clearTimeout(filterTimerRef.current);
+      filterTimerRef.current = null;
+    }
+    if (lastLayoutRef.current && lastLayoutRef.current.length > 0) {
+      void persistGridLayout(gridId, lastLayoutRef.current, { legacyUserSetting: false });
+    }
+  }, [gridId]);
 
   useEffect(() => {
     gridInitializedRef.current = false;
@@ -513,7 +526,9 @@ function DictionaryGridInternal<T extends { id: number }>({
           components={{ ExcelSetColumnFilter }}
           onGridReady={onGridReady}
           onColumnMoved={scheduleLayoutSave}
-          onColumnResized={scheduleLayoutSave}
+          onColumnResized={(event) => {
+            if (event.finished) scheduleLayoutSave();
+          }}
           onColumnVisible={scheduleLayoutSave}
           onSortChanged={scheduleLayoutSave}
           onFilterChanged={(_event: FilterChangedEvent<T>) => scheduleFilterSave()}

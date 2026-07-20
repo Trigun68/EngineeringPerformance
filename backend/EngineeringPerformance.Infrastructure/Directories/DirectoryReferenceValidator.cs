@@ -72,6 +72,16 @@ internal sealed class DirectoryReferenceValidator
     {
         await ValidateClassifierIdAsync(request, cancellationToken);
         await ValidateUnitIdAsync(request, cancellationToken);
+        await ValidatePhysicalVolumeKfoIdAsync(request, cancellationToken);
+    }
+
+    private async Task ValidatePhysicalVolumeKfoIdAsync(DirectoryWriteRequest request, CancellationToken cancellationToken)
+    {
+        if (TryGetInt(request, "physicalVolumeKfoId", out var kfoId)
+            && !await _context.PhysicalVolumesKfo.AsNoTracking().AnyAsync(x => x.Id == kfoId, cancellationToken))
+        {
+            throw new KeyNotFoundException($"PhysicalVolumeKfo {kfoId} not found.");
+        }
     }
 
     private async Task ValidateEquipmentAsync(DirectoryWriteRequest request, CancellationToken cancellationToken)

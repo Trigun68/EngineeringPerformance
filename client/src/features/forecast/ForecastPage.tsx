@@ -309,11 +309,11 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
 
   const volumeColumnDefs = useMemo<ColDef<VolumeTreeRow>[]>(
     () => [
-      { field: 'unitName', headerName: 'Ед.', maxWidth: 80 },
-      { field: 'plannedVolume', headerName: 'План. объём', maxWidth: 120 },
-      { field: 'baseHours', headerName: 'Базовые ч.', maxWidth: 110 },
-      { field: 'optimisticHours', headerName: 'Опт.', maxWidth: 90 },
-      { field: 'pessimisticHours', headerName: 'Пес.', maxWidth: 90 },
+      { field: 'unitName', headerName: 'Ед.', width: 80 },
+      { field: 'plannedVolume', headerName: 'План. объём', width: 120 },
+      { field: 'baseHours', headerName: 'Базовые ч.', width: 110 },
+      { field: 'optimisticHours', headerName: 'Опт.', width: 90 },
+      { field: 'pessimisticHours', headerName: 'Пес.', width: 90 },
       { field: 'range', headerName: 'Диапазон', minWidth: 120 },
     ],
     [],
@@ -321,11 +321,11 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
 
   const factColumnDefs = useMemo<ColDef<PerformanceTreeRow>[]>(
     () => [
-      { field: 'normUnitName', headerName: 'Ед.', maxWidth: 80 },
-      { field: 'factPhysicalVolume', headerName: 'Факт. объём', maxWidth: 110 },
-      { field: 'factLaborHours', headerName: 'Факт часы', maxWidth: 110 },
-      { field: 'factProductivity', headerName: 'Производительность', maxWidth: 130 },
-      { field: 'zScore', headerName: 'Z', maxWidth: 80 },
+      { field: 'normUnitName', headerName: 'Ед.', width: 80 },
+      { field: 'factPhysicalVolume', headerName: 'Факт. объём', width: 110 },
+      { field: 'factLaborHours', headerName: 'Факт часы', width: 110 },
+      { field: 'factProductivity', headerName: 'Производительность', width: 130 },
+      { field: 'zScore', headerName: 'Z', width: 80 },
       { field: 'interpretation', headerName: 'Интерпретация', minWidth: 160 },
     ],
     [],
@@ -543,7 +543,7 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
       </Box>
 
       <Stack direction="row" spacing={2} alignItems="flex-start" flexWrap="wrap">
-        <Table size="small" sx={{ maxWidth: 520 }}>
+        <Table size="small" sx={{ width: 520 }}>
           <TableHead>
             <TableRow>
               <TableCell>Сценарий</TableCell>

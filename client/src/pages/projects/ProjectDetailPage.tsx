@@ -238,7 +238,7 @@ export function ProjectDetailPage() {
       { field: 'displayName', headerName: 'ФИО', minWidth: 160 },
       { field: 'username', headerName: 'Логин' },
       { field: 'roleName', headerName: 'Роль' },
-      { field: 'level', headerName: 'Уровень', maxWidth: 110 },
+      { field: 'level', headerName: 'Уровень', width: 110 },
     ],
     [],
   );
@@ -247,7 +247,7 @@ export function ProjectDetailPage() {
     () => [
       { field: 'versionName', headerName: 'Версия', minWidth: 120 },
       { field: 'name', headerName: 'Наименование', minWidth: 200 },
-      { field: 'isArchived', headerName: 'Архив', maxWidth: 90 },
+      { field: 'isArchived', headerName: 'Архив', width: 90 },
     ],
     [],
   );

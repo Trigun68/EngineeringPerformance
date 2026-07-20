@@ -16,6 +16,8 @@ function pickLists(data: DictionariesAllResponse): Record<DictionaryKey, Diction
   return {
     physicalVolumeTypes: data.physicalVolumeTypes ?? [],
     physicalVolumes: data.physicalVolumes ?? [],
+    physicalVolumesKfo: data.physicalVolumesKfo ?? [],
+    physicalVolumesBer: data.physicalVolumesBer ?? [],
     equipments: data.equipments ?? [],
     laborIntensities: data.laborIntensities ?? [],
     iicWorkDirections: data.iicWorkDirections ?? [],

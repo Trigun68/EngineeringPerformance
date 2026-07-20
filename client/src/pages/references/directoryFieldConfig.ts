@@ -51,9 +51,20 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
     { key: 'code', label: 'Код', type: 'text', required: true, showInGrid: false, gridWidth: 120, formOrder: 10 },
     { key: 'description', label: 'Описание', type: 'text', showInGrid: true, gridWidth: 200, formOrder: 30 },
     {
+      key: 'physicalVolumeKfoId',
+      label: 'Связанная норма КФО',
+      formLabel: 'Связанная номенклатура КФО',
+      type: 'lookup',
+      lookupKey: 'physicalVolumesKfo',
+      hierarchical: true,
+      showInGrid: true,
+      gridWidth: 260,
+      formOrder: 40,
+    },
+    {
       key: 'kfoId',
-      label: 'Классификатор (КФО)',
-      formLabel: 'Классификатор (КФО/нормы ИИС)',
+      label: 'Классификатор (ИИС)',
+      formLabel: 'Классификатор (группы физ. объёмов / нормы ИИС)',
       type: 'lookup',
       lookupKey: 'iicWorkDirections',
       propertyKey: 'classifierId',
@@ -220,6 +231,12 @@ export function formatPropertyValue(
           name: item.name,
           unitName,
         });
+      }
+    }
+    if (field.lookupKey === 'physicalVolumesKfo' || field.lookupKey === 'physicalVolumesBer') {
+      const item = getItem?.(field.lookupKey, id);
+      if (item) {
+        return item.code?.trim() ? `${item.code} ${item.name}` : item.name;
       }
     }
     return getName(field.lookupKey, id);

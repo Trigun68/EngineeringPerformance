@@ -44,10 +44,6 @@ export function UserMenu() {
 
   const portalDisplayName = (profile?.displayName || user.displayName || '').trim();
   const portalLogin = (profile?.login || user.username || '').trim();
-  const windowsAccount = profile?.windowsAccount?.trim() || '';
-  const showWindowsAccount =
-    windowsAccount.length > 0 &&
-    windowsAccount.localeCompare(portalLogin, undefined, { sensitivity: 'accent' }) !== 0;
   const showNameBlock = portalDisplayName.length > 0;
 
   return (
@@ -109,12 +105,7 @@ export function UserMenu() {
               )}
               {portalLogin && (
                 <Typography variant="caption" sx={{ color: wpColors.muted, display: 'block', mt: 0.25 }}>
-                  {portalLogin}
-                </Typography>
-              )}
-              {showWindowsAccount && (
-                <Typography variant="caption" sx={{ color: wpColors.muted, display: 'block', mt: 0.5 }}>
-                  Windows: {windowsAccount}
+                  Логин: {portalLogin}
                 </Typography>
               )}
             </Box>

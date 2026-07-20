@@ -43,6 +43,7 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
         int versionId,
         string newVersionName,
         string? newDescription = null,
+        AnalysisDirection? targetDirection = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(newVersionName))
@@ -59,6 +60,8 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken)
             ?? throw new KeyNotFoundException($"Version {versionId} not found for project {projectId}.");
 
+        var resolvedDirection = VersionCopyDirectionRules.Resolve(source.Direction, targetDirection);
+
         // 2. Проверка прав (defense-in-depth к атрибутам контроллера).
         var userId = _currentUser.UserId
             ?? throw new UnauthorizedAccessException("User is not authenticated.");
@@ -70,70 +73,94 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             throw new UnauthorizedAccessException($"User {userId} cannot edit project {projectId}.");
 
         _logger.LogInformation(
-            "Deep copy started: project {ProjectId}, source version {SourceVersionId}, new name {NewVersionName}, user {UserId}",
-            projectId, versionId, newVersionName.Trim(), userId);
+            "Deep copy started: project {ProjectId}, source version {SourceVersionId} ({SourceDirection}), target {TargetDirection}, new name {NewVersionName}, user {UserId}",
+            projectId, versionId, source.Direction, resolvedDirection, newVersionName.Trim(), userId);
 
-        // 3. Транзакция: всё или ничего.
-        await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
-        try
+        // 3. Транзакция внутри execution strategy (EnableRetryOnFailure не поддерживает BeginTransactionAsync напрямую).
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            var createdAt = DateTime.UtcNow;
-            var copy = new ProjectAnalysisVersion
-            {
-                ProjectId = source.ProjectId,
-                Name = newVersionName.Trim(),
-                VersionName = newVersionName.Trim(),
-                Description = string.IsNullOrWhiteSpace(newDescription) ? source.Description : newDescription.Trim(),
-                Direction = source.Direction,
-                PhysicalVolumeTypeId = source.PhysicalVolumeTypeId,
-                PlanningScenario = source.PlanningScenario,
-                SortOrder = source.SortOrder,
-                IsArchived = false,
-                CreatedAt = createdAt,
-            };
-            _context.ProjectAnalysisVersions.Add(copy);
-            await _context.SaveChangesAsync(cancellationToken);
+            _context.ChangeTracker.Clear();
 
-            // 4. Deep Copy PPV с сохранением иерархии через ppvIdMap.
-            var ppvIdMap = await CopyPhysicalVolumesAsync(
-                source.PhysicalVolumes.ToList(),
-                copy.Id,
-                source.ProjectId,
-                createdAt,
-                cancellationToken);
-
-            // 5. Deep Copy LI (Fact): ремап ProjectPhysicalVolumeId на новые PPV.
-            if (source.Direction == AnalysisDirection.Fact)
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                CopyLaborIntensities(source.LaborIntensities.ToList(), copy.Id, source.ProjectId, createdAt, ppvIdMap);
+                var copy = await CopyVersionWithinTransactionAsync(
+                    source,
+                    newVersionName,
+                    newDescription,
+                    resolvedDirection,
+                    cancellationToken);
+
+                await transaction.CommitAsync(cancellationToken);
+
+                _logger.LogInformation(
+                    "Deep copy completed: project {ProjectId}, new version {NewVersionId} ({Direction}), PPV={PpvCount}, LI={LiCount}, equipment={EquipmentCount}",
+                    projectId, copy.Id, copy.Direction, source.PhysicalVolumes.Count, source.LaborIntensities.Count, source.Equipments.Count);
+
+                return MapToDto(copy);
             }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
+    }
 
-            // 6. Копирование итераций импорта (аудит 1-в-1).
-            CopyImportIterations(source.ImportIterations.ToList(), copy.Id, source.ProjectId);
-
-            // 7. GAP-fix WPF: копирование ProjectEquipments (раньше пропускалось).
-            CopyEquipments(source.Equipments.ToList(), copy.Id, source.ProjectId, createdAt);
-
-            // 8. Новый снимок норм на copy.CreatedAt (не клон старого).
-            await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
-                _context, copy.Id, createdAt, cancellationToken);
-
-            await _planningParameters.CopyFromVersionAsync(source.Id, copy.Id, cancellationToken);
-
-            await _context.SaveChangesAsync(cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-
-            _logger.LogInformation(
-                "Deep copy completed: project {ProjectId}, new version {NewVersionId}, PPV={PpvCount}, LI={LiCount}, equipment={EquipmentCount}",
-                projectId, copy.Id, source.PhysicalVolumes.Count, source.LaborIntensities.Count, source.Equipments.Count);
-
-            return MapToDto(copy);
-        }
-        catch
+    private async Task<ProjectAnalysisVersion> CopyVersionWithinTransactionAsync(
+        ProjectAnalysisVersion source,
+        string newVersionName,
+        string? newDescription,
+        AnalysisDirection targetDirection,
+        CancellationToken cancellationToken)
+    {
+        var createdAt = DateTime.UtcNow;
+        var sameDirection = targetDirection == source.Direction;
+        var copy = new ProjectAnalysisVersion
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            ProjectId = source.ProjectId,
+            Name = newVersionName.Trim(),
+            VersionName = newVersionName.Trim(),
+            Description = string.IsNullOrWhiteSpace(newDescription) ? source.Description : newDescription.Trim(),
+            Direction = targetDirection,
+            PhysicalVolumeTypeId = source.PhysicalVolumeTypeId,
+            PlanningScenario = source.PlanningScenario,
+            SortOrder = source.SortOrder,
+            IsArchived = false,
+            CreatedAt = createdAt,
+        };
+        _context.ProjectAnalysisVersions.Add(copy);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var ppvIdMap = await CopyPhysicalVolumesAsync(
+            source.PhysicalVolumes.ToList(),
+            copy.Id,
+            source.ProjectId,
+            createdAt,
+            cancellationToken);
+
+        // PLI: только при Fact→Fact (у Plan обычно нет строк PLI; для Plan→Fact трудоёмкость импортируют отдельно).
+        if (sameDirection && source.Direction == AnalysisDirection.Fact)
+        {
+            CopyLaborIntensities(source.LaborIntensities.ToList(), copy.Id, source.ProjectId, createdAt, ppvIdMap);
         }
+
+        // Аудит импорта — только при копии в том же направлении.
+        if (sameDirection)
+        {
+            CopyImportIterations(source.ImportIterations.ToList(), copy.Id, source.ProjectId);
+        }
+
+        CopyEquipments(source.Equipments.ToList(), copy.Id, source.ProjectId, createdAt);
+
+        await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
+            _context, copy.Id, createdAt, cancellationToken);
+
+        await _planningParameters.CopyFromVersionAsync(source.Id, copy.Id, cancellationToken);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return copy;
     }
 
     private async Task<Dictionary<int, int>> CopyPhysicalVolumesAsync(
@@ -147,24 +174,52 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
         if (sourcePpvs.Count == 0)
             return ppvIdMap;
 
+        // Раньше SaveChanges вызывался на каждую строку (~12k) — копирование зависало.
+        // Копируем уровнями BFS: один SaveChanges на уровень (для плоских данных — один раз).
         var byParent = sourcePpvs.ToLookup(pv => pv.ParentId);
-        var queue = new Queue<ProjectPhysicalVolume>(byParent[null]);
+        var currentLevel = byParent[null].ToList();
 
-        while (queue.Count > 0)
+        while (currentLevel.Count > 0)
         {
-            var src = queue.Dequeue();
-            int? newParentId = src.ParentId is int parentId && ppvIdMap.TryGetValue(parentId, out var mappedParent)
-                ? mappedParent
-                : null;
+            var copies = new List<ProjectPhysicalVolume>(currentLevel.Count);
+            foreach (var src in currentLevel)
+            {
+                int? newParentId = src.ParentId is int parentId && ppvIdMap.TryGetValue(parentId, out var mappedParent)
+                    ? mappedParent
+                    : null;
+                copies.Add(ClonePhysicalVolume(src, newVersionId, projectId, newParentId, createdAt));
+            }
 
-            var copy = ClonePhysicalVolume(src, newVersionId, projectId, newParentId, createdAt);
-            _context.ProjectPhysicalVolumes.Add(copy);
+            _context.ProjectPhysicalVolumes.AddRange(copies);
             await _context.SaveChangesAsync(cancellationToken);
 
-            ppvIdMap[src.Id] = copy.Id;
+            for (var i = 0; i < currentLevel.Count; i++)
+            {
+                ppvIdMap[currentLevel[i].Id] = copies[i].Id;
+            }
 
-            foreach (var child in byParent[src.Id])
-                queue.Enqueue(child);
+            var nextLevel = new List<ProjectPhysicalVolume>();
+            foreach (var src in currentLevel)
+            {
+                nextLevel.AddRange(byParent[src.Id]);
+            }
+
+            currentLevel = nextLevel;
+        }
+
+        // Защита от циклов/осиротевших ParentId: оставшиеся узлы как корни.
+        if (ppvIdMap.Count < sourcePpvs.Count)
+        {
+            var orphans = sourcePpvs.Where(pv => !ppvIdMap.ContainsKey(pv.Id)).ToList();
+            var orphanCopies = orphans
+                .Select(src => ClonePhysicalVolume(src, newVersionId, projectId, newParentId: null, createdAt))
+                .ToList();
+            _context.ProjectPhysicalVolumes.AddRange(orphanCopies);
+            await _context.SaveChangesAsync(cancellationToken);
+            for (var i = 0; i < orphans.Count; i++)
+            {
+                ppvIdMap[orphans[i].Id] = orphanCopies[i].Id;
+            }
         }
 
         return ppvIdMap;
@@ -309,5 +364,6 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             v.PhysicalVolumeTypeId,
             v.SortOrder,
             v.IsArchived,
-            v.CreatedAt);
+            v.CreatedAt,
+            v.PlanningScenario);
 }

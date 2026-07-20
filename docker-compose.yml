@@ -16,6 +16,8 @@ services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: ep-sqlserver
+    # Без unless-stopped SQL после OOM/kill остаётся Exited → nginx 502 на /api.
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required}
@@ -66,6 +68,9 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_URLS: http://+:8080
+      # Пустые значения отключают дефолт HTTP_PORTS=8080 в aspnet-образе (иначе WRN в логах).
+      HTTP_PORTS: ""
+      HTTPS_PORTS: ""
       ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=EngineeringPerformance;User Id=sa;Password=${SQL_SA_PASSWORD};TrustServerCertificate=True;"
       ConnectionStrings__Redis: "redis:6379"  # Внутри сети Docker порт всегда 6379
       Jwt__Secret: ${JWT_SECRET:?JWT_SECRET is required}

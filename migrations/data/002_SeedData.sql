@@ -90,25 +90,8 @@ END;
 -- ============================================================================
 
 -- ============================================================================
--- 7. Projects (PRJ-25-310, PRJ-25-970) — только карточки, без версий анализа и доступов
+-- 7. Projects — демо-карточки не сидируются; проекты создаются пользователями в UI.
 -- ============================================================================
-IF NOT EXISTS (SELECT 1 FROM [Projects] WHERE [Id] = 4)
-BEGIN
-    SET IDENTITY_INSERT [Projects] ON;
-
-    INSERT INTO [Projects] ([Id], [Code], [WorkNumber], [ContractNumber], [CalendarPlanNumber],
-                            [Type], [Customer], [Contractor], [Gip], [WorkStatus], [WorkStart],
-                            [Program], [Name], [ParentId], [IsArchived], [CreatedAt], [ModifiedAt], [SortOrder])
-    VALUES
-        (4, N'PRJ-25-310', N'25-310', N'', N'', N'', N'', N'', N'', N'', NULL, N'',
-         N'Программа увеличения производства горячекатаного проката', NULL, 0,
-         CAST(N'2026-04-11T20:00:11.7633632' AS datetime2), CAST(N'2026-04-16T19:34:13.3243627' AS datetime2), 0),
-        (5, N'PRJ-25-970', N'25-970', N'', N'', N'', N'', N'', N'Вася', N'в работе', NULL, N'',
-         N'Программа Новый горизонт. Строительство комплекса полного цикла по производству DR-окатышей', NULL, 0,
-         CAST(N'2026-04-11T20:00:11.7633632' AS datetime2), CAST(N'2026-04-16T20:32:49.3155543' AS datetime2), 1);
-
-    SET IDENTITY_INSERT [Projects] OFF;
-END;
 
 -- ============================================================================
 -- 8. Access Rights

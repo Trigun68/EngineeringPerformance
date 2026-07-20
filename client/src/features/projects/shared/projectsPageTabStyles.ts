@@ -4,6 +4,8 @@ import type { SxProps, Theme } from '@mui/material';
 export const projectsPageSubTabsSx: SxProps<Theme> = {
   minHeight: 40,
   flex: '1 1 auto',
+  width: '100%',
+  maxWidth: '100%',
   '& .MuiTabs-indicator': { display: 'none' },
   '& .MuiTab-root': {
     textTransform: 'none',
@@ -11,9 +13,11 @@ export const projectsPageSubTabsSx: SxProps<Theme> = {
     borderRadius: 1,
     mx: 0.5,
     minHeight: 36,
+    minWidth: { xs: 72, md: 120 },
     bgcolor: '#F4F6F7',
     color: '#2C3E50',
     fontWeight: 500,
+    px: { xs: 1, md: 2 },
   },
   '& .MuiTab-root.Mui-selected': {
     bgcolor: '#D6EAF8',
@@ -24,11 +28,28 @@ export const projectsPageSubTabsSx: SxProps<Theme> = {
   },
 };
 
-/** Панель из 6 кнопок импорта/удаления в одну строку без переноса. */
+/** Панель импорта: одна строка с переносом при нехватке места. */
 export const importToolbarStackSx: SxProps<Theme> = {
-  flexWrap: 'nowrap',
-  justifyContent: 'flex-end',
-  overflowX: 'auto',
+  flexWrap: 'wrap',
+  justifyContent: 'flex-start',
+  gap: 1,
   pb: 0.5,
-  '& .MuiButton-root': { flexShrink: 0, whiteSpace: 'nowrap' },
+  '& .MuiButton-root': {
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    minHeight: 40,
+  },
+};
+
+/** Первый ряд тулбара панели: версия + параметры + импорт/удаление. */
+export const panelPrimaryToolbarSx: SxProps<Theme> = {
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 1,
+  mb: 1.5,
+  '& .MuiButton-root': {
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
+    minHeight: 40,
+  },
 };

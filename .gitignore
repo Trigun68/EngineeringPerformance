@@ -73,3 +73,8 @@ client/e2e-report/
 client/test-results/
 client/playwright-report/
 client/blob-report/
+
+# Python
+__pycache__/
+*.py[cod]
+.vscode/

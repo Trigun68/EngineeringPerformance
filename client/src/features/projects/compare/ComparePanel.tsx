@@ -26,6 +26,7 @@ import {
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { fetchProjectVersions, type ProjectVersion } from '../../../api/projectVersionsApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import {
   buildVersionLabel,
   ProjectVersionPickerDialog,
@@ -39,6 +40,8 @@ import {
   createCompareSummaryColumns,
 } from '../gridColumns';
 import { importToolbarStackSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { useWorkspaceChrome } from '../shared/workspaceChromeContext';
+import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import {
   filterCompareDetailRows,
   filterCompareFacilityRows,
@@ -64,6 +67,7 @@ function compareSummaryRowId(row: CompareTreeRow, index: number): string {
 export function ComparePanel({ projectId }: ComparePanelProps) {
   const { canRead } = usePermission('VersionComparison');
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
+  const { chromeExpanded, setVersionSummary } = useWorkspaceChrome();
 
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [versionAId, setVersionAId] = useState<number | null>(null);
@@ -116,6 +120,16 @@ export function ComparePanel({ projectId }: ComparePanelProps) {
     setCompareData(null);
     setError(null);
   }, [projectId]);
+
+  useEffect(() => {
+    const parts = [
+      versionALabel ? `А: ${versionALabel}` : null,
+      versionBLabel ? `Б: ${versionBLabel}` : null,
+    ].filter((p): p is string => Boolean(p));
+    setVersionSummary(parts.length > 0 ? parts.join(' · ') : null);
+  }, [setVersionSummary, versionALabel, versionBLabel]);
+
+  useEffect(() => () => setVersionSummary(null), [setVersionSummary]);
 
   const versionAPrefKey = `projects.${projectId}.compareVersionAId`;
   const versionBPrefKey = `projects.${projectId}.compareVersionBId`;
@@ -220,6 +234,7 @@ export function ComparePanel({ projectId }: ComparePanelProps) {
     () => ({
       headerName: 'Направление',
       minWidth: 260,
+      flex: 1,
       field: 'name' as const,
       cellRendererParams: { suppressCount: true },
     }),
@@ -254,6 +269,9 @@ export function ComparePanel({ projectId }: ComparePanelProps) {
 
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <WorkingOverlay open={exportingPdf} />
+      {chromeExpanded && (
+        <>
       <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
         <Grid item xs={12} md={6}>
           <Stack direction="row" spacing={2} alignItems="center">
@@ -365,18 +383,25 @@ export function ComparePanel({ projectId }: ComparePanelProps) {
       <Tabs
         value={subTab}
         onChange={(_, v: CompareSubTab) => setSubTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
         sx={{ ...projectsPageSubTabsSx, mb: 2 }}
       >
         <Tab label="Итого" value="compare-total" />
-        <Tab label="По объектам" value="compare-facility" />
+        <Tab label="Итого по объектам" value="compare-facility" />
         <Tab label="Детально" value="compare-detail" />
       </Tabs>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        </>
+      )}
+
+      <WorkspaceChromeToggleRow />
 
       <Box sx={{ flex: 1, minHeight: 360, display: 'flex', flexDirection: viewMode === 'split' ? 'column' : 'row', gap: 2 }}>
         {(viewMode === 'table' || viewMode === 'split') && (
-          <Box sx={{ flex: viewMode === 'split' ? 1 : 1, minHeight: 0, width: '100%' }}>
+          <Box sx={{ flex: 1, minHeight: 360, height: '100%', width: '100%', minWidth: 0 }}>
         {subTab === 'compare-total' && (
           <DataTable<CompareTreeRow>
             rowData={summaryRows}

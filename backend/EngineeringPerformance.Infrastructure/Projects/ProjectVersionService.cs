@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,7 @@ public sealed class ProjectVersionService : IProjectVersionService
     {
         await ValidatePhysicalVolumeTypeAsync(request.PhysicalVolumeTypeId, cancellationToken);
 
+        var asOf = NormalizeAsOfDate(request.AsOfDate) ?? DateTime.UtcNow;
         var entity = new ProjectAnalysisVersion
         {
             ProjectId = projectId,
@@ -52,7 +54,7 @@ public sealed class ProjectVersionService : IProjectVersionService
             Direction = request.Direction,
             PhysicalVolumeTypeId = request.PhysicalVolumeTypeId,
             PlanningScenario = request.PlanningScenario ?? Domain.Norms.PlanningScenario.ByEachValue,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = asOf,
         };
 
         _context.ProjectAnalysisVersions.Add(entity);
@@ -76,6 +78,16 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         await ValidatePhysicalVolumeTypeAsync(request.PhysicalVolumeTypeId, cancellationToken);
 
+        var catalogChanged = entity.PhysicalVolumeTypeId != request.PhysicalVolumeTypeId;
+        if (catalogChanged)
+            await EnsureCatalogChangeAllowedAsync(versionId, cancellationToken);
+
+        // Сравниваем по календарному дню: UI шлёт date-only → noon UTC,
+        // чтобы правка имени не сбрасывала CreatedAt и снимок.
+        var asOf = NormalizeAsOfDate(request.AsOfDate);
+        var createdAtChanged = asOf.HasValue
+            && asOf.Value.Date != entity.CreatedAt.ToUniversalTime().Date;
+
         entity.Name = request.Name?.Trim() ?? request.VersionName.Trim();
         entity.VersionName = request.VersionName.Trim();
         entity.Description = request.Description;
@@ -83,7 +95,17 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.PhysicalVolumeTypeId = request.PhysicalVolumeTypeId;
         if (request.PlanningScenario.HasValue)
             entity.PlanningScenario = request.PlanningScenario.Value;
+        if (createdAtChanged)
+            entity.CreatedAt = asOf!.Value;
         entity.ModifiedAt = DateTime.UtcNow;
+
+        // Снимок норм зависит от CreatedAt; смена справочника БЭР/КФО тоже требует
+        // явного пересоздания (единая политика версии).
+        if (catalogChanged || createdAtChanged)
+        {
+            await AnalysisVersionSnapshotService.RepopulateSnapshotAsync(
+                _context, entity.Id, entity.CreatedAt, cancellationToken);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
         return await GetByIdAsync(projectId, versionId, cancellationToken);
@@ -107,8 +129,30 @@ public sealed class ProjectVersionService : IProjectVersionService
         int versionId,
         string newVersionName,
         string? newDescription = null,
+        AnalysisDirection? targetDirection = null,
         CancellationToken cancellationToken = default) =>
-        _deepCopy.CopyVersionAsync(projectId, versionId, newVersionName, newDescription, cancellationToken);
+        _deepCopy.CopyVersionAsync(
+            projectId,
+            versionId,
+            newVersionName,
+            newDescription,
+            targetDirection,
+            cancellationToken);
+
+    /// <summary>
+    /// Смена БЭР↔КФО при уже импортированных ФО недопустима: FK указывают на другой каталог.
+    /// </summary>
+    private async Task EnsureCatalogChangeAllowedAsync(int versionId, CancellationToken cancellationToken)
+    {
+        var hasPpv = await _context.ProjectPhysicalVolumes.AsNoTracking()
+            .AnyAsync(pv => pv.ProjectAnalysisVersionId == versionId, cancellationToken);
+        if (!hasPpv)
+            return;
+
+        throw new InvalidOperationException(
+            "Нельзя сменить справочник физобъёмов (БЭР/КФО): для версии уже импортированы "
+            + "физические объёмы. Удалите данные ФО версии или создайте новую версию с нужным справочником.");
+    }
 
     private async Task ValidatePhysicalVolumeTypeAsync(int? physicalVolumeTypeId, CancellationToken cancellationToken)
     {
@@ -128,6 +172,20 @@ public sealed class ProjectVersionService : IProjectVersionService
             throw new InvalidOperationException(
                 "Справочник физобъёмов должен быть КФО или БЭР.");
         }
+    }
+
+    /// <summary>Нормализует AsOfDate к UTC; date-only (Kind=Unspecified) → полдень UTC.</summary>
+    private static DateTime? NormalizeAsOfDate(DateTime? asOfDate)
+    {
+        if (asOfDate is not DateTime value)
+            return null;
+
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value.Date.AddHours(12), DateTimeKind.Utc),
+        };
     }
 
     private static System.Linq.Expressions.Expression<Func<ProjectAnalysisVersion, ProjectVersionDto>> Map =>

@@ -23,11 +23,15 @@ export interface ProjectVersionWriteRequest {
   physicalVolumeTypeId?: number | null;
   name?: string | null;
   planningScenario?: number | null;
+  /** Дата фиксации норм IIC (CreatedAt + AnalysisVersionSnapshot). ISO date или datetime. */
+  asOfDate?: string | null;
 }
 
 export interface CopyVersionRequest {
   newVersionName: string;
   description?: string | null;
+  /** 1=Plan, 2=Fact. Plan→Fact копирует ФО и оборудование; трудоёмкость — отдельно. */
+  targetDirection?: number | null;
 }
 
 const projectVersionSchema = z.object({
@@ -74,6 +78,7 @@ export async function copyProjectVersion(
   const { data } = await apiClient.post<ProjectVersion>(
     `/projects/${projectId}/versions/${versionId}/copy`,
     body,
+    { timeout: 300_000 },
   );
   return parseApiContract(`/projects/${projectId}/versions/${versionId}/copy`, projectVersionSchema, data);
 }

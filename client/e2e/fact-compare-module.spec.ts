@@ -26,7 +26,7 @@ test.describe('Fact and Compare modules - WPF parity', () => {
     await expect(page.getByRole('button', { name: 'Удалить труд.' })).toBeVisible();
 
     await expect(page.getByRole('tab', { name: 'Итого', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'По объектам' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 
@@ -48,7 +48,7 @@ test.describe('Fact and Compare modules - WPF parity', () => {
     await expect(page.getByRole('button', { name: 'График' })).toBeVisible();
 
     await expect(page.getByRole('tab', { name: 'Итого', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'По объектам' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 

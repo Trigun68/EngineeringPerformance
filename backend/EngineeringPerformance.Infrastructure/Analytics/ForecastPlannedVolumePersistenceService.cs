@@ -48,8 +48,10 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             .Include(pv => pv.PhysicalVolumeKfo)
             .Include(pv => pv.PhysicalVolumeBer)
             .Where(pv => pv.ProjectAnalysisVersionId == projectAnalysisVersionId
-                         && (pv.PhysicalVolumeKfo != null && pv.PhysicalVolumeKfo.ClassifierId == workDirectionId
-                             || pv.PhysicalVolumeBer != null && pv.PhysicalVolumeBer.ClassifierId == workDirectionId))
+                         && (pv.PhysicalVolumeKfo != null && pv.PhysicalVolumeKfo.IsAssessment == true
+                             && pv.PhysicalVolumeKfo.ClassifierId == workDirectionId
+                             || pv.PhysicalVolumeBer != null && pv.PhysicalVolumeBer.IsAssessment == true
+                             && pv.PhysicalVolumeBer.ClassifierId == workDirectionId))
             .OrderBy(pv => pv.Id)
             .ToListAsync(cancellationToken);
 
@@ -76,7 +78,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
         {
             var catalogKfo = await context.PhysicalVolumesKfo
                 .AsNoTracking()
-                .Where(pv => !pv.IsArchived && pv.ClassifierId == workDirectionId)
+                .Where(pv => !pv.IsArchived && pv.IsAssessment == true && pv.ClassifierId == workDirectionId)
                 .OrderBy(pv => pv.SortOrder)
                 .ThenBy(pv => pv.Name)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -101,7 +103,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
         {
             var catalogBer = await context.PhysicalVolumesBer
                 .AsNoTracking()
-                .Where(pv => !pv.IsArchived && pv.ClassifierId == workDirectionId)
+                .Where(pv => !pv.IsArchived && pv.IsAssessment == true && pv.ClassifierId == workDirectionId)
                 .OrderBy(pv => pv.SortOrder)
                 .ThenBy(pv => pv.Name)
                 .FirstOrDefaultAsync(cancellationToken);

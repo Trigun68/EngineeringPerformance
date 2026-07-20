@@ -20,6 +20,7 @@ public sealed class PhysicalVolumeBer : DirectoryItem, INotifyPropertyChanged
         Raise(nameof(Name));
         Raise(nameof(Description));
         Raise(nameof(ClassifierId));
+        Raise(nameof(PhysicalVolumeKfoId));
         Raise(nameof(Classifier));
         Raise(nameof(ClassifierNameWithUnit));
         Raise(nameof(IsAssessment));
@@ -40,6 +41,8 @@ public sealed class PhysicalVolumeBer : DirectoryItem, INotifyPropertyChanged
 
     public int? ClassifierId { get; set; }
 
+    public int? PhysicalVolumeKfoId { get; set; }
+
     public bool? IsAssessment { get; set; }
 
     public string? DocumentSet { get; set; }
@@ -57,6 +60,8 @@ public sealed class PhysicalVolumeBer : DirectoryItem, INotifyPropertyChanged
     public ICollection<ProjectLaborIntensity> LaborIntensities { get; set; } = [];
 
     public IicWorkDirection? Classifier { get; set; }
+
+    public PhysicalVolumeKfo? PhysicalVolumeKfo { get; set; }
 
     [NotMapped]
     public string ClassifierNameWithUnit { get; set; } = string.Empty;

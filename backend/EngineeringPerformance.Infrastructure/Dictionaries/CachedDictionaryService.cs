@@ -16,7 +16,7 @@ namespace EngineeringPerformance.Infrastructure.Dictionaries;
 /// </summary>
 public sealed class CachedDictionaryService : IDictionaryService
 {
-    public const string CacheKey = "dictionaries:all:v2";
+    public const string CacheKey = "dictionaries:all:v3";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
 
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -145,12 +145,14 @@ public sealed class CachedDictionaryService : IDictionaryService
             directionsTask, unitsTask, laborTask, normsTask, characteristicsTask
         );
 
-        // Объединяем KFO и BER тома
+        // Объединяем KFO и BER для legacy-ключа physicalVolumes (ID могут совпадать — не для FK).
         var volumes = volumesKfoTask.Result.Concat(volumesBerTask.Result).ToList();
 
         return new DictionariesAllDto(
             PhysicalVolumeTypes: volumeTypesTask.Result,
             PhysicalVolumes: volumes,
+            PhysicalVolumesKfo: volumesKfoTask.Result,
+            PhysicalVolumesBer: volumesBerTask.Result,
             Equipments: equipmentsTask.Result,
             LaborIntensities: laborTask.Result,
             IicWorkDirections: directionsTask.Result,

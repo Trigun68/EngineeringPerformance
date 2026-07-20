@@ -22,7 +22,7 @@ internal static class DirectoryEntityMapper
     private static readonly HashSet<string> NavigationPropertyNames =
     [
         "children", "parent", "projectPhysicalVolumes", "laborIntensities",
-        "classifier", "unit", "iicWorkDirection", "options",
+        "classifier", "unit", "iicWorkDirection", "options", "physicalVolumeKfo",
     ];
 
     private static readonly HashSet<string> LaborIntensityHiddenPropertyNames =
@@ -32,9 +32,11 @@ internal static class DirectoryEntityMapper
 
     public static DirectoryEntryDto ToDto<T>(T entity) where T : DirectoryItem
     {
-        var node = JsonSerializer.SerializeToNode(entity, JsonOptions)!.AsObject();
+        // Важно: сериализуем runtime-тип (PhysicalVolumeBer и т.д.), а не DirectoryItem —
+        // иначе GetById (возвращает DirectoryItem?) отдаёт пустой Properties.
+        var node = JsonSerializer.SerializeToNode(entity, entity.GetType(), JsonOptions)!.AsObject();
         var properties = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-        var hideLaborNorms = typeof(T).Name == "LaborIntensity";
+        var hideLaborNorms = entity.GetType().Name == "LaborIntensity";
 
         foreach (var property in node)
         {
@@ -75,7 +77,7 @@ internal static class DirectoryEntityMapper
         if (request.Properties is null || request.Properties.Count == 0)
             return entity;
 
-        var node = JsonSerializer.SerializeToNode(entity, JsonOptions)!.AsObject();
+        var node = JsonSerializer.SerializeToNode(entity, typeof(T), JsonOptions)!.AsObject();
         foreach (var (key, value) in request.Properties)
             node[key] = JsonSerializer.SerializeToNode(value, JsonOptions);
 

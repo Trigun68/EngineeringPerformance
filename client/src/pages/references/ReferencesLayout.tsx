@@ -70,7 +70,20 @@ export function ReferencesLayout() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1, flexShrink: 0 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          mb: 2,
+          flexWrap: 'nowrap',
+          gap: 1,
+          flexShrink: 0,
+          overflowX: 'auto',
+          pb: 0.5,
+          WebkitOverflowScrolling: 'touch',
+          '& .MuiButton-root': { flexShrink: 0, minHeight: 40 },
+        }}
+      >
         {visibleRoutes.map((route) => (
           <Button
             key={route.path}

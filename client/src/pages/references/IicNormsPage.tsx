@@ -241,6 +241,7 @@ export function IicNormsPage() {
     () => ({
       headerName: 'Группа',
       minWidth: 320,
+      flex: 1,
       field: 'hierarchy',
       cellRendererParams: { suppressCount: true },
       valueFormatter: (p) => {

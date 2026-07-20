@@ -11,6 +11,9 @@ public sealed class PhysicalVolumeBer : DirectoryItem
 
     public int? ClassifierId { get; set; }
 
+    /// <summary>Связанная позиция номенклатуры КФО (лист «Спр_Номенклатура ФО», столбец «Код КФО»).</summary>
+    public int? PhysicalVolumeKfoId { get; set; }
+
     public bool? IsAssessment { get; set; }
 
     public string? DocumentSet { get; set; }
@@ -30,6 +33,8 @@ public sealed class PhysicalVolumeBer : DirectoryItem
     public ICollection<ProjectLaborIntensity> LaborIntensities { get; set; } = [];
 
     public IicWorkDirection? Classifier { get; set; }
+
+    public PhysicalVolumeKfo? PhysicalVolumeKfo { get; set; }
 
     public UnitOfMeasurement? Unit { get; set; }
 }

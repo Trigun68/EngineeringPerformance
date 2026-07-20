@@ -90,12 +90,17 @@ public sealed class ProjectVersionsController : ControllerBase
                 versionId,
                 request.NewVersionName,
                 request.Description,
+                request.TargetDirection,
                 cancellationToken);
             return Ok(copy);
         }
         catch (KeyNotFoundException)
         {
             return NotFound();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException)
         {

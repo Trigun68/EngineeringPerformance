@@ -29,6 +29,8 @@ import { EditModal } from '../../components/EditModal/EditModal';
 import { usePermission } from '../../hooks/usePermission';
 import { getApiErrorMessage } from '../../services/apiError';
 import type { Project, ProjectFormData } from '../../types/project';
+import { LAST_PROJECT_PREF_KEY } from '../../utils/projectWorkspacePrefs';
+import { putUserPreferences } from '../../api/userPreferencesApi';
 
 const OBJECT_NAME = 'Projects';
 
@@ -96,11 +98,11 @@ export function ProjectsPage() {
       { field: 'contractor', headerName: 'Подрядчик' },
       { field: 'gip', headerName: 'ГИП' },
       { field: 'workStatus', headerName: 'Статус' },
-      { field: 'versionCount', headerName: 'Версии', maxWidth: 110 },
+      { field: 'versionCount', headerName: 'Версии', width: 110 },
       {
         field: 'isArchived',
         headerName: 'Архив',
-        maxWidth: 90,
+        width: 90,
         valueFormatter: (p) => (p.value ? 'Да' : ''),
         hide: !showArchived,
       },
@@ -115,6 +117,7 @@ export function ProjectsPage() {
   };
 
   const openDetail = (project: Project) => {
+    void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(project.id) });
     navigate(`/projects/${project.id}`, { state: { project } });
   };
 
@@ -231,7 +234,7 @@ export function ProjectsPage() {
           placeholder="Код, наименование, договор, заказчик..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          sx={{ minWidth: 360, maxWidth: 520 }}
+          sx={{ minWidth: 360, width: 520 }}
         />
         <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
           <FormControlLabel

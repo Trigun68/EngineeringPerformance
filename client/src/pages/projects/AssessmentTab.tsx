@@ -80,11 +80,11 @@ export function AssessmentTab({ projectId, versionId }: AssessmentTabProps) {
 
   const columnDefs = useMemo<ColDef<DirectionTreeRow>[]>(
     () => [
-      { field: 'code', headerName: 'Код', maxWidth: 100 },
-      { field: 'factPhysicalVolume', headerName: 'Факт. объём', maxWidth: 110 },
-      { field: 'factLaborHours', headerName: 'Часы', maxWidth: 100 },
-      { field: 'factProductivity', headerName: 'Произв.', maxWidth: 100 },
-      { field: 'zScore', headerName: 'Z', maxWidth: 80 },
+      { field: 'code', headerName: 'Код', width: 100 },
+      { field: 'factPhysicalVolume', headerName: 'Факт. объём', width: 110 },
+      { field: 'factLaborHours', headerName: 'Часы', width: 100 },
+      { field: 'factProductivity', headerName: 'Произв.', width: 100 },
+      { field: 'zScore', headerName: 'Z', width: 80 },
       { field: 'interpretation', headerName: 'Интерпретация', minWidth: 160 },
     ],
     [],

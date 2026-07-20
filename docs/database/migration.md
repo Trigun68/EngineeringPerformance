@@ -95,7 +95,7 @@ The `migrations/data/002_SeedData.sql` script loads **reference and demo** data.
 | Physical volume types | БЭР, КФО |
 | IIC work directions | Full tree from «Техас» sheet (`Копия ++++-1.xlsx`), codes `IIC-*` |
 | IIC norms | Norms per direction (performance / estimate / std dev where applicable) |
-| Projects | **Bare cards** `PRJ-25-310`, `PRJ-25-970` (no seeded `ProjectAnalysisVersions`, no `ProjectUserAccess`) |
+| Projects | Не сидируются (создаются в UI) |
 | Access rights | Edit (PM) + Read (Observer) for objects in `AccessControlConstants` |
 
 ### How to apply `002` only

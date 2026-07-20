@@ -9,11 +9,15 @@ public sealed record DictionaryItemDto(
     int? UnitId);
 
 /// <summary>
-/// Все 8 справочников страницы «Справочники» + регистр норм ИИС (кэшируется на фронте).
+/// Справочники страницы «Справочники» + регистр норм ИИС (кэшируется на фронте).
+/// PhysicalVolumes — объединение KFO+BER (обратная совместимость); для FK БЭР→КФО
+/// используйте PhysicalVolumesKfo (ID в таблицах не пересекаются по смыслу, но совпадают численно).
 /// </summary>
 public sealed record DictionariesAllDto(
     IReadOnlyList<DictionaryItemDto> PhysicalVolumeTypes,
     IReadOnlyList<DictionaryItemDto> PhysicalVolumes,
+    IReadOnlyList<DictionaryItemDto> PhysicalVolumesKfo,
+    IReadOnlyList<DictionaryItemDto> PhysicalVolumesBer,
     IReadOnlyList<DictionaryItemDto> Equipments,
     IReadOnlyList<DictionaryItemDto> LaborIntensities,
     IReadOnlyList<DictionaryItemDto> IicWorkDirections,

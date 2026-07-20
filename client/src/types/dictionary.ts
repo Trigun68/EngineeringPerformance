@@ -7,10 +7,12 @@ export interface DictionaryItem {
   unitId?: number | null;
 }
 
-/** 8 справочников + регистр норм ИИС (camelCase — как в API). */
+/** Справочники + регистр норм ИИС (camelCase — как в API). */
 export const DICTIONARY_KEYS = [
   'physicalVolumeTypes',
   'physicalVolumes',
+  'physicalVolumesKfo',
+  'physicalVolumesBer',
   'equipments',
   'laborIntensities',
   'iicWorkDirections',
@@ -24,6 +26,8 @@ export type DictionaryKey = (typeof DICTIONARY_KEYS)[number];
 export interface DictionariesAllResponse {
   physicalVolumeTypes: DictionaryItem[];
   physicalVolumes: DictionaryItem[];
+  physicalVolumesKfo: DictionaryItem[];
+  physicalVolumesBer: DictionaryItem[];
   equipments: DictionaryItem[];
   laborIntensities: DictionaryItem[];
   iicWorkDirections: DictionaryItem[];

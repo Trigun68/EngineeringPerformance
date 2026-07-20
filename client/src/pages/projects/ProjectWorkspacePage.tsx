@@ -168,7 +168,7 @@ export function ProjectWorkspacePage() {
     () => [
       { field: 'versionName', headerName: 'Версия', minWidth: 120 },
       { field: 'name', headerName: 'Наименование', minWidth: 200 },
-      { field: 'isArchived', headerName: 'Архив', maxWidth: 90 },
+      { field: 'isArchived', headerName: 'Архив', width: 90 },
     ],
     []
   );

@@ -22,4 +22,9 @@ public sealed record ProjectVersionWriteRequest(
     AnalysisDirection Direction,
     int? PhysicalVolumeTypeId,
     string? Name = null,
-    PlanningScenario? PlanningScenario = null);
+    PlanningScenario? PlanningScenario = null,
+    /// <summary>
+    /// Дата фиксации норм (снимок IIC). При создании задаёт <c>CreatedAt</c>;
+    /// при обновлении — меняет <c>CreatedAt</c> и пересоздаёт снимок.
+    /// </summary>
+    DateTime? AsOfDate = null);

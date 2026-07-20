@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using EngineeringPerformance.Infrastructure.Projects;
 using Microsoft.EntityFrameworkCore;
@@ -343,6 +344,10 @@ public sealed partial class ProjectExcelDataImportService
             var epCol = TryFindEpCatalogColumnIndex(worksheet, headerRow) ?? 6;
             var qtyCol = TryFindQuantityColumnIndex(worksheet, headerRow);
             columnMap = PhysicalVolumeColumnMap.FromEpCatalogColumn(epCol, qtyCol);
+            // В файлах «Список работ» между типом привязки и комплектом документов
+            // есть колонки оборудования — относительные сдвиги e-3/e-2/e-1 ломают FBS.
+            // Перекрываем по заголовкам (как у импорта оборудования).
+            columnMap = ApplySpisokRabotHeaderOverrides(worksheet, headerRow, columnMap);
             firstDataRowNumber = headerRow + 1;
             return true;
         }
@@ -410,6 +415,7 @@ public sealed partial class ProjectExcelDataImportService
         }
 
         var lastCol = Math.Min(used.LastColumn().ColumnNumber(), 40);
+        var catalogColumns = new List<int>();
         for (var c = 1; c <= lastCol; c++)
         {
             var text = GetWorksheetCellString(worksheet, headerRow, c);
@@ -420,11 +426,46 @@ public sealed partial class ProjectExcelDataImportService
 
             if (IsSpisokCatalogHeaderText(text))
             {
-                return c;
+                catalogColumns.Add(c);
             }
         }
 
-        return null;
+        if (catalogColumns.Count == 0)
+        {
+            return null;
+        }
+
+        if (catalogColumns.Count == 1)
+        {
+            return catalogColumns[0];
+        }
+
+        // В «Список работ» v2 две колонки «ID по каталогу» (оборудование и работы).
+        // Выбираем ту, где в данных больше шифров БЭР/КФО.
+        var firstDataRow = headerRow + 1;
+        var lastRow = Math.Min(used.LastRow().RowNumber(), firstDataRow + 8000);
+        var bestCol = catalogColumns[0];
+        var bestHits = -1;
+        foreach (var col in catalogColumns)
+        {
+            var hits = 0;
+            for (var r = firstDataRow; r <= lastRow; r++)
+            {
+                var cellText = GetWorksheetCellString(worksheet, r, col);
+                if (CellTextLooksLikeCatalogWorkCode(cellText?.Trim() ?? string.Empty))
+                {
+                    hits++;
+                }
+            }
+
+            if (hits > bestHits)
+            {
+                bestHits = hits;
+                bestCol = col;
+            }
+        }
+
+        return bestCol;
     }
 
     /// <summary>
@@ -432,6 +473,75 @@ public sealed partial class ProjectExcelDataImportService
     /// Возвращает номер колонки или <c>null</c>, если не найдено.
     /// </summary>
     private static int? TryFindQuantityColumnIndex(IXLWorksheet worksheet, int headerRow)
+        => TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("кол-во", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("BoQ", StringComparison.OrdinalIgnoreCase)
+                || t.Contains("количество", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Подставляет колонки FBS / комплекта / привязки / работы по тексту шапки,
+    /// чтобы не зависеть от числа колонок оборудования между ними.
+    /// </summary>
+    private static PhysicalVolumeColumnMap ApplySpisokRabotHeaderOverrides(
+        IXLWorksheet worksheet,
+        int headerRow,
+        PhysicalVolumeColumnMap map)
+    {
+        var facility = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("FBS", StringComparison.OrdinalIgnoreCase));
+        var binding = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("Тип привязки", StringComparison.OrdinalIgnoreCase));
+        var documentSet = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("Комплект документов", StringComparison.OrdinalIgnoreCase));
+        var workId = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("ID работы", StringComparison.OrdinalIgnoreCase));
+        var workName = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("Наименование работы", StringComparison.OrdinalIgnoreCase));
+        var workComment = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("Комментарий к работе", StringComparison.OrdinalIgnoreCase));
+        var estimation = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Contains("Базис оценки", StringComparison.OrdinalIgnoreCase));
+        // «TAG» работ (не «TAG оборудования»).
+        var tag = TryFindHeaderColumnIndex(
+            worksheet,
+            headerRow,
+            static t => t.Equals("TAG", StringComparison.OrdinalIgnoreCase)
+                || (t.Contains("TAG", StringComparison.OrdinalIgnoreCase)
+                    && !t.Contains("оборуд", StringComparison.OrdinalIgnoreCase)));
+
+        return map with
+        {
+            FacilitySource = facility ?? map.FacilitySource,
+            BindingType = binding ?? map.BindingType,
+            DocumentSet = documentSet ?? map.DocumentSet,
+            WorkId = workId ?? map.WorkId,
+            WorkName = workName ?? map.WorkName,
+            WorkComment = workComment ?? map.WorkComment,
+            EstimationBasis = estimation ?? map.EstimationBasis,
+            Tag = tag ?? map.Tag,
+        };
+    }
+
+    private static int? TryFindHeaderColumnIndex(
+        IXLWorksheet worksheet,
+        int headerRow,
+        Func<string, bool> match)
     {
         var used = worksheet.RangeUsed();
         if (used is null)
@@ -448,10 +558,7 @@ public sealed partial class ProjectExcelDataImportService
                 continue;
             }
 
-            var t = text.Trim();
-            if (t.Contains("кол-во", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("BoQ", StringComparison.OrdinalIgnoreCase)
-                || t.Contains("количество", StringComparison.OrdinalIgnoreCase))
+            if (match(text.Trim()))
             {
                 return c;
             }

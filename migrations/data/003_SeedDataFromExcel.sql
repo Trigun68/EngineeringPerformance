@@ -1,15 +1,15 @@
 -- ============================================================================
--- Seed Data from Excel (003): IIC из листа «Техас» (Копия ++++-1.xlsx)
+-- Seed Data from Excel (003): IIC из листа «Спр_Техас»
 -- ----------------------------------------------------------------------------
--- Источник: .src/Копия ++++-1.xlsx, лист «Техас» (заголовки в 3-й строке).
+-- Источник: _Расчет_трудоемкости_2_версии.xl.xlsx, лист «Спр_Техас» (заголовки в строке 4).
 -- Иерархия групп строится по номеру «№» (например, 1.2.3 → родитель 1.2 → 1).
 -- Единицы — знаменатель из «Ед. изм. (метр)».
--- Нормы: Performance, Estimate (Z-оценка), StandardDeviation (Cт. откл.).
+-- Нормы: Performance, Estimate (EPM), StandardDeviation (Cт. откл. метр.).
 -- Идемпотентно: безопасно запускать повторно.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
--- 1. IIC Work Directions (иерархия по № из «Техаса»)
+-- 1. IIC Work Directions (иерархия по № из «Спр_Техас»)
 -- ----------------------------------------------------------------------------
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-1')
 BEGIN
@@ -38,7 +38,7 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2')
 BEGIN
     INSERT INTO [IicWorkDirections] ([Code], [Name], [Description], [ParentId], [UnitId], [SortOrder], [IsArchived], [CreatedAt])
-    VALUES (N'IIC-1-2', N'Общие фундаменты (ярд³) (без свай)', N'Объем фундаментов — только кубические ярды бетона. Трудозатраты исключают сваи.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м³'), 4, 0, SYSUTCDATETIME());
+    VALUES (N'IIC-1-2', N'Общие фундаменты (без свай)', N'Объем фундаментов — только кубические ярды бетона. Трудозатраты исключают сваи.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м³'), 4, 0, SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-1')
@@ -176,19 +176,19 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-4')
 BEGIN
     INSERT INTO [IicWorkDirections] ([Code], [Name], [Description], [ParentId], [UnitId], [SortOrder], [IsArchived], [CreatedAt])
-    VALUES (N'IIC-4', N'Общие трубопроводы (только погонные футы)', N'Общий объем — только погонные футы. Трудозатраты включают малый и большой диаметр, инженерные опоры/подвески и фитинги. Примечание: «Горячие» трубопроводы — температура проектирования >250°F; «Холодные» — температура проектирования <–20°F. Количество трубопроводов — это трубопроводы, указанные в окончательных чертежах «Выпущено для строительства» (IFC). Это количество должно измеряться «центром к центру» через клапаны и фитинги, как и количество для строительной метрики.', NULL, (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 27, 0, SYSUTCDATETIME());
+    VALUES (N'IIC-4', N'Общие трубопроводы (только погонные)', N'Общий объем — только погонные футы. Трудозатраты включают малый и большой диаметр, инженерные опоры/подвески и фитинги. Примечание: «Горячие» трубопроводы — температура проектирования >250°F; «Холодные» — температура проектирования <–20°F. Количество трубопроводов — это трубопроводы, указанные в окончательных чертежах «Выпущено для строительства» (IFC). Это количество должно измеряться «центром к центру» через клапаны и фитинги, как и количество для строительной метрики.', NULL, (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 27, 0, SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-1')
 BEGIN
     INSERT INTO [IicWorkDirections] ([Code], [Name], [Description], [ParentId], [UnitId], [SortOrder], [IsArchived], [CreatedAt])
-    VALUES (N'IIC-4-1', N'Малый диаметр (≤2½") — погонные футы', N'Трубы диаметром ≤2½ дюйма.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 28, 0, SYSUTCDATETIME());
+    VALUES (N'IIC-4-1', N'Малый диаметр (≤2½")', N'Трубы диаметром ≤2½ дюйма.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 28, 0, SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-2')
 BEGIN
     INSERT INTO [IicWorkDirections] ([Code], [Name], [Description], [ParentId], [UnitId], [SortOrder], [IsArchived], [CreatedAt])
-    VALUES (N'IIC-4-2', N'Большой диаметр (≥3") — погонные футы', N'Трубы диаметром ≥3 дюйма.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 29, 0, SYSUTCDATETIME());
+    VALUES (N'IIC-4-2', N'Большой диаметр (≥3")', N'Трубы диаметром ≥3 дюйма.', (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'м'), 29, 0, SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-3')
@@ -294,38 +294,38 @@ BEGIN
 END;
 
 -- ----------------------------------------------------------------------------
--- 2. IIC Work Direction Norms (Performance / Estimate=Z / StandardDeviation)
+-- 2. IIC Work Direction Norms (Performance / Estimate=EPM / StandardDeviation)
 -- ----------------------------------------------------------------------------
 DECLARE @ChelHourIdNorm INT = (SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'час');
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1'), 4.3160, 1.4623, 4.3427, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1'), 4.3160, 1.4623, 0.7522, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1'), 1.3079, 0.2684, 4.6572, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1'), 1.3079, 0.2684, 1.1619, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-1'), 3.9236, 1.3670, 3.2697, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-1'), 3.9236, 1.3670, 1.0921, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-2'), 0.7847, -0.2424, 1.1251, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-1-2'), 0.7847, -0.2424, 0.6761, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2'), 2.6157, 0.9615, 2.7325, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2'), 2.6157, 0.9615, 0.7233, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-1'))
@@ -337,49 +337,49 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-2'), 6.4086, 1.8576, 7.6998, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-2'), 6.4086, 1.8576, 0.8715, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-3'), 1.8310, 0.6049, 1.2442, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-2-3'), 1.8310, 0.6049, 0.6710, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-3'), 4.1852, 1.4316, 2.0198, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-1-3'), 4.1852, 1.4316, 0.6245, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2'), 12.0000, 2.4849, 7.9451, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2'), 12.0000, 2.4849, 0.5230, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-1'), 13.0000, 2.5649, 18.9110, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-1'), 13.0000, 2.5649, 0.9785, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2'), 10.0000, 2.3026, 5.0700, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2'), 10.0000, 2.3026, 0.4366, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-1'), 10.0000, 2.3026, 5.1039, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-1'), 10.0000, 2.3026, 0.4930, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-2'), 12.5000, 2.5257, 7.5664, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-2-2-2'), 12.5000, 2.5257, 0.5189, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3'))
@@ -391,19 +391,19 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1'), 29.0000, 3.3673, 13.2098, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1'), 29.0000, 3.3673, 0.5672, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-1'), 21.5000, 3.0681, 11.1555, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-1'), 21.5000, 3.0681, 0.4728, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-2'), 28.0000, 3.3322, 28.8517, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-1-2'), 28.0000, 3.3322, 0.7341, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2'))
@@ -415,19 +415,19 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-1'), 0.6562, -0.4213, 0.4932, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-1'), 0.6562, -0.4213, 0.7735, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-2'), 7.0000, 1.9459, 14.4750, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-2-2'), 7.0000, 1.9459, 1.0250, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-3'), 1.6404, 0.4950, 1.4159, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-3'), 1.6404, 0.4950, 0.8021, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4'))
@@ -439,13 +439,13 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-1'), 0.8202, -0.1982, 0.7225, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-1'), 0.8202, -0.1982, 1.8016, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-2'), 0.6000, -0.5108, 0.7616, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-4-2'), 0.6000, -0.5108, 0.8503, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-5'))
@@ -457,31 +457,31 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-5-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-5-1'), 4.5000, 1.5041, 1.5811, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-3-5-1'), 4.5000, 1.5041, 0.3586, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), 2.2966, 0.8314, 1.1600, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4'), 2.2966, 0.8314, 0.4153, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-1'), 1.9685, 0.6773, 1.0694, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-1'), 1.9685, 0.6773, 0.4801, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-2'), 2.2966, 0.8314, 0.9843, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-2'), 2.2966, 0.8314, 0.3831, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-3'), 2.1000, 0.7419, 0.6519, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-4-3'), 2.1000, 0.7419, 0.2139, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5'))
@@ -493,43 +493,43 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-1'), 23.0000, 3.1355, 21.1896, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-1'), 23.0000, 3.1355, 0.6575, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-2'), 11.0000, 2.3979, 7.9451, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-2'), 11.0000, 2.3979, 0.5800, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-3'), 10.3000, 2.3321, 10.0245, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-5-3'), 10.3000, 2.3321, 0.7165, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6'), 127.0000, 4.8442, 81.1819, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6'), 127.0000, 4.8442, 0.5579, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-1'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-1'), 87.0000, 4.4659, 56.2994, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-1'), 87.0000, 4.4659, 0.4687, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-2'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-2'), 62.2000, 4.1304, 34.5129, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-2'), 62.2000, 4.1304, 0.4219, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-3'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-3'), 67.4000, 4.2106, 42.2191, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-3'), 67.4000, 4.2106, 0.4499, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-4'))
@@ -541,13 +541,13 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-6'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-6'), 304.0000, 5.7170, 290.4522, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-6'), 304.0000, 5.7170, 0.8983, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-7'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-7'), 78.0000, 4.3567, 111.5532, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-7'), 78.0000, 4.3567, 0.6672, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-8'))
@@ -565,7 +565,7 @@ END;
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-10'))
 BEGIN
     INSERT INTO [IicWorkDirectionNorms] ([WorkDirectionId], [Performance], [Estimate], [StandardDeviation], [UnitId], [EffectiveFrom], [CreatedAt])
-    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-10'), 174.0000, 5.1591, 129.1898, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
+    VALUES ((SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-10'), 174.0000, 5.1591, 0.7729, @ChelHourIdNorm, SYSUTCDATETIME(), SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [IicWorkDirectionNorms] WHERE [WorkDirectionId] = (SELECT [Id] FROM [IicWorkDirections] WHERE [Code] = N'IIC-6-11'))

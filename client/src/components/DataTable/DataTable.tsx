@@ -28,13 +28,18 @@ import {
 import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
-import { getUserSetting, putUserSetting } from '../../api/userSettingsApi';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
 import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
-import { GridViewport } from '../dictionary/GridViewport';
+import {
+  filterPrefKey,
+  loadGridLayout,
+  persistGridLayout,
+  setCachedGridLayout,
+} from '../../utils/gridLayoutPersistence';
 import { dataTableAggFuncs } from './dataTableAggFuncs';
+import { GridViewport } from '../dictionary/GridViewport';
 
 export interface ContextMenuItem<T = unknown> {
   name: string;
@@ -73,14 +78,6 @@ export interface DataTableProps<T> {
 
 const LAYOUT_DEBOUNCE_MS = 400;
 const FILTER_DEBOUNCE_MS = 800;
-
-function layoutPrefKey(gridId: string): string {
-  return `grid.${gridId}.layout`;
-}
-
-function filterPrefKey(gridId: string): string {
-  return `grid.${gridId}.filter`;
-}
 
 function sanitizeFilterModel(model: Record<string, unknown>): Record<string, unknown> | null {
   if (Object.keys(model).length === 0) return null;
@@ -125,42 +122,54 @@ export function DataTable<T extends object>({
   const gridInitializedRef = useRef(false);
   const isFirstRenderRef = useRef(true);
   const filterAppliedRef = useRef(false);
+  /** Последний layout — flush при unmount, когда GridApi уже уничтожен. */
+  const lastLayoutRef = useRef<ColumnState[] | null>(null);
   const { canRead, hasLevel } = usePermission(objectName);
 
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [allColumnLabels, setAllColumnLabels] = useState<Record<string, string>>({});
 
+  // Без flex по умолчанию: иначе колонки с узким maxWidth/width не тянутся
+  // (flex + minWidth конфликтуют с maxWidth — resize выглядит как no-op).
+  // Растягиваемые столбцы задают flex: 1 явно в columnDefs.
   const defaultColDef = useMemo<ColDef<T>>(
     () => ({
       sortable: true,
       filter: true,
       resizable: true,
-      flex: 1,
-      minWidth: 120,
+      minWidth: 80,
       headerTooltipValueGetter: (params: { colDef: ColDef<T> }) =>
         params.colDef.headerTooltip ?? params.colDef.headerName ?? params.colDef.field ?? '',
     }),
     [],
   );
 
-  const persistLayoutNow = useCallback(async () => {
+  const captureLayoutFromApi = useCallback((): ColumnState[] | null => {
     const api = gridApiRef.current;
-    if (!api || !gridId || !gridInitializedRef.current) return;
+    if (!api) return lastLayoutRef.current;
     const layout = api.getColumnState();
-    await putUserPreferences({ [layoutPrefKey(gridId)]: JSON.stringify(layout) });
-    // Обратная совместимость со старым ключом.
-    await putUserSetting(`grid-${gridId}`, JSON.stringify(layout));
+    lastLayoutRef.current = layout;
+    if (gridId) setCachedGridLayout(gridId, layout);
+    return layout;
   }, [gridId]);
 
+  const persistLayoutNow = useCallback(async () => {
+    if (!gridId || !gridInitializedRef.current) return;
+    const layout = captureLayoutFromApi() ?? lastLayoutRef.current;
+    if (!layout || layout.length === 0) return;
+    await persistGridLayout(gridId, layout);
+  }, [captureLayoutFromApi, gridId]);
+
   const scheduleLayoutSave = useCallback(() => {
-    if (!gridId || !gridApiRef.current || !gridInitializedRef.current) return;
+    if (!gridId || !gridInitializedRef.current) return;
     if (isFirstRenderRef.current) return;
+    captureLayoutFromApi();
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void persistLayoutNow();
     }, LAYOUT_DEBOUNCE_MS);
-  }, [gridId, persistLayoutNow]);
+  }, [captureLayoutFromApi, gridId, persistLayoutNow]);
 
   const scheduleFilterSave = useCallback(() => {
     if (!gridId || !gridApiRef.current || !gridInitializedRef.current) return;
@@ -179,23 +188,10 @@ export function DataTable<T extends object>({
 
   const applySavedLayout = useCallback(async (api: GridApi<T>) => {
     if (!gridId) return;
-    let raw: string | undefined;
-    try {
-      const prefs = await getUserPreferences();
-      raw = prefs[layoutPrefKey(gridId)];
-    } catch {
-      raw = undefined;
-    }
-    if (!raw) {
-      raw = (await getUserSetting(`grid-${gridId}`)) ?? undefined;
-    }
-    if (!raw) return;
-    try {
-      const state = JSON.parse(raw) as ColumnState[];
-      api.applyColumnState({ state, applyOrder: true });
-    } catch {
-      // Повреждённый layout — игнорируем.
-    }
+    const state = await loadGridLayout(gridId);
+    if (!state || state.length === 0) return;
+    lastLayoutRef.current = state;
+    api.applyColumnState({ state, applyOrder: true });
   }, [gridId]);
 
   const applySavedFilters = useCallback(async (api: GridApi<T>) => {
@@ -261,10 +257,20 @@ export function DataTable<T extends object>({
     void applySavedLayout(api).then(() => syncColumnVisibilityState(api));
   }, [applySavedLayout, columnDefs, syncColumnVisibilityState]);
 
+  // Flush layout при размонтировании (смена вкладки) — иначе debounce теряется.
   useEffect(() => () => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    if (filterTimerRef.current) clearTimeout(filterTimerRef.current);
-  }, []);
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    if (filterTimerRef.current) {
+      clearTimeout(filterTimerRef.current);
+      filterTimerRef.current = null;
+    }
+    if (gridId && lastLayoutRef.current && lastLayoutRef.current.length > 0) {
+      void persistGridLayout(gridId, lastLayoutRef.current);
+    }
+  }, [gridId]);
 
   const getContextMenuItems = useCallback(
     (params: GetContextMenuItemsParams<T>): (string | MenuItemDef)[] => {
@@ -283,9 +289,22 @@ export function DataTable<T extends object>({
           action: () => item.action(row),
         }));
 
+      if (treeData || enableRowGrouping) {
+        items.push(
+          {
+            name: 'Развернуть всё',
+            action: () => gridApiRef.current?.expandAll(),
+          },
+          {
+            name: 'Свернуть всё',
+            action: () => gridApiRef.current?.collapseAll(),
+          },
+        );
+      }
+
       return [...items, 'separator', 'copy', 'copyWithHeaders', 'export'];
     },
-    [canRead, contextMenuItems, hasLevel],
+    [canRead, contextMenuItems, enableRowGrouping, hasLevel, treeData],
   );
 
   const openColumnConfig = () => {
@@ -332,8 +351,18 @@ export function DataTable<T extends object>({
         overflow: 'hidden',
       }}
     >
-      {showColumnSettings && (
-        <Stack direction="row" justifyContent="flex-end" sx={{ mb: 0.5, flexShrink: 0 }}>
+      {(showColumnSettings) && (
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={{
+            mb: 0.5,
+            flexShrink: 0,
+            justifyContent: 'flex-end',
+            flexWrap: 'wrap',
+            gap: 0.5,
+          }}
+        >
           <Tooltip title="Настроить столбцы">
             <IconButton size="small" onClick={openColumnConfig} aria-label="Настроить столбцы">
               <ViewColumnOutlinedIcon fontSize="small" />
@@ -381,7 +410,10 @@ export function DataTable<T extends object>({
           pinnedBottomRowData={pinnedBottomRowData}
           onGridReady={onGridReady}
           onColumnMoved={scheduleLayoutSave}
-          onColumnResized={scheduleLayoutSave}
+          onColumnResized={(event) => {
+            // Сохраняем layout только после отпускания мыши, не на каждый пиксель.
+            if (event.finished) scheduleLayoutSave();
+          }}
           onColumnVisible={scheduleLayoutSave}
           onSortChanged={scheduleLayoutSave}
           onColumnRowGroupChanged={onColumnRowGroupChanged}

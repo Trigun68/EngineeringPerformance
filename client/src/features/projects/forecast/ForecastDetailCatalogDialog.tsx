@@ -5,7 +5,11 @@ import {
   updateDirectoryEntry,
   type DirectoryEntry,
 } from '../../../api/directoriesApi';
-import { getDirectoryFields } from '../../../pages/references/directoryFieldConfig';
+import {
+  buildPropertiesPayload,
+  getFormFields,
+  propertiesFromEntry,
+} from '../../../pages/references/directoryFieldConfig';
 import { DirectoryEditDialog, DirectoryFormRow } from '../../../pages/references/DirectoryEditDialog';
 import { DirectoryFormFields } from '../../../pages/references/DirectoryFormFields';
 import { isPhysicalVolumeCatalogResource } from '../../../pages/references/referenceConfig';
@@ -32,7 +36,7 @@ export function ForecastDetailCatalogDialog({
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [isArchived, setIsArchived] = useState(false);
 
-  const fieldDefs = useMemo(() => getDirectoryFields(resource), [resource]);
+  const fieldDefs = useMemo(() => getFormFields(resource), [resource]);
   const isPhysicalVolumeCatalog = isPhysicalVolumeCatalogResource(resource);
 
   useEffect(() => {
@@ -44,7 +48,7 @@ export function ForecastDetailCatalogDialog({
       .then((loaded) => {
         setEntry(loaded);
         setName(loaded.name);
-        setProperties({ ...loaded.properties });
+        setProperties(propertiesFromEntry(resource, loaded.properties as Record<string, unknown>));
         setIsArchived(loaded.isArchived);
       })
       .catch(() => setEntry(null));
@@ -56,7 +60,7 @@ export function ForecastDetailCatalogDialog({
       name,
       parentId: entry?.parentId ?? null,
       sortOrder: entry?.sortOrder,
-      properties,
+      properties: buildPropertiesPayload(resource, properties),
     });
     onSaved();
     onClose();

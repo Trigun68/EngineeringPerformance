@@ -165,11 +165,11 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
 
   const columnDefs = useMemo<ColDef<VolumeTreeRow>[]>(
     () => [
-      { field: 'unitName', headerName: 'Ед.', maxWidth: 80 },
-      { field: 'plannedVolume', headerName: 'План. объём', maxWidth: 120 },
-      { field: 'baseHours', headerName: 'Базовые ч.', maxWidth: 110 },
-      { field: 'optimisticHours', headerName: 'Опт.', maxWidth: 90 },
-      { field: 'pessimisticHours', headerName: 'Пес.', maxWidth: 90 },
+      { field: 'unitName', headerName: 'Ед.', width: 80 },
+      { field: 'plannedVolume', headerName: 'План. объём', width: 120 },
+      { field: 'baseHours', headerName: 'Базовые ч.', width: 110 },
+      { field: 'optimisticHours', headerName: 'Опт.', width: 90 },
+      { field: 'pessimisticHours', headerName: 'Пес.', width: 90 },
       { field: 'range', headerName: 'Диапазон', minWidth: 120 },
     ],
     [],

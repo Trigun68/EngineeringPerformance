@@ -1,3 +1,5 @@
+using EngineeringPerformance.Domain.Enums;
+
 namespace EngineeringPerformance.Application.Projects;
 
 public interface IProjectVersionService
@@ -17,5 +19,6 @@ public interface IProjectVersionService
         int versionId,
         string newVersionName,
         string? newDescription = null,
+        AnalysisDirection? targetDirection = null,
         CancellationToken cancellationToken = default);
 }
