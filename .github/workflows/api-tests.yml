@@ -2,7 +2,7 @@ name: API Tests
 
 on:
   push:
-    branches: [main, feat/*, fix/*]
+    branches: [master, main, feat/*, fix/*]
     paths:
       - 'backend/**'
       - '.github/workflows/api-tests.yml'
