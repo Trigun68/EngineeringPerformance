@@ -64,6 +64,9 @@ jobs:
             docker logs --tail 40 ep-frontend || true
             exit 1
           }
+          # Sanity: nomenclature + demo projects must exist after db-init.
+          docker compose exec -T sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SQL_SA_PASSWORD" -C -d EngineeringPerformance -Q \
+            "SET NOCOUNT ON; SELECT 'KFO' t, COUNT(*) c FROM PhysicalVolumesKfo UNION ALL SELECT 'Projects', COUNT(*) FROM Projects;"
 
       # Не run-e2e-docker.sh: nested `docker run` на GHA зависает на npm ci.
       - name: Install Playwright browsers

@@ -46,9 +46,12 @@ jobs:
           sed -i 's/^SQL_SA_PASSWORD=.*/SQL_SA_PASSWORD=Test_SA_password1!/' .env
           sed -i 's/^JWT_SECRET=.*/JWT_SECRET=test-jwt-secret-minimum-32-characters-long/' .env
           echo "WEB_PORT=8081" >> .env
-          docker compose up -d sqlserver redis db-init --wait || {
+          # --wait on db-init only waits until the container *starts* (no healthcheck),
+          # not until the seed script finishes — run it in the foreground.
+          docker compose up -d sqlserver redis --wait
+          docker compose run --rm --name ep-db-init-ci db-init || {
             echo "=== ep-db-init logs ==="
-            docker logs ep-db-init || true
+            docker logs ep-db-init-ci || true
             echo "=== ep-sqlserver logs (tail) ==="
             docker logs --tail 80 ep-sqlserver || true
             exit 1

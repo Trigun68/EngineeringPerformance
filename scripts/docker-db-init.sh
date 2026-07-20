@@ -6,7 +6,8 @@ SQL_USER="${SQL_USER:-sa}"
 SQL_PASSWORD="${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}"
 DB_NAME="${DB_NAME:-EngineeringPerformance}"
 
-SQLCMD=(/opt/mssql-tools18/bin/sqlcmd -S "${SQL_HOST}" -U "${SQL_USER}" -P "${SQL_PASSWORD}" -C -I)
+# -b: abort on SQL error (otherwise schema/seed failures exit 0 and CI boots empty DB).
+SQLCMD=(/opt/mssql-tools18/bin/sqlcmd -S "${SQL_HOST}" -U "${SQL_USER}" -P "${SQL_PASSWORD}" -C -I -b)
 
 SCHEMA_FILES=(
   schema/001_InitialSchema.sql
@@ -45,6 +46,7 @@ DATA_FILES=(
   data/009_BackfillAccessRights.sql
   data/010_EquipmentSeed.sql
   data/014_RefreshEquipmentFromNomenclature.sql
+  data/016_SeedCiDemoProjects.sql
 )
 
 table_exists() {

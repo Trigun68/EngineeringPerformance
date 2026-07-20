@@ -49,6 +49,10 @@ services:
       # Не монтировать в /scripts — в образе mssql этот путь занят/пустой volume.
       - ./scripts/docker-db-init.sh:/ep-init/docker-db-init.sh:ro
     entrypoint: ["/bin/bash", "/ep-init/docker-db-init.sh"]
+    # Образ mssql имеет HEALTHCHECK; при override entrypoint он невалиден.
+    # Без disable `compose up --wait` считает сервис «готовым» до конца сида.
+    healthcheck:
+      disable: true
     networks:
       - internal
     restart: "no"

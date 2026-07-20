@@ -45,6 +45,7 @@ BEGIN
     CREATE INDEX [IX_PhysicalVolumesKfo_IsArchived_SortOrder_Name]
         ON [PhysicalVolumesKfo]([IsArchived], [SortOrder], [Name]);
 END;
+GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesBer')
 BEGIN
@@ -84,42 +85,52 @@ BEGIN
     CREATE INDEX [IX_PhysicalVolumesBer_IsArchived_SortOrder_Name]
         ON [PhysicalVolumesBer]([IsArchived], [SortOrder], [Name]);
 END;
+GO
 
+-- Миграция данных из legacy PhysicalVolumes.
+-- Не ссылаемся на PhysicalVolumes.IicNormId/UnitId: на fresh-DB (001) их нет,
+-- и compile-time проверка SQL Server валит весь batch.
 IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumes')
+   AND EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesKfo')
+   AND NOT EXISTS (SELECT 1 FROM [PhysicalVolumesKfo])
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumesKfo])
-    BEGIN
-        SET IDENTITY_INSERT [PhysicalVolumesKfo] ON;
-        INSERT INTO [PhysicalVolumesKfo] (
-            [Id], [Code], [Description], [ClassifierId], [IicNormId], [IsAssessment], [DocumentSet],
-            [Coefficient], [UnitId], [Name], [ParentId], [SortOrder], [IsArchived], [CreatedAt], [ModifiedAt]
-        )
-        SELECT
-            pv.[Id], pv.[Code], pv.[Description], pv.[ClassifierId], pv.[IicNormId], pv.[IsAssessment], pv.[DocumentSet],
-            pv.[Coefficient], pv.[UnitId], pv.[Name], pv.[ParentId], pv.[SortOrder], pv.[IsArchived], pv.[CreatedAt], pv.[ModifiedAt]
-        FROM [PhysicalVolumes] pv
-        INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
-        WHERE pvt.[Name] LIKE N'КФО%';
-        SET IDENTITY_INSERT [PhysicalVolumesKfo] OFF;
-    END;
-
-    IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumesBer])
-    BEGIN
-        SET IDENTITY_INSERT [PhysicalVolumesBer] ON;
-        INSERT INTO [PhysicalVolumesBer] (
-            [Id], [Code], [Description], [ClassifierId], [IsAssessment], [DocumentSet],
-            [Coefficient], [UnitId], [Name], [ParentId], [SortOrder], [IsArchived], [CreatedAt], [ModifiedAt]
-        )
-        SELECT
-            pv.[Id], pv.[Code], pv.[Description], pv.[ClassifierId], pv.[IsAssessment], pv.[DocumentSet],
-            pv.[Coefficient], pv.[UnitId], pv.[Name], pv.[ParentId], pv.[SortOrder], pv.[IsArchived], pv.[CreatedAt], pv.[ModifiedAt]
-        FROM [PhysicalVolumes] pv
-        INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
-        WHERE pvt.[Name] LIKE N'БЭР%';
-        SET IDENTITY_INSERT [PhysicalVolumesBer] OFF;
-    END;
+    SET IDENTITY_INSERT [PhysicalVolumesKfo] ON;
+    INSERT INTO [PhysicalVolumesKfo] (
+        [Id], [Code], [Description], [ClassifierId], [IicNormId], [IsAssessment], [DocumentSet],
+        [Coefficient], [UnitId], [Name], [ParentId], [SortOrder], [IsArchived], [CreatedAt], [ModifiedAt]
+    )
+    SELECT
+        pv.[Id], pv.[Code], pv.[Description], pv.[ClassifierId],
+        NULL, pv.[IsAssessment], pv.[DocumentSet],
+        ISNULL(pv.[Coefficient], 1), NULL, pv.[Name], pv.[ParentId], pv.[SortOrder],
+        pv.[IsArchived], pv.[CreatedAt], pv.[ModifiedAt]
+    FROM [PhysicalVolumes] pv
+    INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
+    WHERE pvt.[Name] LIKE N'КФО%';
+    SET IDENTITY_INSERT [PhysicalVolumesKfo] OFF;
 END;
 GO
+
+IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumes')
+   AND EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesBer')
+   AND NOT EXISTS (SELECT 1 FROM [PhysicalVolumesBer])
+BEGIN
+    SET IDENTITY_INSERT [PhysicalVolumesBer] ON;
+    INSERT INTO [PhysicalVolumesBer] (
+        [Id], [Code], [Description], [ClassifierId], [IsAssessment], [DocumentSet],
+        [Coefficient], [UnitId], [Name], [ParentId], [SortOrder], [IsArchived], [CreatedAt], [ModifiedAt]
+    )
+    SELECT
+        pv.[Id], pv.[Code], pv.[Description], pv.[ClassifierId], pv.[IsAssessment], pv.[DocumentSet],
+        ISNULL(pv.[Coefficient], 1), NULL, pv.[Name], pv.[ParentId], pv.[SortOrder],
+        pv.[IsArchived], pv.[CreatedAt], pv.[ModifiedAt]
+    FROM [PhysicalVolumes] pv
+    INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
+    WHERE pvt.[Name] LIKE N'БЭР%';
+    SET IDENTITY_INSERT [PhysicalVolumesBer] OFF;
+END;
+GO
+
 
 IF COL_LENGTH('dbo.ProjectPhysicalVolumes', 'PhysicalVolumeKfoId') IS NULL
     ALTER TABLE [ProjectPhysicalVolumes] ADD [PhysicalVolumeKfoId] int NULL;
@@ -175,19 +186,23 @@ BEGIN
 END;
 GO
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectPhysicalVolumes_PhysicalVolumesKfo_PhysicalVolumeKfoId')
+IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesKfo')
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectPhysicalVolumes_PhysicalVolumesKfo_PhysicalVolumeKfoId')
     ALTER TABLE [ProjectPhysicalVolumes] ADD CONSTRAINT [FK_ProjectPhysicalVolumes_PhysicalVolumesKfo_PhysicalVolumeKfoId]
         FOREIGN KEY ([PhysicalVolumeKfoId]) REFERENCES [PhysicalVolumesKfo] ([Id]) ON DELETE NO ACTION;
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectPhysicalVolumes_PhysicalVolumesBer_PhysicalVolumeBerId')
+IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesBer')
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectPhysicalVolumes_PhysicalVolumesBer_PhysicalVolumeBerId')
     ALTER TABLE [ProjectPhysicalVolumes] ADD CONSTRAINT [FK_ProjectPhysicalVolumes_PhysicalVolumesBer_PhysicalVolumeBerId]
         FOREIGN KEY ([PhysicalVolumeBerId]) REFERENCES [PhysicalVolumesBer] ([Id]) ON DELETE NO ACTION;
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectLaborIntensities_PhysicalVolumesKfo_PhysicalVolumeKfoId')
+IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesKfo')
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectLaborIntensities_PhysicalVolumesKfo_PhysicalVolumeKfoId')
     ALTER TABLE [ProjectLaborIntensities] ADD CONSTRAINT [FK_ProjectLaborIntensities_PhysicalVolumesKfo_PhysicalVolumeKfoId]
         FOREIGN KEY ([PhysicalVolumeKfoId]) REFERENCES [PhysicalVolumesKfo] ([Id]) ON DELETE SET NULL;
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectLaborIntensities_PhysicalVolumesBer_PhysicalVolumeBerId')
+IF EXISTS (SELECT 1 FROM sys.tables WHERE name = N'PhysicalVolumesBer')
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_ProjectLaborIntensities_PhysicalVolumesBer_PhysicalVolumeBerId')
     ALTER TABLE [ProjectLaborIntensities] ADD CONSTRAINT [FK_ProjectLaborIntensities_PhysicalVolumesBer_PhysicalVolumeBerId]
         FOREIGN KEY ([PhysicalVolumeBerId]) REFERENCES [PhysicalVolumesBer] ([Id]) ON DELETE SET NULL;
 
