@@ -108,6 +108,8 @@ services:
     networks:
       internal: null
       tech-lab24-edge:
+        # Pinned — RU-edge nginx eng-perf (edge-ip-map.env PIN_EP_FRONTEND)
+        ipv4_address: 172.18.0.8
         aliases:
           - ep-web
           - web
