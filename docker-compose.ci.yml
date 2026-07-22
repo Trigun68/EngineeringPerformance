@@ -1,7 +1,12 @@
 # CI / GitHub Actions override.
 # Production compose expects external Cloudflare network tech-lab24-edge;
 # on runners that network does not exist — create a local bridge instead.
+# Subnet required: base compose pins frontend ipv4_address 172.18.0.8
+# (Docker rejects static IP without a user-configured subnet).
 networks:
   tech-lab24-edge:
     external: false
     name: ep-ci-edge
+    ipam:
+      config:
+        - subnet: 172.18.0.0/16
