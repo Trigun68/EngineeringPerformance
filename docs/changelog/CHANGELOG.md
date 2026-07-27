@@ -2,6 +2,195 @@
 
 ## [Unreleased]
 
+### Refactored (2026-07-27, SPA архитектура — устранение дублирования данных)
+- **ConfirmDialog.tsx**: универсальный компонент подтверждения (Material UI) — замена `window.confirm` в 15 местах (удаление строк, версий, пользователей, записей справочников и др.).
+- **useProjectWorkspace.ts**: единый хук загрузки проекта и версий (`useQuery` → `project`, `versions`, `planVersionId`, `factVersionId`, `compareVersionAId`, `compareVersionBId`, `deviationPercent`).
+- **ForecastPanel / FactPanel / ComparePanel**: убрано дублирование `fetchProjectVersions` — все три панели принимают `workspaceVersions` + версию из `useProjectWorkspace`; пользовательский выбор версии сохраняется через `userPlanVersionId` / `userFactVersionId` / `userVersionAId` / `userVersionBId`.
+- **FullProjectsPage.tsx**: упрощён за счёт `useProjectWorkspace` и props-передачи версий; убраны дублирующие `useQuery` загрузки.
+- **vite.config.ts**: добавлен `@/` alias для Vite (параллельно `tsconfig.json` paths).
+
+### Fixed (2026-07-27, справочники — сериализация и фильтры)
+- Аудит всех directory-ресурсов: ToDto — доп. exclude `workDirections`/`norms`; Create reload AsNoTracking (как Update).
+- Фильтры: «Архив» по Да/Нет (не true/false); auto-group equipment/IIC — id + formatAsIisNorm; нормы ИИС «Группа»/«Ед. изм.» — стабильный id.
+- Регрессионный API-тест coefficient update: KFO + BER + equipment.
+
+### Fixed (2026-07-27, фильтр «Классификатор (КФО)» в номенклатуре ФО)
+- Excel-set фильтр lookup-колонок (в т.ч. «Классификатор (КФО)») сопоставляет стабильный `classifierId`, а в списке показывает «код — имя (ед.)».
+- Раньше matching шёл по отформатированной строке → ломался после подгрузки словаря / смены формата; в чеклисте могли мелькать сырые id.
+
+### Fixed (2026-07-27, справочник КФО — сохранение коэффициента)
+- `PUT /api/directories/physical-volumes-kfo/{id}` при смене `coefficient`/`isAssessment` больше не падает с `JsonException` (цикл `ProjectPhysicalVolumes` ↔ `PhysicalVolumeKfo` в `DirectoryEntityMapper.ToDto` после recalc).
+- `ReferenceHandler.IgnoreCycles` + reload AsNoTracking перед ответом.
+
+### Fixed (2026-07-27, разделитель дробной части в Excel-отчётах)
+- Во всех Excel-экспортах (`ProjectExportService`, `ReferenceExcelExporter`, `AnalyticsExportService`, `ProjectsCatalogExportService`) установлен `CultureInfo.ru-RU` для потока генерации — теперь десятичный разделитель `,` вместо `.` (совпадает с русской локалью Excel).
+
+### Fixed (2026-07-27, security audit — authorization)
+- **TrendsAnalyticsController**: на все endpoint-ы добавлен `[RequireProjectAccess]` (кроме `ListFormulas`). Ранее любой пользователь с глобальной Permission `GroupTrend:Read` мог читать трендовые данные любого проекта.
+- **ProjectPermissionsController**: восстановлен `[RequireProjectAccess]` на всех методах. Без него любой пользователь с `Projects:Edit` глобально мог манипулировать правами для любого проекта.
+- **AuthController.FindUserForLoginAsync**: заменён `ToListAsync()` на `FirstOrDefaultAsync()` — DoS-уязвимость (полный скан таблицы пользователей при каждом логине).
+- **AuthController.Login**: добавлен `MapLoginUser` без поля `IsActive`. Раньше `IsActive` возвращался в login-ответе, позволяя перечислять заблокированные учётные записи.
+
+### Fixed (2026-07-26, security audit — input validation & error handling)
+- **MonitoringController**: на все параметры добавлены `[Range]` (windowMinutes `[1,10080]`, take `[1,5000]`, hours `[1,168]`).
+- **ProjectExcelDataImportService.FormatImportExceptionMessage**: generic сообщение вместо stacktrace; full stack логируется на сервере.
+- **ProjectExcelDataImportService.ParseDecimal**: выбрасывает `InvalidOperationException` вместо silent возврата 0.
+- **DirectoriesController.SanitizeFileName**: null-guard + trim до 128 символов.
+- **FactAssessmentPipeline**: generic error вместо подстановки `request.FormulaId`.
+- **ProjectsController.ExportCombinedPdf**: валидация что все versionIds принадлежат projectId.
+
+### Fixed (2026-07-26, security audit — permissions & rate limiting)
+- **ProjectAnalyticsController.forecast/assessment-volumes**: PermissionType изменён с `Projects` на `Planning`.
+- **Program.cs**: rate limiter "export" (5 req/min, fixed window) на 11 export-эндпоинтах.
+
+### Fixed (2026-07-26, security audit — timezone & EF Core)
+- **QuestPdfReportComposer / ProjectExportService / ProjectsCatalogExportService / VisualReportService**: UTC timestamps → MSK в PDF-экспортах.
+- **ProjectAnalysisVersionConfiguration** (создан): `HasMaxLength`, уникальные индексы на primary-версию и Direction.
+- **IicWorkDirectionNormConfiguration** (создан): уникальный индекс на пересечение периодов.
+
+### Fixed (2026-07-26, SPA session management)
+- **AppLayout.tsx**: heartbeat интервал теперь динамический — читает `sessionExpirationMinutes` из SystemSettings и использует 80% от этого значения (fallback 15 мин).
+- **apiClient.ts — retry-after-refresh**: если повторный запрос после refresh тоже 401 — сессия сбрасывается, `onUnauthorized` срабатывает.
+- **apiClient.ts — BroadcastChannel fallback**: синхронизация logout через localStorage (`storage` event).
+- **useAuthStore.initialize**: упрощена цепочка (убран дублирующий `/auth/me` после negotiate).
+
+### Fixed (2026-07-27, DataTable: сохранение видимости столбцов)
+- **DataTable.tsx — scheduleLayoutSave**: убран преждевременный `captureLayoutFromApi()` в начале функции. Раньше snapshot layout делался сразу при входе в `scheduleLayoutSave`, до того как `api.applyColumnState` успевала обновить состояние грида — при сохранении через диалог настроек колонок сохранялось старое состояние, и после перезагрузки все столбцы появлялись заново.
+
+### Added (2026-07-27, hot-path SQL indexes)
+- Миграция `110_HotPathIndexes.sql`: `IX_ProjectEquipments_VersionId_EquipmentId`, covering `IX_ProjectPhysicalVolumes_VersionId_ProjectId_Covering`.
+- Подключено в `scripts/docker-db-init.sh`; EF `HasIndex` parity в Persistence (+ legacy Data configs).
+- Baseline 48h и статус — [`docs/plans/sql-profiling-and-db-optimization.md`](../plans/sql-profiling-and-db-optimization.md) §6.
+
+### Changed (2026-07-27, Аналитика: каркас вкладок)
+- Страница **Аналитика** (`/analytics`): вкладки «Трендовый анализ» и «Сравнение факта и норм».
+- Общие фильтры периода: 1 месяц, текущий/предыдущий квартал, текущий/предыдущий год, произвольный период (два календаря).
+- Графики и наполнение вкладок временно не показываются; `/analytics/trends` редиректит на `/analytics`.
+
+### Fixed (2026-07-25, ролевая матрица / SuperAdmin)
+- Единый SuperAdmin-bypass (`SuperAdmin` | legacy `Administrator` | `RoleId=1`) на API и клиенте.
+- В каталог прав добавлен `Reports`; DataTable на вкладках проекта используют реальные ACL (`Planning` / `Assessment` / `VersionComparison` / `Projects`).
+- Миграция `109`: AccessRights для SuperAdmin, Reports по ролям, demo-user `gip/gip`, `ProjectPermissions` для manager/observer/gip.
+- `GET /api/projects/{id}` и project exports требуют `RequireProjectAccess`.
+- Workspace: скролл контента, чтобы AG Grid не уезжал за нижний край viewport.
+
+### Added (2026-07-24, Corporate Auth)
+- Access JWT (~15 мин) + refresh cookie (7 дней, ротация); `POST /auth/refresh` без живого access JWT.
+- MFA TOTP для SuperAdmin/Admin (soft setup UI), lockout, `AuthAuditLogs`, метрики `/metrics`.
+- Роли: Administrator→**SuperAdmin**, ProjectManager→**Admin**, Observer→**Engineer**, новая **Gip** (миграция `108`).
+- Users: unlock / reset-mfa / temporary password; LDAP stub (`Ldap:Enabled=false`); negotiate → 404 если SPNEGO off.
+- Документация: [`docs/auth/`](../auth/architecture.md).
+
+### Changed (2026-07-24, Оценка факта: справочник и параметры)
+- На вкладке **Оценка факта** у справочника объёмов показывается только краткое имя (часть до `:`), без префикса «Справочник ФО:».
+- Кнопка **Параметры** открывает параметры планирования версии факта: Пессимист. / Базовый / Оптимист. и read-only столбец **Факт** (Z из performance по загруженной трудоёмкости).
+- На **Прогнозирование** столбец «Факт» по-прежнему отсутствует; Z-параметры версии факта по-прежнему участвуют в `ComputeForecastHours` / BaseHours через `ProjectVersionPlanningParameters` текущей версии.
+
+### Changed (2026-07-24, параметры планирования без колонки «Факт»)
+- В модалке **Параметры планирования** на вкладке **Прогнозирование** убран read-only столбец **Факт** (Z из основной версии факта). Колонки «Факт» на **Оценка факта** не затронуты.
+
+### Fixed (2026-07-24, утечка тестовых проектов/версий после Api.Tests)
+- Сьюты Snapshot / CatalogSnapshot / Crud / Primary создают disposable-проекты `apitest-*` и удаляют их в `Dispose` (`TestProjectScope`).
+- Одноразовая зачистка: `scripts/purge-api-test-orphans.sh` (версии `snapshot-test-*`, `ber-asof-*`, … и проекты `apitest-`/`T-`/…).
+- Запрет писать версии на seed-проекты — комментарий в `ApiWebApplicationFactory`.
+
+### Fixed (2026-07-24, CI demo projects)
+- Удалены повторно появившиеся `PRJ-CI-310` / `PRJ-CI-970`.
+- `docker-db-init` больше не запускает `016_SeedCiDemoProjects.sql` на уже существующей БД (только на fresh init).
+
+### Added (2026-07-23, SQL profiling)
+- Middleware + EF `DbCommandInterceptor`: замер HTTP end-to-end и SQL (SELECT/INSERT/UPDATE/DELETE), hash, таблицы, rows, параметры.
+- Таблица `SqlQueryMetrics` (`107_SqlQueryMetrics.sql`) и API `/api/monitoring/sql-metrics/{summary,slow,frequent,weak-tables}` (Admin).
+- Документ рекомендаций: [`docs/plans/sql-profiling-and-db-optimization.md`](../plans/sql-profiling-and-db-optimization.md).
+
+### Changed (2026-07-23, справочник оборудования — проектная модель)
+- У `Equipments` добавлен `ProjectId`; уникальность `(ProjectId, Name, UnitId)`.
+- Миграция `106_EquipmentProjectId`: клонирование общих позиций по проектам-потребителям из `ProjectEquipments`.
+- Импорт оборудования: пропуск в текущем проекте → копия признаков с самого свежего донора → stub (коэф. 1).
+- UI `/references/equipment`: обязательный селектор проекта.
+- Refresh номенклатуры (`014`/`019`) затрагивает только строки с `ProjectId IS NULL`.
+
+### Added (2026-07-23, прогноз: справочник объёмов)
+- На вкладке **Прогнозирование** справа от имени версии плана — краткое имя справочника объёмов (КФО/БЭР, часть до `:`).
+- Кнопка **Параметры** (бывш. «Параметры планирования») сразу после поля справочника.
+
+### Added (2026-07-23, основная версия плана и факта)
+- У версии анализа — флаг **Основная** отдельно для плана и факта (`IsPrimary`).
+- Первая версия направления становится основной автоматически; далее — галочка при создании (с подтверждением) или кнопка «Сделать основной» в списке.
+- В форме редактирования отметка только для просмотра; `PUT` её не меняет.
+- Forecast/Fact предпочитают основную версию (после сохранённого prefs).
+
+### Fixed (2026-07-23, оборудование из импорта снова в справочнике)
+- Разархивированы все позиции оборудования, привязанные к данным проектов (в т.ч. автосозданные импортом 25-970).
+- `014`/`019` больше не архивируют позиции с `ProjectEquipments`; `023` в `docker-db-init` после refresh — чтобы recreate не откатывал.
+- При update существующей БД `016` больше не дописывает версии к уже созданным CI-проектам (версии только вместе с новым проектом).
+
+### Changed (2026-07-23, счётчик версий план/факт)
+- На списке проектов столбец **Версии** показывает `план/факт` (неархивные версии по направлению анализа).
+
+### Fixed (2026-07-23, счётчик версий на списке проектов)
+- Столбец **Версии** считает только неархивные версии анализа (как список в карточке проекта), без тестовых/asof-копий в архиве.
+
+### Added (2026-07-23, паритет экспортов «Оценка факта»)
+- Модал **Анализ версии**: карточки IIC с ФО/оборудованием и блок **Трудоёмкость**; Excel анализа — 3 листа (направления / объёмы / трудоёмкость).
+- **По объектам**: `export/fact-facility/excel` (часы, Z, интерпретация + ИТОГО); wiring Excel исправлен.
+- **Детально**: Excel, PDF и **Сводная таблица** (`fact-detail/excel`, `fact-detail/summary-table`) — на группу IIC столбцы ФО / План Тр. / Факт Тр. / Z.
+
+### Fixed (2026-07-23, ложные часы на «Оценка факта»)
+- На вкладках **Итого по объектам** / **Детально** факт. трудоёмкость для оборудования больше не считается как `объём × норма` (формула прогноза).
+- Часы берутся только из загруженной трудоёмкости (распределение LI по DocSet на ФО). Без импорта LI колонка пустая — согласовано с вкладкой **Итого**.
+
+### Changed (2026-07-23, ISS-007: имена IIC + SSOT движка)
+- Правила: `.cursor/rules/iic-group-naming.mdc`, `performance-calculation-engine-ssot.mdc` (WPF вне объёма).
+- Факт «По объектам»/«Детально» считается только через `CalculateFactAssessment` (дубль `FactAssessmentRowsCalculator` удалён).
+- Пересчёт LI, агрегация прогноза и взвешенный Z — через методы `IPerformanceCalculationEngine`; Infrastructure не вызывает калькуляторы напрямую.
+- Выровнены имена групп IIC (`код — наименование (ед.)`) в прогнозе, нормах, справочниках, Planning/Forecast UI.
+
+### Added (2026-07-22, правила IIC-имён и SSOT движка)
+- Cursor rules: `.cursor/rules/iic-group-naming.mdc`, `.cursor/rules/performance-calculation-engine-ssot.mdc`; обновлены `.cursorrules` §9 и skill `engineering-performance-code`.
+- Аудит соответствия: `docs/issues/ISS-007-iic-naming-and-calc-engine-ssot.md`.
+
+### Changed (2026-07-22, единый формат имён групп IIC на Факте)
+- Группы IIC на **Факт → Итого**, **Детально** (ФО и оборудование) и в **анализе версии** отображаются как `код — наименование (ед.)` (`FormatCodeNameWithResolvedUnit` / `formatIisNorm`).
+- Раньше на «Итого» и в анализе было только краткое имя; у ФО в деталях — `код имя` без тире и единицы.
+
+### Added (2026-07-22, уровень параметров Z в планировании)
+- В диалоге **Параметры планирования** под сценарием — селектор уровня Z-оценки: по проекту / 1 уровень / 2 уровень / каждый элемент.
+- «По проекту»: три редактируемых поля; значения каскадом пишутся во все направления ИИС (потомки скрыты).
+- На остальных уровнях строка «По проекту» — средневзвешенный Z по трудоёмкости листьев (read-only); видны и редактируются узлы выбранной глубины, скрытые потомки сохраняются в БД.
+- Уровень хранится на версии (`ZParameterLevel`).
+
+### Added (2026-07-22, автопересчёт трудоёмкости)
+- При смене даты версии / КФО·БЭР / сценария планирования, параметров Z, норм ИИС или полей **Оценка**/**Коэффициент** в справочниках КФО/БЭР/оборудование сервер пересчитывает трудоёмкость затронутых (неархивных) версий плана и факта.
+- Клиент показывает оверлей «Работаю…» на время сохранения параметров версии, норм и справочников (дублирующий client-side `recalculate` после параметров планирования убран).
+
+### Added (2026-07-22, нормы ИИС EPMS с 01.07.2026)
+- В регистр норм направлений ИИС добавлен период с **`EffectiveFrom = 2026-07-01`** (предыдущие открытые периоды закрыты `EffectiveTo = 2026-06-30`).
+- `Performance = Median`, `Estimate = ln(Median)`, `StandardDeviation = exp((ln(Q3)−ln(Q1))/1.349)`; формула Linear (`a=Performance`, `b=0`).
+- Для IIC-2-1 / IIC-2-2-2 / IIC-4-2 без Median: `Performance = √(Q1·Q3)`.
+- Скрипт: `migrations/data/022_IicNormsEpms20260701.sql` (подключён в `docker-db-init`). Предыдущие периоды нормализуются в окно **2026-01-01 … 2026-06-30** (строки сохраняются из‑за FK снимков версий).
+
+### Fixed (2026-07-22, объём оборудования после обновления номенклатуры)
+- Строки `ProjectEquipments`, оставшиеся на архивных двойниках справочника с `IsAssessment=0`, перепривязаны к активным позициям (`migrations/data/021_RelinkProjectEquipmentToActiveCatalog.sql`).
+- Импорт оборудования: при дубликате active+archived по (Name, UnitId) выбирается активная позиция, а не пропуск строки (`EquipmentImportCatalogMatcher`).
+- Пример: проект **25-310**, план **30.06.26** — оценочный объём оборудования ~626 (как сумма «Всего» по позициям с `Оценка=Да` в `Спр_Оборудование`), а не ~310.
+
+### Fixed (2026-07-22, сводная таблица прогноза Excel)
+- Экспорт **Сводная таблица** (Прогнозирование → Детально) учитывает только оценочные строки (`Оценка = Да`), как вкладки «Итого» / «Итого по объектам».
+- Числа ФО и трудоёмкости в Excel — целые с разделителем разрядов (`#,##0`), без дробной части.
+
+### Added (2026-07-21, итоги ФО по единицам измерения)
+- На вкладках **Итого** (прогноз, факт, сравнение версий) строки итогов показывают сумму физ. объёма по одинаковым единицам измерения: `число (ЕИ); …`.
+- В факте добавлена колонка ФО и синтетические строки «Итого»/«ИТОГО»; в сравнении — колонки ФО А/Б.
+
+### Changed (2026-07-21, обновление номенклатуры из Excel)
+- Из файла «Номенклатура_физических_объёмов_.xlsx» применены связи/признаки для справочников **КФО**, **БЭР** и **Оборудование** (оценка, коэффициент, Классификатор КИМ; для БЭР — также меппинг на КФО).
+- Перед изменением созданы бэкап-таблицы `bak_*_20260721` и выгрузки в `backups/nomenclature_20260721/`.
+- Скрипт: `migrations/data/020_UpdateCatalogLinksFromNomenclature_20260721.sql` (точечный UPDATE без архивации отсутствующих позиций).
+
+### Added (2026-07-21, индикатор «Работаю…» при долгой загрузке)
+- Полноэкранный оверлей «Работаю…» при загрузке данных проектов и справочников дольше 1 с (список/карточка проекта, прогноз/факт/сравнение, DirectoryPage, нормы ИИС, кэш `/dictionaries/all`). Мутации и экспорт по-прежнему показываются сразу.
+
 ### Added (2026-07-19, копирование версии из плана в факт)
 - В диалоге версий факта кнопка **«Копировать из плана»**: создаёт версию факта с ФО и оборудованием выбранного плана. Трудоёмкость добавляется отдельно импортом.
 - API `POST .../versions/{id}/copy` принимает опциональный `targetDirection` (допускается Plan→Fact).

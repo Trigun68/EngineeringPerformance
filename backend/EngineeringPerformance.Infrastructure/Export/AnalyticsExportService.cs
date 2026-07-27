@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Export;
@@ -25,35 +26,145 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
     {
         var report = await _analysisService.GenerateReportAsync(projectId, versionId);
 
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("Analysis");
 
-        sheet.Cell(1, 1).Value = "Project";
-        sheet.Cell(1, 2).Value = report.ProjectName;
-        sheet.Cell(2, 1).Value = "Version";
-        sheet.Cell(2, 2).Value = report.VersionName;
+        var directionsSheet = workbook.Worksheets.Add("Направления IIC");
+        directionsSheet.Cell(1, 1).Value =
+            $"Анализ версии: {report.ProjectCode ?? report.ProjectName} ({report.VersionName})";
+        directionsSheet.Cell(1, 1).Style.Font.Bold = true;
+        directionsSheet.Cell(1, 1).Style.Font.FontSize = 13;
+        directionsSheet.Range(1, 1, 1, 8).Merge();
 
-        var headerRow = 4;
-        sheet.Cell(headerRow, 1).Value = "Code";
-        sheet.Cell(headerRow, 2).Value = "Name";
-        sheet.Cell(headerRow, 3).Value = "Fact Labor Hours";
-        sheet.Cell(headerRow, 4).Value = "Z-Score";
-        sheet.Cell(headerRow, 5).Value = "Interpretation";
-
-        var row = headerRow + 1;
-        foreach (var direction in report.Directions)
+        var dirHeaders = new[]
         {
-            sheet.Cell(row, 1).Value = direction.Code;
-            sheet.Cell(row, 2).Value = direction.Name;
-            sheet.Cell(row, 3).Value = direction.FactLaborHours;
-            sheet.Cell(row, 4).Value = direction.ZScore;
-            sheet.Cell(row, 5).Value = direction.Interpretation?.ToRussian() ?? string.Empty;
+            "Код", "Направление", "Ед.", "Факт ФО", "Факт ч", "Факт произв.", "Норм. произв.", "Z", "Интерпретация",
+        };
+        for (var c = 0; c < dirHeaders.Length; c++)
+        {
+            directionsSheet.Cell(2, c + 1).Value = dirHeaders[c];
+            directionsSheet.Cell(2, c + 1).Style.Font.Bold = true;
+            directionsSheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            directionsSheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
+        }
+
+        var row = 3;
+        foreach (var direction in report.Directions.OrderBy(d => d.Level).ThenBy(d => d.Code))
+        {
+            directionsSheet.Cell(row, 1).Value = direction.Code;
+            directionsSheet.Cell(row, 2).Value = direction.Name;
+            directionsSheet.Cell(row, 3).Value = direction.UnitName ?? string.Empty;
+            if (direction.FactPhysicalVolume.HasValue)
+                directionsSheet.Cell(row, 4).Value = direction.FactPhysicalVolume.Value;
+            if (direction.FactLaborHours.HasValue)
+                directionsSheet.Cell(row, 5).Value = direction.FactLaborHours.Value;
+            if (direction.FactProductivity.HasValue)
+                directionsSheet.Cell(row, 6).Value = direction.FactProductivity.Value;
+            if (direction.NormProductivity.HasValue)
+                directionsSheet.Cell(row, 7).Value = direction.NormProductivity.Value;
+            if (direction.ZScore.HasValue)
+                directionsSheet.Cell(row, 8).Value = direction.ZScore.Value;
+            directionsSheet.Cell(row, 9).Value = direction.Interpretation?.ToRussian() ?? string.Empty;
+            if (row % 2 == 1)
+                directionsSheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
             row++;
         }
+
+        directionsSheet.Columns().AdjustToContents();
+        directionsSheet.SheetView.FreezeRows(2);
+
+        var volumesSheet = workbook.Worksheets.Add("ФО и оборудование");
+        volumesSheet.Cell(1, 1).Value = "Физ. объёмы и оборудование по направлениям";
+        volumesSheet.Cell(1, 1).Style.Font.Bold = true;
+        volumesSheet.Range(1, 1, 1, 8).Merge();
+
+        var volHeaders = new[]
+        {
+            "Направление", "Тип", "Код", "Номенклатура", "Ед.", "Кол-во", "Коэфф.", "Итого",
+        };
+        for (var c = 0; c < volHeaders.Length; c++)
+        {
+            volumesSheet.Cell(2, c + 1).Value = volHeaders[c];
+            volumesSheet.Cell(2, c + 1).Style.Font.Bold = true;
+            volumesSheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            volumesSheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
+        }
+
+        row = 3;
+        foreach (var direction in report.Directions.OrderBy(d => d.Code))
+        {
+            var dirLabel = string.IsNullOrWhiteSpace(direction.Code)
+                ? direction.Name
+                : $"{direction.Code} — {direction.Name}";
+            foreach (var pv in direction.PhysicalVolumes)
+            {
+                WriteVolumeRow(volumesSheet, row++, dirLabel, "ФО", pv);
+            }
+
+            foreach (var eq in direction.EquipmentVolumes)
+            {
+                WriteVolumeRow(volumesSheet, row++, dirLabel, "Оборудование", eq);
+            }
+        }
+
+        volumesSheet.Columns().AdjustToContents();
+        volumesSheet.SheetView.FreezeRows(2);
+
+        var laborSheet = workbook.Worksheets.Add("Трудоёмкость");
+        laborSheet.Cell(1, 1).Value = "Виды работ (трудоёмкость проекта)";
+        laborSheet.Cell(1, 1).Style.Font.Bold = true;
+        laborSheet.Range(1, 1, 1, 4).Merge();
+
+        var laborHeaders = new[] { "Шифр документации", "Марка", "Направление IIC", "Плановые часы" };
+        for (var c = 0; c < laborHeaders.Length; c++)
+        {
+            laborSheet.Cell(2, c + 1).Value = laborHeaders[c];
+            laborSheet.Cell(2, c + 1).Style.Font.Bold = true;
+            laborSheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            laborSheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
+        }
+
+        row = 3;
+        decimal laborTotal = 0m;
+        foreach (var li in report.LaborIntensities)
+        {
+            laborSheet.Cell(row, 1).Value = li.DocumentationCode;
+            laborSheet.Cell(row, 2).Value = li.Brand ?? string.Empty;
+            laborSheet.Cell(row, 3).Value = li.WorkDirectionName ?? string.Empty;
+            laborSheet.Cell(row, 4).Value = li.PlannedHours;
+            laborTotal += li.PlannedHours;
+            row++;
+        }
+
+        laborSheet.Cell(row, 1).Value = "ИТОГО";
+        laborSheet.Cell(row, 4).Value = laborTotal;
+        laborSheet.Row(row).Style.Font.Bold = true;
+        laborSheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#EEF4FF");
+        laborSheet.Columns().AdjustToContents();
+        laborSheet.SheetView.FreezeRows(2);
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    private static void WriteVolumeRow(
+        IXLWorksheet sheet,
+        int row,
+        string directionLabel,
+        string type,
+        ProjectVersionPhysicalVolumeDto item)
+    {
+        sheet.Cell(row, 1).Value = directionLabel;
+        sheet.Cell(row, 2).Value = type;
+        sheet.Cell(row, 3).Value = item.Code;
+        sheet.Cell(row, 4).Value = item.Name;
+        sheet.Cell(row, 5).Value = item.UnitName ?? string.Empty;
+        sheet.Cell(row, 6).Value = item.Quantity;
+        sheet.Cell(row, 7).Value = item.Coefficient;
+        sheet.Cell(row, 8).Value = item.Total;
+        if (row % 2 == 1)
+            sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
     }
 
     public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
@@ -63,6 +174,7 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
     {
         var report = await _forecastService.GenerateForecastAsync(projectId, versionId);
 
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add("Прогноз");
         sheet.Cell(1, 1).Value = $"Прогноз трудозатрат: {report.ProjectName} ({report.VersionName})";

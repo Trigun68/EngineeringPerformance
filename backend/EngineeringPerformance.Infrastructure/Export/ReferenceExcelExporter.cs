@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 
 namespace EngineeringPerformance.Infrastructure.Export;
@@ -8,6 +9,7 @@ public static class ReferenceExcelExporter
 
     public static byte[] Export(string title, IReadOnlyList<ColumnDef> columns, IEnumerable<object> rows)
     {
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
         var sheetName = title.Length <= 31 ? title : title[..31];
         var ws = workbook.Worksheets.Add(sheetName);
@@ -49,5 +51,21 @@ public static class ReferenceExcelExporter
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+}
+
+internal sealed class TemporaryCulture : IDisposable
+{
+    private readonly CultureInfo _previous;
+
+    public TemporaryCulture(CultureInfo culture)
+    {
+        _previous = Thread.CurrentThread.CurrentCulture;
+        Thread.CurrentThread.CurrentCulture = culture;
+    }
+
+    public void Dispose()
+    {
+        Thread.CurrentThread.CurrentCulture = _previous;
     }
 }
