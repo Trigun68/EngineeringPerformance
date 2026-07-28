@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### Added (2026-07-28, экспорт Детально — все / выделенные)
+- Кнопка **«Экспорт всех excel»** (бывш. «Экспорт Excel») — полный серверный dump.
+- Кнопка **«Экспорт выделенных excel»** — видимые столбцы и строки после фильтра/сортировки грида (как в справочниках).
+
+### Fixed (2026-07-28, сводная таблица Детально — сценарии)
+- Excel «Сводная таблица» (Прогноз): листы **Базовый**, **Оптимистичный**, **Пессимистичный**; колонка **Итого Тр.** (сумма трудоёмкости по блокам, без ФО).
+- Оценка факта: лист **Базовый** + колонка **Итого факт Тр.**
+
+### Fixed (2026-07-28, раскладка колонок Прогноз/Факт/Сравнение)
+- `gridId` гридов вкладок больше не включает `projectId` — ширина/состав колонок запоминаются на пользователя глобально (как WPF `DetailForecastGrid`), а не отдельно на каждый проект.
+
+### Fixed (2026-07-28, номенклатура ФО — коэффициент после recreate)
+- Коэффициент через `PUT /directories/physical-volumes-kfo/{id}` сохранялся в БД, но `docker-db-init` на существующей БД снова гонял `012_RefreshPhysicalVolumesKfoFromNomenclature.sql` и сбрасывал `Coefficient` в seed.
+- На existing DB bulk-refresh (`011`/`022` ИИС, `012`/`013` ФО/БЕР, `014` оборудование) пропускается; принудительно: `FORCE_NOMENCLATURE_REFRESH=1`.
+
+### Fixed (2026-07-28, нормы ИИС — отрицательная оценка)
+- Снято ограничение `Estimate >= 0`: в мигрированных данных EPMS оценка бывает отрицательной; правка таких записей больше не блокируется валидатором.
+
+### Fixed (2026-07-28, нормы ИИС — валидация формулы)
+- FluentValidation принимал только legacy Performance/Estimate/σ — сохранение parametric-формулы без них давало 400 «One or more validation errors occurred».
+- Теперь норма с `NormFormula` проходит валидацию; сообщения на русском; UI показывает текст из `errors`, а не общий `detail`.
+
+### Fixed (2026-07-28, нормы ИИС — добавление периода и пересчёт)
+- Создание новой записи истории норм больше не падает на пересечении с открытым периодом (`EffectiveTo = null`): валидация учитывает AutoClose предыдущего периода.
+- После create/update нормы пересчитываются только неархивные версии в периоде нормы (as-of = `CreatedAt`) и с направлением в снимке (или без снимка).
+- Диалог истории показывает текст ошибки API и сообщение «Пересчитано версий: N».
+
+### Added (2026-07-27, SQL indexes wave 2)
+- Миграция [`111_SqlMetricsWave2Indexes.sql`](../../migrations/schema/111_SqlMetricsWave2Indexes.sql) по SqlQueryMetrics:
+  - covering `IX_ProjectLaborIntensities_VersionId_Covering`;
+  - covering unique `UX_IicWorkDirectionNorms_WorkDirection_EffectiveFrom` (+ INCLUDE);
+  - `IX_DataImportIterations_Project_Version_DataType_ImportedAt`.
+- EF parity в Persistence (+ legacy Data configurations); `docker-db-init` SCHEMA_FILES/drift.
+- Документ: [`docs/plans/sql-profiling-and-db-optimization.md`](../plans/sql-profiling-and-db-optimization.md) §7.
+
 ### Refactored (2026-07-27, SPA архитектура — устранение дублирования данных)
 - **ConfirmDialog.tsx**: универсальный компонент подтверждения (Material UI) — замена `window.confirm` в 15 местах (удаление строк, версий, пользователей, записей справочников и др.).
 - **useProjectWorkspace.ts**: единый хук загрузки проекта и версий (`useQuery` → `project`, `versions`, `planVersionId`, `factVersionId`, `compareVersionAId`, `compareVersionBId`, `deviationPercent`).
@@ -21,6 +56,10 @@
 ### Fixed (2026-07-27, справочник КФО — сохранение коэффициента)
 - `PUT /api/directories/physical-volumes-kfo/{id}` при смене `coefficient`/`isAssessment` больше не падает с `JsonException` (цикл `ProjectPhysicalVolumes` ↔ `PhysicalVolumeKfo` в `DirectoryEntityMapper.ToDto` после recalc).
 - `ReferenceHandler.IgnoreCycles` + reload AsNoTracking перед ответом.
+
+### Fixed (2026-07-28, числовые значения в Excel-экспортах)
+- `WriteFactDetailSheet` и `WriteDetailSheet`: `Set()` больше не вызывает `.ToString()` на `decimal?` — Coefficient, Quantity, BaseHours, NormStdDev, FactProductivity, ZScore теперь записываются как числа, а не текст.
+- `ReferenceExcelExporter.SetCellValue`: парсит строки обратно в `decimal` для visible-экспорта из AG Grid (где valueFormatter уже отформатировал числа).
 
 ### Fixed (2026-07-27, разделитель дробной части в Excel-отчётах)
 - Во всех Excel-экспортах (`ProjectExportService`, `ReferenceExcelExporter`, `AnalyticsExportService`, `ProjectsCatalogExportService`) установлен `CultureInfo.ru-RU` для потока генерации — теперь десятичный разделитель `,` вместо `.` (совпадает с русской локалью Excel).
