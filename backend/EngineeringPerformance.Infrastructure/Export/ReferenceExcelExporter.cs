@@ -34,7 +34,7 @@ public static class ReferenceExcelExporter
         foreach (var item in rows)
         {
             for (var c = 0; c < columns.Count; c++)
-                ws.Cell(rowIdx, c + 1).Value = columns[c].GetValue(item) ?? string.Empty;
+                SetCellValue(ws, rowIdx, c + 1, columns[c].GetValue(item));
 
             if (rowIdx % 2 == 0)
             {
@@ -52,20 +52,25 @@ public static class ReferenceExcelExporter
         workbook.SaveAs(stream);
         return stream.ToArray();
     }
-}
 
-internal sealed class TemporaryCulture : IDisposable
-{
-    private readonly CultureInfo _previous;
-
-    public TemporaryCulture(CultureInfo culture)
+    private static void SetCellValue(IXLWorksheet ws, int row, int col, string? value)
     {
-        _previous = Thread.CurrentThread.CurrentCulture;
-        Thread.CurrentThread.CurrentCulture = culture;
-    }
+        var cell = ws.Cell(row, col);
+        if (string.IsNullOrEmpty(value))
+        {
+            cell.Value = string.Empty;
+            return;
+        }
 
-    public void Dispose()
-    {
-        Thread.CurrentThread.CurrentCulture = _previous;
+        // Попробовать распарсить число из строки (для экспорта через visible-пути,
+        // где valueFormatter уже отформатировал числа в строки).
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        {
+            cell.Value = parsed;
+        }
+        else
+        {
+            cell.Value = value;
+        }
     }
 }

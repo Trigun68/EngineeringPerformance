@@ -298,24 +298,34 @@ public sealed class ProjectExportService : IProjectExportService
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var (projectCode, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
 
-        var inputRows = data.Forecast.Detail
+        var assessed = data.Forecast.Detail
             .Where(r => string.Equals(r.IsAssessment, "Да", StringComparison.Ordinal))
-            .Select(r => new DetailForecastSummaryInputRow(
-                r.FacilityCode,
-                r.FacilityName,
-                r.ClassifierId,
-                r.Quantity,
-                r.Coefficient,
-                r.BaseHours))
             .ToList();
 
-        var table = DetailForecastSummaryTableBuilder.Build(
-            inputRows,
-            directions,
-            projectCode,
-            versionName);
+        DetailForecastSummaryTableDto BuildForScenario(Func<ProjectsPageDetailRowDto, decimal?> hoursSelector) =>
+            DetailForecastSummaryTableBuilder.Build(
+                assessed
+                    .Select(r => new DetailForecastSummaryInputRow(
+                        r.FacilityCode,
+                        r.FacilityName,
+                        r.ClassifierId,
+                        r.Quantity,
+                        r.Coefficient,
+                        hoursSelector(r)))
+                    .ToList(),
+                directions,
+                projectCode,
+                versionName);
 
-        using var workbook = BuildDetailSummaryTableWorkbook(table);
+        var baseTable = BuildForScenario(r => r.BaseHours);
+        var optimisticTable = BuildForScenario(r => r.OptimisticHours);
+        var pessimisticTable = BuildForScenario(r => r.PessimisticHours);
+
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
+        using var workbook = new XLWorkbook();
+        AddDetailSummarySheet(workbook, "Базовый", baseTable, isForecast: true);
+        AddDetailSummarySheet(workbook, "Оптимистичный", optimisticTable, isForecast: true);
+        AddDetailSummarySheet(workbook, "Пессимистичный", pessimisticTable, isForecast: true);
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
@@ -447,11 +457,11 @@ public sealed class ProjectExportService : IProjectExportService
     private static XLWorkbook BuildFactDetailSummaryTableWorkbook(DetailFactSummaryTableDto table)
     {
         var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Сводная таблица");
+        var ws = workbook.Worksheets.Add("Базовый");
 
         const int colsPerBlock = 4;
-        var colCount = Math.Max(1, 1 + table.Columns.Count * colsPerBlock);
-        ws.Cell(1, 1).Value = $"Сводная таблица факта: {table.ProjectCode} ({table.VersionName})";
+        var colCount = Math.Max(1, 1 + table.Columns.Count * colsPerBlock + 1);
+        ws.Cell(1, 1).Value = $"Сводная таблица факта (Базовый): {table.ProjectCode} ({table.VersionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
         ws.Range(1, 1, 1, colCount).Merge();
@@ -477,6 +487,16 @@ public sealed class ProjectExportService : IProjectExportService
             blockCol += colsPerBlock;
         }
 
+        var laborTotalCol = blockCol;
+        ws.Cell(2, laborTotalCol).Value = "Итого факт Тр.";
+        ws.Range(2, laborTotalCol, 3, laborTotalCol).Merge();
+        var laborHeader = ws.Range(2, laborTotalCol, 3, laborTotalCol);
+        laborHeader.Style.Font.Bold = true;
+        laborHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        laborHeader.Style.Font.FontColor = XLColor.White;
+        laborHeader.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        laborHeader.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
         ws.Cell(3, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#34495E");
         blockCol = 2;
         foreach (var _ in table.Columns)
@@ -500,6 +520,7 @@ public sealed class ProjectExportService : IProjectExportService
         var totalVolumes = new decimal[columnCount];
         var totalPlan = new decimal[columnCount];
         var totalFact = new decimal[columnCount];
+        decimal grandFactLabor = 0m;
 
         foreach (var dataRow in table.Rows)
         {
@@ -525,6 +546,9 @@ public sealed class ProjectExportService : IProjectExportService
                 cellCol += colsPerBlock;
             }
 
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, dataRow.FactLaborHoursTotal);
+            grandFactLabor += dataRow.FactLaborHoursTotal;
+
             if (rowIdx % 2 == 0)
                 ws.Range(rowIdx, 1, rowIdx, colCount).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
 
@@ -546,6 +570,7 @@ public sealed class ProjectExportService : IProjectExportService
                 totalCol += colsPerBlock;
             }
 
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, Math.Round(grandFactLabor, 0, MidpointRounding.AwayFromZero));
             rowIdx++;
         }
 
@@ -562,6 +587,8 @@ public sealed class ProjectExportService : IProjectExportService
         ws.SheetView.FreezeRows(3);
         return workbook;
     }
+
+    private const string SummaryIntegerNumberFormat = "#,##0";
 
     private static void WriteSummaryNumber(IXLWorksheet ws, int row, int col, decimal value)
     {
@@ -598,7 +625,25 @@ public sealed class ProjectExportService : IProjectExportService
         foreach (var row in rows)
         {
             var col = 1;
-            void Set(object? value) => sheet.Cell(rowIndex, col++).Value = value?.ToString() ?? string.Empty;
+            void Set(object? value)
+            {
+                var cell = sheet.Cell(rowIndex, col++);
+                cell.Value = value switch
+                {
+                    decimal? d => d.HasValue ? (object)d.Value : string.Empty,
+                    decimal d => d,
+                    double? dbl => dbl.HasValue ? (object)dbl.Value : string.Empty,
+                    double dbl => dbl,
+                    float? flt => flt.HasValue ? (object)flt.Value : string.Empty,
+                    float flt => flt,
+                    int? i => i.HasValue ? (object)i.Value : string.Empty,
+                    int i => i,
+                    long? l => l.HasValue ? (object)l.Value : string.Empty,
+                    long l => l,
+                    null => string.Empty,
+                    _ => value.ToString() ?? string.Empty,
+                };
+            }
 
             Set(row.FacilityCode);
             Set(row.FacilityName);
@@ -636,15 +681,21 @@ public sealed class ProjectExportService : IProjectExportService
             sheet.Column(c).Width = 14;
     }
 
-    private const string SummaryIntegerNumberFormat = "#,##0";
-
-    private static XLWorkbook BuildDetailSummaryTableWorkbook(DetailForecastSummaryTableDto table)
+    /// <summary>
+    /// Лист сводной таблицы прогноза: блоки ФО/Тр. + столбец «Итого Тр.» (без суммирования ФО).
+    /// </summary>
+    private static void AddDetailSummarySheet(
+        XLWorkbook workbook,
+        string sheetName,
+        DetailForecastSummaryTableDto table,
+        bool isForecast)
     {
-        var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Сводная таблица");
+        var ws = workbook.Worksheets.Add(sheetName);
 
-        var colCount = Math.Max(1, 1 + table.Columns.Count * 2);
-        ws.Cell(1, 1).Value = $"Сводная таблица прогноза: {table.ProjectCode} ({table.VersionName})";
+        var hasLaborTotal = true;
+        var colCount = Math.Max(1, 1 + table.Columns.Count * 2 + (hasLaborTotal ? 1 : 0));
+        var titleKind = isForecast ? "прогноза" : "факта";
+        ws.Cell(1, 1).Value = $"Сводная таблица {titleKind} ({sheetName}): {table.ProjectCode} ({table.VersionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
         ws.Range(1, 1, 1, colCount).Merge();
@@ -654,6 +705,7 @@ public sealed class ProjectExportService : IProjectExportService
         ws.Cell(2, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
         ws.Cell(2, 1).Style.Font.FontColor = XLColor.White;
         ws.Cell(2, 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        ws.Range(2, 1, 3, 1).Merge();
 
         var blockCol = 2;
         foreach (var column in table.Columns)
@@ -669,7 +721,16 @@ public sealed class ProjectExportService : IProjectExportService
             blockCol += 2;
         }
 
-        ws.Cell(3, 1).Value = string.Empty;
+        var laborTotalCol = blockCol;
+        ws.Cell(2, laborTotalCol).Value = "Итого Тр.";
+        ws.Range(2, laborTotalCol, 3, laborTotalCol).Merge();
+        var laborHeader = ws.Range(2, laborTotalCol, 3, laborTotalCol);
+        laborHeader.Style.Font.Bold = true;
+        laborHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        laborHeader.Style.Font.FontColor = XLColor.White;
+        laborHeader.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        laborHeader.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+
         ws.Cell(3, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#34495E");
         blockCol = 2;
         foreach (var _ in table.Columns)
@@ -691,6 +752,7 @@ public sealed class ProjectExportService : IProjectExportService
         var columnCount = table.Columns.Count;
         var totalVolumes = new decimal[columnCount];
         var totalHours = new decimal[columnCount];
+        decimal grandLaborTotal = 0m;
 
         foreach (var dataRow in table.Rows)
         {
@@ -702,22 +764,13 @@ public sealed class ProjectExportService : IProjectExportService
                 totalVolumes[i] += cell.PhysicalVolume;
                 totalHours[i] += cell.LaborHours;
 
-                if (cell.PhysicalVolume != 0m)
-                {
-                    ws.Cell(rowIdx, cellCol).Value = cell.PhysicalVolume;
-                    ws.Cell(rowIdx, cellCol).Style.NumberFormat.Format = SummaryIntegerNumberFormat;
-                    ws.Cell(rowIdx, cellCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                }
-
-                if (cell.LaborHours != 0m)
-                {
-                    ws.Cell(rowIdx, cellCol + 1).Value = cell.LaborHours;
-                    ws.Cell(rowIdx, cellCol + 1).Style.NumberFormat.Format = SummaryIntegerNumberFormat;
-                    ws.Cell(rowIdx, cellCol + 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                }
-
+                WriteSummaryNumber(ws, rowIdx, cellCol, cell.PhysicalVolume);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 1, cell.LaborHours);
                 cellCol += 2;
             }
+
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, dataRow.LaborHoursTotal);
+            grandLaborTotal += dataRow.LaborHoursTotal;
 
             if (rowIdx % 2 == 0)
                 ws.Range(rowIdx, 1, rowIdx, colCount).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
@@ -734,26 +787,12 @@ public sealed class ProjectExportService : IProjectExportService
             var totalCol = 2;
             for (var i = 0; i < columnCount; i++)
             {
-                var vol = Math.Round(totalVolumes[i], 0, MidpointRounding.AwayFromZero);
-                var hrs = Math.Round(totalHours[i], 0, MidpointRounding.AwayFromZero);
-
-                if (vol != 0m)
-                {
-                    ws.Cell(rowIdx, totalCol).Value = vol;
-                    ws.Cell(rowIdx, totalCol).Style.NumberFormat.Format = SummaryIntegerNumberFormat;
-                    ws.Cell(rowIdx, totalCol).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                }
-
-                if (hrs != 0m)
-                {
-                    ws.Cell(rowIdx, totalCol + 1).Value = hrs;
-                    ws.Cell(rowIdx, totalCol + 1).Style.NumberFormat.Format = SummaryIntegerNumberFormat;
-                    ws.Cell(rowIdx, totalCol + 1).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
-                }
-
+                WriteSummaryNumber(ws, rowIdx, totalCol, Math.Round(totalVolumes[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 1, Math.Round(totalHours[i], 0, MidpointRounding.AwayFromZero));
                 totalCol += 2;
             }
 
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, Math.Round(grandLaborTotal, 0, MidpointRounding.AwayFromZero));
             rowIdx++;
         }
 
@@ -768,6 +807,13 @@ public sealed class ProjectExportService : IProjectExportService
             ws.Column(c).Width = 14;
 
         ws.SheetView.FreezeRows(3);
+    }
+
+    private static XLWorkbook BuildDetailSummaryTableWorkbook(DetailForecastSummaryTableDto table)
+    {
+        // Совместимость: один лист «Базовый» (тесты/старые вызовы).
+        var workbook = new XLWorkbook();
+        AddDetailSummarySheet(workbook, "Базовый", table, isForecast: true);
         return workbook;
     }
 
@@ -839,7 +885,25 @@ public sealed class ProjectExportService : IProjectExportService
         foreach (var row in rows)
         {
             var col = 1;
-            void Set(object? value) => sheet.Cell(rowIndex, col++).Value = value?.ToString() ?? string.Empty;
+            void Set(object? value)
+            {
+                var cell = sheet.Cell(rowIndex, col++);
+                cell.Value = value switch
+                {
+                    decimal? d => d.HasValue ? (object)d.Value : string.Empty,
+                    decimal d => d,
+                    double? dbl => dbl.HasValue ? (object)dbl.Value : string.Empty,
+                    double dbl => dbl,
+                    float? flt => flt.HasValue ? (object)flt.Value : string.Empty,
+                    float flt => flt,
+                    int? i => i.HasValue ? (object)i.Value : string.Empty,
+                    int i => i,
+                    long? l => l.HasValue ? (object)l.Value : string.Empty,
+                    long l => l,
+                    null => string.Empty,
+                    _ => value.ToString() ?? string.Empty,
+                };
+            }
 
             Set(row.FacilityCode);
             Set(row.FacilityName);
