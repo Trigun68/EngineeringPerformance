@@ -48,7 +48,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var userId = _currentUser.UserId
             ?? throw new UnauthorizedAccessException("User is not authenticated.");
 
-        var accessible = await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken);
+        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToList();
         var projects = await _db.Projects.AsNoTracking()
             .Where(p => accessible.Contains(p.Id) && !p.IsArchived)
             .OrderBy(p => p.Code)
@@ -73,10 +73,11 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             ? _options.WeightMode
             : request.WeightMode;
 
-        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToHashSet();
+        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToList();
+        // List (not int[]): array.Contains binds to MemoryExtensions under C# 13 / newer SDKs and breaks EF.
         var projectIds = request.ProjectIds is { Length: > 0 }
-            ? request.ProjectIds.Where(accessible.Contains).ToArray()
-            : accessible.ToArray();
+            ? request.ProjectIds.Where(accessible.Contains).ToList()
+            : accessible;
 
         var cacheKey =
             $"ztrends:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
@@ -92,7 +93,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         }
 
         var warnings = new List<string>();
-        if (projectIds.Length == 0)
+        if (projectIds.Count == 0)
         {
             var empty = EmptyResponse(warnings, "Нет доступных проектов.");
             return empty;
@@ -101,10 +102,13 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var versionsQuery = _db.ProjectAnalysisVersions.AsNoTracking()
             .Where(v => projectIds.Contains(v.ProjectId) && !v.IsArchived && v.IsPrimary);
 
-        if (request.PeriodStart.HasValue)
-            versionsQuery = versionsQuery.Where(v => v.CreatedAt >= request.PeriodStart.Value);
-        if (request.PeriodEnd.HasValue)
-            versionsQuery = versionsQuery.Where(v => v.CreatedAt <= request.PeriodEnd.Value);
+        // Capture DateTime? locals — request.PeriodStart.Value inside the expression tree breaks EF parameter extract.
+        DateTime? periodStart = request.PeriodStart;
+        DateTime? periodEnd = request.PeriodEnd;
+        if (periodStart.HasValue)
+            versionsQuery = versionsQuery.Where(v => v.CreatedAt >= periodStart);
+        if (periodEnd.HasValue)
+            versionsQuery = versionsQuery.Where(v => v.CreatedAt <= periodEnd);
 
         var versions = await versionsQuery
             .OrderBy(v => v.CreatedAt)
@@ -125,13 +129,13 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             return empty;
         }
 
-        var versionIds = versions.Select(v => v.Id).ToArray();
+        var versionIds = versions.Select(v => v.Id).ToList();
         var snapshots = await _db.AnalysisVersionSnapshots.AsNoTracking()
             .Where(s => versionIds.Contains(s.ProjectAnalysisVersionId))
             .Select(s => new { s.ProjectAnalysisVersionId, s.WorkDirectionId, s.NormId })
             .ToListAsync(cancellationToken);
 
-        var normIds = snapshots.Select(s => s.NormId).Distinct().ToArray();
+        var normIds = snapshots.Select(s => s.NormId).Distinct().ToList();
         var norms = await _db.IicWorkDirectionNorms.AsNoTracking()
             .Where(n => normIds.Contains(n.Id))
             .Select(n => new

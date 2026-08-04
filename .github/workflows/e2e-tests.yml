@@ -55,6 +55,8 @@ jobs:
           sed -i 's/^SQL_SA_PASSWORD=.*/SQL_SA_PASSWORD=Test_SA_password1!/' .env
           sed -i 's/^JWT_SECRET=.*/JWT_SECRET=test-jwt-secret-minimum-32-characters-long/' .env
           echo "WEB_PORT=8081" >> .env
+          # Drop stale CI networks that may collide with compose IPAM pools.
+          docker network rm ep-ci-edge 2>/dev/null || true
           docker compose up -d --build --wait || {
             echo "=== ep-db-init logs ==="
             docker logs ep-db-init || true

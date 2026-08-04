@@ -40,7 +40,6 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
                 ["DevWindowsAuth:SimulatedWindowsUser"] = "",
                 ["RateLimit:Enabled"] = "false",
                 ["RateLimit:LoginMaxAttempts"] = "1000",
-                ["Mfa:Enabled"] = "false",
             });
         });
 
@@ -49,6 +48,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
         {
             services.RemoveAll<IDbContextFactory<AppDbContext>>();
             services.RemoveAll<AppDbContext>();
+            services.RemoveAll<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
+            services.AddDistributedMemoryCache();
             services.AddDbContextFactory<AppDbContext>((sp, options) =>
             {
                 var configuration = sp.GetRequiredService<IConfiguration>();

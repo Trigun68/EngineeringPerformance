@@ -63,6 +63,8 @@ public sealed class MfaApiTests(ApiWebApplicationFactory factory) : IClassFixtur
             var user = await context.Users.FirstOrDefaultAsync(candidate => candidate.Id == userId);
             if (user is not null)
             {
+                var logs = await context.UserActionLogs.Where(l => l.UserId == userId).ToListAsync();
+                context.UserActionLogs.RemoveRange(logs);
                 context.Users.Remove(user);
                 await context.SaveChangesAsync();
             }
