@@ -19,7 +19,8 @@ public sealed class PermissionDriftServiceTests
         {
             context.AccessRights.AddRange(
                 new AccessRight { RoleId = 2, ObjectName = obj, AccessLevel = AccessLevel.Edit },
-                new AccessRight { RoleId = 3, ObjectName = obj, AccessLevel = AccessLevel.Read });
+                new AccessRight { RoleId = 3, ObjectName = obj, AccessLevel = AccessLevel.Read },
+                new AccessRight { RoleId = 4, ObjectName = obj, AccessLevel = AccessLevel.Read });
         }
         await context.SaveChangesAsync();
 
