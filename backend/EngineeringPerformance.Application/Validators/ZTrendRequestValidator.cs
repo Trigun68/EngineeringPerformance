@@ -14,7 +14,7 @@ public sealed class ZTrendRequestValidator : AbstractValidator<ZTrendRequest>
     public ZTrendRequestValidator()
     {
         RuleFor(x => x.WeightMode)
-            .Must(m => AllowedWeightModes.Contains(m))
+            .Must(m => string.IsNullOrWhiteSpace(m) || AllowedWeightModes.Contains(m))
             .WithMessage("WeightMode must be basisHours or uniform.");
 
         RuleFor(x => x)

@@ -42,8 +42,9 @@ public sealed class ZTrendApiTests : IClassFixture<ApiWebApplicationFactory>
             periodEnd = (string?)null,
             weightMode = "basisHours",
         });
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, because: body);
+        using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
         root.TryGetProperty("overall", out var overall).Should().BeTrue();
         overall.TryGetProperty("plan", out _).Should().BeTrue();

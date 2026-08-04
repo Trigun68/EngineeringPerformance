@@ -32,10 +32,15 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = connection,
+                // CI runner is outside compose network; hostname redis is unreachable.
+                ["ConnectionStrings:Redis"] = "",
                 ["Jwt:Secret"] = jwtSecret,
                 ["Jwt:ExpirationMinutes"] = "60",
                 ["Spnego:Enabled"] = "false",
                 ["DevWindowsAuth:SimulatedWindowsUser"] = "",
+                ["RateLimit:Enabled"] = "false",
+                ["RateLimit:LoginMaxAttempts"] = "1000",
+                ["Mfa:Enabled"] = "false",
             });
         });
 
@@ -93,7 +98,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
             }
             catch
             {
-                // Пробуем следующий хост.
+                // Try next host.
             }
         }
 
