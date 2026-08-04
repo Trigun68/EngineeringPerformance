@@ -6,7 +6,8 @@ using EngineeringPerformance.Domain.Norms;
 namespace EngineeringPerformance.Application.LaborIntensity;
 
 /// <summary>
-/// Единая агрегация прогнозных часов по PPV и направлениям ИИС (ForecastPanel = отчёт планирования).
+/// Агрегация прогнозных часов по PPV и направлениям ИИС.
+/// Реализация для IPerformanceCalculationEngine; Infrastructure вызывает только через движок.
 /// </summary>
 public static class ForecastHoursAggregator
 {

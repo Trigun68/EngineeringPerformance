@@ -1,4 +1,5 @@
 import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
+import { buildExportFileName } from '../utils/directoryExport';
 import type {
   ProjectsPageCompareGrids,
   ProjectsPageData,
@@ -87,6 +88,24 @@ export async function exportForecastDetailExcel(
   triggerBrowserDownload(blob, filename);
 }
 
+export async function exportForecastDetailExcelVisible(
+  projectId: number,
+  versionId: number,
+  tabName: string,
+  headers: string[],
+  rows: string[][],
+): Promise<void> {
+  const { data } = await apiClient.post<ArrayBuffer>(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-detail/excel-visible`,
+    { tabName, headers, rows },
+    { responseType: 'arraybuffer' },
+  );
+  const blob = new Blob([data], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  triggerBrowserDownload(blob, buildExportFileName(tabName || `ForecastDetail_visible_${projectId}_v${versionId}`));
+}
+
 export async function exportForecastDetailPdf(
   projectId: number,
   versionId: number,
@@ -107,6 +126,60 @@ export async function exportForecastDetailSummaryTable(
     `/projects/${projectId}/versions/${versionId}/export/forecast-detail/summary-table`,
     {},
     `ForecastDetailSummary_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportFactFacilityExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/fact-facility/excel`,
+    {},
+    `FactFacility_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportFactDetailExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/fact-detail/excel`,
+    {},
+    `FactDetail_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportFactDetailExcelVisible(
+  projectId: number,
+  versionId: number,
+  tabName: string,
+  headers: string[],
+  rows: string[][],
+): Promise<void> {
+  const { data } = await apiClient.post<ArrayBuffer>(
+    `/projects/${projectId}/versions/${versionId}/export/fact-detail/excel-visible`,
+    { tabName, headers, rows },
+    { responseType: 'arraybuffer' },
+  );
+  const blob = new Blob([data], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  triggerBrowserDownload(blob, buildExportFileName(tabName || `FactDetail_visible_${projectId}_v${versionId}`));
+}
+
+export async function exportFactDetailSummaryTable(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/fact-detail/summary-table`,
+    {},
+    `FactDetailSummary_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }

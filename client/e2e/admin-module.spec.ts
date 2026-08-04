@@ -25,6 +25,7 @@ test.describe('Admin module', () => {
 
     await expect(page.getByRole('link', { name: 'Логи системы' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Состояние сервисов' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Мониторинг' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Аудит настроек' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Журнал действий' })).toBeVisible();
 
@@ -33,6 +34,10 @@ test.describe('Admin module', () => {
     await page.getByRole('link', { name: 'Состояние сервисов' }).click();
     await expect(page).toHaveURL(/\/admin\/health$/);
     await expect(page.getByTestId('health-service-Database')).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole('link', { name: 'Мониторинг' }).click();
+    await expect(page).toHaveURL(/\/admin\/monitoring$/);
+    await expect(page.getByText('Системный мониторинг (RED)')).toBeVisible({ timeout: 15_000 });
 
     await page.getByRole('link', { name: 'Аудит настроек' }).click();
     await expect(page).toHaveURL(/\/admin\/audit$/);

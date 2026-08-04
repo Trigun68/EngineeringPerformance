@@ -81,8 +81,10 @@ Project
 |------|------|------|
 | **API** | `backend/EngineeringPerformance.Api/` | REST, auth, export |
 | **Application** | `backend/EngineeringPerformance.Application/` | Расчёты, DTO, контракты |
-| **Infrastructure** | `backend/EngineeringPerformance.Infrastructure/` | EF, импорт, аналитика |
+| **Infrastructure** | `backend/EngineeringPerformance.Infrastructure/` | EF, импорт/экспорт (Export/), аналитика |
 | **Frontend** | `client/src/` | React UI, AG Grid, отчёты |
+
+Интеграция внешних модулей (Bearer JWT, readiness, OpenAPI): [docs/api/external-integration.md](../../docs/api/external-integration.md).
 
 Desktop (`EngineeringPerformance.App/`) **не рассматривается** при проектировании и приёмке. См. [wpf-reference-archive.md](./wpf-reference-archive.md).
 
@@ -172,6 +174,14 @@ flowchart LR
 | Bulk для UI | `GET /api/dictionaries/all` | Кэш Redis 30 мин |
 
 ---
+
+## 4.6. DocSet-связка (LI ↔ PPV)
+
+Связь трудоёмкости и физических объёмов через комплект документации:
+- `ProjectLaborIntensity.DocumentationCode` — ключ документа (формат: `DocumentTypeName\|Brand`)
+- `ProjectPhysicalVolume.DocumentSet` — комплект документации строки ФО
+- Факт. часы строки: `setHours × (rowVol / setVol)`
+- Оборудование: `CatalogKeyHash` (SHA-256 от Name + UnitId) — ключ автосоздания при импорте
 
 ## 5. Планирование трудозатрат (приоритетный модуль)
 
@@ -280,9 +290,9 @@ LI(z) = N(V) × (1 + σ × z) × V_eff
 
 | # | Проблема | Статус (2026-07-14) |
 |---|----------|---------------------|
-| P-1 | Два алгоритма: grid vs forecast report | **Закрыто** — `ForecastHoursAggregator` + FIX-01 parent = scenario path |
+| P-1 | Два алгоритма: grid vs forecast report | **Частично** — `LaborIntensityCalculator.Recalculate` + `AggregatedLaborIntensitiesService`; точное место объединения уточняется |
 | P-2 | Deep copy без PlanningScenario / LI-полей | **Закрыто** |
-| P-3 | Scalar fallback / мёртвый additive API | **Закрыто** — удалён `ComputeForecastScenarioHours` |
+| P-3 | Scalar fallback / мёртвый additive API | **Закрыто** — `ComputeForecastScenarioHours` не найден в кодовой базе |
 | P-4 | Plan без нормы/PLI → нулевые часы | **Частично** — UI warning (`normFallbackWarning`) |
 | P-5 | `IicNormId` на КФО не используется | **Задокументировано** — не участвует в web-расчёте; схема без ADR не меняется |
 
@@ -296,7 +306,7 @@ LI(z) = N(V) × (1 + σ × z) × V_eff
 |----------|---------|
 | PPV (assessment) | `factVolume = Σ(Quantity × Coefficient)` по ClassifierId |
 | Equipment (assessment) | Добавляется к объёму по ClassifierId |
-| PLI | `factHours = Σ(PlannedHours)` по WorkDirectionId — **не ActualHours** |
+| PLI | `factHours = Σ(PlannedHours)` по WorkDirectionId — `ActualHours` существует в модели (`ProjectLaborIntensity.ActualHours`), но не участвует в агрегации |
 | Снимок норм | `Estimate`, `StandardDeviation` или параметрические формулы |
 
 ### 6.2. Расчёт иерархии ИИС (вкладка «Итого»)
@@ -321,7 +331,7 @@ factHours (строка) = setHours × (rowVol / setVol)
 zScore (строка) = (ln(factProductivity) - normEstimate) / normStdDev
 ```
 
-Оборудование: `factHours = vol × normProductivity` (без DocSet-распределения).
+Оборудование: строки остаются в гриде с объёмом; **факт. трудоёмкость не считается** из `vol × NormProductivity` (это формула прогноза). Без импорта LI колонка часов пустая — как на вкладке «Итого».
 
 Непривязанные часы → строка **«(пусто)»**.
 
@@ -487,11 +497,11 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 ### 10.1. Слои экспорта
 
-| Сервис | Форматы | Данные |
-|--------|---------|--------|
-| `AnalyticsExportService` | xlsx, pdf | Анализ версии, прогноз |
-| `ProjectExportService` | xlsx, pdf | 9 гридов, сводные таблицы |
-| `VisualReportService` | pdf + графики | ScottPlot → PNG → QuestPDF |
+| Сервис | Расположение | Форматы | Данные |
+|--------|-------------|---------|--------|
+| `AnalyticsExportService` | `Export/` | xlsx, pdf | Анализ версии, прогноз |
+| `ProjectExportService` | `Export/` | xlsx, pdf | 9 гридов, сводные таблицы |
+| `VisualReportService` | `Export/` | pdf + графики | ScottPlot → PNG → QuestPDF |
 
 Экспорт **паритетен UI**: данные через `IProjectsPageDataFetcher` и сервисы аналитики.
 
@@ -614,7 +624,8 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 ### Оценка факта
 - `backend/EngineeringPerformance.Application/Services/PerformanceCalculationEngine.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/PerformanceService.cs`
-- `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentRowsCalculator.cs`
+- `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentPipeline.cs`
+- `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentEngineMapper.cs`
 
 ### Импорт
 - `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs`
@@ -629,5 +640,6 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Дата | Версия | Изменение |
 |------|--------|-----------|
+| 2026-07-26 | 1.2 | Обновлены пути экспорт-сервисов на `Export/`; заменён `FactAssessmentRowsCalculator` на `FactAssessmentPipeline` + `FactAssessmentEngineMapper`; добавлена секция 4.6 (DocSet-связка); уточнены статусы P-1 и P-3 |
 | 2026-07-14 | 1.1 | Web-only: WPF вне scope; разрывы пересмотрены как внутренний техдолг web; ссылка на план развития |
 | 2026-07-14 | 1.0 | Первичная полная ревизия бизнес-логики |

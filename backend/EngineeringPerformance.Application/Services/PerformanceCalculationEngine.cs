@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
@@ -130,19 +131,19 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 pv.Quantity,
                 factHours,
                 factProductivity,
-                zScore));
+                zScore,
+                pv.SourceRowId,
+                IsEquipment: false));
         }
 
+        // Оборудование: только объём в гриде. Факт. трудоёмкость — исключительно из LI
+        // (доля DocSet×направление на PPV). Не считать vol×NormProductivity — это формула прогноза.
         foreach (var eq in input.Equipment
                      .OrderBy(e => e.FacilityCode)
                      .ThenBy(e => e.FacilityName)
                      .ThenBy(e => e.PvName))
         {
             input.NormByDirection.TryGetValue(eq.ClassifierId ?? -1, out var norm);
-            var vol = eq.Quantity * eq.Coefficient;
-            decimal? factHours = null;
-            if (eq.IsAssessment && norm?.NormProductivity is decimal p && vol != 0)
-                factHours = Math.Round(vol * p, 2);
 
             detailRows.Add(new FactAssessmentDetailRowDto(
                 eq.FacilityCode,
@@ -155,9 +156,11 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 FormatClassifierName(eq.ClassifierId, input.ClassifierMap),
                 norm?.NormUnitName ?? string.Empty,
                 eq.Quantity,
-                factHours,
-                null,
-                null));
+                FactLaborHours: null,
+                FactProductivity: null,
+                ZScore: null,
+                eq.SourceRowId,
+                IsEquipment: true));
         }
 
         var facilityRows = detailRows
@@ -217,7 +220,9 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 0m,
                 unmatchedHours,
                 null,
-                null));
+                null,
+                SourceRowId: null,
+                IsEquipment: false));
         }
 
         return new FactAssessmentCalculationResult(detailRows, facilityRows);
@@ -269,9 +274,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
     {
         if (classifierId is not int cid || !classifierMap.TryGetValue(cid, out var node))
             return string.Empty;
+        // Согласовано с IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit.
+        var baseName = string.IsNullOrWhiteSpace(node.Code)
+            ? node.Name
+            : $"{node.Code.Trim()} — {node.Name}".Trim();
         return string.IsNullOrWhiteSpace(node.UnitName)
-            ? $"{node.Code} — {node.Name}"
-            : $"{node.Code} — {node.Name} ({node.UnitName})";
+            ? baseName
+            : $"{baseName} ({node.UnitName})";
     }
 
     private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
@@ -395,4 +404,34 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         decimal? stdDev,
         PlanningZParameters z) =>
         ForecastCalculation.ComputeForecastHours(volume, productivity, stdDev, z);
+
+    public IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
+        PlanningScenario scenario,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        LaborIntensityCalculator.Recalculate(
+            scenario, lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
+        PlanningScenario scenario,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.ComputePpvHours(
+            scenario, lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
+        IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.AggregateByDirection(
+            lines, ppvHoursById, equipmentVolumes, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public decimal? ComputeWeightedZFromPerformanceRows(
+        IReadOnlyList<PerformanceRowDto> performanceRows,
+        int decimalPlaces = 2) =>
+        WeightedZScoreCalculator.FromRootPerformanceRows(performanceRows, decimalPlaces);
 }

@@ -30,12 +30,22 @@ SCHEMA_FILES=(
   schema/101_ParametricNorms.sql
   schema/102_PlanningScenarios.sql
   schema/103_AddPhysicalVolumeBerKfoLink.sql
+  schema/104_ZParameterLevel.sql
+  schema/105_ProjectAnalysisVersionIsPrimary.sql
+  schema/106_EquipmentProjectId.sql
+  schema/107_SqlQueryMetrics.sql
+  schema/108_CorporateAuthRolesAndTokens.sql
+  schema/109_SuperAdminRightsAndProjectParticipants.sql
+  schema/110_HotPathIndexes.sql
+  schema/111_SqlMetricsWave2Indexes.sql
+  schema/112_NormSuggestionsAndAudit.sql
 )
 
 DATA_FILES=(
   data/002_SeedData.sql
   data/003_SeedDataFromExcel.sql
   data/011_RefreshIicFromTexasV2.sql
+  data/022_IicNormsEpms20260701.sql
   data/004_LaborIntensity.sql
   data/005_PhysicalVolumes.sql
   data/005_PhysicalVolumesKfo.sql
@@ -46,6 +56,7 @@ DATA_FILES=(
   data/009_BackfillAccessRights.sql
   data/010_EquipmentSeed.sql
   data/014_RefreshEquipmentFromNomenclature.sql
+  data/023_UnarchiveEquipmentAutoCreatedBy25970Import.sql
   data/016_SeedCiDemoProjects.sql
 )
 
@@ -82,7 +93,7 @@ run_seed_file() {
         echo "  - ${file} (skipped: table PhysicalVolumesBer not found)"
       fi
       ;;
-    data/010_EquipmentSeed.sql|data/014_RefreshEquipmentFromNomenclature.sql)
+    data/010_EquipmentSeed.sql|data/014_RefreshEquipmentFromNomenclature.sql|data/023_UnarchiveEquipmentAutoCreatedBy25970Import.sql)
       if table_exists "Equipments"; then
         echo "  - ${file}"
         "${SQLCMD[@]}" -d "${DB_NAME}" -i "${file}"
@@ -121,10 +132,41 @@ if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Use
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/101_ParametricNorms.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/102_PlanningScenarios.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/103_AddPhysicalVolumeBerKfoLink.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/104_ZParameterLevel.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/105_ProjectAnalysisVersionIsPrimary.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/107_SqlQueryMetrics.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/108_CorporateAuthRolesAndTokens.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/109_SuperAdminRightsAndProjectParticipants.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/110_HotPathIndexes.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/111_SqlMetricsWave2Indexes.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/112_NormSuggestionsAndAudit.sql
   echo ">>> Re-applying seed data scripts (idempotent)..."
   for file in "${DATA_FILES[@]}"; do
+    # Не воскрешать CI demo-проекты на существующей рабочей БД после ручного удаления.
+    if [[ "${file}" == "data/016_SeedCiDemoProjects.sql" ]]; then
+      echo "  - ${file} (skipped on existing DB)"
+      continue
+    fi
+    # Bulk-refresh номенклатур/норм затирают UI-правки (Coefficient, нормы ИИС) и часто
+    # не идемпотентны при unique-индексах (sqlcmd -b → abort всего init).
+    # Принудительно: FORCE_NOMENCLATURE_REFRESH=1.
+    if [[ "${file}" == "data/011_RefreshIicFromTexasV2.sql" \
+       || "${file}" == "data/022_IicNormsEpms20260701.sql" \
+       || "${file}" == "data/012_RefreshPhysicalVolumesKfoFromNomenclature.sql" \
+       || "${file}" == "data/013_RefreshPhysicalVolumesBerFromNomenclature.sql" \
+       || "${file}" == "data/014_RefreshEquipmentFromNomenclature.sql" ]]; then
+      if [[ "${FORCE_NOMENCLATURE_REFRESH:-0}" == "1" ]]; then
+        echo "  - ${file} (FORCE_NOMENCLATURE_REFRESH=1)"
+      else
+        echo "  - ${file} (skipped on existing DB — preserves UI edits; set FORCE_NOMENCLATURE_REFRESH=1 to re-apply)"
+        continue
+      fi
+    fi
     run_seed_file "${file}"
   done
+  # Повторно: backfill ProjectId после появления ProjectEquipments из сидов.
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
   exit 0
 fi
 
@@ -138,5 +180,8 @@ echo ">>> Applying seed data scripts..."
 for file in "${DATA_FILES[@]}"; do
   run_seed_file "${file}"
 done
+
+# Backfill ProjectId после сидов (на пустой схеме 106 в SCHEMA_FILES ещё не находит потребителей).
+"${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
 
 echo "Database initialized successfully."

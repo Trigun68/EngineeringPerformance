@@ -3,6 +3,7 @@ import { Box, Button, Stack } from '@mui/material';
 import { wpColors } from '../../theme/wpColors';
 import { useAuthStore } from '../../store/useAuthStore';
 import { usePermission } from '../../hooks/usePermission';
+import { isSuperAdmin } from '../../utils/permissionAccess';
 
 const subNavSx = {
   textTransform: 'none' as const,
@@ -20,7 +21,7 @@ const subNavSx = {
 export function SettingsLayout() {
   const user = useAuthStore((s) => s.user);
   const { canRead: canReadUsers } = usePermission('Users');
-  const isAdmin = user?.roleName === 'Administrator';
+  const isAdmin = isSuperAdmin(user?.roleName, user?.roleId);
   const canReadAccessRights = isAdmin;
 
   const tabs = [

@@ -33,15 +33,15 @@ public sealed class FactAssessmentPipeline : IFactAssessmentPipeline
         CancellationToken cancellationToken = default)
     {
         if (request.FormulaId != DocSetProportionalFormula.Id)
-            throw new InvalidOperationException($"Unknown formula id: {request.FormulaId}");
+            throw new InvalidOperationException("Неизвестная формула оценки.");
 
         var bundle = await _rawLoader.LoadAsync(request.ProjectId, request.VersionId, cancellationToken);
         var performance = ProjectsPageGridBuilder.BuildPerformance(bundle, _calculationEngine);
-        _ = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance);
+        _ = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _calculationEngine);
 
         // SoT часов = сумма PlannedHours PLI (как ProjectVersionAnalysisService / PDF анализа).
         var totalHours = FactLaborHoursTotals.FromLaborIntensities(bundle.LaborIntensities);
-        var weightedZ = WeightedZScoreCalculator.FromRootPerformanceRows(
+        var weightedZ = _calculationEngine.ComputeWeightedZFromPerformanceRows(
             performance,
             decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
 

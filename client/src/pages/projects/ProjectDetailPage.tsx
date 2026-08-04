@@ -37,6 +37,7 @@ import { EditModal } from '../../components/EditModal/EditModal';
 import { ImportWizard } from '../../components/ImportWizard/ImportWizard';
 import { PaginationBar } from '../../components/PaginationBar/PaginationBar';
 import { ParticipantsModal } from '../../components/ParticipantsModal/ParticipantsModal';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { useAuthStore } from '../../store/useAuthStore';
 import { canReadPermission } from '../../utils/permissionAccess';
@@ -285,6 +286,7 @@ export function ProjectDetailPage() {
 
   return (
     <Box>
+      <WorkingOverlay open={loading} delayMs={1000} />
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h5">
           {project ? `${project.code} — ${project.name}` : `Проект #${projectId}`}
@@ -424,7 +426,7 @@ export function ProjectDetailPage() {
             rowData={participants}
             columnDefs={participantColumns}
             loading={loading}
-            objectName="ProjectPermissions"
+            objectName="Projects"
             gridId={`project-${pid}-participants`}
           />
         </Stack>

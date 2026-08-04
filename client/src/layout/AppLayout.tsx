@@ -24,13 +24,13 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { UserMenu } from '../components/auth/UserMenu';
+import { WorkingOverlay } from '../components/WorkingOverlay/WorkingOverlay';
 import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
-import { isAdministrator } from '../utils/permissionAccess';
+import { isSuperAdmin } from '../utils/permissionAccess';
 import { wpColors } from '../theme/wpColors';
 import { useAuthStore } from '../store/useAuthStore';
 import { useDictionaryStore } from '../store/useDictionaryStore';
@@ -40,11 +40,10 @@ const SIDEBAR_WIDTH = 280;
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/': <HomeOutlinedIcon fontSize="small" />,
   '/projects': <FolderOutlinedIcon fontSize="small" />,
-  '/analytics/trends': <MenuBookOutlinedIcon fontSize="small" />,
+  '/analytics': <MenuBookOutlinedIcon fontSize="small" />,
   '/references': <MenuBookOutlinedIcon fontSize="small" />,
   '/settings/users': <SettingsOutlinedIcon fontSize="small" />,
   '/help': <HelpOutlineIcon fontSize="small" />,
-  '/monitoring': <MonitorHeartOutlinedIcon fontSize="small" />,
   '/admin': <AdminPanelSettingsOutlinedIcon fontSize="small" />,
 };
 
@@ -57,7 +56,6 @@ function resolvePageTitle(pathname: string): string {
     if (pathname.startsWith('/admin/user-actions')) return 'Журнал действий';
     return 'Администрирование';
   }
-  if (pathname.startsWith('/monitoring')) return 'Мониторинг';
   if (pathname.startsWith('/help')) return 'Справка';
   if (pathname === '/projects') return 'Проекты';
   if (pathname === '/') return 'Главная';
@@ -125,16 +123,10 @@ function AppNavList({
           </ListItemButton>
         ))}
         {isAdmin && (
-          <>
-            <ListItemButton component={NavLink} to="/admin" sx={navLinkSx} onClick={onNavigate}>
-              <ListItemIcon>{NAV_ICONS['/admin']}</ListItemIcon>
-              <ListItemText primary="Администрирование" primaryTypographyProps={{ fontSize: 14 }} />
-            </ListItemButton>
-            <ListItemButton component={NavLink} to="/monitoring" sx={navLinkSx} onClick={onNavigate}>
-              <ListItemIcon>{NAV_ICONS['/monitoring']}</ListItemIcon>
-              <ListItemText primary="Мониторинг" primaryTypographyProps={{ fontSize: 14 }} />
-            </ListItemButton>
-          </>
+          <ListItemButton component={NavLink} to="/admin" sx={navLinkSx} onClick={onNavigate}>
+            <ListItemIcon>{NAV_ICONS['/admin']}</ListItemIcon>
+            <ListItemText primary="Администрирование" primaryTypographyProps={{ fontSize: 14 }} />
+          </ListItemButton>
         )}
       </List>
 
@@ -149,10 +141,11 @@ export function AppLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const fetchDictionaries = useDictionaryStore((s) => s.fetchDictionaries);
+  const dictionariesLoading = useDictionaryStore((s) => s.isLoading);
   const location = useLocation();
   const projectMatch = useMatch('/projects/:projectId');
   const { visibleItems } = useAccessibleNavigation();
-  const isAdmin = isAdministrator(user?.roleName);
+  const isAdmin = isSuperAdmin(user?.roleName, user?.roleId);
 
   usePersistLastRoute();
 
@@ -165,11 +158,25 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!user) return undefined;
-    const intervalId = window.setInterval(() => {
-      void apiClient.post('/auth/refresh').catch(() => {
-        // 401 обработает interceptor apiClient.
-      });
-    }, 15 * 60 * 1000);
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    (async () => {
+      try {
+        const { sessionExpirationMinutes } = (await apiClient.get<{ sessionExpirationMinutes: number }>('/admin/system-settings')).data;
+        const heartbeatMs = Math.floor(sessionExpirationMinutes * 60 * 1000 * 0.8);
+        intervalId = window.setInterval(() => {
+          void apiClient.post('/auth/refresh').catch(() => {
+            // 401 обработает interceptor apiClient.
+          });
+        }, heartbeatMs);
+      } catch {
+        // fallback: 15 минут
+        intervalId = window.setInterval(() => {
+          void apiClient.post('/auth/refresh').catch(() => {
+            // 401 обработает interceptor apiClient.
+          });
+        }, 15 * 60 * 1000);
+      }
+    })();
     return () => window.clearInterval(intervalId);
   }, [user]);
 
@@ -206,6 +213,7 @@ export function AppLayout() {
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', bgcolor: wpColors.pageBg }}>
+      <WorkingOverlay open={dictionariesLoading} delayMs={1000} />
       {!isMobile && (
         <Box component="nav" sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, display: 'flex' }}>
           {navBody}

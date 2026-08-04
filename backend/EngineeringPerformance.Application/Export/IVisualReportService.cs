@@ -41,4 +41,10 @@ public interface IVisualReportService
         string formulaId = "v1-docset-proportional",
         bool includeAppendix = false,
         CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportPerformanceReportPdfAsync(
+        int projectId,
+        int? planVersionId = null,
+        int? factVersionId = null,
+        CancellationToken cancellationToken = default);
 }

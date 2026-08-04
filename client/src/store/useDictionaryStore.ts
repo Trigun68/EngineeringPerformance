@@ -6,6 +6,8 @@ import {
   type DictionaryKey,
   type DictionariesAllResponse,
 } from '../types/dictionary';
+import { formatIisNorm } from '../utils/formatIisNorm';
+import { resolveIicDirectionUnitName } from '../utils/resolveIicDirectionUnit';
 
 /**
  * Справочники загружаются один раз при старте приложения (см. AppLayout.tsx)
@@ -116,7 +118,23 @@ export const useDictionaryStore = create<DictionaryState>((set, get) => ({
 
   getUnitName: (id) => get().getName('unitsOfMeasurement', id),
 
-  getDirectionName: (id) => get().getName('iicWorkDirections', id),
+  getDirectionName: (id) => {
+    if (id == null) {
+      return '';
+    }
+
+    const directions = get().lists.iicWorkDirections;
+    const direction = get().caches.iicWorkDirections.get(id);
+    if (!direction) {
+      return String(id);
+    }
+
+    return formatIisNorm({
+      code: direction.code,
+      name: direction.name,
+      unitName: resolveIicDirectionUnitName(id, directions, get().getUnitName),
+    });
+  },
 
   getNormTypeName: (codeOrId) => {
     if (codeOrId == null || codeOrId === '') {

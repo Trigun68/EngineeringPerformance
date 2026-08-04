@@ -101,6 +101,33 @@ public static class FormulaTemplates
         [],
         RequiresBounds: true);
 
+    public static readonly FormulaTemplate Constant = new(
+        FormulaType.Constant,
+        "Постоянная",
+        @"N(V) = a",
+        [new("a", "Производительность", true, 0)],
+        RequiresBounds: false);
+
+    public static readonly FormulaTemplate Hyperbolic = new(
+        FormulaType.Hyperbolic,
+        "Гиперболическая",
+        @"N(V) = \max(0, a + b / V)",
+        [
+            new("a", "Асимптота a", true),
+            new("b", "Коэффициент b", true),
+        ],
+        RequiresBounds: true);
+
+    public static readonly FormulaTemplate Exponential = new(
+        FormulaType.Exponential,
+        "Экспоненциальная",
+        @"N(V) = a \cdot e^{b \cdot V}",
+        [
+            new("a", "Коэффициент a", true, 0),
+            new("b", "Показатель b", true),
+        ],
+        RequiresBounds: true);
+
     /// <summary>Все шаблоны — объявлен после полей, иначе static init даёт null в списке.</summary>
     public static IReadOnlyList<FormulaTemplate> All { get; } =
     [
@@ -112,5 +139,8 @@ public static class FormulaTemplates
         ExponentialDecay,
         PiecewiseLinear,
         Polynomial,
+        Constant,
+        Hyperbolic,
+        Exponential,
     ];
 }

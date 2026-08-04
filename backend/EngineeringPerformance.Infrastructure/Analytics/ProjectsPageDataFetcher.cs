@@ -43,8 +43,10 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
 
         var factTask = Task.Run(() =>
         {
-            var (facility, detail) = ProjectsPageGridBuilder.BuildFactGrids(primaryBundle, primaryPerformance);
-            return new ProjectsPageFactGridsDto(primaryPerformance, facility, detail);
+            var (facility, detail) = ProjectsPageGridBuilder.BuildFactGrids(
+                primaryBundle, primaryPerformance, _calculationEngine);
+            var performanceWithTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(primaryPerformance);
+            return new ProjectsPageFactGridsDto(performanceWithTotals, facility, detail);
         }, cancellationToken);
 
         await Task.WhenAll(forecastTask, factTask);
@@ -55,14 +57,19 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
             var comparePerformance = ProjectsPageGridBuilder.BuildPerformance(compareBundle, _calculationEngine);
             var (compareFacility, compareDetail) = ProjectsPageGridBuilder.BuildFactGrids(
                 compareBundle,
-                comparePerformance);
+                comparePerformance,
+                _calculationEngine);
             var compareFact = new ProjectsPageFactGridsDto(comparePerformance, compareFacility, compareDetail);
 
+            // Сравнение строится по «сырым» performance (без итогов); итоги добавляет BuildCompareGrids.
             compare = ProjectsPageGridBuilder.BuildCompareGrids(
                 primaryPerformance,
                 comparePerformance,
-                factTask.Result,
-                compareFact);
+                new ProjectsPageFactGridsDto(primaryPerformance, factTask.Result.Facility, factTask.Result.Detail),
+                compareFact,
+                primaryBundle,
+                compareBundle,
+                _calculationEngine);
         }
 
         return new ProjectsPageDataDto(forecastTask.Result, factTask.Result, compare);

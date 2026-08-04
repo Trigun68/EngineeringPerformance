@@ -8,7 +8,7 @@ export function GroupTrendTab({ projectId }: { projectId: number }) {
       <Alert severity="info" sx={{ mb: 2 }}>
         Трендовый анализ перенесён на отдельную страницу аналитики с графиками факта, прогноза и накопительного итога.
       </Alert>
-      <Button component={Link} to={`/analytics/trends?projectId=${projectId}`} variant="contained">
+      <Button component={Link} to={`/analytics?projectId=${projectId}`} variant="contained">
         Открыть трендовый анализ
       </Button>
     </Box>

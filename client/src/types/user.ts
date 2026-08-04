@@ -22,4 +22,5 @@ export interface UserFormData {
   roleId: number | '';
   windowsUsername: string;
   isActive: boolean;
+  mustChangePassword: boolean;
 }

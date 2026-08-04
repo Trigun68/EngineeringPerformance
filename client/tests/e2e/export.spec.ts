@@ -12,7 +12,7 @@ const mockUser = {
   username: 'pm',
   displayName: 'Project Manager',
   roleId: 2,
-  roleName: 'ProjectManager',
+  roleName: 'Admin',
   isActive: true,
   permissions: {
     Dashboard: 1,

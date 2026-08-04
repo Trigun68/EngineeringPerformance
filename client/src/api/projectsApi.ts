@@ -20,7 +20,8 @@ const projectSchema = z.object({
   workStatus: z.string().nullable().optional(),
   workStart: z.string().nullable().optional(),
   program: z.string().nullable().optional(),
-  versionCount: z.number().int(),
+  planVersionCount: z.number().int(),
+  factVersionCount: z.number().int(),
   isArchived: z.boolean().optional(),
 });
 const projectListSchema = z.array(projectSchema);

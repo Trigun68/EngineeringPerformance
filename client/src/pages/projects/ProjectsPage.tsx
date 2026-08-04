@@ -26,7 +26,9 @@ import {
 } from '../../api/projectsApi';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { EditModal } from '../../components/EditModal/EditModal';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { getApiErrorMessage } from '../../services/apiError';
 import type { Project, ProjectFormData } from '../../types/project';
 import { LAST_PROJECT_PREF_KEY } from '../../utils/projectWorkspacePrefs';
@@ -52,6 +54,7 @@ const emptyForm: ProjectFormData = {
 export function ProjectsPage() {
   const navigate = useNavigate();
   const { canRead, canEdit } = usePermission(OBJECT_NAME);
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
@@ -98,7 +101,17 @@ export function ProjectsPage() {
       { field: 'contractor', headerName: 'Подрядчик' },
       { field: 'gip', headerName: 'ГИП' },
       { field: 'workStatus', headerName: 'Статус' },
-      { field: 'versionCount', headerName: 'Версии', width: 110 },
+      {
+        colId: 'versionCounts',
+        headerName: 'Версии',
+        width: 110,
+        valueGetter: (p) => {
+          const plan = p.data?.planVersionCount ?? 0;
+          const fact = p.data?.factVersionCount ?? 0;
+          return `${plan}/${fact}`;
+        },
+        tooltipValueGetter: () => 'План / Факт',
+      },
       {
         field: 'isArchived',
         headerName: 'Архив',
@@ -159,11 +172,10 @@ export function ProjectsPage() {
   };
 
   const handleHardDelete = async (project: Project) => {
-    if (
-      !window.confirm(
-        `Удалить проект «${project.name}» безвозвратно?\nВсе версии и связанные данные будут удалены. Это действие необратимо.`,
-      )
-    ) {
+    if (!(await confirm({
+      title: 'Удалить проект безвозвратно?',
+      description: `Удалить проект «${project.name}» безвозвратно?\nВсе версии и связанные данные будут удалены. Это действие необратимо.`,
+    }))) {
       return;
     }
     try {
@@ -227,6 +239,7 @@ export function ProjectsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, flex: 1, overflow: 'hidden' }}>
+      <WorkingOverlay open={loading} delayMs={1000} />
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} spacing={1} flexShrink={0} flexWrap="wrap" useFlexGap>
         <TextField
           size="small"
@@ -391,6 +404,7 @@ export function ProjectsPage() {
           />
         </Stack>
       </EditModal>
+      {ConfirmDialog}
     </Box>
   );
 }

@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -5,9 +6,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Projects;
 
-public sealed class ProjectVersionPlanningParameterService(AppDbContext context) : IProjectVersionPlanningParameterService
+public sealed class ProjectVersionPlanningParameterService(
+    AppDbContext context,
+    IAnalysisVersionRecalculationOrchestrator recalcOrchestrator) : IProjectVersionPlanningParameterService
 {
     private readonly AppDbContext _context = context;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator = recalcOrchestrator;
 
     public async Task<IReadOnlyList<ProjectVersionPlanningParameterDto>> ListAsync(
         int projectId,
@@ -17,7 +21,7 @@ public sealed class ProjectVersionPlanningParameterService(AppDbContext context)
         await EnsureVersionExistsAsync(projectId, versionId, cancellationToken);
         await SeedForVersionAsync(versionId, cancellationToken);
 
-        return await _context.ProjectVersionPlanningParameters.AsNoTracking()
+        var rows = await _context.ProjectVersionPlanningParameters.AsNoTracking()
             .Where(p => p.ProjectAnalysisVersionId == versionId)
             .Join(
                 _context.IicWorkDirections.AsNoTracking(),
@@ -42,8 +46,20 @@ public sealed class ProjectVersionPlanningParameterService(AppDbContext context)
                 x.p.ZPessimistic,
                 x.p.ZBase,
                 x.p.ZOptimistic,
-                x.p.ZActual))
+                x.p.ZActual,
+                0m))
             .ToListAsync(cancellationToken);
+
+        var weights = await LoadLaborHoursWeightsAsync(versionId, cancellationToken);
+        if (weights.Count == 0)
+            return rows;
+
+        return rows
+            .Select(r => r with
+            {
+                LaborHoursWeight = weights.GetValueOrDefault(r.IicWorkDirectionId),
+            })
+            .ToList();
     }
 
     public async Task SaveAsync(
@@ -70,9 +86,10 @@ public sealed class ProjectVersionPlanningParameterService(AppDbContext context)
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
     }
 
-    public async Task SeedForVersionAsync(int versionId, CancellationToken cancellationToken = default)
+    public async Task SeedForVersionAsync(int versionId, CancellationToken cancellationToken)
     {
         var hasAny = await _context.ProjectVersionPlanningParameters
             .AnyAsync(p => p.ProjectAnalysisVersionId == versionId, cancellationToken);
@@ -126,6 +143,46 @@ public sealed class ProjectVersionPlanningParameterService(AppDbContext context)
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Веса = сумма уже посчитанной LaborIntensityBase по классификатору направления (КФО/БЭР).
+    /// </summary>
+    private async Task<Dictionary<int, decimal>> LoadLaborHoursWeightsAsync(
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var kfoWeights = await _context.ProjectPhysicalVolumes.AsNoTracking()
+            .Where(pv => pv.ProjectAnalysisVersionId == versionId && pv.PhysicalVolumeKfoId != null)
+            .Join(
+                _context.PhysicalVolumesKfo.AsNoTracking(),
+                pv => pv.PhysicalVolumeKfoId,
+                k => k.Id,
+                (pv, k) => new { k.ClassifierId, Hours = pv.LaborIntensityBase ?? 0m })
+            .Where(x => x.ClassifierId != null)
+            .GroupBy(x => x.ClassifierId!.Value)
+            .Select(g => new { DirectionId = g.Key, Hours = g.Sum(x => x.Hours) })
+            .ToListAsync(cancellationToken);
+
+        var berWeights = await _context.ProjectPhysicalVolumes.AsNoTracking()
+            .Where(pv => pv.ProjectAnalysisVersionId == versionId && pv.PhysicalVolumeBerId != null)
+            .Join(
+                _context.PhysicalVolumesBer.AsNoTracking(),
+                pv => pv.PhysicalVolumeBerId,
+                b => b.Id,
+                (pv, b) => new { b.ClassifierId, Hours = pv.LaborIntensityBase ?? 0m })
+            .Where(x => x.ClassifierId != null)
+            .GroupBy(x => x.ClassifierId!.Value)
+            .Select(g => new { DirectionId = g.Key, Hours = g.Sum(x => x.Hours) })
+            .ToListAsync(cancellationToken);
+
+        var map = new Dictionary<int, decimal>();
+        foreach (var row in kfoWeights.Concat(berWeights))
+        {
+            map[row.DirectionId] = map.GetValueOrDefault(row.DirectionId) + row.Hours;
+        }
+
+        return map;
     }
 
     private async Task EnsureVersionExistsAsync(int projectId, int versionId, CancellationToken cancellationToken)

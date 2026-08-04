@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using EngineeringPerformance.Application.Directories;
 using EngineeringPerformance.Domain.Common;
 
@@ -11,6 +12,9 @@ internal static class DirectoryEntityMapper
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
+        // После смены coefficient/assessment recalc может fixup-нуть ProjectPhysicalVolumes
+        // на tracked DirectoryItem → цикл KFO↔PPV при SerializeToNode.
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
     };
 
     private static readonly HashSet<string> BasePropertyNames =
@@ -23,6 +27,9 @@ internal static class DirectoryEntityMapper
     [
         "children", "parent", "projectPhysicalVolumes", "laborIntensities",
         "classifier", "unit", "iicWorkDirection", "options", "physicalVolumeKfo",
+        "project", "projectEquipments",
+        // UnitOfMeasurement ↔ IIC (цикл при SerializeToNode, если nav подгружены)
+        "workDirections", "norms",
     ];
 
     private static readonly HashSet<string> LaborIntensityHiddenPropertyNames =

@@ -13,6 +13,7 @@ import {
 import { DirectoryEditDialog, DirectoryFormRow } from '../../../pages/references/DirectoryEditDialog';
 import { DirectoryFormFields } from '../../../pages/references/DirectoryFormFields';
 import { isPhysicalVolumeCatalogResource } from '../../../pages/references/referenceConfig';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 
 export interface ForecastDetailCatalogDialogProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function ForecastDetailCatalogDialog({
   const [name, setName] = useState('');
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [isArchived, setIsArchived] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const fieldDefs = useMemo(() => getFormFields(resource), [resource]);
   const isPhysicalVolumeCatalog = isPhysicalVolumeCatalogResource(resource);
@@ -56,24 +58,38 @@ export function ForecastDetailCatalogDialog({
 
   const handleSubmit = async () => {
     if (!entryId) return;
-    await updateDirectoryEntry(resource, entryId, {
-      name,
-      parentId: entry?.parentId ?? null,
-      sortOrder: entry?.sortOrder,
-      properties: buildPropertiesPayload(resource, properties),
-    });
-    onSaved();
-    onClose();
+    setSubmitting(true);
+    try {
+      const payload = buildPropertiesPayload(resource, properties);
+      if (resource === 'equipment') {
+        const projectId = Number(entry?.properties?.projectId ?? properties.projectId);
+        if (Number.isFinite(projectId) && projectId > 0) {
+          payload.projectId = projectId;
+        }
+      }
+      await updateDirectoryEntry(resource, entryId, {
+        name,
+        parentId: entry?.parentId ?? null,
+        sortOrder: entry?.sortOrder,
+        properties: payload,
+      });
+      onSaved();
+      onClose();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <DirectoryEditDialog
-      open={open}
-      title={title}
-      onClose={onClose}
-      onSubmit={handleSubmit}
-      maxWidth="md"
-    >
+    <>
+      <WorkingOverlay open={submitting} />
+      <DirectoryEditDialog
+        open={open}
+        title={title}
+        onClose={onClose}
+        onSubmit={handleSubmit}
+        maxWidth="md"
+      >
       {isPhysicalVolumeCatalog && (
         <DirectoryFormRow label="Код">
           <TextField
@@ -97,5 +113,6 @@ export function ForecastDetailCatalogDialog({
         showArchive
       />
     </DirectoryEditDialog>
+    </>
   );
 }

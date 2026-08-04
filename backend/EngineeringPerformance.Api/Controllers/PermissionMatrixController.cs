@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Admin;
 using EngineeringPerformance.Application.Auth;
+using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -56,5 +57,5 @@ public sealed class PermissionMatrixController : ControllerBase
     }
 
     private bool IsAdministrator() =>
-        string.Equals(_currentUser.RoleName, nameof(UserRole.Administrator), StringComparison.Ordinal);
+        PermissionObjectCatalog.IsSuperAdmin(_currentUser.RoleName, _currentUser.RoleId);
 }

@@ -5,7 +5,11 @@ using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Application.LaborIntensity;
 
-/// <summary>Чистая логика пересчёта LI по сценариям планирования (без БД).</summary>
+/// <summary>
+/// Чистая логика пересчёта LI по сценариям планирования (без БД).
+/// Реализация для IPerformanceCalculationEngine.RecalculateLaborIntensities;
+/// Infrastructure вызывает только через движок.
+/// </summary>
 public static class LaborIntensityCalculator
 {
     public sealed record PpvLine(

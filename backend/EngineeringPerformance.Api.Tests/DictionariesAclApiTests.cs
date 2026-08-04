@@ -41,7 +41,7 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
     {
         if (!_sqlAvailable) return;
 
-        // Observer в seed часто имеет References=Read — временно снимаем право через admin API.
+        // Engineer в seed часто имеет References=Read — временно снимаем право через admin API.
         var rightsResponse = await _client.GetAsync("/api/access-rights");
         rightsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var rightsJson = await rightsResponse.Content.ReadAsStringAsync();
@@ -53,7 +53,7 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
         {
             var roleName = item.GetProperty("roleName").GetString();
             var objectName = item.GetProperty("objectName").GetString();
-            if (!string.Equals(roleName, "Observer", StringComparison.Ordinal)
+            if (!string.Equals(roleName, "Engineer", StringComparison.Ordinal)
                 || !string.Equals(objectName, "References", StringComparison.Ordinal))
             {
                 continue;

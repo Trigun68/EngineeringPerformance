@@ -4,6 +4,7 @@ using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EngineeringPerformance.Api.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -13,11 +14,16 @@ namespace EngineeringPerformance.Api.Controllers;
 public sealed class TrendsAnalyticsController : ControllerBase
 {
     private readonly ITrendAnalyticsService _trends;
+    private readonly IZTrendAnalyticsService _zTrends;
     private readonly IVisualReportService _visualReports;
 
-    public TrendsAnalyticsController(ITrendAnalyticsService trends, IVisualReportService visualReports)
+    public TrendsAnalyticsController(
+        ITrendAnalyticsService trends,
+        IZTrendAnalyticsService zTrends,
+        IVisualReportService visualReports)
     {
         _trends = trends;
+        _zTrends = zTrends;
         _visualReports = visualReports;
     }
 
@@ -27,6 +33,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
         Ok(_trends.ListFormulas());
 
     [HttpGet]
+    [RequireProjectAccess]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
     public Task<TrendAnalyticsResultDto> GetTrends(
         [FromQuery] int projectId,
@@ -38,6 +45,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
         _trends.GetTrendsAsync(projectId, dateFrom, dateTo, granularity, formulaId, cancellationToken);
 
     [HttpGet("detail")]
+    [RequireProjectAccess]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
     public Task<IReadOnlyList<TrendDetailRowDto>> GetDetail(
         [FromQuery] int projectId,
@@ -46,8 +54,26 @@ public sealed class TrendsAnalyticsController : ControllerBase
         CancellationToken cancellationToken = default) =>
         _trends.GetDetailAsync(projectId, versionId, formulaId, cancellationToken);
 
-    [HttpGet("export.pdf")]
+    /// <summary>Трендовый анализ средневзвешенного Z (план/факт, сегментация по нормам).</summary>
+    [HttpPost("z-score")]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ZTrendResponse>> GetZTrends(
+        [FromBody] ZTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _zTrends.GetZTrendsAsync(request ?? new ZTrendRequest(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("z-score/filters")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public Task<ZTrendFiltersDto> GetZTrendFilters(CancellationToken cancellationToken) =>
+        _zTrends.GetFiltersAsync(cancellationToken);
+
+    [HttpGet("export.pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportTrendsPdf(
         [FromQuery] int projectId,
         [FromQuery] DateTime? dateFrom,

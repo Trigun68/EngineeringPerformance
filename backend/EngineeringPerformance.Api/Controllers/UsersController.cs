@@ -104,6 +104,39 @@ public sealed class UsersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:int}/unlock")]
+    [HasPermission(PermissionType.Users, AccessLevel.Edit)]
+    public async Task<IActionResult> Unlock(int id, CancellationToken cancellationToken)
+    {
+        var unlocked = await _users.UnlockAsync(id, cancellationToken);
+        return unlocked ? NoContent() : NotFound();
+    }
+
+    [HttpPost("{id:int}/reset-mfa")]
+    [HasPermission(PermissionType.Users, AccessLevel.Edit)]
+    public async Task<IActionResult> ResetMfa(int id, CancellationToken cancellationToken)
+    {
+        var result = await _users.ResetMfaAsync(id, cancellationToken);
+        return result switch
+        {
+            MfaResetStatus.Success => NoContent(),
+            MfaResetStatus.UserNotFound => NotFound(),
+            MfaResetStatus.Disabled => BadRequest("Многофакторная аутентификация отключена."),
+            _ => StatusCode(StatusCodes.Status500InternalServerError),
+        };
+    }
+
+    [HttpPost("{id:int}/reset-password")]
+    [HasPermission(PermissionType.Users, AccessLevel.Edit)]
+    public async Task<ActionResult<ResetPasswordResponse>> ResetPassword(int id, CancellationToken cancellationToken)
+    {
+        var (temporaryPassword, error) = await _users.ResetPasswordAsync(id, cancellationToken);
+        if (error is not null)
+            return error == "Пользователь не найден" ? NotFound(error) : BadRequest(error);
+
+        return Ok(new ResetPasswordResponse(temporaryPassword!));
+    }
+
     [HttpGet]
     [HasPermission(PermissionType.Users, AccessLevel.Read)]
     public async Task<ActionResult<IReadOnlyList<UserDto>>> GetAll(
@@ -179,4 +212,6 @@ public sealed class UsersController : ControllerBase
         var unarchived = await _users.UnarchiveAsync(id, cancellationToken);
         return unarchived ? NoContent() : NotFound();
     }
+
+    public sealed record ResetPasswordResponse(string TemporaryPassword);
 }

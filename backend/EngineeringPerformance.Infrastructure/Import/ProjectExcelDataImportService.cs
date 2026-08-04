@@ -237,23 +237,15 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
             return (decimal)dbl;
         }
 
-        return 0m;
+        throw new InvalidOperationException($"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C \u0447\u0438\u0441\u043B\u043E\u0432\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: '{value}'.");
     }
 
     private static string FormatImportExceptionMessage(Exception ex)
     {
-        var inner = ex.InnerException;
-        if (ex is DbUpdateException && inner is not null)
-        {
-            return $"{inner.Message} ({inner.GetType().Name})";
-        }
-
-        if (inner is not null)
-        {
-            return $"{ex.Message} — {inner.Message}";
-        }
-
-        return ex.Message;
+        // Log full exception server-side (already logged at call site).
+        // Return a generic message to avoid leaking DB schema, constraint names,
+        // connection details, or other internal information to the caller.
+        return "Ошибка импорта данных. Обратитесь к администратору.";
     }
 
     private static async Task<int> DeleteImportedRecordsAsync(AppDbContext context, DataImportType dataType, int projectId, int versionId, DateTime importedAt)

@@ -43,7 +43,7 @@
 - **Excel:** ClosedXML, endpoints `export/analysis.xlsx`, `export/forecast.xlsx`
 - **PDF:** QuestPDF, endpoints `export/analysis.pdf`, `export/forecast.pdf`
 
-Реализация: `AnalyticsExportService` в Infrastructure.
+Реализация: `AnalyticsExportService` и `ProjectExportService` в `Export/` (Infrastructure).
 
 ---
 

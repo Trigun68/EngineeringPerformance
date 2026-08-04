@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Autocomplete, TextField } from '@mui/material';
 import type { DictionaryItem } from '../../types/dictionary';
+import { formatIisNorm } from '../../utils/formatIisNorm';
 
 export interface HierarchicalSelectOption {
   id: number | null;
@@ -21,7 +22,7 @@ export interface HierarchicalSelectProps {
 }
 
 function defaultLabel(item: DictionaryItem): string {
-  return item.code?.trim() ? `${item.code} ${item.name}` : item.name;
+  return formatIisNorm({ code: item.code, name: item.name });
 }
 
 function buildFlatOptions(

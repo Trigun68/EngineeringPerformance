@@ -96,9 +96,16 @@ export function flattenDirectoryTree(
   return rows;
 }
 
-export async function fetchDirectoryTree(resource: string, includeArchived = false): Promise<DirectoryTreeNode[]> {
+export async function fetchDirectoryTree(
+  resource: string,
+  includeArchived = false,
+  projectId?: number | null,
+): Promise<DirectoryTreeNode[]> {
   const { data } = await apiClient.get<DirectoryTreeNode[]>(`/directories/${resource}/tree`, {
-    params: { includeArchived },
+    params: {
+      includeArchived,
+      ...(projectId != null ? { projectId } : {}),
+    },
   });
   return data.map(normalizeTreeNode);
 }
@@ -115,9 +122,15 @@ export async function fetchDirectory(
   includeArchived = false,
   page = 1,
   pageSize = 100,
+  projectId?: number | null,
 ): Promise<PagedDirectoryResponse> {
   const { data } = await apiClient.get<PagedDirectoryResponse>(`/directories/${resource}`, {
-    params: { includeArchived, page, pageSize },
+    params: {
+      includeArchived,
+      page,
+      pageSize,
+      ...(projectId != null ? { projectId } : {}),
+    },
   });
   return {
     ...data,

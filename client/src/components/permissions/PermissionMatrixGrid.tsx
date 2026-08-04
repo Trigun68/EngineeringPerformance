@@ -34,9 +34,10 @@ const EDITABLE_LEVELS: { value: MatrixAccessLevel; label: string }[] = [
 ];
 
 const ROLE_HEADER_LABELS: Record<string, string> = {
-  Administrator: 'Администратор',
-  ProjectManager: 'Менеджер проекта',
-  Observer: 'Наблюдатель',
+  SuperAdmin: 'Суперадминистратор',
+  Admin: 'Администратор',
+  Engineer: 'Инженер',
+  Gip: 'Главный инженер проекта',
 };
 
 const OBJECT_COLUMN_HEADER = 'Объект / Роль';
@@ -50,13 +51,13 @@ function formatRoleHeaderName(roleName: string): string {
   return ROLE_HEADER_LABELS[roleName] ?? roleName;
 }
 
-function isAdministratorRole(roleName: string): boolean {
-  return roleName === 'Administrator';
+function isSuperAdminRole(roleName: string, roleId?: number): boolean {
+  return roleName === 'SuperAdmin' || roleName === 'Administrator' || roleId === 1;
 }
 
 export function PermissionMatrixGrid() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.roleName === 'Administrator';
+  const isAdmin = isSuperAdminRole(user?.roleName ?? '', user?.roleId);
 
   const matrix = usePermissionMatrixStore((s) => s.matrix);
   const storeLoading = usePermissionMatrixStore((s) => s.loading);
@@ -108,7 +109,7 @@ export function PermissionMatrixGrid() {
     roleName: string,
     level: MatrixAccessLevel,
   ) => {
-    if (!matrix || isAdministratorRole(roleName)) return;
+    if (!matrix || isSuperAdminRole(roleName)) return;
 
     setRows((prev) =>
       prev.map((row) =>
@@ -226,7 +227,7 @@ export function PermissionMatrixGrid() {
       const row = params.data;
       if (!row || row.isHeader) return null;
 
-      if (isAdministratorRole(roleName)) {
+      if (isSuperAdminRole(roleName)) {
         return (
           <Typography
             variant="body2"

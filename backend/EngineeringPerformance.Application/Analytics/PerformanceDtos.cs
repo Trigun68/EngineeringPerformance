@@ -19,7 +19,11 @@ public sealed record PerformanceRowDto(
     decimal? ZScore,
     PerformanceInterpretation? Interpretation,
     /// <summary>Часы поддерева, участвующие в средневзвешенной FactEstimate (и в весе Z родителя).</summary>
-    decimal? SubtreeHours = null)
+    decimal? SubtreeHours = null,
+    /// <summary>Синтетическая строка «Итого» / «ИТОГО» (сумма часов и ФО по ЕИ).</summary>
+    bool IsTotal = false,
+    /// <summary>Отображение ФО на строках итогов: «число (ЕИ); …».</summary>
+    string? FactPhysicalVolumeDisplay = null)
 {
     /// <summary>Синтетическая строка: сумма физ. объёмов без связи с группой ИИС (ClassifierId).</summary>
     public const int UnallocatedPhysicalVolumeWorkDirectionId = -1;

@@ -25,8 +25,10 @@ import {
   type ProjectForecastReport,
 } from '../../api/analyticsApi';
 import { DataTable } from '../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { collectNormFallbackWarnings } from '../../features/projects/forecast/normFallbackWarning';
+import { useDictionaryStore } from '../../store/useDictionaryStore';
 
 interface PlanningTabProps {
   projectId: number;
@@ -38,7 +40,10 @@ interface VolumeTreeRow extends ForecastIicVolumeRow {
   isLeaf: boolean;
 }
 
-function buildTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
+function buildTreeRows(
+  volumes: ForecastIicVolumeRow[],
+  getLabel: (row: ForecastIicVolumeRow) => string,
+): VolumeTreeRow[] {
   const idsWithChildren = new Set(
     volumes.filter((v) => v.parentId != null).map((v) => v.parentId!),
   );
@@ -55,9 +60,11 @@ function buildTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
   const walk = (parentId: number | null, path: string[]) => {
     const children = byParent.get(parentId) ?? [];
     for (const child of children) {
-      const hierarchy = [...path, child.name];
+      const name = getLabel(child);
+      const hierarchy = [...path, name];
       result.push({
         ...child,
+        name,
         hierarchy,
         isLeaf: !idsWithChildren.has(child.workDirectionId),
       });
@@ -70,6 +77,8 @@ function buildTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
 
 export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
   const { canRead, canEdit } = usePermission('Planning');
+  const getById = useDictionaryStore((s) => s.getById);
+  const getDirectionName = useDictionaryStore((s) => s.getDirectionName);
   const [report, setReport] = useState<ProjectForecastReport | null>(null);
   const [volumeEdits, setVolumeEdits] = useState<Record<number, string>>({});
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
@@ -96,10 +105,15 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
     void load();
   }, [load]);
 
-  const treeRows = useMemo(
-    () => (report ? buildTreeRows(report.plannedVolumes) : []),
-    [report],
+  const getLabel = useCallback(
+    (row: ForecastIicVolumeRow) =>
+      getById('iicWorkDirections', row.workDirectionId)
+        ? getDirectionName(row.workDirectionId)
+        : row.name,
+    [getById, getDirectionName],
   );
+
+  const treeRows = useMemo(() => (report ? buildTreeRows(report.plannedVolumes, getLabel) : []), [getLabel, report]);
 
   const leafRows = useMemo(() => treeRows.filter((r) => r.isLeaf), [treeRows]);
 
@@ -185,6 +199,7 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
 
   return (
     <Box>
+      <WorkingOverlay open={loading} delayMs={1000} />
       {versionId && (
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <Button

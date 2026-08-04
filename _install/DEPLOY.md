@@ -31,6 +31,12 @@ docker compose up -d
 
 4. API health: `GET /api/auth/me` через proxy (с Bearer после login).
 
+### Номенклатура ФО / коэффициент
+
+`PUT /api/directories/physical-volumes-kfo/{id}` сохраняет `coefficient` в SQL.  
+При повторном `docker compose up` на **существующей** БД скрипты `012`/`013`/`014` **не** перезапускаются — иначе seed снова ставит `Coefficient = 1`.  
+Полный refresh с Excel: `FORCE_NOMENCLATURE_REFRESH=1 docker compose up db-init` (или в `.env`).
+
 ---
 
 ## Переменные окружения (api)

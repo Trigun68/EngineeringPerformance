@@ -1,11 +1,9 @@
 using EngineeringPerformance.Application.Analytics;
-using EngineeringPerformance.Application.Export;
-using EngineeringPerformance.Domain.Enums;
 
 namespace EngineeringPerformance.Infrastructure.Export;
 
-/// <summary>Фильтрация строк сравнения для PDF (паритет web compareFilters).</summary>
-internal static class CompareReportFilter
+/// <summary>Фильтрация строк сравнения для PDF (паритет web compareFilters / docs).</summary>
+public static class CompareReportFilter
 {
     private const string PresenceBoth = "A+B";
 
@@ -15,23 +13,42 @@ internal static class CompareReportFilter
     {
         if (!onlyDifferences) return rows;
 
-        var diffIds = rows
-            .Where(r => r.ZDelta is not null && r.ZDelta != 0)
-            .Select(r => r.WorkDirectionId)
-            .ToHashSet();
+        var byId = rows.Where(r => !r.IsTotal)
+            .GroupBy(r => r.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First());
 
-        var keep = new HashSet<int>();
-        foreach (var id in diffIds)
-            AddAncestors(rows, id, keep);
+        var visible = new HashSet<int>();
+        foreach (var row in rows)
+        {
+            if (row.IsTotal) continue;
+            if (HasSummaryDifference(row))
+                visible.Add(row.WorkDirectionId);
+        }
 
-        return rows.Where(r => keep.Contains(r.WorkDirectionId)).ToList();
+        var changed = true;
+        while (changed)
+        {
+            changed = false;
+            foreach (var id in visible.ToList())
+            {
+                if (!byId.TryGetValue(id, out var row)) continue;
+                if (row.ParentId is int parentId && visible.Add(parentId))
+                    changed = true;
+            }
+        }
+
+        return rows
+            .Where(r =>
+                visible.Contains(r.WorkDirectionId)
+                || (r.IsTotal && r.Level == -1 && visible.Count > 0))
+            .ToList();
     }
 
     public static IReadOnlyList<VersionCompareFacilityRowDto> FilterFacility(
         IReadOnlyList<VersionCompareFacilityRowDto> rows,
         bool onlyDifferences) =>
         onlyDifferences
-            ? rows.Where(r => (r.HoursDelta ?? 0) != 0 || (r.ZDelta ?? 0) != 0).ToList()
+            ? rows.Where(HasFacilityDifference).ToList()
             : rows;
 
     public static IReadOnlyList<VersionCompareDetailRowDto> FilterDetail(
@@ -42,24 +59,40 @@ internal static class CompareReportFilter
         return rows.Where(HasDetailDifference).ToList();
     }
 
-    private static bool HasDetailDifference(VersionCompareDetailRowDto row)
+    /// <summary>FactZ + PlanZ + базовые плановые часы (PDF без выбора сценария).</summary>
+    private static bool HasSummaryDifference(VersionCompareRowDto row)
     {
-        if (!string.Equals(row.Presence, PresenceBoth, StringComparison.Ordinal))
-            return true;
-        return (row.QuantityDelta ?? 0) != 0
-            || (row.HoursDelta ?? 0) != 0
-            || (row.ProductivityDelta ?? 0) != 0;
+        var factZIdentical = Round4(row.FactZScoreA) == Round4(row.FactZScoreB);
+        var planZIdentical = Round4(row.PlanZScoreA) == Round4(row.PlanZScoreB);
+        var planLaborIdentical = Round2(row.PlannedLaborHoursA) == Round2(row.PlannedLaborHoursB);
+        return !(factZIdentical && planZIdentical && planLaborIdentical);
     }
 
-    private static void AddAncestors(IReadOnlyList<VersionCompareRowDto> rows, int id, HashSet<int> keep)
+    private static bool HasFacilityDifference(VersionCompareFacilityRowDto row)
     {
-        var byId = rows.ToDictionary(r => r.WorkDirectionId);
-        var current = id;
-        while (byId.TryGetValue(current, out var row))
-        {
-            keep.Add(current);
-            if (row.ParentId is null) break;
-            current = row.ParentId.Value;
-        }
+        if (!row.FactLaborHoursA.HasValue && !row.FactLaborHoursB.HasValue)
+            return false;
+
+        var hoursIdentical = Round2(row.FactLaborHoursA) == Round2(row.FactLaborHoursB);
+        var zIdentical = Round4(row.ZScoreA) == Round4(row.ZScoreB);
+        return !(hoursIdentical && zIdentical);
     }
+
+    private static bool HasDetailDifference(VersionCompareDetailRowDto row)
+    {
+        if (!string.Equals(row.Presence, PresenceBoth, StringComparison.Ordinal)
+            && !string.Equals(row.Presence, "Both", StringComparison.Ordinal))
+            return true;
+
+        var quantityIdentical = Round4(row.QuantityA) == Round4(row.QuantityB);
+        var hoursIdentical = Round2(row.FactLaborHoursA) == Round2(row.FactLaborHoursB);
+        var prodIdentical = Round4(row.FactProductivityA) == Round4(row.FactProductivityB);
+        return !(quantityIdentical && hoursIdentical && prodIdentical);
+    }
+
+    private static decimal Round4(decimal? value) =>
+        Math.Round(value ?? 0m, 4, MidpointRounding.AwayFromZero);
+
+    private static decimal Round2(decimal? value) =>
+        Math.Round(value ?? 0m, 2, MidpointRounding.AwayFromZero);
 }

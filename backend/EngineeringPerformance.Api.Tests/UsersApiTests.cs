@@ -39,7 +39,7 @@ public sealed class UsersApiTests : IClassFixture<ApiWebApplicationFactory>
 
         var roles = await response.Content.ReadFromJsonAsync<List<RoleListItem>>();
         Assert.NotNull(roles);
-        Assert.Contains(roles!, r => r.Name == "Administrator");
+        Assert.Contains(roles!, r => r.Name == "SuperAdmin");
     }
 
     [Fact]

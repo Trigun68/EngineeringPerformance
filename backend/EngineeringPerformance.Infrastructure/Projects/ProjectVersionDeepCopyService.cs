@@ -117,6 +117,16 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
     {
         var createdAt = DateTime.UtcNow;
         var sameDirection = targetDirection == source.Direction;
+
+        var hasPeers = await _context.ProjectAnalysisVersions
+            .AnyAsync(
+                v => v.ProjectId == source.ProjectId
+                     && v.Direction == targetDirection
+                     && !v.IsArchived,
+                cancellationToken);
+        // Копия не наследует primary; становится основной только если это первая версия направления.
+        var makePrimary = !hasPeers;
+
         var copy = new ProjectAnalysisVersion
         {
             ProjectId = source.ProjectId,
@@ -126,8 +136,10 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             Direction = targetDirection,
             PhysicalVolumeTypeId = source.PhysicalVolumeTypeId,
             PlanningScenario = source.PlanningScenario,
+            ZParameterLevel = source.ZParameterLevel,
             SortOrder = source.SortOrder,
             IsArchived = false,
+            IsPrimary = makePrimary,
             CreatedAt = createdAt,
         };
         _context.ProjectAnalysisVersions.Add(copy);
@@ -365,5 +377,7 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             v.SortOrder,
             v.IsArchived,
             v.CreatedAt,
-            v.PlanningScenario);
+            v.PlanningScenario,
+            v.ZParameterLevel,
+            v.IsPrimary);
 }

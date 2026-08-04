@@ -1,12 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Divider,
   IconButton,
   Paper,
@@ -18,17 +16,8 @@ import {
   Typography,
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import { exportCombinedProjectPdf } from '../../api/visualReportsApi';
-import { fetchProjectPermissions, type ProjectPermission } from '../../api/projectPermissionsApi';
-import {
-  fetchProjectVersions,
-  type ProjectVersion,
-} from '../../api/projectVersionsApi';
-import { createProject, fetchProjectById, fetchProjects, updateProject } from '../../api/projectsApi';
-import { fetchProjectCharacteristics } from '../../api/projectCharacteristicsApi';
-import { getApiErrorMessage } from '../../services/apiError';
 import { usePermission } from '../../hooks/usePermission';
+import { createProject, fetchProjects, updateProject } from '../../api/projectsApi';
 import type { Project } from '../../types/project';
 import type { ProjectFormData } from '../../types/project';
 import { ProjectSelectionDialog } from '../../components/ProjectSelectionDialog/ProjectSelectionDialog';
@@ -38,12 +27,14 @@ import { ProjectCharacteristicsDialog } from '../../components/ProjectCharacteri
 import { ForecastPanel } from '../../features/projects/forecast/ForecastPanel';
 import { FactPanel } from '../../features/projects/fact/FactPanel';
 import { ComparePanel } from '../../features/projects/compare/ComparePanel';
+import { ReportPanel } from '../../features/projects/report/ReportPanel';
+import {
+  useProjectWorkspace,
+} from '../../features/projects/shared/useProjectWorkspace';
 import { WorkspaceChromeProvider, useWorkspaceChrome } from '../../features/projects/shared/workspaceChromeContext';
 import { WorkspaceChromeToggleRow } from '../../features/projects/shared/WorkspaceChromeToggleRow';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
-import { useAuthStore } from '../../store/useAuthStore';
-import { canReadPermission } from '../../utils/permissionAccess';
 import {
   LAST_PROJECT_PREF_KEY,
   readHeaderExpanded,
@@ -51,7 +42,7 @@ import {
 } from '../../utils/projectWorkspacePrefs';
 import { putUserPreferences } from '../../api/userPreferencesApi';
 
-type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'reports';
+type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'report';
 
 const WORKSPACE_TAB_CONFIG: ReadonlyArray<{
   value: WorkspaceMainTab;
@@ -61,45 +52,8 @@ const WORKSPACE_TAB_CONFIG: ReadonlyArray<{
   { value: 'forecast', label: 'Прогнозирование', permission: 'Planning' },
   { value: 'fact', label: 'Оценка факта', permission: 'Assessment' },
   { value: 'compare', label: 'Сравнение версий', permission: 'VersionComparison' },
-  { value: 'reports', label: 'Отчёты', permission: 'Reports' },
+  { value: 'report', label: 'Отчет', permission: 'Reports' },
 ];
-
-// Типы workspace query (верхняя панель проекта и вкладка «Отчёты»)
-
-interface ProjectsPageData {
-  project: Project | null;
-  versions: ProjectVersion[];
-  participants: ProjectPermission[];
-  // Прогнозирование
-  planVersionId: number | null;
-  planVersionLabel: string;
-  // Оценка факта
-  factVersionId: number | null;
-  factVersionLabel: string;
-  // Сравнение
-  compareVersionAId: number | null;
-  compareVersionBId: number | null;
-  compareShowOnlyDifferences: boolean;
-  // Метрики проекта
-  accuracyScore: number | null;
-  deviationPercent: number | null;
-}
-
-// Пустые данные для заглушек
-const EMPTY_DATA: ProjectsPageData = {
-  project: null,
-  versions: [],
-  participants: [],
-  planVersionId: null,
-  planVersionLabel: '',
-  factVersionId: null,
-  factVersionLabel: '',
-  compareVersionAId: null,
-  compareVersionBId: null,
-  compareShowOnlyDifferences: false,
-  accuracyScore: null,
-  deviationPercent: null,
-};
 
 const EMPTY_PROJECT_FORM: ProjectFormData = {
   code: '',
@@ -135,43 +89,6 @@ function toProjectForm(project: Project): ProjectFormData {
   };
 }
 
-async function fetchWorkspaceData(projectId: number): Promise<ProjectsPageData> {
-  const [project, versionsData, participantsData, characteristicsData] = await Promise.all([
-    fetchProjectById(projectId),
-    fetchProjectVersions(projectId),
-    fetchProjectPermissions(projectId).catch(() => [] as ProjectPermission[]),
-    fetchProjectCharacteristics(projectId).catch(() => []),
-  ]);
-  if (!project) {
-    throw new Error('Проект не найден.');
-  }
-  const planVersion = versionsData.find((v) => v.direction === 1) ?? versionsData[0] ?? null;
-  const factVersion = versionsData.find((v) => v.direction === 2) ?? planVersion;
-
-  const percents = characteristicsData
-    .map((c) => c.selectedValuePercent)
-    .filter((v): v is number => v != null);
-  const deviationPercent =
-    percents.length > 0
-      ? Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 100) / 100
-      : null;
-
-  return {
-    project,
-    versions: versionsData,
-    participants: participantsData,
-    planVersionId: planVersion?.id ?? null,
-    planVersionLabel: planVersion ? `${planVersion.versionName} — ${planVersion.name}` : '',
-    factVersionId: factVersion?.id ?? null,
-    factVersionLabel: factVersion ? `${factVersion.versionName} — ${factVersion.name}` : '',
-    compareVersionAId: planVersion?.id ?? null,
-    compareVersionBId: factVersion?.id ?? null,
-    compareShowOnlyDifferences: false,
-    accuracyScore: null,
-    deviationPercent,
-  };
-}
-
 function parseProjectId(raw: string | undefined): number | null {
   if (!raw || !/^\d+$/.test(raw)) return null;
   const id = Number(raw);
@@ -186,17 +103,30 @@ export function FullProjectsPage() {
   const navProject = (location.state as { project?: Project } | null)?.project ?? null;
 
   const { canRead, canEdit } = usePermission('Projects');
-  const user = useAuthStore((s) => s.user);
-  const permissions = user?.permissions;
-  const roleName = user?.roleName;
 
-  const visibleWorkspaceTabs = useMemo(
-    () =>
-      WORKSPACE_TAB_CONFIG.filter((tab) =>
-        canReadPermission(permissions, tab.permission, roleName),
-      ),
-    [permissions, roleName],
+  const projectsQuery = useQuery<Project[]>({
+    queryKey: ['projects', 'all'],
+    queryFn: () => fetchProjects(),
+    enabled: canRead,
+  });
+
+  const { data: workspace, loading: workspaceLoading, error: workspaceError, visibleWorkspaceTabs } = useProjectWorkspace(
+    currentProjectId,
+    canRead,
   );
+
+  const projects = projectsQuery.data ?? [];
+  const resolvedProject =
+    workspace?.project ?? (navProject && navProject.id === currentProjectId ? navProject : null);
+  const hasProject = resolvedProject != null;
+
+  const dataFetching = projectsQuery.isFetching || workspaceLoading;
+  const error =
+    projectsQuery.isError
+      ? 'Не удалось загрузить список проектов.'
+      : workspaceError
+        ? 'Не удалось загрузить данные проекта.'
+        : null;
 
   // Активные вкладки
   const [mainTab, setMainTab] = usePersistedTabState<WorkspaceMainTab>(
@@ -222,48 +152,21 @@ export function FullProjectsPage() {
     }
   }, [mainTab, setMainTab, visibleWorkspaceTabs]);
 
+  useEffect(() => {
+    if (currentProjectId) {
+      void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(currentProjectId) });
+    }
+  }, [currentProjectId]);
+
+  // Модалки
   const [selectionDialogOpen, setSelectionDialogOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [characteristicsOpen, setCharacteristicsOpen] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [projectModalMode, setProjectModalMode] = useState<'create' | 'edit'>('edit');
   const [projectEditingId, setProjectEditingId] = useState<number | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectFormData>(EMPTY_PROJECT_FORM);
   const [projectSubmitting, setProjectSubmitting] = useState(false);
-  const [combinedExporting, setCombinedExporting] = useState(false);
-
-  useEffect(() => {
-    if (currentProjectId) {
-      setSelectionDialogOpen(false);
-      void putUserPreferences({ [LAST_PROJECT_PREF_KEY]: String(currentProjectId) });
-    }
-  }, [currentProjectId]);
-
-  const projectsQuery = useQuery<Project[]>({
-    queryKey: ['projects', 'all'],
-    queryFn: () => fetchProjects(),
-    enabled: canRead,
-  });
-
-  const projectDataQuery = useQuery<ProjectsPageData>({
-    queryKey: ['projects', 'workspace', currentProjectId],
-    queryFn: () => fetchWorkspaceData(currentProjectId as number),
-    enabled: Boolean(currentProjectId && canRead),
-  });
-
-  const projects = projectsQuery.data ?? [];
-  const data = projectDataQuery.data ?? EMPTY_DATA;
-  const resolvedProject =
-    data.project ?? (navProject && navProject.id === currentProjectId ? navProject : null);
-  const hasProject = resolvedProject != null;
-  const loading = projectsQuery.isLoading || (Boolean(currentProjectId) && projectDataQuery.isLoading);
-  const error = pageError
-    ?? (projectsQuery.isError
-      ? 'Не удалось загрузить список проектов.'
-      : projectDataQuery.isError
-        ? 'Не удалось загрузить данные проекта.'
-        : null);
 
   // Обработчики
   const handleSelectProject = (pid: number) => {
@@ -301,41 +204,33 @@ export function FullProjectsPage() {
   const handleSaveProject = async () => {
     if (!canEdit) return;
     setProjectSubmitting(true);
-    setPageError(null);
     try {
       if (projectModalMode === 'edit' && projectEditingId) {
         await updateProject(projectEditingId, projectForm);
         setProjectModalOpen(false);
-        await projectDataQuery.refetch();
-        await projectsQuery.refetch();
+        void projectsQuery.refetch();
       } else {
         const created = await createProject(projectForm);
         setProjectModalOpen(false);
-        await projectsQuery.refetch();
+        void projectsQuery.refetch();
         navigate(`/projects/${created.id}`);
       }
-    } catch (err) {
-      setPageError(getApiErrorMessage(err, 'Не удалось сохранить проект.'));
-      throw err;
     } finally {
       setProjectSubmitting(false);
     }
   };
 
-  // Вкладка «Отчёты» — навигация к функциям на других вкладках
   if (!canRead) {
     return <Alert severity="warning">Нет прав на просмотр проектов.</Alert>;
   }
-
-  const { planVersionId, factVersionId, compareVersionAId, compareVersionBId } = data;
 
   return (
     <WorkspaceChromeProvider
       chromeExpanded={headerExpanded}
       setChromeExpanded={setHeaderExpanded}
     >
-      <WorkingOverlay open={combinedExporting} />
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <WorkingOverlay open={dataFetching} delayMs={1000} />
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         {headerExpanded ? (
           <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 }, mb: 0.5, backgroundColor: '#F8F9FA' }}>
             <Box sx={{ mb: 2 }}>
@@ -383,7 +278,7 @@ export function FullProjectsPage() {
                       {resolvedProject!.name}
                     </Typography>
 
-                    {data.deviationPercent !== null && (
+                    {workspace?.deviationPercent != null && (
                       <Box
                         sx={{
                           backgroundColor: '#FDFEFE',
@@ -394,16 +289,16 @@ export function FullProjectsPage() {
                         }}
                       >
                         <Typography variant="body2" sx={{ color: '#616A6B' }}>
-                          Отклонение: <strong>{data.deviationPercent.toFixed(2)}%</strong>
+                          Отклонение: <strong>{workspace.deviationPercent.toFixed(2)}%</strong>
                         </Typography>
                       </Box>
                     )}
                   </>
-                ) : loading && currentProjectId ? (
+                ) : workspaceLoading && currentProjectId ? (
                   <Typography variant="body1" color="text.secondary">
                     Загрузка проекта…
                   </Typography>
-                ) : currentProjectId && projectDataQuery.isError ? (
+                ) : currentProjectId && workspaceError ? (
                   <Typography variant="body1" color="error">
                     Не удалось загрузить проект
                   </Typography>
@@ -445,8 +340,8 @@ export function FullProjectsPage() {
 
               <Tooltip title="Обновить">
                 <IconButton
-                  onClick={() => void projectDataQuery.refetch()}
-                  disabled={loading}
+                  onClick={() => void projectsQuery.refetch()}
+                  disabled={workspaceLoading || projectsQuery.isLoading}
                   size="small"
                 >
                   <RefreshIcon />
@@ -455,7 +350,7 @@ export function FullProjectsPage() {
             </Stack>
 
             {error && (
-              <Alert severity="error" sx={{ mt: 2 }} onClose={() => setPageError(null)}>
+              <Alert severity="error" sx={{ mt: 2 }} onClose={() => {}}>
                 {error}
               </Alert>
             )}
@@ -475,7 +370,7 @@ export function FullProjectsPage() {
 
         {headerExpanded && <Divider sx={{ mb: 2 }} />}
 
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'auto' }}>
           {headerExpanded && (
             <Paper
               elevation={0}
@@ -521,11 +416,14 @@ export function FullProjectsPage() {
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: ПРОГНОЗИРОВАНИЕ
            ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'forecast' && currentProjectId && hasProject && (
+        {mainTab === 'forecast' && currentProjectId && hasProject && workspace && (
           <ForecastPanel
             projectId={currentProjectId}
             projectName={resolvedProject!.name}
             projectCode={resolvedProject!.code}
+            workspaceVersions={workspace.versions}
+            workspacePlanVersionId={workspace.planVersionId}
+            workspacePlanVersionLabel={workspace.planVersionLabel}
           />
         )}
         {mainTab === 'forecast' && (!currentProjectId || !hasProject) && (
@@ -537,8 +435,13 @@ export function FullProjectsPage() {
           </>
         )}
 
-        {mainTab === 'fact' && currentProjectId && hasProject && (
-          <FactPanel projectId={currentProjectId} />
+        {mainTab === 'fact' && currentProjectId && hasProject && workspace && (
+          <FactPanel
+            projectId={currentProjectId}
+            workspaceVersions={workspace.versions}
+            workspaceFactVersionId={workspace.factVersionId}
+            workspaceFactVersionLabel={workspace.factVersionLabel}
+          />
         )}
         {mainTab === 'fact' && (!currentProjectId || !hasProject) && (
           <>
@@ -552,8 +455,13 @@ export function FullProjectsPage() {
         {/* ═════════════════════════════════════════════════════════════════
             ВКЛАДКА: СРАВНЕНИЕ ВЕРСИЙ
            ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'compare' && currentProjectId && hasProject && (
-          <ComparePanel projectId={currentProjectId} />
+        {mainTab === 'compare' && currentProjectId && hasProject && workspace && (
+          <ComparePanel
+            projectId={currentProjectId}
+            workspaceVersions={workspace.versions}
+            workspaceCompareVersionAId={workspace.compareVersionAId}
+            workspaceCompareVersionBId={workspace.compareVersionBId}
+          />
         )}
         {mainTab === 'compare' && (!currentProjectId || !hasProject) && (
           <>
@@ -564,116 +472,21 @@ export function FullProjectsPage() {
           </>
         )}
 
-        {/* ═════════════════════════════════════════════════════════════════
-            ВКЛАДКА: ОТЧЁТЫ
-           ═════════════════════════════════════════════════════════════════ */}
-        {mainTab === 'reports' && (
-          <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+        {mainTab === 'report' && currentProjectId && hasProject && workspace && (
+          <ReportPanel
+            projectId={currentProjectId}
+            workspaceVersions={workspace.versions}
+            workspacePlanVersionId={workspace.planVersionId}
+            workspaceFactVersionId={workspace.factVersionId}
+          />
+        )}
+        {mainTab === 'report' && (!currentProjectId || !hasProject) && (
+          <>
             <WorkspaceChromeToggleRow />
-            <Stack spacing={3}>
-              <Card sx={{ backgroundColor: '#F4F6F7', border: '1px solid #D5D8DC' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ color: '#2C3E50', mb: 1 }}>
-                    Сводный отчёт PDF
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#5D6D7E', mb: 2 }}>
-                    Единый документ с KPI и ключевыми графиками: прогноз, факт, сравнение версий, тренды.
-                  </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap">
-                    <Button
-                      variant="contained"
-                      disabled={
-                        !currentProjectId
-                        || !planVersionId
-                        || !factVersionId
-                        || !compareVersionAId
-                        || !compareVersionBId
-                        || combinedExporting
-                      }
-                      startIcon={<PictureAsPdfIcon />}
-                      onClick={async () => {
-                        if (!currentProjectId || !planVersionId || !factVersionId || !compareVersionAId || !compareVersionBId) return;
-                        setCombinedExporting(true);
-                        try {
-                          await exportCombinedProjectPdf(currentProjectId, {
-                            planVersionId,
-                            factVersionId,
-                            compareVersionAId,
-                            compareVersionBId,
-                          });
-                        } finally {
-                          setCombinedExporting(false);
-                        }
-                      }}
-                    >
-                      Скачать сводный PDF
-                    </Button>
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              {/* Группа: Оценка факта */}
-              <Card sx={{ backgroundColor: '#EBF5FB', border: '1px solid #AED6F1' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ color: '#1A5276', mb: 1 }}>
-                    Оценка факта
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#5D6D7E', mb: 2 }}>
-                    Отчёт по производительности: физ. объёмы, трудоёмкость, Z-score по направлениям IIC.
-                    На странице «Проекты» доступен только для версии факта (вкладка «Оценка факта»).
-                    Для версии плана откройте карточку проекта → «Анализ версии проекта».
-                  </Typography>
-                  <Stack direction="row" spacing={1} flexWrap="wrap">
-                    <Button
-                      variant="contained"
-                      disabled={!factVersionId}
-                      onClick={() => setMainTab('fact')}
-                      sx={{ backgroundColor: '#3498DB', color: 'white' }}
-                    >
-                      📊 Перейти к оценке факта
-                    </Button>
-                    <Typography variant="body2" sx={{ color: '#5D6D7E', width: '100%' }}>
-                      Экспорт Excel/PDF и анализ версии доступны на вкладке «Оценка факта» → «По объектам» / «Итого».
-                    </Typography>
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              {/* Группа: Прогноз */}
-              <Card sx={{ backgroundColor: '#EAFAF1', border: '1px solid #A9DFBF' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ color: '#1E8449', mb: 1 }}>
-                    Прогноз трудозатрат
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#5D6D7E', mb: 2 }}>
-                    Три сценария трудозатрат (базовый, оптимистичный, пессимистичный) по плановым объёмам.
-                    Требуется выбранная плановая версия на вкладке «Прогнозирование».
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    disabled={!planVersionId}
-                    onClick={() => setMainTab('forecast')}
-                    sx={{ backgroundColor: '#27AE60', color: 'white' }}
-                  >
-                    Перейти к прогнозированию
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Группа: Сравнение версий */}
-              <Card sx={{ backgroundColor: '#FEF9E7', border: '1px solid #F9E79F' }}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ color: '#7D6608', mb: 1 }}>
-                    Сравнение версий
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#5D6D7E' }}>
-                    Для сравнения двух версий перейдите на вкладку «Сравнение версий»,
-                    выберите Версию А и Версию Б. Таблица с Δ Z-score отобразится там же.
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Stack>
-          </Box>
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Выберите проект для просмотра отчёта.
+            </Alert>
+          </>
         )}
       </Box>
 
@@ -692,14 +505,14 @@ export function FullProjectsPage() {
         open={participantsOpen && hasProject}
         projectId={currentProjectId ?? 0}
         onClose={() => setParticipantsOpen(false)}
-        onSaved={() => void projectDataQuery.refetch()}
+        onSaved={() => void projectsQuery.refetch()}
       />
 
       <ProjectCharacteristicsDialog
         open={characteristicsOpen && hasProject}
         projectId={currentProjectId ?? 0}
         onClose={() => setCharacteristicsOpen(false)}
-        onSaved={() => void projectDataQuery.refetch()}
+        onSaved={() => void projectsQuery.refetch()}
       />
 
       <EditModal

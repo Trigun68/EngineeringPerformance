@@ -20,14 +20,16 @@ test.describe('PDF visual reports export', () => {
     await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible({ timeout: 15_000 });
   });
 
-  test('reports tab has combined PDF button', async ({ page }) => {
+  test('report tab has PDF export for performance report', async ({ page }) => {
     await openFirstProject(page);
-    await page.getByRole('tab', { name: 'Отчёты' }).click();
-    await expect(page.getByRole('button', { name: 'Скачать сводный PDF' })).toBeVisible();
+    await page.getByRole('tab', { name: 'Отчет' }).click();
+    await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
   });
 
-  test('trends page has PDF export button', async ({ page }) => {
-    await page.goto('/analytics/trends');
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible({ timeout: 15_000 });
+  test('analytics page shell is reachable (charts deferred)', async ({ page }) => {
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('analytics-main-tabs')).toBeVisible();
   });
 });

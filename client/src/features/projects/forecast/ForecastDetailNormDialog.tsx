@@ -72,7 +72,7 @@ export function ForecastDetailNormDialog({
       workDirectionId={workDirectionId}
       initial={initial}
       onClose={onClose}
-      onSaved={onSaved}
+      onSaved={() => onSaved()}
     />
   );
 }

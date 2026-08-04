@@ -19,12 +19,15 @@ import {
 } from '../../api/auditApi';
 import { DataTable } from '../../components/DataTable/DataTable';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useAuthStore } from '../../store/useAuthStore';
 import { formatDateTime } from '../../utils/formatDateTime';
+import { isSuperAdmin } from '../../utils/permissionAccess';
 
 export function UserActionLogPage() {
   const { canRead } = usePermission('UserActionLog');
-  const isAdmin = useAuthStore((s) => s.user?.roleName === 'Administrator');
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
+  const isAdmin = useAuthStore((s) => isSuperAdmin(s.user?.roleName, s.user?.roleId));
   const [rows, setRows] = useState<UserActionLogEntry[]>([]);
   const [selected, setSelected] = useState<UserActionLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,7 +80,10 @@ export function UserActionLogPage() {
 
   const handleArchiveSelected = async () => {
     if (selected.length === 0) return;
-    if (!window.confirm(`Перенести в архив ${selected.length} записей?`)) return;
+    if (!(await confirm({
+      title: 'Перенести в архив?',
+      description: `Перенести в архив ${selected.length} записей?`,
+    }))) return;
     setError(null);
     try {
       await archiveUserActionLogs(selected.map((row) => row.id));
@@ -194,6 +200,7 @@ export function UserActionLogPage() {
           onSelectionChanged={setSelected}
         />
       </Box>
+      {ConfirmDialog}
     </Box>
   );
 }

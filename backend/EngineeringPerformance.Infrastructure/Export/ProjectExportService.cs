@@ -17,13 +17,16 @@ public sealed class ProjectExportService : IProjectExportService
 {
     private readonly IProjectsPageDataFetcher _dataFetcher;
     private readonly IForecastDetailSummaryTableContext _summaryTableContext;
+    private readonly IProjectCompareService _compare;
 
     public ProjectExportService(
         IProjectsPageDataFetcher dataFetcher,
-        IForecastDetailSummaryTableContext summaryTableContext)
+        IForecastDetailSummaryTableContext summaryTableContext,
+        IProjectCompareService compare)
     {
         _dataFetcher = dataFetcher;
         _summaryTableContext = summaryTableContext;
+        _compare = compare;
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
@@ -331,6 +334,30 @@ public sealed class ProjectExportService : IProjectExportService
         return stream.ToArray();
     }
 
+    public async Task<byte[]> ExportCompareDetailExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default)
+    {
+        var compare = await _compare.CompareAsync(projectId, versionAId, versionBId, cancellationToken);
+        return BuildCompareDetailWorkbook(
+            CompareDetailSummaryTableBuilder.Build(compare.Detail),
+            $"Детализация сравнения версий {versionAId} / {versionBId}");
+    }
+
+    public async Task<byte[]> ExportCompareDetailSummaryTableAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default)
+    {
+        var compare = await _compare.CompareAsync(projectId, versionAId, versionBId, cancellationToken);
+        return BuildCompareDetailWorkbook(
+            CompareDetailSummaryTableBuilder.Build(compare.Detail),
+            $"Сводная детализация сравнения версий {versionAId} / {versionBId}");
+    }
+
     public async Task<byte[]> ExportFactFacilityExcelAsync(
         int projectId,
         int versionId,
@@ -628,19 +655,15 @@ public sealed class ProjectExportService : IProjectExportService
             void Set(object? value)
             {
                 var cell = sheet.Cell(rowIndex, col++);
+                // Boxed nullable без значения → null; со значением → T (не T?).
                 cell.Value = value switch
                 {
-                    decimal? d => d.HasValue ? (object)d.Value : string.Empty,
-                    decimal d => d,
-                    double? dbl => dbl.HasValue ? (object)dbl.Value : string.Empty,
-                    double dbl => dbl,
-                    float? flt => flt.HasValue ? (object)flt.Value : string.Empty,
-                    float flt => flt,
-                    int? i => i.HasValue ? (object)i.Value : string.Empty,
-                    int i => i,
-                    long? l => l.HasValue ? (object)l.Value : string.Empty,
-                    long l => l,
                     null => string.Empty,
+                    decimal d => d,
+                    double dbl => dbl,
+                    float flt => flt,
+                    int i => i,
+                    long l => l,
                     _ => value.ToString() ?? string.Empty,
                 };
             }
@@ -817,6 +840,89 @@ public sealed class ProjectExportService : IProjectExportService
         return workbook;
     }
 
+    private static byte[] BuildCompareDetailWorkbook(
+        IReadOnlyList<CompareDetailSummaryTableRowDto> rows,
+        string title)
+    {
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Сравнение детально");
+        var headers = new[]
+        {
+            "Шифр объекта", "Наименование объекта", "Группа ФО IIC", "Код позиции", "Наименование позиции",
+            "ID работы", "Наименование работы", "ФО A", "ФО B", "План. труд (база) A", "План. труд (база) B",
+            "Факт. труд A", "Факт. труд B", "План. произв. A", "План. произв. B",
+            "Факт. произв. A", "Факт. произв. B", "Z A", "Z B", "Наличие",
+        };
+
+        sheet.Cell(1, 1).Value = title;
+        sheet.Cell(1, 1).Style.Font.Bold = true;
+        sheet.Cell(1, 1).Style.Font.FontSize = 13;
+        sheet.Range(1, 1, 1, headers.Length).Merge();
+
+        for (var column = 0; column < headers.Length; column++)
+        {
+            var header = sheet.Cell(2, column + 1);
+            header.Value = headers[column];
+            header.Style.Font.Bold = true;
+            header.Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
+            header.Style.Font.FontColor = XLColor.White;
+            header.Style.Alignment.WrapText = true;
+        }
+
+        var rowNumber = 3;
+        foreach (var row in rows)
+        {
+            sheet.Cell(rowNumber, 1).Value = row.FacilityCode;
+            sheet.Cell(rowNumber, 2).Value = row.FacilityName;
+            sheet.Cell(rowNumber, 3).Value = row.IicGroupName;
+            sheet.Cell(rowNumber, 4).Value = row.PvCode;
+            sheet.Cell(rowNumber, 5).Value = row.PvName;
+            sheet.Cell(rowNumber, 6).Value = row.WorkId;
+            sheet.Cell(rowNumber, 7).Value = row.WorkName;
+            WriteNullableNumber(sheet, rowNumber, 8, row.PhysicalVolumeA);
+            WriteNullableNumber(sheet, rowNumber, 9, row.PhysicalVolumeB);
+            WriteNullableNumber(sheet, rowNumber, 10, row.PlannedLaborHoursA);
+            WriteNullableNumber(sheet, rowNumber, 11, row.PlannedLaborHoursB);
+            WriteNullableNumber(sheet, rowNumber, 12, row.FactLaborHoursA);
+            WriteNullableNumber(sheet, rowNumber, 13, row.FactLaborHoursB);
+            WriteNullableNumber(sheet, rowNumber, 14, row.PlannedProductivityA);
+            WriteNullableNumber(sheet, rowNumber, 15, row.PlannedProductivityB);
+            WriteNullableNumber(sheet, rowNumber, 16, row.FactProductivityA);
+            WriteNullableNumber(sheet, rowNumber, 17, row.FactProductivityB);
+            WriteNullableNumber(sheet, rowNumber, 18, row.ZScoreA);
+            WriteNullableNumber(sheet, rowNumber, 19, row.ZScoreB);
+            sheet.Cell(rowNumber, 20).Value = row.Presence;
+
+            if (rowNumber % 2 == 1)
+                sheet.Row(rowNumber).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
+
+            rowNumber++;
+        }
+
+        sheet.Range(2, 1, Math.Max(2, rowNumber - 1), headers.Length).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+        sheet.Range(2, 1, Math.Max(2, rowNumber - 1), headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
+        sheet.SheetView.FreezeRows(2);
+        sheet.Columns(1, 7).AdjustToContents(1, Math.Max(2, rowNumber - 1));
+        for (var column = 8; column <= 19; column++)
+            sheet.Column(column).Width = 15;
+        sheet.Column(20).Width = 14;
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    private static void WriteNullableNumber(IXLWorksheet sheet, int row, int column, decimal? value)
+    {
+        if (!value.HasValue)
+            return;
+
+        var cell = sheet.Cell(row, column);
+        cell.Value = value.Value;
+        cell.Style.NumberFormat.Format = "#,##0.####";
+    }
+
     private static void WriteForecastSheet(XLWorkbook workbook, ProjectsPageDataDto data)
     {
         var sheet = workbook.Worksheets.Add("Forecast");
@@ -888,19 +994,15 @@ public sealed class ProjectExportService : IProjectExportService
             void Set(object? value)
             {
                 var cell = sheet.Cell(rowIndex, col++);
+                // Boxed nullable без значения → null; со значением → T (не T?).
                 cell.Value = value switch
                 {
-                    decimal? d => d.HasValue ? (object)d.Value : string.Empty,
-                    decimal d => d,
-                    double? dbl => dbl.HasValue ? (object)dbl.Value : string.Empty,
-                    double dbl => dbl,
-                    float? flt => flt.HasValue ? (object)flt.Value : string.Empty,
-                    float flt => flt,
-                    int? i => i.HasValue ? (object)i.Value : string.Empty,
-                    int i => i,
-                    long? l => l.HasValue ? (object)l.Value : string.Empty,
-                    long l => l,
                     null => string.Empty,
+                    decimal d => d,
+                    double dbl => dbl,
+                    float flt => flt,
+                    int i => i,
+                    long l => l,
                     _ => value.ToString() ?? string.Empty,
                 };
             }

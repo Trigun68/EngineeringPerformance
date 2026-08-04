@@ -198,9 +198,10 @@ erDiagram
 
 | ID | Имя (`UserRole`) | Описание | Особенности |
 |----|------------------|----------|-------------|
-| 1 | `Administrator` | Полный доступ | Bypass матрицы `AccessRights`; видит **все** проекты без `ProjectPermission` |
-| 2 | `ProjectManager` | Управление проектами и данными | По умолчанию `Edit` на все объекты (seed) |
-| 3 | `Observer` | Только чтение | По умолчанию `Read` на все объекты (seed) |
+| 1 | `SuperAdmin` (бывш. Administrator) | Полный доступ | Bypass матрицы `AccessRights`; видит **все** проекты без `ProjectPermission` |
+| 2 | `Admin` (бывш. ProjectManager) | Управление проектами и данными | По умолчанию `Edit` на все объекты (seed) |
+| 3 | `Engineer` (бывш. Observer) | Только чтение | По умолчанию `Read` на все объекты (seed) |
+| 4 | `Gip` | ГИП | Edit Projects/Planning/Assessment/Import; Read справочники; без Users/SystemSettings Edit |
 
 Уровни доступа (`AccessLevel`): `None = 0`, `Read = 1`, `Edit = 2`.
 

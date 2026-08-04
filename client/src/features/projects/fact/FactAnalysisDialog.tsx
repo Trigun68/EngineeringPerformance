@@ -1,11 +1,6 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-} from '@mui/material';
+import { Dialog, DialogContent, DialogTitle, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { AssessmentTab } from '../../../pages/projects/AssessmentTab';
+import { FactAnalysisReportView } from './FactAnalysisReportView';
 
 export interface FactAnalysisDialogProps {
   open: boolean;
@@ -21,15 +16,26 @@ export function FactAnalysisDialog({
   onClose,
 }: FactAnalysisDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth data-testid="fact-analysis-dialog">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="xl"
+      fullWidth
+      data-testid="fact-analysis-dialog"
+      PaperProps={{ sx: { height: '90vh' } }}
+    >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
-        Анализ версии
+        <Typography variant="h6" component="span">
+          Анализ версии
+        </Typography>
         <IconButton aria-label="Закрыть" onClick={onClose} size="small">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
-      <DialogContent dividers sx={{ minHeight: 420 }}>
-        <AssessmentTab projectId={projectId} versionId={versionId} />
+      <DialogContent dividers sx={{ p: 2, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        {versionId != null && (
+          <FactAnalysisReportView projectId={projectId} versionId={versionId} />
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -126,7 +126,8 @@ public sealed class PerformanceService : IPerformanceService
             NormsByDirection: normsByDirection);
 
         // GAP: математика только в PerformanceCalculationEngine, не в LINQ/циклах сервиса.
-        return _calculationEngine.CalculatePerformance(input);
+        var rows = _calculationEngine.CalculatePerformance(input);
+        return ProjectsPageGridBuilder.ApplyFormattedWorkDirectionNames(rows, directionById);
     }
 
     private async Task<List<IicWorkDirection>> GetWorkDirectionsAsync()

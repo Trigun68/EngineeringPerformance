@@ -7,7 +7,7 @@ namespace EngineeringPerformance.Infrastructure.Settings;
 
 /// <summary>
 /// Глобальные настройки системы в distributed cache (Redis / memory).
-/// Значение по умолчанию — из Jwt:ExpirationMinutes в конфигурации.
+/// Значение по умолчанию — из эффективного срока access JWT в конфигурации.
 /// </summary>
 public sealed class SystemSettingsService : ISystemSettingsService
 {
@@ -28,7 +28,7 @@ public sealed class SystemSettingsService : ISystemSettingsService
         if (int.TryParse(raw, out var minutes) && minutes is >= 5 and <= 10080)
             return minutes;
 
-        return _jwtDefaults.ExpirationMinutes;
+        return _jwtDefaults.EffectiveAccessTokenLifetimeMinutes;
     }
 
     public async Task SetSessionExpirationMinutesAsync(int minutes, CancellationToken cancellationToken = default)

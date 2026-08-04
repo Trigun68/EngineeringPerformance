@@ -2,6 +2,7 @@ using System.Security.Claims;
 using EngineeringPerformance.Api.Auth;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
+using EngineeringPerformance.Api.Metrics;
 using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Permissions;
@@ -23,6 +24,11 @@ public sealed class AuthController : ControllerBase
 {
     private readonly AppDbContext _context;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IRefreshTokenService _refreshTokenService;
+    private readonly IAccountLockoutService _accountLockoutService;
+    private readonly IMfaService _mfaService;
+    private readonly IAuthAuditService _authAuditService;
+    private readonly AuthCookieHelper _authCookieHelper;
     private readonly IUserActionLogger _actionLogger;
     private readonly IHostEnvironment _environment;
     private readonly SpnegoOptions _spnegoOptions;
@@ -31,6 +37,11 @@ public sealed class AuthController : ControllerBase
     public AuthController(
         AppDbContext context,
         IJwtTokenService jwtTokenService,
+        IRefreshTokenService refreshTokenService,
+        IAccountLockoutService accountLockoutService,
+        IMfaService mfaService,
+        IAuthAuditService authAuditService,
+        AuthCookieHelper authCookieHelper,
         IUserActionLogger actionLogger,
         IHostEnvironment environment,
         IOptions<SpnegoOptions> spnegoOptions,
@@ -38,6 +49,11 @@ public sealed class AuthController : ControllerBase
     {
         _context = context;
         _jwtTokenService = jwtTokenService;
+        _refreshTokenService = refreshTokenService;
+        _accountLockoutService = accountLockoutService;
+        _mfaService = mfaService;
+        _authAuditService = authAuditService;
+        _authCookieHelper = authCookieHelper;
         _actionLogger = actionLogger;
         _environment = environment;
         _spnegoOptions = spnegoOptions.Value;
@@ -46,7 +62,14 @@ public sealed class AuthController : ControllerBase
 
     public sealed record LoginRequest(string Username, string Password);
 
-    public sealed record LoginResponse(DateTime ExpiresAt, UserInfoResponse User);
+    public sealed record LoginResponse(
+        DateTime ExpiresAt,
+        UserInfoResponse User,
+        bool RequiresMfa = false,
+        string? MfaSessionToken = null,
+        bool RequiresMfaSetup = false,
+        string? AccessToken = null,
+        string? TokenType = null);
 
     public sealed record UserInfoResponse(
         int Id,
@@ -56,6 +79,8 @@ public sealed class AuthController : ControllerBase
         string RoleName,
         string? WindowsUsername,
         bool IsActive,
+        bool MfaEnabled,
+        bool MustChangePassword,
         Dictionary<string, int> Permissions);
 
     [HttpPost("login")]
@@ -66,19 +91,56 @@ public sealed class AuthController : ControllerBase
         var user = await FindUserForLoginAsync(request.Username, cancellationToken);
 
         if (user is null || string.IsNullOrEmpty(user.PasswordHash))
+        {
+            AuthMetrics.LoginFailure.Inc();
+            await _authAuditService.WriteAsync(
+                AuthEventType.LoginFailed,
+                success: false,
+                identifier: request.Username,
+                details: "Invalid credentials",
+                cancellationToken: cancellationToken);
             return Unauthorized();
+        }
+
+        if (await _accountLockoutService.CheckLockoutAsync(user, cancellationToken))
+        {
+            AuthMetrics.LoginFailure.Inc();
+            await _authAuditService.WriteAsync(
+                AuthEventType.LoginLockedOut,
+                success: false,
+                user.Id,
+                user.Username,
+                details: "Account is locked",
+                cancellationToken: cancellationToken);
+            return Unauthorized();
+        }
 
         var passwordOk = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
         if (!passwordOk)
         {
+            AuthMetrics.LoginFailure.Inc();
+            await _accountLockoutService.RecordFailedAttemptAsync(user, cancellationToken);
             await _actionLogger.LogForUserAsync(
                 user.Id,
                 UserActionType.LoginFailed,
                 description: "Invalid password");
+            await _authAuditService.WriteAsync(
+                AuthEventType.LoginFailed,
+                success: false,
+                user.Id,
+                user.Username,
+                details: "Invalid credentials",
+                cancellationToken: cancellationToken);
             return Unauthorized();
         }
 
-        return Ok(await CreateLoginResponseAsync(user, $"Manual login: {user.Username}", cancellationToken));
+        await _accountLockoutService.ResetFailedAttemptsAsync(user, cancellationToken);
+        AuthMetrics.LoginSuccess.Inc();
+        return Ok(await CreateLoginResponseAsync(
+            user,
+            $"Manual login: {user.Username}",
+            AuthEventType.LoginSuccess,
+            cancellationToken));
     }
 
     public sealed record WindowsIdentityHintResponse(string? WindowsUsername, string? DisplayName, string Source);
@@ -130,6 +192,12 @@ public sealed class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Negotiate(CancellationToken cancellationToken)
     {
+        if (!_spnegoOptions.Enabled
+            && (!_environment.IsDevelopment() || string.IsNullOrWhiteSpace(_devWindowsAuth.SimulatedWindowsUser)))
+        {
+            return NotFound();
+        }
+
         var autoLogin = await TryWindowsAutoLoginAsync(cancellationToken);
         return autoLogin is null ? Unauthorized() : Ok(autoLogin);
     }
@@ -138,38 +206,101 @@ public sealed class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
+        var refreshToken = GetRefreshCookie();
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+            await _refreshTokenService.RevokeAsync(refreshToken, "Logout", cancellationToken);
+
         if (User.FindFirstValue(ClaimTypes.NameIdentifier) is { } userIdRaw
             && int.TryParse(userIdRaw, out var userId))
         {
             await _actionLogger.LogForUserAsync(userId, UserActionType.Logout, cancellationToken: cancellationToken);
+            await _authAuditService.WriteAsync(
+                AuthEventType.Logout,
+                success: true,
+                userId: userId,
+                cancellationToken: cancellationToken);
         }
 
-        Response.Cookies.Delete(AuthCookieConstants.TokenCookieName, new CookieOptions { Path = "/" });
+        _authCookieHelper.Delete(Response);
         return NoContent();
     }
 
     [HttpPost("refresh")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Refresh(CancellationToken cancellationToken)
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim, out var userId))
+        var refreshToken = GetRefreshCookie();
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            await _authAuditService.WriteAsync(
+                AuthEventType.RefreshFailed,
+                success: false,
+                details: "Refresh cookie is missing",
+                cancellationToken: cancellationToken);
             return Unauthorized();
+        }
 
-        var user = await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
-
-        if (user is null)
+        var rotation = await _refreshTokenService.ValidateAndRotateAsync(
+            refreshToken,
+            GetRemoteIpAddress(),
+            GetUserAgent(),
+            cancellationToken);
+        if (rotation is null)
+        {
+            _authCookieHelper.Delete(Response);
+            await _authAuditService.WriteAsync(
+                AuthEventType.RefreshFailed,
+                success: false,
+                details: "Refresh token is invalid",
+                cancellationToken: cancellationToken);
             return Unauthorized();
+        }
 
-        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
-        var token = _jwtTokenService.GenerateToken(user);
+        var permissions = await LoadPermissionsAsync(rotation.User.RoleId, rotation.User.Role.Name, cancellationToken);
+        var token = _jwtTokenService.GenerateToken(rotation.User);
         var expires = _jwtTokenService.GetExpiration();
-        AppendAuthCookie(token, expires);
+        _authCookieHelper.Append(Response, token, expires, new RefreshTokenIssue(rotation.Token, rotation.ExpiresAt));
 
-        return Ok(new LoginResponse(expires, MapUser(user, permissions)));
+        await _authAuditService.WriteAsync(
+            AuthEventType.RefreshSuccess,
+            success: true,
+            userId: rotation.User.Id,
+            identifier: rotation.User.Username,
+            cancellationToken: cancellationToken);
+
+        AuthMetrics.TokenRefresh.Inc();
+        return Ok(new LoginResponse(
+            expires,
+            MapUser(rotation.User, permissions),
+            AccessToken: token,
+            TokenType: "Bearer"));
+    }
+
+    [HttpPost("logout-all")]
+    [Authorize]
+    public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        await _refreshTokenService.RevokeAllAsync(userId, "Logout all devices", cancellationToken);
+        await _authAuditService.WriteAsync(
+            AuthEventType.LogoutAllDevices,
+            success: true,
+            userId: userId,
+            cancellationToken: cancellationToken);
+        _authCookieHelper.Delete(Response);
+        return NoContent();
+    }
+
+    [HttpGet("sessions")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<RefreshSession>>> GetSessions(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Unauthorized();
+
+        return Ok(await _refreshTokenService.GetSessionsAsync(userId, cancellationToken));
     }
 
     [HttpGet("me")]
@@ -205,6 +336,7 @@ public sealed class AuthController : ControllerBase
         return await CreateLoginResponseAsync(
             user,
             $"Auto-login: {hint.Username}",
+            AuthEventType.NegotiateSuccess,
             cancellationToken);
     }
 
@@ -243,32 +375,64 @@ public sealed class AuthController : ControllerBase
 
     private async Task<User?> FindUserForLoginAsync(string input, CancellationToken cancellationToken)
     {
-        var users = await _context.Users
+        // EndsWith + StringComparison не транслируется в SQL Server — используем Like (суффикс \sam).
+        var windowsSuffix = $@"%\{input}";
+        return await _context.Users
             .Include(u => u.Role)
             .Where(u => u.IsActive)
-            .ToListAsync(cancellationToken);
-
-        return users.FirstOrDefault(u => LoginIdentityMatcher.Matches(u, input));
+            .Where(u => u.Username == input
+                     || u.WindowsUsername == input
+                     || (u.WindowsUsername != null && EF.Functions.Like(u.WindowsUsername, windowsSuffix)))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     private async Task<LoginResponse> CreateLoginResponseAsync(
         User user,
         string logDescription,
+        AuthEventType authEventType,
         CancellationToken cancellationToken)
     {
         var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
+        if (_mfaService.IsMfaEnabled(user))
+        {
+            return new LoginResponse(
+                _jwtTokenService.GetExpiration(),
+                MapLoginUser(user, permissions),
+                RequiresMfa: true,
+                MfaSessionToken: _jwtTokenService.GenerateMfaSessionToken(user));
+        }
+
         var token = _jwtTokenService.GenerateToken(user);
         var expires = _jwtTokenService.GetExpiration();
+        var refreshToken = await _refreshTokenService.CreateAsync(
+            user.Id,
+            GetRemoteIpAddress(),
+            GetUserAgent(),
+            cancellationToken);
 
-        AppendAuthCookie(token, expires);
+        user.LastLoginAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        _authCookieHelper.Append(Response, token, expires, refreshToken);
 
         await _actionLogger.LogForUserAsync(
             user.Id,
             UserActionType.Login,
             description: logDescription,
             cancellationToken: cancellationToken);
+        await _authAuditService.WriteAsync(
+            authEventType,
+            success: true,
+            userId: user.Id,
+            identifier: user.Username,
+            details: logDescription,
+            cancellationToken: cancellationToken);
 
-        return new LoginResponse(expires, MapUser(user, permissions));
+        return new LoginResponse(
+            expires,
+            MapLoginUser(user, permissions),
+            RequiresMfaSetup: _mfaService.IsMfaRequired(user),
+            AccessToken: token,
+            TokenType: "Bearer");
     }
 
     private bool IsTrustedProxyRequest()
@@ -284,24 +448,19 @@ public sealed class AuthController : ControllerBase
             && string.Equals(provided, _spnegoOptions.TrustedProxySecret, StringComparison.Ordinal);
     }
 
-    private void AppendAuthCookie(string token, DateTime expires)
-    {
-        Response.Cookies.Append(AuthCookieConstants.TokenCookieName, token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _environment.IsProduction() || Request.IsHttps,
-            // Strict ломает cookie jar HttpClient в интеграционных тестах (WebApplicationFactory).
-            SameSite = _environment.IsEnvironment("Development") || _environment.IsEnvironment("Testing")
-                ? SameSiteMode.Lax
-                : SameSiteMode.Strict,
-            Expires = expires,
-            Path = "/",
-        });
-    }
+    private string? GetRefreshCookie() =>
+        Request.Cookies.TryGetValue(AuthCookieConstants.RefreshCookieName, out var token) ? token : null;
+
+    private string? GetRemoteIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString();
+
+    private string? GetUserAgent() => Request.Headers.UserAgent.ToString();
+
+    private bool TryGetCurrentUserId(out int userId) =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
     private async Task<Dictionary<string, int>> LoadPermissionsAsync(int roleId, string roleName, CancellationToken cancellationToken)
     {
-        if (string.Equals(roleName, nameof(UserRole.Administrator), StringComparison.Ordinal))
+        if (PermissionObjectCatalog.IsSuperAdmin(roleName, roleId))
         {
             return PermissionObjectCatalog.AllObjectNames
                 .ToDictionary(name => name, _ => (int)AccessLevel.Edit);
@@ -315,7 +474,7 @@ public sealed class AuthController : ControllerBase
         return rights.ToDictionary(r => r.ObjectName, r => (int)r.AccessLevel);
     }
 
-    private static UserInfoResponse MapUser(Domain.Entities.User user, Dictionary<string, int> permissions) =>
+    public static UserInfoResponse MapUser(Domain.Entities.User user, Dictionary<string, int> permissions) =>
         new(
             user.Id,
             user.Username,
@@ -324,5 +483,20 @@ public sealed class AuthController : ControllerBase
             user.Role.Name,
             user.WindowsUsername,
             user.IsActive,
+            user.MfaEnabled,
+            user.MustChangePassword,
+            permissions);
+
+    private static UserInfoResponse MapLoginUser(Domain.Entities.User user, Dictionary<string, int> permissions) =>
+        new(
+            user.Id,
+            user.Username,
+            user.DisplayName,
+            user.RoleId,
+            user.Role.Name,
+            user.WindowsUsername,
+            user.IsActive,
+            user.MfaEnabled,
+            user.MustChangePassword,
             permissions);
 }

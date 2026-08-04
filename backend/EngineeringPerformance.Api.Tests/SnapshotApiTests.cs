@@ -21,13 +21,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
     {
         if (!_sqlAvailable) return;
 
-        var projectsResponse = await _client.GetAsync("/api/projects");
-        projectsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var projectsJson = await projectsResponse.Content.ReadAsStringAsync();
-        using var projectsDoc = System.Text.Json.JsonDocument.Parse(projectsJson);
-        if (projectsDoc.RootElement.GetArrayLength() == 0) return;
-
-        var projectId = projectsDoc.RootElement[0].GetProperty("id").GetInt32();
+        await using var project = await TestProjectScope.CreateAsync(_client, "snapshot");
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var dictResponse = await _client.GetAsync("/api/dictionaries/all");
@@ -47,7 +41,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
         kfoTypeId.Should().NotBeNull();
 
         var createResponse = await _client.PostAsJsonAsync(
-            $"/api/projects/{projectId}/versions",
+            $"/api/projects/{project.Id}/versions",
             new
             {
                 versionName = $"snapshot-test-{suffix}",
@@ -62,7 +56,7 @@ public sealed class SnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
         var versionId = createdDoc.RootElement.GetProperty("id").GetInt32();
 
         var performanceResponse = await _client.GetAsync(
-            $"/api/projects/{projectId}/versions/{versionId}/performance");
+            $"/api/projects/{project.Id}/versions/{versionId}/performance");
         performanceResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 }

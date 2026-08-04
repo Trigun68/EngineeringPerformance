@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -16,13 +17,16 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IPerformanceService _performanceService;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
     public ProjectVersionAnalysisService(
         IDbContextFactory<AppDbContext> contextFactory,
-        IPerformanceService performanceService)
+        IPerformanceService performanceService,
+        IPerformanceCalculationEngine calculationEngine)
     {
         _contextFactory = contextFactory;
         _performanceService = performanceService;
+        _calculationEngine = calculationEngine;
     }
 
     public async Task<ProjectVersionAnalysisDto> GenerateReportAsync(int projectId, int versionId)
@@ -111,12 +115,21 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 DirectionLaborIntensities: BuildDirectionLabor(laborByDirection, r.WorkDirectionId)))
             .ToList();
 
+        // Имена групп IIC уже в формате «код — наименование (ед.)» из PerformanceService.
+        var directionNameById = performanceData
+            .Where(r => r.WorkDirectionId >= 0)
+            .GroupBy(r => r.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First().WorkDirectionName);
+
         // Виды работ: общий блок из трудоёмкости проекта.
         var laborRows = laborIntensities
             .Select(li => new ProjectVersionLaborIntensityDto(
                 DocumentationCode: li.DocumentationCode,
                 Brand: li.Brand,
-                WorkDirectionName: li.WorkDirection?.Name,
+                WorkDirectionName: li.WorkDirectionId is int dirId
+                    && directionNameById.TryGetValue(dirId, out var formattedName)
+                        ? formattedName
+                        : li.WorkDirection?.Name,
                 PlannedHours: li.PlannedHours,
                 ActualHours: li.ActualHours))
             .ToList();
@@ -124,10 +137,14 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         var totalPlannedHours = FactLaborHoursTotals.FromLaborIntensities(laborIntensities) ?? 0m;
         var unallocatedPlannedHours = FactLaborHoursTotals.UnallocatedPlannedHours(laborIntensities);
 
+        var weightedZ = _calculationEngine.ComputeWeightedZFromPerformanceRows(
+            performanceData,
+            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
         var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
             performanceData,
             totalPlannedHours,
-            unallocatedPlannedHours);
+            unallocatedPlannedHours,
+            weightedZ);
 
         var planningRows = await ctx1.ProjectVersionPlanningParameters
             .AsNoTracking()

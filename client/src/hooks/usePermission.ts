@@ -5,7 +5,7 @@ import {
   canEditPermission,
   canReadPermission,
   getPermissionLevel,
-  isAdministrator,
+  isSuperAdmin,
 } from '../utils/permissionAccess';
 
 export interface PermissionResult {
@@ -31,11 +31,12 @@ export function usePermission(objectName: string): PermissionResult {
   // Стабильная ссылка: `?? {}` в селекторе даёт новый объект на каждый snapshot → риск #185.
   const permissions = useAuthStore((state) => state.user?.permissions) ?? EMPTY_PERMISSIONS;
   const roleName = useAuthStore((state) => state.user?.roleName);
-  const admin = isAdministrator(roleName);
+  const roleId = useAuthStore((state) => state.user?.roleId);
+  const admin = isSuperAdmin(roleName, roleId);
 
   const level: AccessLevel = useMemo(
-    () => getPermissionLevel(permissions, objectName, roleName),
-    [objectName, permissions, roleName],
+    () => getPermissionLevel(permissions, objectName, roleName, roleId),
+    [objectName, permissions, roleName, roleId],
   );
 
   const canRead = level >= 1;
@@ -73,9 +74,10 @@ export function usePermissionAccess(
 export function useCanRead(objectName: string): boolean {
   const permissions = useAuthStore((state) => state.user?.permissions);
   const roleName = useAuthStore((state) => state.user?.roleName);
+  const roleId = useAuthStore((state) => state.user?.roleId);
   return useMemo(
-    () => canReadPermission(permissions, objectName, roleName),
-    [objectName, permissions, roleName],
+    () => canReadPermission(permissions, objectName, roleName, roleId),
+    [objectName, permissions, roleName, roleId],
   );
 }
 
@@ -83,8 +85,9 @@ export function useCanRead(objectName: string): boolean {
 export function useCanEdit(objectName: string): boolean {
   const permissions = useAuthStore((state) => state.user?.permissions);
   const roleName = useAuthStore((state) => state.user?.roleName);
+  const roleId = useAuthStore((state) => state.user?.roleId);
   return useMemo(
-    () => canEditPermission(permissions, objectName, roleName),
-    [objectName, permissions, roleName],
+    () => canEditPermission(permissions, objectName, roleName, roleId),
+    [objectName, permissions, roleName, roleId],
   );
 }

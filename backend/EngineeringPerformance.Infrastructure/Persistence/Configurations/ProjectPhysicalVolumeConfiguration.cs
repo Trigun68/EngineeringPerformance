@@ -41,5 +41,30 @@ public sealed class ProjectPhysicalVolumeConfiguration : IEntityTypeConfiguratio
             .WithMany(pv => pv.Children)
             .HasForeignKey(pv => pv.ParentId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(pv => pv.ProjectId);
+        builder.HasIndex(pv => pv.ParentId);
+        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeKfoId });
+        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId, pv.PhysicalVolumeBerId });
+        // Covering index for version grid loads (SqlQueryMetrics → 110_HotPathIndexes.sql)
+        builder.HasIndex(pv => new { pv.ProjectAnalysisVersionId, pv.ProjectId })
+            .HasDatabaseName("IX_ProjectPhysicalVolumes_VersionId_ProjectId_Covering")
+            .IncludeProperties(pv => new
+            {
+                pv.PhysicalVolumeKfoId,
+                pv.PhysicalVolumeBerId,
+                pv.Quantity,
+                pv.LaborIntensityBase,
+                pv.LaborIntensityOptimistic,
+                pv.LaborIntensityPessimistic,
+                pv.FacilityCode,
+                pv.FacilityName,
+                pv.DocumentSet,
+                pv.CatalogCode,
+                pv.CatalogId,
+                pv.WorkId,
+                pv.ParentId,
+                pv.BindingType,
+            });
     }
 }

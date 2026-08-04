@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
 import { AppLayout } from './layout/AppLayout';
 import { AdminRouteGuard } from './components/auth/AdminRouteGuard';
+import { MfaSetupDialog } from './components/auth/MfaSetupDialog';
 import { PermissionGuard, SettingsGuard } from './components/auth/PermissionGuard';
 import { useFirstAccessiblePath } from './hooks/useAccessibleNavigation';
 import { ProjectsPage as ProjectsListPage } from './pages/projects/ProjectsPage';
@@ -20,7 +21,7 @@ import { AccessRightsPage } from './pages/settings/AccessRightsPage';
 import { SystemSettingsPage } from './pages/settings/SystemSettingsPage';
 import { HelpPage } from './pages/help/HelpPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
-import { TrendsAnalyticsPage } from './pages/analytics/TrendsAnalyticsPage';
+import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { MonitoringDashboard } from './features/monitoring/MonitoringDashboard';
 import { AdminLayout } from './features/admin/AdminLayout';
@@ -69,6 +70,8 @@ export default function App() {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const isLoading = useAuthStore((state) => state.isLoading);
   const user = useAuthStore((state) => state.user);
+  const requiresMfaSetup = useAuthStore((state) => state.requiresMfaSetup);
+  const completeMfaSetup = useAuthStore((state) => state.completeMfaSetup);
 
   useEffect(() => {
     void initialize();
@@ -100,7 +103,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {user ? (
+      <>
+        {user ? (
         <Routes>
           <Route element={<AppLayout />}>
             <Route
@@ -128,13 +132,14 @@ export default function App() {
               )}
             />
             <Route
-              path="/analytics/trends"
+              path="/analytics"
               element={(
                 <PermissionGuard objectName="GroupTrend">
-                  <TrendsAnalyticsPage />
+                  <AnalyticsPage />
                 </PermissionGuard>
               )}
             />
+            <Route path="/analytics/trends" element={<Navigate to="/analytics" replace />} />
             <Route
               path="/references"
               element={(
@@ -187,17 +192,11 @@ export default function App() {
             >
               <Route path="logs" element={<LogViewer />} />
               <Route path="health" element={<HealthDashboard />} />
+              <Route path="monitoring" element={<MonitoringDashboard />} />
               <Route path="audit" element={<ConfigAudit />} />
               <Route path="user-actions" element={<UserActionLogPage />} />
             </Route>
-            <Route
-              path="/monitoring"
-              element={(
-                <AdminRouteGuard>
-                  <MonitoringDashboard />
-                </AdminRouteGuard>
-              )}
-            />
+            <Route path="/monitoring" element={<Navigate to="/admin/monitoring" replace />} />
             <Route
               path="/settings"
               element={(
@@ -227,9 +226,15 @@ export default function App() {
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
         </Routes>
-      ) : (
-        <LoginPage />
-      )}
+        ) : (
+          <LoginPage />
+        )}
+        <MfaSetupDialog
+          open={Boolean(user && requiresMfaSetup)}
+          onCompleted={completeMfaSetup}
+          onDismiss={completeMfaSetup}
+        />
+      </>
     </BrowserRouter>
   );
 }

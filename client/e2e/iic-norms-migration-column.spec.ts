@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { clearMatchingGridLayouts, loginAsAdmin, scrollAgGridToColumn } from './helpers';
 
 test.describe('IIC norms migration column visibility', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,8 +7,14 @@ test.describe('IIC norms migration column visibility', () => {
   });
 
   test('migration column can be hidden via column settings', async ({ page }) => {
+    await clearMatchingGridLayouts(page, ['ref-iic-norms', 'grid-ref-iic-norms']);
     await page.goto('/references/iic-norms');
     await page.waitForSelector('.ag-root-wrapper', { timeout: 20_000 });
+
+    await scrollAgGridToColumn(page, 'migration', 'ref-iic-norms');
+    await expect(page.locator('.ag-header-cell[col-id="migration"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
 
     await page.getByRole('button', { name: 'Настройка столбцов' }).click();
     const dialog = page.getByRole('dialog');
@@ -21,13 +27,19 @@ test.describe('IIC norms migration column visibility', () => {
     }
     await dialog.getByRole('button', { name: 'Применить' }).click();
 
-    await expect(page.getByRole('columnheader', { name: 'Миграция' })).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator('.ag-header-cell[col-id="migration"]')).toHaveCount(0, {
+      timeout: 10_000,
+    });
 
     // Restore visibility for repeatable runs
     await page.getByRole('button', { name: 'Настройка столбцов' }).click();
     await expect(dialog).toBeVisible();
     await dialog.getByRole('checkbox', { name: 'Миграция' }).check();
     await dialog.getByRole('button', { name: 'Применить' }).click();
-    await expect(page.getByRole('columnheader', { name: 'Миграция' })).toBeVisible({ timeout: 10_000 });
+
+    await scrollAgGridToColumn(page, 'migration', 'ref-iic-norms');
+    await expect(page.locator('.ag-header-cell[col-id="migration"]').first()).toBeVisible({
+      timeout: 10_000,
+    });
   });
 });

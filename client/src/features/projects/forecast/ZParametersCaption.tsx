@@ -17,13 +17,19 @@ const textSx = {
 } as const;
 
 export interface ZParametersCaptionProps {
+  /** Режим: план (по умолчанию) или факт — текст подписи. */
+  variant?: 'plan' | 'fact';
   planVersionSelected?: boolean;
 }
 
-export function ZParametersCaption({ planVersionSelected = true }: ZParametersCaptionProps) {
+export function ZParametersCaption({
+  variant = 'plan',
+  planVersionSelected = true,
+}: ZParametersCaptionProps) {
+  const versionWord = variant === 'fact' ? 'факта' : 'плана';
   const suffix = planVersionSelected
-    ? 'для выбранной версии плана'
-    : '— выберите версию плана';
+    ? `для выбранной версии ${versionWord}`
+    : `— выберите версию ${versionWord}`;
 
   return (
     <Box sx={captionSx} data-testid="z-parameters-caption">

@@ -10,6 +10,7 @@ namespace EngineeringPerformance.Infrastructure.Export;
 public static class QuestPdfReportComposer
 {
     private static readonly string? EmbeddedFontPath = ResolveEmbeddedFontPath();
+    private static readonly TimeZoneInfo MoscowTime = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
     private static bool _fontRegistered;
 
     static QuestPdfReportComposer()
@@ -225,8 +226,8 @@ public static class QuestPdfReportComposer
         container.AlignCenter().Text(t =>
         {
             t.Span("Engineering Performance · ");
-            t.Span(DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm")).FontSize(8);
-            t.Span(" UTC · ");
+            t.Span(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(3)).ToString("yyyy-MM-dd HH:mm")).FontSize(8);
+            t.Span(" MSK · ");
             t.CurrentPageNumber();
             t.Span(" / ");
             t.TotalPages();

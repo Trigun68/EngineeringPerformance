@@ -6,8 +6,7 @@ export type ProjectTabId =
   | 'data'
   | 'forecast'
   | 'analysis'
-  | 'compare'
-  | 'reports';
+  | 'compare';
 
 export interface ProjectTabConfig {
   id: ProjectTabId;
@@ -21,7 +20,6 @@ export const PROJECT_TAB_CONFIG: ProjectTabConfig[] = [
   { id: 'forecast', label: 'Прогнозирование', permission: 'Planning' },
   { id: 'analysis', label: 'Анализ факта', permission: 'Assessment' },
   { id: 'compare', label: 'Сравнение версий', permission: 'VersionComparison' },
-  { id: 'reports', label: 'Отчеты', permission: 'Reports' },
 ];
 
 export function getVisibleTabs(

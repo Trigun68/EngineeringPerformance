@@ -38,4 +38,31 @@ public interface IProjectExportService
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportFactFacilityExcelAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportFactDetailExcelAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportFactDetailSummaryTableAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportCompareDetailExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportCompareDetailSummaryTableAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default);
 }

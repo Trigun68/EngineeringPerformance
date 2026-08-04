@@ -149,7 +149,13 @@ function ReportDataRow({
         {code || (dark ? 'ИТОГО' : '—')}
       </Box>
       <Box sx={{ fontWeight: dark ? 600 : 500 }}>{name}</Box>
-      <Box sx={{ textAlign: 'right' }}>{dark ? '—' : num2(factFo)}</Box>
+      <Box sx={{ textAlign: 'right' }}>
+        {typeof factFo === 'string'
+          ? factFo
+          : dark
+            ? (factFo != null && factFo !== '' ? String(factFo) : '—')
+            : num2(factFo)}
+      </Box>
       <Box sx={{ textAlign: 'right' }}>{dark ? '—' : num4(normProd)}</Box>
       <Box sx={{ textAlign: 'right', fontWeight: 600 }}>{num1(baseH)}</Box>
       <Box sx={{ textAlign: 'right', fontWeight: 600, color: dark ? '#A9DFBF' : '#27AE60' }}>
@@ -295,7 +301,7 @@ export function ForecastReportView({
             <ReportDataRow
               code=""
               name="По проекту"
-              factFo={null}
+              factFo={totalRow.factPhysicalVolumeDisplay ?? totalRow.factPhysicalVolume}
               normProd={null}
               baseH={totalRow.baseHours}
               optH={totalRow.optimisticHours}
@@ -322,7 +328,7 @@ export function ForecastReportView({
                 <ReportDataRow
                   code={code}
                   name={name}
-                  factFo={row.factPhysicalVolume}
+                  factFo={row.factPhysicalVolumeDisplay ?? row.factPhysicalVolume}
                   normProd={row.normProductivity}
                   baseH={row.baseHours}
                   optH={row.optimisticHours}

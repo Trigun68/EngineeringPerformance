@@ -17,6 +17,7 @@ public sealed class VisualReportService : IVisualReportService
     private readonly ITrendAnalyticsService _trends;
     private readonly IChartImageRenderer _charts;
     private readonly IForecastDetailSummaryTableContext _meta;
+    private readonly IPerformanceReportService _performanceReport;
 
     public VisualReportService(
         IProjectsPageDataFetcher pageData,
@@ -24,7 +25,8 @@ public sealed class VisualReportService : IVisualReportService
         IProjectVersionAnalysisService analysis,
         ITrendAnalyticsService trends,
         IChartImageRenderer charts,
-        IForecastDetailSummaryTableContext meta)
+        IForecastDetailSummaryTableContext meta,
+        IPerformanceReportService performanceReport)
     {
         _pageData = pageData;
         _compare = compare;
@@ -32,6 +34,7 @@ public sealed class VisualReportService : IVisualReportService
         _trends = trends;
         _charts = charts;
         _meta = meta;
+        _performanceReport = performanceReport;
     }
 
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -522,8 +525,8 @@ public sealed class VisualReportService : IVisualReportService
     {
         var summary = CompareReportFilter.FilterSummary(compare.Summary, showOnlyDifferences);
         var totalHoursDelta = compare.Facility.Sum(f => f.HoursDelta ?? 0);
-        var zRows = summary.Where(r => r.ZDelta.HasValue).ToList();
-        var avgZDelta = zRows.Count > 0 ? zRows.Average(r => (double)(r.ZDelta ?? 0)) : (double?)null;
+        var zRows = summary.Where(r => r.FactZDelta.HasValue).ToList();
+        var avgZDelta = zRows.Count > 0 ? zRows.Average(r => (double)(r.FactZDelta ?? 0)) : (double?)null;
 
         var deltaItems = chart.Points
             .Select(p => new ChartBarItem(p.Category, (double)(p.Delta ?? 0)))
@@ -536,21 +539,32 @@ public sealed class VisualReportService : IVisualReportService
         var kpis = new List<ReportKpiItem>
         {
             new("Δ часы (объекты)", $"{totalHoursDelta:N2} ч"),
-            new("Средн. Δ Z", avgZDelta?.ToString("N4") ?? "—"),
+            new("Средн. Δ Z факт", avgZDelta?.ToString("N4") ?? "—"),
             new("Версия A", chart.VersionAName),
             new("Версия B", chart.VersionBName),
         };
 
         var tableRows = summary
-            .Where(r => r.ZDelta.HasValue || r.ZScoreA.HasValue || r.ZScoreB.HasValue)
-            .OrderByDescending(r => Math.Abs(r.ZDelta ?? 0))
+            .Where(r => r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
+                || r.PlannedLaborHoursA.HasValue || r.PlannedLaborHoursB.HasValue
+                || r.FactLaborHoursA.HasValue || r.FactLaborHoursB.HasValue
+                || r.FactZScoreA.HasValue || r.FactZScoreB.HasValue)
+            .OrderByDescending(r => Math.Abs(r.FactZDelta ?? r.PlanZDelta ?? 0))
             .Select(r => new[]
             {
                 r.Name,
-                r.ZScoreA?.ToString("N4") ?? "—",
-                r.ZScoreB?.ToString("N4") ?? "—",
-                r.ZDelta?.ToString("N4") ?? "—",
-                r.InterpretationB,
+                r.FactPhysicalVolumeA?.ToString("N2") ?? "—",
+                r.FactPhysicalVolumeB?.ToString("N2") ?? "—",
+                r.PlannedLaborHoursA?.ToString("N0") ?? "—",
+                r.PlannedLaborHoursB?.ToString("N0") ?? "—",
+                r.FactLaborHoursA?.ToString("N0") ?? "—",
+                r.FactLaborHoursB?.ToString("N0") ?? "—",
+                r.PlannedProductivityA?.ToString("N4") ?? "—",
+                r.PlannedProductivityB?.ToString("N4") ?? "—",
+                r.FactProductivityA?.ToString("N4") ?? "—",
+                r.FactProductivityB?.ToString("N4") ?? "—",
+                r.FactZScoreA?.ToString("N4") ?? "—",
+                r.FactZScoreB?.ToString("N4") ?? "—",
             });
 
         col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
@@ -558,7 +572,8 @@ public sealed class VisualReportService : IVisualReportService
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "Итого IIC",
-            ["Направление", "Z A", "Z B", "Δ Z", "Интерпр. B"],
+            ["Направление", "ФО A", "ФО B", "План. труд A", "План. труд B", "Факт. труд A", "Факт. труд B",
+                "План. произв. A", "План. произв. B", "Факт. произв. A", "Факт. произв. B", "Z A", "Z B"],
             tableRows));
     }
 
@@ -599,16 +614,26 @@ public sealed class VisualReportService : IVisualReportService
         var tableRows = facility.Select(f => new[]
         {
             f.FacilityName,
+            f.FactPhysicalVolumeA?.ToString("N2") ?? "—",
+            f.FactPhysicalVolumeB?.ToString("N2") ?? "—",
+            f.PlannedLaborHoursA?.ToString("N0") ?? "—",
+            f.PlannedLaborHoursB?.ToString("N0") ?? "—",
             f.FactLaborHoursA?.ToString("N0") ?? "—",
             f.FactLaborHoursB?.ToString("N0") ?? "—",
-            f.HoursDelta?.ToString("N0") ?? "—",
+            f.PlannedProductivityA?.ToString("N4") ?? "—",
+            f.PlannedProductivityB?.ToString("N4") ?? "—",
+            f.FactProductivityA?.ToString("N4") ?? "—",
+            f.FactProductivityB?.ToString("N4") ?? "—",
+            f.ZScoreA?.ToString("N4") ?? "—",
+            f.ZScoreB?.ToString("N4") ?? "—",
         });
 
         col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chartPng, "Сравнение трудоёмкости по объектам"));
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "По объектам",
-            ["Объект", "Часы A", "Часы B", "Δ"],
+            ["Объект", "ФО A", "ФО B", "План. труд A", "План. труд B", "Факт. труд A", "Факт. труд B",
+                "План. произв. A", "План. произв. B", "Факт. произв. A", "Факт. произв. B", "Z A", "Z B"],
             tableRows));
     }
 
@@ -642,7 +667,18 @@ public sealed class VisualReportService : IVisualReportService
             d.FacilityName,
             d.PvCode,
             d.PvName,
-            d.HoursDelta?.ToString("N0") ?? "—",
+            d.QuantityA?.ToString("N2") ?? "—",
+            d.QuantityB?.ToString("N2") ?? "—",
+            d.PlannedLaborHoursA?.ToString("N0") ?? "—",
+            d.PlannedLaborHoursB?.ToString("N0") ?? "—",
+            d.FactLaborHoursA?.ToString("N0") ?? "—",
+            d.FactLaborHoursB?.ToString("N0") ?? "—",
+            d.PlannedProductivityA?.ToString("N4") ?? "—",
+            d.PlannedProductivityB?.ToString("N4") ?? "—",
+            d.FactProductivityA?.ToString("N4") ?? "—",
+            d.FactProductivityB?.ToString("N4") ?? "—",
+            d.ZScoreA?.ToString("N4") ?? "—",
+            d.ZScoreB?.ToString("N4") ?? "—",
             d.Presence,
         });
 
@@ -650,7 +686,78 @@ public sealed class VisualReportService : IVisualReportService
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "Детально",
-            ["Объект", "Код", "Наименование", "Δ часы", "Наличие"],
+            ["Объект", "Код", "Наименование", "ФО A", "ФО B", "План. труд A", "План. труд B",
+                "Факт. труд A", "Факт. труд B", "План. произв. A", "План. произв. B",
+                "Факт. произв. A", "Факт. произв. B", "Z A", "Z B", "Наличие"],
             tableRows));
+    }
+
+    public async Task<byte[]> ExportPerformanceReportPdfAsync(
+        int projectId,
+        int? planVersionId = null,
+        int? factVersionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var report = await _performanceReport.GetReportAsync(
+            projectId,
+            planVersionId,
+            factVersionId,
+            cancellationToken);
+
+        static string FmtZ(decimal? z) => z is null ? "—" : z.Value.ToString("+0.00;-0.00;0.00");
+        static string FmtHours(decimal? h) => h is null ? "—" : $"{h.Value:N0} ч";
+
+        var kpis = new List<ReportKpiItem>
+        {
+            new("План Z", FmtZ(report.Plan?.WeightedZScore)),
+            new("Факт Z", FmtZ(report.Fact?.WeightedZScore)),
+            new("Перцентиль (факт)", report.Fact?.WeightedZScorePercentile ?? "—"),
+            new("Трудоёмкость факта", FmtHours(report.Fact?.TotalLaborHours)),
+            new("Трудоёмкость плана", FmtHours(report.Plan?.TotalLaborHours)),
+            new("Точность PD%", report.Accuracy.AveragePercent is null ? "—" : $"{report.Accuracy.AveragePercent:0.0}%"),
+        };
+
+        var topRows = (report.Fact ?? report.Plan)?.Directions
+            .Where(d => d.ZScore.HasValue && (d.SubtreeHours ?? 0) > 0)
+            .OrderByDescending(d => Math.Abs(d.ZScore!.Value) * (d.SubtreeHours ?? 0))
+            .Take(12)
+            .Select(d => (string[])
+            [
+                d.Name,
+                d.ZScore?.ToString("N2") ?? "—",
+                d.SubtreeHours?.ToString("N0") ?? "—",
+                d.Interpretation ?? "—",
+            ])
+            .ToList() ?? [];
+
+        var insightLines = report.Insights.Items
+            .Take(8)
+            .Select(i => $"{i.Title}: {i.Detail}")
+            .ToList();
+
+        return QuestPdfReportComposer.BuildLandscapeReport(col =>
+        {
+            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
+            if (topRows.Count > 0)
+            {
+                col.Item().PaddingTop(10).Element(c => QuestPdfReportComposer.ComposeTable(
+                    c,
+                    "Ключевые направления (|Z| × часы)",
+                    ["Направление", "Z", "Часы поддерева", "Интерпретация"],
+                    topRows));
+            }
+
+            if (insightLines.Count > 0)
+            {
+                col.Item().PaddingTop(10).Text("Выводы и рекомендации").SemiBold().FontSize(11);
+                foreach (var line in insightLines)
+                    col.Item().PaddingTop(2).Text($"• {line}").FontSize(8);
+            }
+        },
+        "Отчет по инженерной производительности",
+        $"Проект: {report.Project.Code} — {report.Project.Name}",
+        $"План версий: {report.Project.PlanVersionCount}; факт версий: {report.Project.FactVersionCount}",
+        report.Plan is null ? "План: —" : $"План: {report.Plan.VersionName}",
+        report.Fact is null ? "Факт: —" : $"Факт: {report.Fact.VersionName}");
     }
 }

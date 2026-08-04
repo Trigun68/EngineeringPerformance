@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, openFirstProject } from './helpers';
+import { loginAsAdmin, openFirstProject, waitForWorkingOverlayHidden } from './helpers';
 
 test.describe('Migration UAT smoke (Playwright)', () => {
   test.beforeEach(async ({ page }) => {
@@ -62,14 +62,16 @@ test.describe('Migration UAT smoke (Playwright)', () => {
   test('project detail — data and analytics tabs', async ({ page }) => {
     const projectId = await openFirstProject(page);
     test.skip(projectId === null, 'No projects in database');
+    await waitForWorkingOverlayHidden(page);
 
     for (const tabName of [
       'Прогнозирование',
       'Оценка факта',
       'Сравнение версий',
-      'Отчёты',
     ]) {
+      await waitForWorkingOverlayHidden(page);
       await page.getByRole('tab', { name: tabName, exact: true }).first().click();
+      await waitForWorkingOverlayHidden(page);
       await expect(page.getByRole('tab', { name: tabName, exact: true }).first()).toHaveAttribute('aria-selected', 'true');
     }
   });
@@ -79,8 +81,8 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     test.skip(projectId === null, 'No projects in database');
 
     await page.getByRole('tab', { name: 'Сравнение' }).click();
-    await page.getByRole('tab', { name: 'Итого по объектам' }).click();
-    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: 'По объектам', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'По объектам', exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: 'Детально' }).click();
     await page.waitForSelector('.ag-root', { timeout: 15_000 });
   });

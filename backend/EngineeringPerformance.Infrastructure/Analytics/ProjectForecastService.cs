@@ -106,25 +106,22 @@ public sealed class ProjectForecastService : IProjectForecastService
                 IsAssessment: true))
             .ToList();
 
-        var deviationCalculator = new DeviationCalculator(new NormCalculator());
-        var ppvHoursById = ForecastHoursAggregator.ComputePpvHours(
+        var ppvHoursById = _calculationEngine.ComputePpvForecastHours(
             planningScenario,
             ppvLines,
             normsByDirection,
-            planningZByDirection,
-            deviationCalculator);
+            planningZByDirection);
 
         var equipmentVolumes = equipmentRows
             .Where(eq => eq.Equipment?.IsAssessment == true && eq.Equipment.ClassifierId.HasValue)
             .Select(eq => (eq.Equipment!.ClassifierId!.Value, eq.QuantityInIicGroupUnits()));
 
-        var scenarioHoursByDirection = ForecastHoursAggregator.AggregateByDirection(
+        var scenarioHoursByDirection = _calculationEngine.AggregateForecastHoursByDirection(
             ppvLines,
             ppvHoursById,
             equipmentVolumes,
             normsByDirection,
-            planningZByDirection,
-            deviationCalculator);
+            planningZByDirection);
 
         var volumeByDirection = physicalVolumes
             .Where(pv => pv.GetClassifierId().HasValue == true && pv.GetIsAssessment() == true)
@@ -369,7 +366,8 @@ public sealed class ProjectForecastService : IProjectForecastService
                 return;
             }
 
-            var path = string.IsNullOrEmpty(pathPrefix) ? d.Name : $"{pathPrefix} / {d.Name}";
+            var displayName = IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(d, byId);
+            var path = string.IsNullOrEmpty(pathPrefix) ? displayName : $"{pathPrefix} / {displayName}";
             normByDirection.TryGetValue(d.Id, out var norm);
             var unitName = IicWorkDirectionDisplayUnit.ResolveUnitName(d, byId);
 
@@ -413,7 +411,7 @@ public sealed class ProjectForecastService : IProjectForecastService
             results.Add(new ForecastIicVolumeRowDto(
                 WorkDirectionId: d.Id,
                 ParentId: d.ParentId,
-                Name: d.Name,
+                Name: displayName,
                 UnitName: unitName,
                 NormProductivity: norm?.Performance,
                 NormEstimate: norm?.Estimate,

@@ -2,7 +2,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using EngineeringPerformance.Application.Auth;
-using EngineeringPerformance.Application.Settings;
 using EngineeringPerformance.Domain.Entities;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -12,12 +11,10 @@ namespace EngineeringPerformance.Infrastructure.Auth;
 public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly JwtSettings _settings;
-    private readonly ISystemSettingsService _systemSettings;
 
-    public JwtTokenService(IOptions<JwtSettings> settings, ISystemSettingsService systemSettings)
+    public JwtTokenService(IOptions<JwtSettings> settings)
     {
         _settings = settings.Value;
-        _systemSettings = systemSettings;
     }
 
     public string GenerateToken(User user)
@@ -31,9 +28,64 @@ public sealed class JwtTokenService : IJwtTokenService
             new("role_id", user.RoleId.ToString())
         };
 
+        return GenerateToken(claims, GetExpiration());
+    }
+
+    public string GenerateMfaSessionToken(User user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.Username),
+            new("purpose", "mfa_completion")
+        };
+
+        return GenerateToken(claims, DateTime.UtcNow.AddMinutes(5));
+    }
+
+    public int? ValidateMfaSessionToken(string token)
+    {
+        try
+        {
+            var validationParameters = new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _settings.Issuer,
+                ValidAudience = _settings.Audience,
+                IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret)),
+                ClockSkew = TimeSpan.Zero,
+            };
+
+            var principal = new JwtSecurityTokenHandler().ValidateToken(token, validationParameters, out _);
+            var purpose = principal.FindFirst("purpose")?.Value;
+            var userId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return string.Equals(purpose, "mfa_completion", StringComparison.Ordinal)
+                && int.TryParse(userId, out var parsedUserId)
+                ? parsedUserId
+                : null;
+        }
+        catch (SecurityTokenException)
+        {
+            return null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    public DateTime GetExpiration()
+    {
+        return DateTime.UtcNow.AddMinutes(_settings.EffectiveAccessTokenLifetimeMinutes);
+    }
+
+    private string GenerateToken(IEnumerable<Claim> claims, DateTime expires)
+    {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_settings.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-        var expires = GetExpiration();
 
         var token = new JwtSecurityToken(
             issuer: _settings.Issuer,
@@ -43,11 +95,5 @@ public sealed class JwtTokenService : IJwtTokenService
             signingCredentials: credentials);
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
-    public DateTime GetExpiration()
-    {
-        var minutes = _systemSettings.GetSessionExpirationMinutesAsync().GetAwaiter().GetResult();
-        return DateTime.UtcNow.AddMinutes(minutes);
     }
 }

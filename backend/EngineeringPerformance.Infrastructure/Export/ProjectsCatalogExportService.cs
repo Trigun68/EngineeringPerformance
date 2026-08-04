@@ -97,19 +97,3 @@ public sealed class ProjectsCatalogExportService : IProjectsCatalogExportService
 
     private sealed record ProjectRow(string Code, string Name, string? Customer, string? WorkStatus);
 }
-
-internal sealed class TemporaryCulture : IDisposable
-{
-    private readonly CultureInfo _previous;
-
-    public TemporaryCulture(CultureInfo culture)
-    {
-        _previous = Thread.CurrentThread.CurrentCulture;
-        Thread.CurrentThread.CurrentCulture = culture;
-    }
-
-    public void Dispose()
-    {
-        Thread.CurrentThread.CurrentCulture = _previous;
-    }
-}

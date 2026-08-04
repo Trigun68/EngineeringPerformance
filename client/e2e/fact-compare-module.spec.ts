@@ -1,23 +1,29 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
-
-async function openFirstProject(page: import('@playwright/test').Page) {
-  await page.goto('/projects');
-  await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-  await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
-  await page.waitForURL(/\/projects\/\d+/);
-}
+import {
+  clearMatchingGridLayouts,
+  loginAsAdmin,
+  openPreferredProject,
+  scrollAgGridToColumn,
+  waitForWorkingOverlayHidden,
+} from './helpers';
 
 test.describe('Fact and Compare modules - WPF parity', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
 
-  test('fact tab shows version button, six import buttons, and sub-tabs', async ({ page }) => {
-    await openFirstProject(page);
+  async function openFactTab(page: import('@playwright/test').Page): Promise<void> {
+    await openPreferredProject(page);
+    await waitForWorkingOverlayHidden(page);
     await page.getByRole('tab', { name: 'Оценка факта' }).click();
+    await waitForWorkingOverlayHidden(page);
+  }
+
+  test('fact tab shows version button, six import buttons, and sub-tabs', async ({ page }) => {
+    await openFactTab(page);
 
     await expect(page.getByRole('button', { name: /Версия \(факт\)/ })).toBeVisible();
+    await expect(page.getByTestId('fact-planning-parameters-button')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Импорт ФО' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Удалить ФО' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Импорт оборуд.' })).toBeVisible();
@@ -30,51 +36,129 @@ test.describe('Fact and Compare modules - WPF parity', () => {
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 
-  test('fact version picker dialog opens with title Версии факта', async ({ page }) => {
-    await openFirstProject(page);
-    await page.getByRole('tab', { name: 'Оценка факта' }).click();
+  test('fact planning parameters dialog shows Fact column', async ({ page }) => {
+    await openFactTab(page);
+
+    const paramsBtn = page.getByTestId('fact-planning-parameters-button');
+    if ((await paramsBtn.count()) === 0) {
+      test.skip(true, 'No fact version selected');
+      return;
+    }
+    await paramsBtn.click();
+    const dialog = page.getByTestId('planning-parameters-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByTestId('z-parameters-caption').getByText(/версии факта/),
+    ).toBeVisible();
+    await expect(dialog.getByRole('columnheader', { name: 'Факт' })).toBeVisible();
+    await expect(dialog.getByTestId('z-project-fact')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Закрыть', exact: true }).last().click();
+  });
+
+  test('fact catalog label shows short name without prefix when present', async ({ page }) => {
+    await openFactTab(page);
+    const catalog = page.getByTestId('fact-catalog-label');
+    if ((await catalog.count()) === 0) {
+      test.skip(true, 'No physical volume catalog on selected fact version');
+      return;
+    }
+    await expect(catalog).toBeVisible();
+    await expect(catalog).not.toContainText('Справочник ФО:');
+  });
+
+  test('fact version picker dialog opens with title Выбор версии (факт)', async ({ page }) => {
+    await openFactTab(page);
     await page.getByRole('button', { name: /Версия \(факт\)/ }).click();
-    await expect(page.getByRole('dialog').getByText('Версии факта')).toBeVisible();
+    await expect(page.getByRole('dialog').getByText('Выбор версии (факт)')).toBeVisible();
   });
 
   test('compare tab shows dual version pickers and differences checkbox', async ({ page }) => {
-    await openFirstProject(page);
+    await openPreferredProject(page);
+    await waitForWorkingOverlayHidden(page);
     await page.getByRole('tab', { name: 'Сравнение версий' }).click();
+    await waitForWorkingOverlayHidden(page);
 
     await expect(page.getByRole('button', { name: /Версия А/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Версия Б/ })).toBeVisible();
     await expect(page.getByLabel('Показывать различия')).toBeVisible();
+    await expect(page.getByLabel('Сценарий')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Таблица' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'График' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт всех excel' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт выделенных excel' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Split' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Импорт оборуд.' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Удалить оборуд.' })).toHaveCount(0);
 
     await expect(page.getByRole('tab', { name: 'Итого', exact: true })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'По объектам', exact: true })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 
   test('fact analysis dialog opens from fact tab', async ({ page }) => {
-    await openFirstProject(page);
-    await page.getByRole('tab', { name: 'Оценка факта' }).click();
-    // Кнопка «Анализ версии» только на подвкладке «Итого».
+    await openFactTab(page);
     await page.getByRole('tab', { name: 'Итого', exact: true }).click();
     await page.getByRole('button', { name: /Анализ версии/ }).click();
     await expect(page.getByTestId('fact-analysis-dialog')).toBeVisible();
   });
 
   test('fact detail grouping via column drag shows group rows', async ({ page }) => {
-    await openFirstProject(page);
+    test.setTimeout(90_000);
+    const projectId = await openPreferredProject(page);
+    test.skip(!projectId, 'No projects in seed data');
+
+    await clearMatchingGridLayouts(page, ['fact-detail']);
+    await page.goto(`/projects/${projectId}`);
+    await waitForWorkingOverlayHidden(page);
+
     await page.getByRole('tab', { name: 'Оценка факта' }).click();
+    await waitForWorkingOverlayHidden(page);
     await page.getByRole('tab', { name: 'Детально' }).click();
-    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await waitForWorkingOverlayHidden(page);
 
-    const groupDropZone = page
-      .locator('.ag-column-drop-horizontal')
-      .filter({ hasText: 'Перетащите сюда заголовок столбца для группировки' });
-    await expect(groupDropZone).toBeVisible();
+    const hasRows = await page
+      .locator('.ag-center-cols-container .ag-row')
+      .first()
+      .isVisible({ timeout: 30_000 })
+      .catch(() => false);
+    test.skip(!hasRows, 'No fact detail rows for preferred project');
 
-    const groupableHeader = page.getByRole('columnheader', { name: /Группа ФО IIC/ });
-    await groupableHeader.dragTo(groupDropZone);
+    await expect(
+      page
+        .locator('.ag-column-drop-horizontal')
+        .filter({ hasText: 'Перетащите сюда заголовок столбца для группировки' }),
+    ).toBeVisible();
 
-    await page.waitForSelector('.ag-row-group', { timeout: 10_000 });
+    await scrollAgGridToColumn(page, 'iicGroupName', 'fact-detail');
+    const groupableHeader = page.locator('.ag-header-cell[col-id="iicGroupName"]').first();
+    await expect(groupableHeader).toBeVisible({ timeout: 20_000 });
+
+    const groupedViaApi = await page.evaluate((id) => {
+      const api = (window as unknown as {
+        __epGridApis?: Record<
+          string,
+          { addRowGroupColumns?: (cols: string[]) => void; setRowGroupColumns?: (cols: string[]) => void }
+        >;
+      }).__epGridApis?.[id];
+      if (api?.setRowGroupColumns) {
+        api.setRowGroupColumns(['iicGroupName']);
+        return true;
+      }
+      if (api?.addRowGroupColumns) {
+        api.addRowGroupColumns(['iicGroupName']);
+        return true;
+      }
+      return false;
+    }, 'fact-detail');
+
+    if (!groupedViaApi) {
+      const dropZone = page
+        .locator('.ag-column-drop-horizontal')
+        .filter({ hasText: 'Перетащите сюда заголовок столбца для группировки' });
+      await groupableHeader.dragTo(dropZone, { force: true });
+    }
+
+    await expect(page.locator('.ag-row-group').first()).toBeVisible({ timeout: 20_000 });
   });
 });

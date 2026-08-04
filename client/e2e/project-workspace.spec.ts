@@ -17,6 +17,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(editSelectedButton).toBeDisabled();
 
     await expect(page.getByRole('button', { name: 'Экспорт Excel' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Экспорт всех excel' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Экспорт выделенных excel' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Импорт Excel' })).toHaveCount(0);
 
@@ -152,18 +154,33 @@ test.describe('Project Workspace - WPF Style', () => {
     await page.getByRole('button', { name: 'Закрыть' }).click();
   });
 
-  test('shows main tabs: Прогнозирование, Оценка факта, Сравнение версий, Отчёты', async ({ page }) => {
+  test('shows main tabs: Прогнозирование, Оценка факта, Сравнение версий, Отчет', async ({ page }) => {
     // Navigate to first project
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
 
-    // Check for main tabs (WPF-style)
+    // Check for main tabs (WPF-style + visual report)
     await expect(page.getByRole('tab', { name: 'Прогнозирование' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Оценка факта' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Сравнение версий' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Отчёты' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Отчет' })).toBeVisible();
+  });
+
+  test('report tab loads performance report panel', async ({ page }) => {
+    await page.goto('/projects');
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
+    await page.waitForURL(/\/projects\/\d+/);
+
+    await page.getByRole('tab', { name: 'Отчет' }).click();
+    await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: /План:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Факт:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
+    await expect(page.getByTestId('report-plan-z')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('report-fact-z')).toBeVisible({ timeout: 30_000 });
   });
 
   test('forecast tab shows version selector and import buttons', async ({ page }) => {

@@ -1,9 +1,17 @@
 # Трендовый анализ
 
-**Дата обновления:** 2026-07-13  
-**Код:** `client/src/pages/analytics/TrendsAnalyticsPage.tsx`, `backend/.../TrendAnalyticsService.cs`
+**Дата обновления:** 2026-07-27  
+**Код:** `client/src/pages/analytics/AnalyticsPage.tsx`, `backend/.../TrendAnalyticsService.cs`
 
-## Архитектура
+## UI (текущее состояние)
+
+- Маршрут `/analytics` (право `GroupTrend`); `/analytics/trends` → redirect.
+- Вкладки: «Трендовый анализ», «Сравнение факта и норм».
+- Общие фильтры периода (пресеты + произвольный диапазон).
+- **Графики временно не отображаются** — каркас до следующего этапа наполнения.
+- Вкладка **«Сравнение факта и норм»** реализована: см. [`fact-norm-analysis.md`](fact-norm-analysis.md).
+
+## Архитектура (API, без изменений)
 
 - `IFactAssessmentPipeline` — абстракция формулы оценки (`v1-docset-proportional` → `PerformanceCalculationEngine`)
 - `granularity=version` — точки по `ProjectAnalysisVersion.CreatedAt`
@@ -18,9 +26,3 @@
 | `GET /api/analytics/trends/formulas` | Список формул |
 | `GET /api/analytics/trends` | Временные ряды (факт, прогноз, Δ, S-curve) |
 | `GET /api/analytics/trends/detail` | Детальные строки по версии |
-
-## UI
-
-- Маршрут `/analytics/trends` (право `GroupTrend`)
-- Фильтры: проект, формула, диапазон дат
-- 3 графика Highcharts: spline, column Δ, area S-curve

@@ -74,6 +74,7 @@ export interface DataTableProps<T> {
   showColumnSettings?: boolean;
   pinnedBottomRowData?: T[];
   gridTestId?: string;
+  onGridApiReady?: (api: GridApi<T>) => void;
 }
 
 const LAYOUT_DEBOUNCE_MS = 400;
@@ -114,6 +115,7 @@ export function DataTable<T extends object>({
   enableRowGrouping = false,
   showColumnSettings = false,
   pinnedBottomRowData,
+  onGridApiReady,
 }: DataTableProps<T>) {
   const gridRef = useRef<AgGridReact<T>>(null);
   const gridApiRef = useRef<GridApi<T> | null>(null);
@@ -164,12 +166,11 @@ export function DataTable<T extends object>({
   const scheduleLayoutSave = useCallback(() => {
     if (!gridId || !gridInitializedRef.current) return;
     if (isFirstRenderRef.current) return;
-    captureLayoutFromApi();
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void persistLayoutNow();
     }, LAYOUT_DEBOUNCE_MS);
-  }, [captureLayoutFromApi, gridId, persistLayoutNow]);
+  }, [gridId, persistLayoutNow]);
 
   const scheduleFilterSave = useCallback(() => {
     if (!gridId || !gridApiRef.current || !gridInitializedRef.current) return;
@@ -224,12 +225,18 @@ export function DataTable<T extends object>({
 
   const onGridReady = useCallback((event: GridReadyEvent<T>) => {
     gridApiRef.current = event.api;
+    if (typeof window !== 'undefined' && gridId) {
+      const w = window as Window & { __epGridApis?: Record<string, import('ag-grid-community').GridApi> };
+      w.__epGridApis = w.__epGridApis ?? {};
+      w.__epGridApis[gridId] = event.api;
+    }
+    onGridApiReady?.(event.api);
     void applySavedLayout(event.api).then(() => {
       syncColumnVisibilityState(event.api);
       gridInitializedRef.current = true;
       isFirstRenderRef.current = false;
     });
-  }, [applySavedLayout, syncColumnVisibilityState]);
+  }, [applySavedLayout, gridId, onGridApiReady, syncColumnVisibilityState]);
 
   useEffect(() => {
     const api = gridApiRef.current;
@@ -239,6 +246,19 @@ export function DataTable<T extends object>({
     }, 300);
     return () => clearTimeout(timer);
   }, [applySavedFilters, rowData.length]);
+
+  // AG Grid 32 + getRowId/treeData: controlled rowData может обновить option, но не client-side model
+  // (getGridOption('rowData').length уже новый, getDisplayedRowCount() — старый). Явный sync + refresh.
+  useEffect(() => {
+    const api = gridApiRef.current;
+    if (!api || !gridInitializedRef.current) return;
+    api.setGridOption('rowData', rowData);
+    // Для treeData сокращение набора без remount оставляет старые displayed rows.
+    if (treeData) {
+      api.setGridOption('rowData', []);
+      api.setGridOption('rowData', rowData);
+    }
+  }, [rowData, treeData]);
 
   const onColumnRowGroupChanged = useCallback(() => {
     scheduleLayoutSave();

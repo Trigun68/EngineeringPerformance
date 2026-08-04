@@ -192,7 +192,7 @@ public sealed class CachedDictionaryService : IDictionaryService
 
     private static Task<List<DictionaryItemDto>> LoadEquipmentsAsync(AppDbContext context, CancellationToken ct) =>
         context.Equipments.AsNoTracking()
-            .Where(x => !x.IsArchived)
+            .Where(x => !x.IsArchived && x.ProjectId != null)
             .OrderBy(x => x.SortOrder)
             .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId, null))
             .ToListAsync(ct);

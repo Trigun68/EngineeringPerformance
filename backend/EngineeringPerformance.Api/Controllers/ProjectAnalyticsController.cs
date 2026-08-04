@@ -3,6 +3,7 @@ using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -91,7 +92,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
 
     [HttpGet("forecast/assessment-volumes")]
     [RequireProjectAccess]
-    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [HasPermission(PermissionType.Planning, AccessLevel.Read)]
     public Task<ProjectForecastAssessmentVolumesDto> ForecastAssessmentVolumes(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
         _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId);
@@ -121,6 +122,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HttpGet("export/analysis.xlsx")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAnalysisExcel(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
@@ -134,6 +136,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HttpGet("export/analysis.pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAnalysisPdf(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
@@ -144,6 +147,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HttpGet("export/forecast.xlsx")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportForecastExcel(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
@@ -157,6 +161,7 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HttpGet("export/forecast.pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportForecastPdf(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {

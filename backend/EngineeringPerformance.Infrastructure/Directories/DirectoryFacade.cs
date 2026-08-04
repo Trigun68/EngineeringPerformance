@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Directories;
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Domain.Common;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -11,29 +12,54 @@ public sealed class DirectoryFacade : IDirectoryFacade
 {
     private readonly AppDbContext _context;
     private readonly ICacheInvalidator _cacheInvalidator;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
 
-    public DirectoryFacade(AppDbContext context, ICacheInvalidator cacheInvalidator)
+    private static readonly HashSet<string> AssessmentCatalogResources = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "physical-volumes-kfo",
+        "physical-volumes-ber",
+        "equipment",
+    };
+
+    public DirectoryFacade(
+        AppDbContext context,
+        ICacheInvalidator cacheInvalidator,
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
     {
         _context = context;
         _cacheInvalidator = cacheInvalidator;
+        _recalcOrchestrator = recalcOrchestrator;
     }
 
-    public async Task<IReadOnlyList<DirectoryEntryDto>> ListAsync(string resource, bool includeArchived, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<DirectoryEntryDto>> ListAsync(
+        string resource,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null)
     {
-        return await DispatchList(resource, includeArchived, cancellationToken);
+        return await DispatchList(resource, includeArchived, cancellationToken, projectId);
     }
 
-    public async Task<IReadOnlyList<DirectoryEntryDto>> GetChildrenAsync(string resource, int? parentId, bool includeArchived, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<DirectoryEntryDto>> GetChildrenAsync(
+        string resource,
+        int? parentId,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null)
     {
-        return await DispatchChildren(resource, parentId, includeArchived, cancellationToken);
+        return await DispatchChildren(resource, parentId, includeArchived, cancellationToken, projectId);
     }
 
-    public Task<IReadOnlyList<DirectoryTreeNodeDto>> GetTreeAsync(string resource, bool includeArchived, CancellationToken cancellationToken) =>
+    public Task<IReadOnlyList<DirectoryTreeNodeDto>> GetTreeAsync(
+        string resource,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null) =>
         resource.ToLowerInvariant() switch
         {
             "physical-volumes-kfo" => MapTree<PhysicalVolumeKfo>(includeArchived, cancellationToken),
             "physical-volumes-ber" => MapTree<PhysicalVolumeBer>(includeArchived, cancellationToken),
-            "equipment" => MapTree<Equipment>(includeArchived, cancellationToken),
+            "equipment" => MapEquipmentTree(includeArchived, projectId, cancellationToken),
             "labor-intensities" => MapTree<LaborIntensity>(includeArchived, cancellationToken),
             "iic-work-directions" => MapTree<IicWorkDirection>(includeArchived, cancellationToken),
             _ => throw new InvalidOperationException($"Resource '{resource}' does not support tree view.")
@@ -50,17 +76,87 @@ public sealed class DirectoryFacade : IDirectoryFacade
         await ValidateReferencesAsync(resource, request, entityId: null, cancellationToken);
         var created = await DispatchCreate(resource, request, cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return DirectoryEntityMapper.ToDto(created);
+        // Reload без навигаций — единообразно с UpdateAsync (защита от циклов ToDto).
+        var forDto = await DispatchGetById(resource, created.Id, cancellationToken) ?? created;
+        return DirectoryEntityMapper.ToDto(forDto);
     }
 
     public async Task<DirectoryEntryDto?> UpdateAsync(string resource, int id, DirectoryWriteRequest request, CancellationToken cancellationToken)
     {
         await ValidateReferencesAsync(resource, request, entityId: id, cancellationToken);
+
+        var before = AssessmentCatalogResources.Contains(resource)
+            ? await ReadAssessmentCoefficientAsync(resource, id, cancellationToken)
+            : null;
+
         var updated = await DispatchUpdate(resource, id, request, cancellationToken);
-        if (updated is not null)
-            await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return updated is null ? null : DirectoryEntityMapper.ToDto(updated);
+        if (updated is null)
+            return null;
+
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+
+        var recalcCount = 0;
+        if (before is not null)
+        {
+            var after = ReadAssessmentCoefficient(updated);
+            if (after is not null
+                && (before.Value.IsAssessment != after.Value.IsAssessment
+                    || before.Value.Coefficient != after.Value.Coefficient))
+            {
+                recalcCount = await _recalcOrchestrator.AfterCatalogAssessmentOrCoefficientChangedAsync(
+                    resource, id, cancellationToken);
+            }
+        }
+
+        // ToDto после recalc: reload без навигаций (EF fixup мог наполнить ProjectPhysicalVolumes).
+        var forDto = await DispatchGetById(resource, id, cancellationToken) ?? updated;
+        return DirectoryEntityMapper.ToDto(forDto) with { RecalculatedVersionCount = recalcCount };
     }
+
+    private async Task<(bool? IsAssessment, decimal Coefficient)?> ReadAssessmentCoefficientAsync(
+        string resource,
+        int id,
+        CancellationToken cancellationToken)
+    {
+        switch (resource.ToLowerInvariant())
+        {
+            case "physical-volumes-kfo":
+            {
+                var row = await _context.PhysicalVolumesKfo.AsNoTracking()
+                    .Where(x => x.Id == id)
+                    .Select(x => new { x.IsAssessment, x.Coefficient })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return row is null ? null : (row.IsAssessment, row.Coefficient);
+            }
+            case "physical-volumes-ber":
+            {
+                var row = await _context.PhysicalVolumesBer.AsNoTracking()
+                    .Where(x => x.Id == id)
+                    .Select(x => new { x.IsAssessment, x.Coefficient })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return row is null ? null : (row.IsAssessment, row.Coefficient);
+            }
+            case "equipment":
+            {
+                var row = await _context.Equipments.AsNoTracking()
+                    .Where(x => x.Id == id)
+                    .Select(x => new { x.IsAssessment, x.Coefficient })
+                    .FirstOrDefaultAsync(cancellationToken);
+                return row is null ? null : (row.IsAssessment, row.Coefficient);
+            }
+            default:
+                return null;
+        }
+    }
+
+    private static (bool? IsAssessment, decimal Coefficient)? ReadAssessmentCoefficient(DirectoryItem item) =>
+        item switch
+        {
+            PhysicalVolumeKfo k => (k.IsAssessment, k.Coefficient),
+            PhysicalVolumeBer b => (b.IsAssessment, b.Coefficient),
+            Equipment e => (e.IsAssessment, e.Coefficient),
+            _ => null,
+        };
 
     public async Task<bool> ArchiveAsync(string resource, int id, CancellationToken cancellationToken)
     {
@@ -212,6 +308,29 @@ public sealed class DirectoryFacade : IDirectoryFacade
         return DirectoryEntityMapper.BuildTree(items);
     }
 
+    private async Task<IReadOnlyList<DirectoryTreeNodeDto>> MapEquipmentTree(
+        bool includeArchived,
+        int? projectId,
+        CancellationToken cancellationToken)
+    {
+        var items = FilterEquipment(
+            await Repo<Equipment>().GetAllAsync(includeArchived, cancellationToken),
+            projectId);
+        return DirectoryEntityMapper.BuildTree(items);
+    }
+
+    private static IReadOnlyList<Equipment> FilterEquipment(
+        IReadOnlyList<Equipment> items,
+        int? projectId)
+    {
+        // Без projectId — все проектные строки (скрываем legacy NULL).
+        // С projectId — только выбранный проект.
+        IEnumerable<Equipment> query = items.Where(e => e.ProjectId != null);
+        if (projectId is int pid)
+            query = query.Where(e => e.ProjectId == pid);
+        return query.ToList();
+    }
+
     private EfDirectoryRepository<T> Repo<T>() where T : DirectoryItem, new() =>
         new(_context, GetDbSet<T>());
 
@@ -239,18 +358,38 @@ public sealed class DirectoryFacade : IDirectoryFacade
     {
         var merged = DirectoryEntityMapper.Merge(request, entity);
         if (merged is Equipment equipment)
-            equipment.CatalogKeyHash = EquipmentCatalogKeyHasher.Compute(equipment.Name, equipment.UnitId);
+        {
+            if (equipment.ProjectId is null
+                && request.Properties is not null
+                && request.Properties.TryGetValue("projectId", out var projectEl)
+                && projectEl.ValueKind == System.Text.Json.JsonValueKind.Number
+                && projectEl.TryGetInt32(out var projectIdFromRequest))
+            {
+                equipment.ProjectId = projectIdFromRequest;
+            }
+
+            equipment.CatalogKeyHash = EquipmentCatalogKeyHasher.Compute(
+                equipment.ProjectId,
+                equipment.Name,
+                equipment.UnitId);
+        }
+
         return merged;
     }
 
-    private async Task<IReadOnlyList<DirectoryEntryDto>> DispatchList(string resource, bool includeArchived, CancellationToken ct)
+    private async Task<IReadOnlyList<DirectoryEntryDto>> DispatchList(
+        string resource,
+        bool includeArchived,
+        CancellationToken ct,
+        int? projectId)
     {
         EnsureResource(resource);
         return resource.ToLowerInvariant() switch
         {
             "physical-volumes-kfo" => (await Repo<PhysicalVolumeKfo>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "physical-volumes-ber" => (await Repo<PhysicalVolumeBer>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
-            "equipment" => (await Repo<Equipment>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "equipment" => FilterEquipment(await Repo<Equipment>().GetAllAsync(includeArchived, ct), projectId)
+                .Select(DirectoryEntityMapper.ToDto).ToList(),
             "labor-intensities" => (await Repo<LaborIntensity>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
@@ -259,14 +398,22 @@ public sealed class DirectoryFacade : IDirectoryFacade
         };
     }
 
-    private async Task<IReadOnlyList<DirectoryEntryDto>> DispatchChildren(string resource, int? parentId, bool includeArchived, CancellationToken ct)
+    private async Task<IReadOnlyList<DirectoryEntryDto>> DispatchChildren(
+        string resource,
+        int? parentId,
+        bool includeArchived,
+        CancellationToken ct,
+        int? projectId)
     {
         EnsureResource(resource);
         return resource.ToLowerInvariant() switch
         {
             "physical-volumes-kfo" => (await Repo<PhysicalVolumeKfo>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "physical-volumes-ber" => (await Repo<PhysicalVolumeBer>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
-            "equipment" => (await Repo<Equipment>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "equipment" => FilterEquipment(
+                    await Repo<Equipment>().GetChildrenAsync(parentId, includeArchived, ct),
+                    projectId)
+                .Select(DirectoryEntityMapper.ToDto).ToList(),
             "labor-intensities" => (await Repo<LaborIntensity>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),

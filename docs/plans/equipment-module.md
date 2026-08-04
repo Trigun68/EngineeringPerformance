@@ -42,11 +42,15 @@
 
 ## Архитектурные решения
 
-1. **Сопоставление:** точное посимвольное сравнение `Equipment.Name` + `Equipment.UnitId` (из Excel «Размерность») с «Наименование по каталогу» + «Размерность» (`StringComparison.Ordinal` для имени).
-2. **Автосоздание:** новый элемент справочника с Name и UnitId; `ClassifierId` = null, `IsAssessment` = false, `Coefficient` = 1, `IsArchived` = false.
-3. **Дубликаты:** если в справочнике несколько строк с одним ключом (Name + UnitId), строки импорта пропускаются с записью в лог и сводку.
-3. **Расчёт:** `Quantity × (Coefficient ?? 1)` в ед. IIC; часы только при `IsAssessment == true` и заданной группе IIC + норме на дату версии.
-4. **Итого:** `TotalHours = PhysicalVolumesHours + EquipmentHours` на вкладках прогноз/факт/сравнение.
+1. **Проектная модель:** каждая позиция справочника принадлежит проекту (`Equipment.ProjectId`). Уникальность `(ProjectId, Name, UnitId)`.
+2. **Сопоставление при импорте:** точное сравнение `Name` + `UnitId` **в рамках текущего проекта**.
+3. **Алгоритм импорта новой единицы:**
+   - уже есть в текущем проекте → пропуск (reuse);
+   - нет в проекте, но есть в другом → копия `IsAssessment` / `Coefficient` / `ClassifierId` с донора (max `ModifiedAt`);
+   - нигде нет → stub: `IsAssessment=false`, `Coefficient=1`, `ClassifierId=null`.
+4. **Дубликаты:** несколько активных строк с одним ключом **внутри одного проекта** — строки импорта пропускаются.
+5. **Расчёт:** `Quantity × (Coefficient ?? 1)` в ед. IIC; часы только при `IsAssessment == true` и заданной группе IIC + норме на дату версии.
+6. **Итого:** `TotalHours = PhysicalVolumesHours + EquipmentHours` на вкладках прогноз/факт/сравнение.
 
 ## Workflow
 
@@ -56,3 +60,4 @@
 
 - `docs/features/data-import.md`
 - `docs/database/entities/PhysicalVolume.md` (аналог)
+- `migrations/schema/106_EquipmentProjectId.sql`

@@ -280,6 +280,12 @@ function DictionaryGridInternal<T extends { id: number }>({
   const onGridReady = useCallback(
     (event: GridReadyEvent<T>) => {
       gridApiRef.current = event.api;
+      // E2E: ensureColumnVisible через window.__epGridApis[gridId]
+      if (typeof window !== 'undefined' && gridId) {
+        const w = window as Window & { __epGridApis?: Record<string, GridApi> };
+        w.__epGridApis = w.__epGridApis ?? {};
+        w.__epGridApis[gridId] = event.api as GridApi;
+      }
       onGridApiReady?.(event.api);
       void applySavedLayout(event.api).then(() => {
         syncColumnVisibilityState(event.api);
@@ -289,7 +295,7 @@ function DictionaryGridInternal<T extends { id: number }>({
         }, 500);
       });
     },
-    [applySavedLayout, onGridApiReady, syncColumnVisibilityState],
+    [applySavedLayout, gridId, onGridApiReady, syncColumnVisibilityState],
   );
 
   useEffect(() => () => {

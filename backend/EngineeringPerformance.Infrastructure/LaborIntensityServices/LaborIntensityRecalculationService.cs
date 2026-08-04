@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -14,12 +15,14 @@ public interface ILaborIntensityRecalculationService
 public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalculationService
 {
     private readonly AppDbContext _context;
-    private readonly IDeviationCalculator _deviationCalculator;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
-    public LaborIntensityRecalculationService(AppDbContext context, IDeviationCalculator deviationCalculator)
+    public LaborIntensityRecalculationService(
+        AppDbContext context,
+        IPerformanceCalculationEngine calculationEngine)
     {
         _context = context;
-        _deviationCalculator = deviationCalculator;
+        _calculationEngine = calculationEngine;
     }
 
     public async Task<int> RecalculateAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -63,12 +66,11 @@ public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalcul
             pv.GetCoefficient(),
             pv.GetIsAssessment() == true)).ToList();
 
-        var results = LaborIntensityCalculator.Recalculate(
+        var results = _calculationEngine.RecalculateLaborIntensities(
             version.PlanningScenario,
             lines,
             norms,
-            zParams,
-            _deviationCalculator);
+            zParams);
 
         var byId = results.ToDictionary(r => r.PpvId);
         foreach (var pv in ppvs)

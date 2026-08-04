@@ -25,7 +25,8 @@ test.describe('Forecast detail export buttons', () => {
     await dialog.getByRole('button', { name: 'Выбрать' }).click();
 
     await page.getByRole('tab', { name: 'Детально' }).click();
-    await expect(page.getByRole('button', { name: 'Экспорт Excel' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт всех excel' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Экспорт выделенных excel' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Сводная таблица' })).toBeVisible();
   });

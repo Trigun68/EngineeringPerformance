@@ -22,6 +22,7 @@ export interface IicNorm {
   normFormula?: NormFormulaDto | null;
   deviationFormula?: DeviationFormulaDto | null;
   migratedAt?: string | null;
+  recalculatedVersionCount?: number;
 }
 
 const normFormulaSchema = z
@@ -61,6 +62,7 @@ const iicNormSchema = z.object({
   normFormula: normFormulaSchema.nullable().optional(),
   deviationFormula: deviationFormulaSchema.nullable().optional(),
   migratedAt: z.string().nullable().optional(),
+  recalculatedVersionCount: z.number().int().optional(),
 });
 const iicNormListSchema = z.array(iicNormSchema);
 

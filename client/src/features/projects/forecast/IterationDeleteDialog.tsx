@@ -22,6 +22,7 @@ import {
   type ImportIteration,
 } from '../../../api/importApi';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { useConfirmation } from '../../../hooks/useConfirmation';
 
 export interface IterationDeleteDialogProps {
   open: boolean;
@@ -53,6 +54,7 @@ export function IterationDeleteDialog({
   onClose,
   onSuccess,
 }: IterationDeleteDialogProps) {
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const [iterations, setIterations] = useState<ImportIteration[]>([]);
   const [selectedAt, setSelectedAt] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -90,7 +92,10 @@ export function IterationDeleteDialog({
 
   const handleDelete = async () => {
     if (!selectedAt) return;
-    if (!window.confirm('Удалить выбранную итерацию импорта? Это действие необратимо.')) return;
+    if (!(await confirm({
+      title: 'Удалить итерацию?',
+      description: 'Удалить выбранную итерацию импорта? Это действие необратимо.',
+    }))) return;
 
     setDeleting(true);
     setError(null);
@@ -153,6 +158,7 @@ export function IterationDeleteDialog({
           {deleting ? 'Удаление…' : 'Удалить итерацию'}
         </Button>
       </DialogActions>
+      {ConfirmDialog}
     </Dialog>
   );
 }

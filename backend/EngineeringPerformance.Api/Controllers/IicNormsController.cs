@@ -42,4 +42,22 @@ public sealed class IicNormsController : ControllerBase
         var updated = await _norms.UpdateAsync(id, request, cancellationToken);
         return updated is null ? NotFound() : Ok(updated);
     }
+
+    [HttpPost]
+    [HasPermission(PermissionType.IicWorkDirectionNorms, AccessLevel.Edit)]
+    public async Task<ActionResult<IicNormDto>> Create(
+        [FromBody] IicNormWriteRequest request,
+        CancellationToken cancellationToken)
+    {
+        var created = await _norms.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(List), created);
+    }
+
+    [HttpDelete("{id:int}")]
+    [HasPermission(PermissionType.IicWorkDirectionNorms, AccessLevel.Edit)]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        var ok = await _norms.DeleteAsync(id, cancellationToken);
+        return ok ? NoContent() : NotFound();
+    }
 }

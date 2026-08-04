@@ -55,19 +55,24 @@ public sealed partial class ProjectExcelDataImportService
         }
 
         var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? firstDataRowNumber - 1;
-        var catalogRows = await context.Equipments.AsNoTracking().ToListAsync();
+        // Все проектные строки (для доноров) + lookup текущего проекта.
+        var catalogRows = await context.Equipments.AsNoTracking()
+            .Where(e => e.ProjectId != null)
+            .ToListAsync();
         var units = await context.UnitsOfMeasurement.AsNoTracking().ToListAsync();
         var (catalogLookup, ambiguousKeys, duplicateKeyCount) =
-            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, _logger);
+            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, projectId, _logger);
         if (duplicateKeyCount > 0)
         {
             _logger.LogWarning(
-                "Equipment import: catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                "Equipment import: project {ProjectId} catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                projectId,
                 duplicateKeyCount);
         }
 
         var pendingCatalogCreates = new List<Equipment>();
         var autoCreatedCount = 0;
+        var copiedFromOtherProjectCount = 0;
         var skippedDuplicateCount = 0;
         var skippedDuplicateRows = new List<(int RowNumber, string Name, string Unit)>();
         var importTimestamp = iteration.ImportedAt;
@@ -105,10 +110,12 @@ public sealed partial class ProjectExcelDataImportService
                          ?? EquipmentUnitNameMatcher.ResolveUnitId(rawUnitName, units);
 
             var resolveResult = EquipmentImportCatalogMatcher.ResolveOrCreate(
+                projectId,
                 catalogName,
                 unitId,
                 catalogLookup,
                 ambiguousKeys,
+                catalogRows,
                 pendingCatalogCreates);
 
             if (resolveResult.SkippedDuplicate)
@@ -125,10 +132,19 @@ public sealed partial class ProjectExcelDataImportService
             }
 
             if (resolveResult.Created)
-                autoCreatedCount++;
+            {
+                if (resolveResult.CopiedFromOtherProject)
+                    copiedFromOtherProjectCount++;
+                else
+                    autoCreatedCount++;
+            }
 
-            if (dictionaryRefs.DirectionId is int directionId)
+            // DirectionId из Excel перекрывает только stub; у копии с донора уже есть ClassifierId.
+            if (dictionaryRefs.DirectionId is int directionId
+                && (!resolveResult.CopiedFromOtherProject || resolveResult.Equipment.ClassifierId is null))
+            {
                 resolveResult.Equipment.ClassifierId = directionId;
+            }
 
             newEntities.Add(BuildProjectEquipmentFromImportRow(
                 row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp));
@@ -142,7 +158,8 @@ public sealed partial class ProjectExcelDataImportService
                 0,
                 autoCreatedCount,
                 skippedDuplicateCount,
-                skippedDuplicateRows);
+                skippedDuplicateRows,
+                copiedFromOtherProjectCount);
             return new DataImportResultDto(
                 true,
                 0,
@@ -163,7 +180,8 @@ public sealed partial class ProjectExcelDataImportService
             newEntities.Count,
             autoCreatedCount,
             skippedDuplicateCount,
-            skippedDuplicateRows);
+            skippedDuplicateRows,
+            copiedFromOtherProjectCount);
 
         var rowErrors = dictionaryErrors
             .Concat(skippedDuplicateRows.Select(s => new ImportRowErrorDto(

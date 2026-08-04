@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,17 +16,20 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
     private readonly IFactAssessmentPipeline _pipeline;
     private readonly ProjectsPageRawDataLoader _rawLoader;
     private readonly IDistributedCache _cache;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
     public TrendAnalyticsService(
         AppDbContext db,
         IFactAssessmentPipeline pipeline,
         ProjectsPageRawDataLoader rawLoader,
-        IDistributedCache cache)
+        IDistributedCache cache,
+        IPerformanceCalculationEngine calculationEngine)
     {
         _db = db;
         _pipeline = pipeline;
         _rawLoader = rawLoader;
         _cache = cache;
+        _calculationEngine = calculationEngine;
     }
 
     public IReadOnlyList<AssessmentFormulaDescriptor> ListFormulas() => _pipeline.ListFormulas();
@@ -184,7 +188,8 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
             cancellationToken);
 
         var bundle = await _rawLoader.LoadAsync(projectId, versionId, cancellationToken);
-        var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(bundle, result.Performance);
+        var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(
+            bundle, result.Performance, _calculationEngine);
 
         return detail.Select(d => new TrendDetailRowDto(
             version.CreatedAt,

@@ -1,9 +1,18 @@
-import type { ColDef, ValueFormatterParams } from 'ag-grid-community';
-import type { PerformanceRow, VersionCompareDetailRow, VersionCompareFacilityRow, VersionCompareRow } from '../../api/analyticsApi';
+import type { ColDef, ValueFormatterParams, ValueGetterParams } from 'ag-grid-community';
+import type { PerformanceRow } from '../../api/analyticsApi';
 import type { ProjectsPageDetailRow, ProjectsPageFacilityRow, ProjectsPageForecastSummaryRow } from './types';
 
 import { formatGridNumber } from '../../utils/formatGridNumber';
 import { interpretationCellStyle } from '../../utils/interpretationStyle';
+export {
+  createCompareDetailColumns,
+  createCompareFacilityColumns,
+  createCompareSharedMetricColumns,
+  createCompareSummaryColumns,
+  getComparePlannedLaborHours,
+  getComparePlannedProductivity,
+  type CompareScenario,
+} from './compare/compareColumns';
 
 export type DictionaryFormatters = {
   getUnitName: (id: number | null | undefined) => string;
@@ -14,14 +23,37 @@ const num0 = (v: unknown) => formatGridNumber(v, 0);
 
 const rightAlign = { cellStyle: { textAlign: 'right' as const } };
 
+/** Число ФО или готовый текст итогов по единицам измерения. */
+export function formatPhysicalVolumeCell(
+  display: string | null | undefined,
+  value: number | null | undefined,
+  decimals = 0,
+): string {
+  if (display != null && display !== '') return display;
+  return formatGridNumber(value, decimals);
+}
+
+function physicalVolumeValueGetter<T extends object>(
+  displayKey: keyof T,
+  valueKey: keyof T,
+): (p: ValueGetterParams<T>) => string | number | null {
+  return (p) => {
+    const display = p.data?.[displayKey] as string | null | undefined;
+    if (display != null && display !== '') return display;
+    return (p.data?.[valueKey] as number | null | undefined) ?? null;
+  };
+}
+
 export function createForecastSummaryColumns(): ColDef<ProjectsPageForecastSummaryRow>[] {
   return [
     {
-      field: 'factPhysicalVolume',
+      colId: 'factPhysicalVolume',
       headerName: 'Факт ФО',
-      width: 110,
+      width: 160,
       ...rightAlign,
-      valueFormatter: (p) => num0(p.value),
+      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueFormatter: (p) =>
+        typeof p.value === 'string' ? p.value : num0(p.value),
     },
     {
       field: 'normProductivity',
@@ -248,7 +280,7 @@ export function createPerformanceColumns(
       headerName: 'Направление',
       minWidth: 200,
       valueFormatter: (p: ValueFormatterParams<PerformanceRow>) =>
-        formatters.getDirectionName(p.data?.workDirectionId) || p.value?.toString() || '',
+        p.value?.toString() || formatters.getDirectionName(p.data?.workDirectionId) || '',
     },
     { field: 'factPhysicalVolume', headerName: 'ФО' },
     { field: 'factLaborHours', headerName: 'Часы' },
@@ -264,6 +296,15 @@ export function createFactPerformanceColumns(): ColDef<PerformanceRow>[] {
   return [
     { field: 'workDirectionCode', headerName: 'Код', width: 100 },
     { field: 'normUnitName', headerName: 'Ед. изм.', width: 90 },
+    {
+      colId: 'factPhysicalVolume',
+      headerName: 'ФО',
+      width: 160,
+      ...rightAlign,
+      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueFormatter: (p) =>
+        typeof p.value === 'string' ? p.value : num0(p.value),
+    },
     {
       field: 'factLaborHours',
       headerName: 'Факт трудоёмк.',
@@ -389,182 +430,3 @@ export function createFactDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
   ];
 }
 
-export function createCompareSummaryColumns(
-  versionAName = 'Версия А',
-  versionBName = 'Версия Б',
-): ColDef<VersionCompareRow>[] {
-  const num4 = (v: unknown) => formatGridNumber(v, 4);
-  return [
-    {
-      field: 'zScoreA',
-      headerName: versionAName,
-      width: 120,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'interpretationA',
-      headerName: 'Оценка А',
-      minWidth: 120,
-      cellStyle: (p) => interpretationCellStyle(p.value as string),
-    },
-    {
-      field: 'zScoreB',
-      headerName: versionBName,
-      width: 120,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'interpretationB',
-      headerName: 'Оценка Б',
-      minWidth: 120,
-      cellStyle: (p) => interpretationCellStyle(p.value as string),
-    },
-    {
-      field: 'zDelta',
-      headerName: 'Δ Z-score',
-      width: 110,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-  ];
-}
-
-export function createCompareFacilityColumns(
-  versionAName = 'Версия А',
-  versionBName = 'Версия Б',
-): ColDef<VersionCompareFacilityRow>[] {
-  const num2 = (v: unknown) => formatGridNumber(v, 2);
-  const num4 = (v: unknown) => formatGridNumber(v, 4);
-  return [
-    { field: 'facilityCode', headerName: 'Код', minWidth: 100 },
-    { field: 'facilityName', headerName: 'Наименование', minWidth: 180, flex: 1 },
-    {
-      field: 'factLaborHoursA',
-      headerName: `${versionAName}, ч`,
-      width: 120,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'factLaborHoursB',
-      headerName: `${versionBName}, ч`,
-      width: 120,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'hoursDelta',
-      headerName: 'Δ часы',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'zScoreA',
-      headerName: 'Z (A)',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'zScoreB',
-      headerName: 'Z (B)',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'zDelta',
-      headerName: 'Δ Z',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    { field: 'interpretationA', headerName: 'Оценка А', minWidth: 110,
-      cellStyle: (p) => interpretationCellStyle(p.value as string) },
-    { field: 'interpretationB', headerName: 'Оценка Б', minWidth: 110,
-      cellStyle: (p) => interpretationCellStyle(p.value as string) },
-  ];
-}
-
-export function createCompareDetailColumns(): ColDef<VersionCompareDetailRow>[] {
-  const num2 = (v: unknown) => formatGridNumber(v, 2);
-  const num4 = (v: unknown) => formatGridNumber(v, 4);
-  return [
-    { field: 'facilityCode', headerName: 'Шифр объекта', minWidth: 100 },
-    { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 140 },
-    { field: 'documentSet', headerName: 'Комплект документов', minWidth: 120 },
-    { field: 'pvCode', headerName: 'Код ФО', width: 90 },
-    { field: 'pvName', headerName: 'Наименование ФО', minWidth: 140 },
-    { field: 'workId', headerName: 'ID работы', width: 100 },
-    { field: 'workName', headerName: 'Наименование работы', minWidth: 140 },
-    {
-      field: 'quantityA',
-      headerName: 'Кол-во A',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'quantityB',
-      headerName: 'Кол-во B',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'quantityDelta',
-      headerName: 'Δ кол-во',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'factLaborHoursA',
-      headerName: 'Факт ч A',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'factLaborHoursB',
-      headerName: 'Факт ч B',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'hoursDelta',
-      headerName: 'Δ часы',
-      width: 90,
-      ...rightAlign,
-      valueFormatter: (p) => num2(p.value),
-    },
-    {
-      field: 'factProductivityA',
-      headerName: 'Произв. A',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'factProductivityB',
-      headerName: 'Произв. B',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    {
-      field: 'productivityDelta',
-      headerName: 'Δ произв.',
-      width: 100,
-      ...rightAlign,
-      valueFormatter: (p) => num4(p.value),
-    },
-    { field: 'iicGroupName', headerName: 'Группа IIC', minWidth: 160 },
-    { field: 'iicUnitName', headerName: 'Ед. изм.', width: 90 },
-    { field: 'presence', headerName: 'Наличие', width: 100 },
-  ];
-}

@@ -4,6 +4,7 @@ using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -15,15 +16,21 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IProjectCompareService _compare;
     private readonly IGroupAnalyticsService _groupAnalytics;
     private readonly IVisualReportService _visualReports;
+    private readonly IProjectExportService _projectExport;
+    private readonly IDirectoryExportService _directoryExport;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
         IGroupAnalyticsService groupAnalytics,
-        IVisualReportService visualReports)
+        IVisualReportService visualReports,
+        IProjectExportService projectExport,
+        IDirectoryExportService directoryExport)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
         _visualReports = visualReports;
+        _projectExport = projectExport;
+        _directoryExport = directoryExport;
     }
 
     [HttpGet("compare")]
@@ -73,6 +80,63 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         return File(bytes, "application/pdf", $"Compare_{projectId}_{versionA}_{versionB}.pdf");
     }
 
+    /// <summary>Excel текущего вида раздела сравнения (видимые колонки и отфильтрованные строки).</summary>
+    [HttpPost("compare/export/{section}/excel-visible")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public IActionResult ExportCompareExcelVisible(
+        int projectId,
+        string section,
+        [FromBody] DirectoryExportRequest request)
+    {
+        _ = projectId;
+        if (!IsCompareExportSection(section))
+            return BadRequest("Поддерживаются разделы summary, facility и detail.");
+
+        var bytes = _directoryExport.ExportToExcel(request);
+        var safeName = SanitizeFileName(request.TabName);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{safeName}_{timestamp}.xlsx");
+    }
+
+    [HttpGet("compare/export/detail/excel")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    public async Task<IActionResult> ExportCompareDetailExcel(
+        int projectId,
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _projectExport.ExportCompareDetailExcelAsync(
+            projectId, versionA, versionB, cancellationToken);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"CompareDetail_{projectId}_{versionA}_{versionB}.xlsx");
+    }
+
+    [HttpGet("compare/export/detail/summary-table")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    public async Task<IActionResult> ExportCompareDetailSummaryTable(
+        int projectId,
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _projectExport.ExportCompareDetailSummaryTableAsync(
+            projectId, versionA, versionB, cancellationToken);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"CompareDetailSummary_{projectId}_{versionA}_{versionB}.xlsx");
+    }
+
     [HttpGet("group-analysis")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.GroupAnalysis, AccessLevel.Read)]
@@ -88,4 +152,15 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         int projectId,
         CancellationToken cancellationToken = default) =>
         _groupAnalytics.GetGroupTrendAsync(projectId, cancellationToken);
+
+    private static bool IsCompareExportSection(string section) =>
+        section.Equals("summary", StringComparison.OrdinalIgnoreCase)
+        || section.Equals("facility", StringComparison.OrdinalIgnoreCase)
+        || section.Equals("detail", StringComparison.OrdinalIgnoreCase);
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        return string.Concat(value.Select(character => invalid.Contains(character) ? '_' : character));
+    }
 }

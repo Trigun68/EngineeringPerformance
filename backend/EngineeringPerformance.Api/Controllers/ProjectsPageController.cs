@@ -4,6 +4,7 @@ using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -16,17 +17,20 @@ public sealed class ProjectsPageController : ControllerBase
     private readonly IProjectExportService _exportService;
     private readonly IVisualReportService _visualReports;
     private readonly IForecastDetailSummaryTableContext _summaryTableContext;
+    private readonly IDirectoryExportService _directoryExport;
 
     public ProjectsPageController(
         IProjectsPageDataFetcher fetcher,
         IProjectExportService exportService,
         IVisualReportService visualReports,
-        IForecastDetailSummaryTableContext summaryTableContext)
+        IForecastDetailSummaryTableContext summaryTableContext,
+        IDirectoryExportService directoryExport)
     {
         _fetcher = fetcher;
         _exportService = exportService;
         _visualReports = visualReports;
         _summaryTableContext = summaryTableContext;
+        _directoryExport = directoryExport;
     }
 
     /// <summary>Batch-данные для 9 гридов ProjectsPage (прогноз / факт / сравнение).</summary>
@@ -142,6 +146,27 @@ public sealed class ProjectsPageController : ControllerBase
             $"{safeProject}_{safeVersion}_Детально_{timestamp}.xlsx");
     }
 
+    /// <summary>Excel текущего вида грида «Детально» (видимые колонки + отфильтрованные строки).</summary>
+    [HttpPost("export/forecast-detail/excel-visible")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public IActionResult ExportForecastDetailExcelVisible(
+        int projectId,
+        int versionId,
+        [FromBody] DirectoryExportRequest request)
+    {
+        _ = projectId;
+        _ = versionId;
+        var bytes = _directoryExport.ExportToExcel(request);
+        var safeName = SanitizeFileName(request.TabName);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{safeName}_{timestamp}.xlsx");
+    }
+
     [HttpGet("export/forecast-detail/pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
@@ -195,6 +220,76 @@ public sealed class ProjectsPageController : ControllerBase
     {
         var bytes = await _visualReports.ExportFactFacilityPdfAsync(projectId, versionId, cancellationToken);
         return File(bytes, "application/pdf", $"FactFacility_{projectId}_v{versionId}.pdf");
+    }
+
+    [HttpGet("export/fact-facility/excel")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public async Task<IActionResult> ExportFactFacilityExcel(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _exportService.ExportFactFacilityExcelAsync(projectId, versionId, cancellationToken);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"FactFacility_{projectId}_v{versionId}.xlsx");
+    }
+
+    [HttpGet("export/fact-detail/excel")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public async Task<IActionResult> ExportFactDetailExcel(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _exportService.ExportFactDetailExcelAsync(projectId, versionId, cancellationToken);
+        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        var safeProject = SanitizeFileName(projectCode);
+        var safeVersion = SanitizeFileName(versionName);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{safeProject}_{safeVersion}_Факт_Детально_{timestamp}.xlsx");
+    }
+
+    /// <summary>Excel текущего вида грида факта «Детально» (видимые колонки + отфильтрованные строки).</summary>
+    [HttpPost("export/fact-detail/excel-visible")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public IActionResult ExportFactDetailExcelVisible(
+        int projectId,
+        int versionId,
+        [FromBody] DirectoryExportRequest request)
+    {
+        _ = projectId;
+        _ = versionId;
+        var bytes = _directoryExport.ExportToExcel(request);
+        var safeName = SanitizeFileName(request.TabName);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"{safeName}_{timestamp}.xlsx");
+    }
+
+    [HttpGet("export/fact-detail/summary-table")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public async Task<IActionResult> ExportFactDetailSummaryTable(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _exportService.ExportFactDetailSummaryTableAsync(projectId, versionId, cancellationToken);
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"FactDetailSummary_{projectId}_v{versionId}.xlsx");
     }
 
     [HttpGet("export/fact-detail/pdf")]

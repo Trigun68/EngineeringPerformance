@@ -42,6 +42,8 @@ import {
 } from '../../api/projectVersionsApi';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
+import { useDictionaryStore } from '../../store/useDictionaryStore';
 
 type ForecastMethod = 'regression' | 'element';
 type DataViewTab = 'plan' | 'fact' | 'forecast';
@@ -101,7 +103,10 @@ function createEmptySession(): VersionSession {
   };
 }
 
-function buildVolumeTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
+function buildVolumeTreeRows(
+  volumes: ForecastIicVolumeRow[],
+  getLabel: (row: ForecastIicVolumeRow) => string,
+): VolumeTreeRow[] {
   const byParent = volumes.reduce<Map<number | null, ForecastIicVolumeRow[]>>((map, row) => {
     const key = row.parentId;
     const list = map.get(key) ?? [];
@@ -113,8 +118,9 @@ function buildVolumeTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
   const result: VolumeTreeRow[] = [];
   const walk = (parentId: number | null, path: string[]) => {
     for (const child of byParent.get(parentId) ?? []) {
-      const hierarchy = [...path, child.name];
-      result.push({ ...child, hierarchy, id: child.workDirectionId });
+      const name = getLabel(child);
+      const hierarchy = [...path, name];
+      result.push({ ...child, name, hierarchy, id: child.workDirectionId });
       walk(child.workDirectionId, hierarchy);
     }
   };
@@ -122,7 +128,10 @@ function buildVolumeTreeRows(volumes: ForecastIicVolumeRow[]): VolumeTreeRow[] {
   return result;
 }
 
-function buildPerformanceTreeRows(rows: PerformanceRow[]): PerformanceTreeRow[] {
+function buildPerformanceTreeRows(
+  rows: PerformanceRow[],
+  getLabel: (row: PerformanceRow) => string,
+): PerformanceTreeRow[] {
   const byParent = rows.reduce<Map<number | null, PerformanceRow[]>>((map, row) => {
     const key = row.parentId;
     const list = map.get(key) ?? [];
@@ -134,8 +143,9 @@ function buildPerformanceTreeRows(rows: PerformanceRow[]): PerformanceTreeRow[] 
   const result: PerformanceTreeRow[] = [];
   const walk = (parentId: number | null, path: string[]) => {
     for (const child of byParent.get(parentId) ?? []) {
-      const hierarchy = [...path, child.workDirectionName];
-      result.push({ ...child, hierarchy, id: child.workDirectionId });
+      const workDirectionName = getLabel(child);
+      const hierarchy = [...path, workDirectionName];
+      result.push({ ...child, workDirectionName, hierarchy, id: child.workDirectionId });
       walk(child.workDirectionId, hierarchy);
     }
   };
@@ -143,13 +153,16 @@ function buildPerformanceTreeRows(rows: PerformanceRow[]): PerformanceTreeRow[] 
   return result;
 }
 
-function buildForecastScenarioTree(report: ProjectForecastReport): VolumeTreeRow[] {
+function buildForecastScenarioTree(
+  report: ProjectForecastReport,
+  getLabel: (row: ForecastIicVolumeRow) => string,
+): VolumeTreeRow[] {
   const pessimistic = report.scenarios.find((s) => s.scenarioName === 'Пессимистичный');
   const base = report.scenarios.find((s) => s.scenarioName === 'Базовый');
   const optimistic = report.scenarios.find((s) => s.scenarioName === 'Оптимистичный');
 
   const byId = new Map<number, VolumeTreeRow>();
-  for (const row of buildVolumeTreeRows(report.plannedVolumes)) {
+  for (const row of buildVolumeTreeRows(report.plannedVolumes, getLabel)) {
     const pes = pessimistic?.disciplines.find((d) => d.workDirectionId === row.workDirectionId);
     const bas = base?.disciplines.find((d) => d.workDirectionId === row.workDirectionId);
     const opt = optimistic?.disciplines.find((d) => d.workDirectionId === row.workDirectionId);
@@ -184,8 +197,11 @@ function toCalculationOptions(method: ForecastMethod, zScores: ZScoreRow[]): For
 
 export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps) {
   const { canRead } = usePermission('Planning');
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const { canEdit: canEditVersions } = usePermission('ProjectAnalysisVersions');
   const { canEdit: canImport } = usePermission('ProjectDataUpload');
+  const getById = useDictionaryStore((s) => s.getById);
+  const getDirectionName = useDictionaryStore((s) => s.getDirectionName);
 
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
@@ -292,19 +308,39 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
     void ensureTabData(dataTab, selectedVersionId);
   }, [canRead, dataTab, ensureTabData, selectedVersionId]);
 
+  const getVolumeLabel = useCallback(
+    (row: ForecastIicVolumeRow) =>
+      getById('iicWorkDirections', row.workDirectionId)
+        ? getDirectionName(row.workDirectionId)
+        : row.name,
+    [getById, getDirectionName],
+  );
+
+  const getPerformanceLabel = useCallback(
+    (row: PerformanceRow) =>
+      getById('iicWorkDirections', row.workDirectionId)
+        ? getDirectionName(row.workDirectionId)
+        : row.workDirectionName,
+    [getById, getDirectionName],
+  );
+
   const planTreeRows = useMemo(
-    () => (session.planReport ? buildVolumeTreeRows(session.planReport.plannedVolumes) : []),
-    [session.planReport],
+    () => (session.planReport ? buildVolumeTreeRows(session.planReport.plannedVolumes, getVolumeLabel) : []),
+    [getVolumeLabel, session.planReport],
   );
 
   const forecastTreeRows = useMemo(
-    () => (session.forecastReport ? buildForecastScenarioTree(session.forecastReport) : []),
-    [session.forecastReport],
+    () => (
+      session.forecastReport
+        ? buildForecastScenarioTree(session.forecastReport, getVolumeLabel)
+        : []
+    ),
+    [getVolumeLabel, session.forecastReport],
   );
 
   const factTreeRows = useMemo(
-    () => buildPerformanceTreeRows(session.performanceRows),
-    [session.performanceRows],
+    () => buildPerformanceTreeRows(session.performanceRows, getPerformanceLabel),
+    [getPerformanceLabel, session.performanceRows],
   );
 
   const volumeColumnDefs = useMemo<ColDef<VolumeTreeRow>[]>(
@@ -424,7 +460,11 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
   };
 
   const handleDeleteVersion = async () => {
-    if (!selectedVersion || !window.confirm(`Удалить версию «${selectedVersion.versionName}»?`)) return;
+    if (!selectedVersion) return;
+    if (!(await confirm({
+      title: 'Удалить версию?',
+      description: `Удалить версию «${selectedVersion.versionName}»?`,
+    }))) return;
     await deleteProjectVersion(projectId, selectedVersion.id);
     sessionsRef.current.delete(selectedVersion.id);
     setSelectedVersionId(null);
@@ -684,6 +724,7 @@ export function ForecastPage({ projectId, initialVersionId }: ForecastPageProps)
           </Box>
         </Box>
       )}
+      {ConfirmDialog}
     </Box>
   );
 }

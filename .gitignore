@@ -46,6 +46,8 @@ _tmp/
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/**
+!.cursor/skills/
+!.cursor/skills/**
 .playwright-mcp/
 
 # Source research files (исходники, референсы, черновики)

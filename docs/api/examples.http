@@ -1,0 +1,58 @@
+@baseUrl = http://127.0.0.1:8081
+@token = 
+
+### Login
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin"
+}
+
+### Me (Bearer)
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Dictionaries
+GET {{baseUrl}}/api/dictionaries/all
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Directory list (units)
+GET {{baseUrl}}/api/directories/units-of-measurement
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### IIC norms alias
+GET {{baseUrl}}/api/iic-norms
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Projects
+GET {{baseUrl}}/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Create project
+# @name createProject
+POST {{baseUrl}}/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "code": "ext-demo-001",
+  "name": "External demo project"
+}
+
+### Create version (set physicalVolumeTypeId from dictionaries)
+POST {{baseUrl}}/api/projects/{{createProject.response.body.id}}/versions
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "versionName": "Plan-1",
+  "direction": 1,
+  "physicalVolumeTypeId": 1
+}
+
+### Readiness (подставьте projectId / versionId)
+GET {{baseUrl}}/api/projects/1/versions/1/readiness
+Authorization: Bearer {{login.response.body.accessToken}}

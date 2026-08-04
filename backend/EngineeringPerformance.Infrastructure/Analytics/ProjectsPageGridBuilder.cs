@@ -27,7 +27,8 @@ public static class ProjectsPageGridBuilder
     }
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
-        ProjectsPageVersionBundle bundle)
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine engine)
     {
         var lines = bundle.PhysicalVolumes
             .Where(pv => pv.GetIsAssessment() == true)
@@ -43,18 +44,17 @@ public static class ProjectsPageGridBuilder
         if (lines.Count == 0)
             return new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>();
 
-        var calculator = new DeviationCalculator(new NormCalculator());
-        return ForecastHoursAggregator.ComputePpvHours(
+        return engine.ComputePpvForecastHours(
             bundle.PlanningScenario,
             lines,
             bundle.NormsByDirection,
-            bundle.PlanningZByDirection,
-            calculator);
+            bundle.PlanningZByDirection);
     }
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById)
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
+        IPerformanceCalculationEngine engine)
     {
         var lines = bundle.PhysicalVolumes
             .Where(pv => pv.GetIsAssessment() == true)
@@ -71,14 +71,12 @@ public static class ProjectsPageGridBuilder
             .Where(e => e.Equipment?.IsAssessment == true && e.Equipment.ClassifierId.HasValue)
             .Select(e => (e.Equipment!.ClassifierId!.Value, e.QuantityInIicGroupUnits()));
 
-        var calculator = new DeviationCalculator(new NormCalculator());
-        return ForecastHoursAggregator.AggregateByDirection(
+        return engine.AggregateForecastHoursByDirection(
             lines,
             ppvHoursById,
             equipmentVolumes,
             bundle.NormsByDirection,
-            bundle.PlanningZByDirection,
-            calculator);
+            bundle.PlanningZByDirection);
     }
 
     private static List<ProjectsPageForecastSummaryRowDto> BuildForecastSummary(
@@ -90,7 +88,7 @@ public static class ProjectsPageGridBuilder
         var classifierMap = bundle.ClassifierMap;
         var planningZByDirection = bundle.PlanningZByDirection;
         var normsByDirection = bundle.NormsByDirection;
-        var hoursByDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById);
+        var hoursByDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById, engine);
         string FormatDirectionName(PerformanceRowDto row)
         {
             if (row.WorkDirectionId < 0 || !classifierMap.TryGetValue(row.WorkDirectionId, out var dir))
@@ -98,10 +96,11 @@ public static class ProjectsPageGridBuilder
             return IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dir, classifierMap);
         }
 
-        var childrenByParent = performance
+        var perfRows = performance.Where(r => !r.IsTotal).ToList();
+        var childrenByParent = perfRows
             .Where(r => r.WorkDirectionId >= 0 && r.ParentId.HasValue)
             .ToLookup(r => r.ParentId!.Value);
-        var roots = performance
+        var roots = perfRows
             .Where(r => r.WorkDirectionId >= 0 && !r.ParentId.HasValue)
             .ToList();
 
@@ -162,6 +161,8 @@ public static class ProjectsPageGridBuilder
             var aggPes = (ownPes ?? 0m) + totalPes;
 
             var totalLabel = $"Итого: {row.WorkDirectionName}";
+            var foDisplay = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                CollectSubtree(row, childrenByParent));
             result.Add(new ProjectsPageForecastSummaryRowDto(
                 row.WorkDirectionId,
                 totalLabel,
@@ -175,7 +176,8 @@ public static class ProjectsPageGridBuilder
                 level,
                 row.ParentId,
                 row.WorkDirectionCode,
-                new[] { totalLabel }));
+                new[] { totalLabel },
+                FactPhysicalVolumeDisplay: foDisplay));
 
             return (aggBase, aggOpt, aggPes);
         }
@@ -183,7 +185,7 @@ public static class ProjectsPageGridBuilder
         foreach (var root in roots)
             BuildSubtree(root, 0, Array.Empty<string>());
 
-        var unallocated = performance.FirstOrDefault(r => r.WorkDirectionId < 0);
+        var unallocated = perfRows.FirstOrDefault(r => r.WorkDirectionId < 0);
         if (unallocated is not null)
         {
             var (ub, uo, up) = CalcHoursFromRow(unallocated);
@@ -207,6 +209,8 @@ public static class ProjectsPageGridBuilder
         var grand = SumAllForecastScenarioHours(bundle, performance, ppvHoursById, engine);
         if (grand.Base > 0 || grand.Opt > 0 || grand.Pes > 0 || rootTotals.Count > 0)
         {
+            var grandFo = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                perfRows.Where(r => r.WorkDirectionId >= 0));
             result.Add(new ProjectsPageForecastSummaryRowDto(
                 int.MinValue,
                 "ИТОГО",
@@ -220,7 +224,120 @@ public static class ProjectsPageGridBuilder
                 -1,
                 null,
                 string.Empty,
-                new[] { "ИТОГО" }));
+                new[] { "ИТОГО" },
+                FactPhysicalVolumeDisplay: grandFo));
+        }
+
+        return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();
+    }
+
+    private static List<PerformanceRowDto> CollectSubtree(
+        PerformanceRowDto root,
+        ILookup<int, PerformanceRowDto> childrenByParent)
+    {
+        var list = new List<PerformanceRowDto> { root };
+        void Walk(int id)
+        {
+            foreach (var child in childrenByParent[id])
+            {
+                list.Add(child);
+                Walk(child.WorkDirectionId);
+            }
+        }
+
+        Walk(root.WorkDirectionId);
+        return list;
+    }
+
+    /// <summary>
+    /// Добавляет строки «Итого: …» (корневые) и «ИТОГО» с суммой часов и ФО по ЕИ.
+    /// </summary>
+    public static IReadOnlyList<PerformanceRowDto> AppendPerformanceTotals(
+        IReadOnlyList<PerformanceRowDto> performance)
+    {
+        var source = performance.Where(r => !r.IsTotal).ToList();
+        var childrenByParent = source
+            .Where(r => r.WorkDirectionId >= 0 && r.ParentId.HasValue)
+            .ToLookup(r => r.ParentId!.Value);
+        var roots = source
+            .Where(r => r.WorkDirectionId >= 0 && r.ParentId is null)
+            .ToList();
+
+        var result = new List<PerformanceRowDto>();
+
+        decimal BuildSubtree(PerformanceRowDto row)
+        {
+            result.Add(row);
+            var children = childrenByParent[row.WorkDirectionId].ToList();
+            if (children.Count == 0)
+                return row.FactLaborHours ?? 0m;
+
+            decimal childHours = 0m;
+            foreach (var child in children)
+                childHours += BuildSubtree(child);
+
+            var aggHours = (row.FactLaborHours ?? 0m) + childHours;
+            var foDisplay = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                CollectSubtree(row, childrenByParent));
+            result.Add(new PerformanceRowDto(
+                WorkDirectionId: row.WorkDirectionId,
+                WorkDirectionName: $"Итого: {row.WorkDirectionName}",
+                WorkDirectionCode: row.WorkDirectionCode,
+                ParentId: row.ParentId,
+                Level: row.Level,
+                NormUnitName: null,
+                FactPhysicalVolume: null,
+                FactLaborHours: aggHours > 0 ? aggHours : null,
+                FactProductivity: null,
+                FactEstimate: null,
+                NormProductivity: null,
+                NormEstimate: null,
+                NormStdDev: null,
+                ZScore: null,
+                Interpretation: null,
+                SubtreeHours: null,
+                IsTotal: true,
+                FactPhysicalVolumeDisplay: foDisplay));
+
+            return aggHours;
+        }
+
+        foreach (var root in roots)
+            BuildSubtree(root);
+
+        foreach (var unallocated in source.Where(r => r.WorkDirectionId < 0))
+            result.Add(unallocated);
+
+        var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
+        var hasData = source.Any(r =>
+            r.WorkDirectionId >= 0
+            && (r.FactLaborHours is > 0 || r.FactPhysicalVolume is > 0));
+        if (rootTotals.Count > 0 || hasData)
+        {
+            var grandHours = rootTotals.Count > 0
+                ? rootTotals.Sum(r => r.FactLaborHours ?? 0m)
+                : source.Where(r => r.WorkDirectionId >= 0).Sum(r => r.FactLaborHours ?? 0m);
+            var grandFo = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                source.Where(r => r.WorkDirectionId >= 0));
+            result.Add(new PerformanceRowDto(
+                WorkDirectionId: int.MinValue,
+                WorkDirectionName: "ИТОГО",
+                WorkDirectionCode: string.Empty,
+                ParentId: null,
+                Level: -1,
+                NormUnitName: null,
+                FactPhysicalVolume: null,
+                FactLaborHours: grandHours > 0 ? grandHours : null,
+                FactProductivity: null,
+                FactEstimate: null,
+                NormProductivity: null,
+                NormEstimate: null,
+                NormStdDev: null,
+                ZScore: null,
+                Interpretation: null,
+                SubtreeHours: null,
+                IsTotal: true,
+                FactPhysicalVolumeDisplay: grandFo));
         }
 
         return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();
@@ -261,12 +378,37 @@ public static class ProjectsPageGridBuilder
                 .ToList(),
             NormsByDirection: bundle.NormsByDirection);
 
-        return engine.CalculatePerformance(input);
+        var rows = engine.CalculatePerformance(input);
+        return ApplyFormattedWorkDirectionNames(rows, bundle.ClassifierMap);
+    }
+
+    /// <summary>
+    /// Группы IIC в гридах: «код — наименование (ед.)» через <see cref="IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit"/>.
+    /// </summary>
+    public static IReadOnlyList<PerformanceRowDto> ApplyFormattedWorkDirectionNames(
+        IReadOnlyList<PerformanceRowDto> rows,
+        IReadOnlyDictionary<int, IicWorkDirection> classifierMap)
+    {
+        if (rows.Count == 0)
+            return rows;
+
+        return rows
+            .Select(r =>
+            {
+                if (r.WorkDirectionId < 0 || !classifierMap.TryGetValue(r.WorkDirectionId, out var dir))
+                    return r;
+                var formatted = IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dir, classifierMap);
+                return r.WorkDirectionName == formatted
+                    ? r
+                    : r with { WorkDirectionName = formatted };
+            })
+            .ToList();
     }
 
     public static (List<ProjectsPageFacilityRowDto> Facility, List<ProjectsPageDetailRowDto> Detail) BuildFactGrids(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance)
+        IReadOnlyList<PerformanceRowDto> performance,
+        IPerformanceCalculationEngine engine)
     {
         static string ExtractDocSet(string? code)
         {
@@ -288,12 +430,14 @@ public static class ProjectsPageGridBuilder
             .GroupBy(r => r.WorkDirectionId)
             .ToDictionary(g => g.Key, g => g.First());
 
-        var (detailInternal, facilityInternal) = FactAssessmentRowsCalculator.Compute(
+        var input = FactAssessmentEngineMapper.ToInput(
             bundle.PhysicalVolumes,
             bundle.Equipment,
             laborIntensities,
             normByDirection,
             bundle.ClassifierMap);
+        var calculated = engine.CalculateFactAssessment(input);
+        var (detailInternal, facilityInternal) = FactAssessmentEngineMapper.FromResult(calculated);
 
         var facility = facilityInternal
             .Select(f => new ProjectsPageFacilityRowDto(
@@ -304,52 +448,98 @@ public static class ProjectsPageGridBuilder
                 f.Interpretation))
             .ToList();
 
-        var detail = detailInternal
-            .Select(d =>
+        // O(1) lookup — иначе FirstOrDefault по тысячам строк на каждую detail-строку
+        // подвешивает page-data и приводит к SQL timeout на следующих запросах.
+        var pvById = bundle.PhysicalVolumes.ToDictionary(p => p.Id);
+        var eqById = bundle.Equipment.ToDictionary(e => e.Id);
+
+        var detail = new List<ProjectsPageDetailRowDto>(detailInternal.Count);
+        foreach (var d in detailInternal)
+        {
+            ProjectPhysicalVolume? pv = null;
+            ProjectEquipment? eq = null;
+            if (d.RowId is int rowId)
             {
-                var dirId = bundle.PhysicalVolumes.FirstOrDefault(pv => pv.Id == d.RowId)?.GetClassifierId()
-                    ?? bundle.Equipment.FirstOrDefault(eq => eq.Id == d.RowId)?.Equipment?.ClassifierId;
-                normByDirection.TryGetValue(dirId ?? -1, out var norm);
-                var normId = dirId is int did && bundle.NormIdByDirection.TryGetValue(did, out var nid) ? nid : (int?)null;
-                var pv = bundle.PhysicalVolumes.FirstOrDefault(p => p.Id == d.RowId);
-                var eq = bundle.Equipment.FirstOrDefault(e => e.Id == d.RowId);
-                var catalogResource = pv?.PhysicalVolumeKfoId.HasValue == true
-                    ? "physical-volumes-kfo"
-                    : pv?.PhysicalVolumeBerId.HasValue == true
-                        ? "physical-volumes-ber"
+                if (d.IsEquipment)
+                    eqById.TryGetValue(rowId, out eq);
+                else
+                    pvById.TryGetValue(rowId, out pv);
+            }
+
+            var dirId = pv?.GetClassifierId()
+                ?? eq?.Equipment?.ClassifierId;
+            normByDirection.TryGetValue(dirId ?? -1, out var norm);
+            var normId = dirId is int did && bundle.NormIdByDirection.TryGetValue(did, out var nid) ? nid : (int?)null;
+            var catalogResource = pv?.PhysicalVolumeKfoId.HasValue == true
+                ? "physical-volumes-kfo"
+                : pv?.PhysicalVolumeBerId.HasValue == true
+                    ? "physical-volumes-ber"
+                    : eq is not null
+                        ? "equipment"
                         : string.Empty;
-                return new ProjectsPageDetailRowDto(
-                    RowId: d.RowId,
-                    FacilityCode: d.FacilityCode,
-                    FacilityName: d.FacilityName,
-                    DocumentSet: d.DocumentSet,
-                    CatalogCode: d.PvCode,
-                    CatalogName: d.PvName,
-                    WorkId: d.WorkId,
-                    WorkName: d.WorkName,
-                    IicGroupName: d.IicGroupName,
-                    IicUnitName: d.IicUnitName,
-                    Quantity: d.Quantity,
-                    BaseHours: null,
-                    OptimisticHours: null,
-                    PessimisticHours: null,
-                    FactLaborHours: d.FactLaborHours,
-                    FactProductivity: d.FactProductivity,
-                    ZScore: d.ZScore,
-                    Interpretation: d.ZScore.HasValue
-                        ? PerformanceInterpretationHelper.GetInterpretation(d.ZScore)?.ToRussian() ?? string.Empty
-                        : string.Empty,
-                    IsEquipment: d.IsEquipment,
-                    PvCode: d.PvCode,
-                    PvName: d.PvName,
-                    NormProductivity: norm?.NormProductivity,
-                    ClassifierId: dirId,
-                    NormId: normId,
-                    CatalogVolumeId: pv?.GetCatalogVolumeId(),
-                    CatalogEquipmentId: eq?.EquipmentId,
-                    CatalogResource: catalogResource);
-            })
-            .ToList();
+
+            var isAssessment = pv is not null
+                ? pv.GetIsAssessment() == true
+                : eq?.Equipment?.IsAssessment == true;
+            var coefficient = pv?.GetCoefficient()
+                ?? eq?.Equipment?.Coefficient
+                ?? 1m;
+
+            // План. часы (Base/Opt/Pess) — для сравнения версий и сводной Excel.
+            decimal? baseH = null, optH = null, pesH = null;
+            if (isAssessment && dirId is int wd && norm?.NormProductivity is decimal p)
+            {
+                var vol = pv is not null
+                    ? d.Quantity * coefficient
+                    : eq?.QuantityInIicGroupUnits() ?? d.Quantity * coefficient;
+                if (vol != 0)
+                {
+                    var z = ForecastCalculation.ResolvePlanningZ(bundle.PlanningZByDirection, wd);
+                    (baseH, optH, pesH) = CalcForecastHours(
+                        engine, vol, vol, wd, bundle.NormsByDirection, p, norm.NormStdDev, z);
+                }
+            }
+
+            detail.Add(new ProjectsPageDetailRowDto(
+                RowId: d.RowId,
+                FacilityCode: d.FacilityCode,
+                FacilityName: d.FacilityName,
+                DocumentSet: d.DocumentSet,
+                CatalogCode: d.PvCode,
+                CatalogName: d.PvName,
+                WorkId: d.WorkId,
+                WorkName: d.WorkName,
+                IicGroupName: d.IicGroupName,
+                IicUnitName: d.IicUnitName,
+                Quantity: d.Quantity,
+                BaseHours: baseH,
+                OptimisticHours: optH,
+                PessimisticHours: pesH,
+                FactLaborHours: d.FactLaborHours,
+                FactProductivity: d.FactProductivity,
+                ZScore: d.ZScore,
+                Interpretation: d.ZScore.HasValue
+                    ? PerformanceInterpretationHelper.GetInterpretation(d.ZScore)?.ToRussian() ?? string.Empty
+                    : string.Empty,
+                IsEquipment: d.IsEquipment,
+                BindingType: d.IsEquipment ? "Оборудование" : "ФО",
+                CatalogId: eq?.CatalogId ?? string.Empty,
+                Tag: eq?.Tag ?? string.Empty,
+                ItemName: eq?.Equipment?.Name ?? eq?.CatalogName ?? d.PvName,
+                WorkComment: pv?.WorkComment ?? string.Empty,
+                EstimationBasis: eq?.EstimationBasis ?? string.Empty,
+                PvCode: d.PvCode,
+                PvName: d.PvName,
+                IsAssessment: isAssessment ? "Да" : "Нет",
+                Coefficient: coefficient,
+                NormProductivity: norm?.NormProductivity,
+                NormStdDev: norm?.NormStdDev,
+                ClassifierId: dirId,
+                NormId: normId,
+                CatalogVolumeId: pv?.GetCatalogVolumeId(),
+                CatalogEquipmentId: eq?.EquipmentId,
+                CatalogResource: catalogResource));
+        }
 
         return (facility, detail);
     }
@@ -359,7 +549,7 @@ public static class ProjectsPageGridBuilder
         IReadOnlyList<PerformanceRowDto> performance,
         IPerformanceCalculationEngine engine)
     {
-        var ppvHoursById = ComputePpvForecastHours(bundle);
+        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
         var summary = BuildForecastSummary(performance, bundle, ppvHoursById, engine);
         var facility = BuildForecastFacility(bundle, performance, ppvHoursById, engine);
         var detail = BuildForecastDetail(bundle, performance, ppvHoursById, engine);
@@ -635,68 +825,319 @@ public static class ProjectsPageGridBuilder
             CatalogResource: catalogResource);
     }
 
-    public static ProjectsPageCompareGridsDto BuildCompareGrids(
+    /// <summary>
+    /// Сводка сравнения по направлениям: факт (ФО, труд, произв., Z) + план (Base/Opt/Pess).
+    /// </summary>
+    public static IReadOnlyList<VersionCompareRowDto> BuildCompareSummary(
         IReadOnlyList<PerformanceRowDto> performanceA,
         IReadOnlyList<PerformanceRowDto> performanceB,
-        ProjectsPageFactGridsDto factA,
-        ProjectsPageFactGridsDto factB)
+        ProjectsPageVersionBundle bundleA,
+        ProjectsPageVersionBundle bundleB,
+        IPerformanceCalculationEngine engine)
     {
-        var dictA = performanceA.GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
-        var dictB = performanceB.GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
-        var allIds = dictA.Keys.Union(dictB.Keys).ToList();
+        var dictA = performanceA.Where(r => !r.IsTotal)
+            .GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
+        var dictB = performanceB.Where(r => !r.IsTotal)
+            .GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
 
-        var summary = new List<VersionCompareRowDto>(allIds.Count);
+        var hoursA = ResolveScenarioHoursByDirection(bundleA, performanceA, engine);
+        var hoursB = ResolveScenarioHoursByDirection(bundleB, performanceB, engine);
+
+        var allIds = dictA.Keys.Union(dictB.Keys).ToList();
+        var summaryBase = new List<VersionCompareRowDto>(allIds.Count);
         foreach (var id in allIds)
         {
             dictA.TryGetValue(id, out var a);
             dictB.TryGetValue(id, out var b);
             if (a is null && b is null) continue;
 
-            var row = a ?? b!;
-            decimal? zDelta = a?.ZScore.HasValue == true && b?.ZScore.HasValue == true
-                ? b.ZScore - a.ZScore
-                : null;
-
-            summary.Add(new VersionCompareRowDto(
-                row.WorkDirectionId,
-                row.ParentId,
-                row.WorkDirectionName,
-                a?.ZScore,
-                b?.ZScore,
-                zDelta,
-                a?.Interpretation.ToRussian() is { Length: > 0 } ia ? ia : "-",
-                b?.Interpretation.ToRussian() is { Length: > 0 } ib ? ib : "-"));
+            hoursA.TryGetValue(id, out var plannedHoursA);
+            hoursB.TryGetValue(id, out var plannedHoursB);
+            summaryBase.Add(MapCompareSummaryRow(
+                a,
+                b,
+                plannedHoursA,
+                plannedHoursB,
+                ForecastCalculation.ResolvePlanningZ(bundleA.PlanningZByDirection, id).ZBase,
+                ForecastCalculation.ResolvePlanningZ(bundleB.PlanningZByDirection, id).ZBase));
         }
 
-        var facilityA = factA.Facility
-            .Select(f => new FactFacilityRowInternal
-            {
-                Code = f.FacilityCode,
-                Name = f.FacilityName,
-                FactLaborHours = f.LaborHours,
-                ZScore = f.ZScore,
-                Interpretation = f.Interpretation,
-            })
-            .ToList();
+        return AppendCompareTotals(summaryBase, dictA, dictB);
+    }
 
-        var facilityB = factB.Facility
-            .Select(f => new FactFacilityRowInternal
-            {
-                Code = f.FacilityCode,
-                Name = f.FacilityName,
-                FactLaborHours = f.LaborHours,
-                ZScore = f.ZScore,
-                Interpretation = f.Interpretation,
-            })
-            .ToList();
+    public static ProjectsPageCompareGridsDto BuildCompareGrids(
+        IReadOnlyList<PerformanceRowDto> performanceA,
+        IReadOnlyList<PerformanceRowDto> performanceB,
+        ProjectsPageFactGridsDto factA,
+        ProjectsPageFactGridsDto factB,
+        ProjectsPageVersionBundle bundleA,
+        ProjectsPageVersionBundle bundleB,
+        IPerformanceCalculationEngine engine)
+    {
+        var summary = BuildCompareSummary(performanceA, performanceB, bundleA, bundleB, engine);
 
         var detailA = factA.Detail.Select(ToCompareDetailInternal).ToList();
         var detailB = factB.Detail.Select(ToCompareDetailInternal).ToList();
+
+        var facilityA = EnrichFacilityFromDetail(
+            factA.Facility.Select(f => new FactFacilityRowInternal
+            {
+                Code = f.FacilityCode,
+                Name = f.FacilityName,
+                FactLaborHours = f.LaborHours,
+                ZScore = f.ZScore,
+                Interpretation = f.Interpretation,
+            }).ToList(),
+            detailA);
+        var facilityB = EnrichFacilityFromDetail(
+            factB.Facility.Select(f => new FactFacilityRowInternal
+            {
+                Code = f.FacilityCode,
+                Name = f.FacilityName,
+                FactLaborHours = f.LaborHours,
+                ZScore = f.ZScore,
+                Interpretation = f.Interpretation,
+            }).ToList(),
+            detailB);
 
         return new ProjectsPageCompareGridsDto(
             summary,
             VersionCompareMerge.BuildFacilityRows(facilityA, facilityB),
             VersionCompareMerge.BuildDetailRows(detailA, detailB));
+    }
+
+    /// <summary>
+    /// Добавляет корневые «Итого: …» и «ИТОГО» в summary сравнения с ФО по ЕИ (A и B отдельно).
+    /// </summary>
+    public static IReadOnlyList<VersionCompareRowDto> AppendCompareTotals(
+        IReadOnlyList<VersionCompareRowDto> rows,
+        IReadOnlyDictionary<int, PerformanceRowDto> performanceA,
+        IReadOnlyDictionary<int, PerformanceRowDto> performanceB)
+    {
+        var source = rows.Where(r => !r.IsTotal).ToList();
+        var byId = source.GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
+        var childrenByParent = source
+            .Where(r => r.ParentId.HasValue && r.WorkDirectionId >= 0)
+            .ToLookup(r => r.ParentId!.Value);
+        var roots = source.Where(r => r.WorkDirectionId >= 0 && r.ParentId is null).ToList();
+
+        var childrenPerfA = performanceA.Values
+            .Where(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.ParentId.HasValue)
+            .ToLookup(r => r.ParentId!.Value);
+        var childrenPerfB = performanceB.Values
+            .Where(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.ParentId.HasValue)
+            .ToLookup(r => r.ParentId!.Value);
+
+        var result = new List<VersionCompareRowDto>();
+
+        void BuildSubtree(VersionCompareRowDto row)
+        {
+            result.Add(row);
+            var children = childrenByParent[row.WorkDirectionId]
+                .Where(c => byId.ContainsKey(c.WorkDirectionId))
+                .ToList();
+            if (children.Count == 0)
+                return;
+
+            foreach (var child in children)
+                BuildSubtree(child);
+
+            performanceA.TryGetValue(row.WorkDirectionId, out var perfA);
+            performanceB.TryGetValue(row.WorkDirectionId, out var perfB);
+            var foA = perfA is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatFromPerformance(CollectSubtree(perfA, childrenPerfA));
+            var foB = perfB is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatFromPerformance(CollectSubtree(perfB, childrenPerfB));
+
+            result.Add(new VersionCompareRowDto(
+                row.WorkDirectionId,
+                row.ParentId,
+                $"Итого: {row.Name}",
+                FactPhysicalVolumeDisplayA: foA,
+                FactPhysicalVolumeDisplayB: foB,
+                IsTotal: true,
+                Level: row.Level));
+        }
+
+        foreach (var root in roots)
+            BuildSubtree(root);
+
+        foreach (var unallocated in source.Where(r => r.WorkDirectionId < 0))
+            result.Add(unallocated);
+
+        var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
+        var hasFo = performanceA.Values.Concat(performanceB.Values)
+            .Any(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.FactPhysicalVolume is > 0);
+        if (rootTotals.Count > 0 || hasFo || source.Count > 0)
+        {
+            var grandFoA = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                performanceA.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            var grandFoB = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                performanceB.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            result.Add(new VersionCompareRowDto(
+                int.MinValue,
+                null,
+                "ИТОГО",
+                FactPhysicalVolumeDisplayA: grandFoA,
+                FactPhysicalVolumeDisplayB: grandFoB,
+                IsTotal: true,
+                Level: -1));
+        }
+
+        return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();
+    }
+
+    private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ResolveScenarioHoursByDirection(
+        ProjectsPageVersionBundle bundle,
+        IReadOnlyList<PerformanceRowDto> performance,
+        IPerformanceCalculationEngine engine)
+    {
+        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
+        var hoursByDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById, engine);
+        var result = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>();
+
+        foreach (var row in performance.Where(r => !r.IsTotal))
+        {
+            if (hoursByDirection.TryGetValue(row.WorkDirectionId, out var aggregated)
+                && (aggregated.Base.HasValue || aggregated.Optimistic.HasValue || aggregated.Pessimistic.HasValue))
+            {
+                result[row.WorkDirectionId] = aggregated;
+                continue;
+            }
+
+            var vol = row.FactPhysicalVolume ?? 0m;
+            if (vol <= 0 || !row.NormProductivity.HasValue)
+            {
+                result[row.WorkDirectionId] = (null, null, null);
+                continue;
+            }
+
+            var z = ForecastCalculation.ResolvePlanningZ(bundle.PlanningZByDirection, row.WorkDirectionId);
+            result[row.WorkDirectionId] = CalcForecastHours(
+                engine,
+                vol,
+                vol,
+                row.WorkDirectionId,
+                bundle.NormsByDirection,
+                row.NormProductivity,
+                row.NormStdDev,
+                z);
+        }
+
+        return result;
+    }
+
+    private static VersionCompareRowDto MapCompareSummaryRow(
+        PerformanceRowDto? a,
+        PerformanceRowDto? b,
+        (decimal? Base, decimal? Optimistic, decimal? Pessimistic) plannedHoursA,
+        (decimal? Base, decimal? Optimistic, decimal? Pessimistic) plannedHoursB,
+        decimal planZA,
+        decimal planZB)
+    {
+        var row = a ?? b!;
+        var factZA = a?.ZScore;
+        var factZB = b?.ZScore;
+        decimal? factZDelta = factZA.HasValue && factZB.HasValue ? factZB - factZA : null;
+        decimal? planZAValue = a is null ? null : planZA;
+        decimal? planZBValue = b is null ? null : planZB;
+        decimal? planZDelta = planZAValue.HasValue && planZBValue.HasValue
+            ? planZBValue - planZAValue
+            : null;
+
+        static decimal? PlannedProductivity(decimal? hours, decimal? volume) =>
+            hours.HasValue && volume is > 0 ? hours.Value / volume.Value : null;
+
+        var hoursA = a is null ? (null, null, null) : plannedHoursA;
+        var hoursB = b is null ? (null, null, null) : plannedHoursB;
+
+        return new VersionCompareRowDto(
+            row.WorkDirectionId,
+            row.ParentId,
+            row.WorkDirectionName,
+            FactZScoreA: factZA,
+            FactZScoreB: factZB,
+            FactZDelta: factZDelta,
+            InterpretationA: a?.Interpretation.ToRussian() is { Length: > 0 } ia ? ia : "-",
+            InterpretationB: b?.Interpretation.ToRussian() is { Length: > 0 } ib ? ib : "-",
+            FactPhysicalVolumeA: a?.FactPhysicalVolume,
+            FactPhysicalVolumeB: b?.FactPhysicalVolume,
+            PlannedLaborHoursA: hoursA.Base,
+            PlannedLaborHoursB: hoursB.Base,
+            PlannedLaborHoursOptimisticA: hoursA.Optimistic,
+            PlannedLaborHoursOptimisticB: hoursB.Optimistic,
+            PlannedLaborHoursPessimisticA: hoursA.Pessimistic,
+            PlannedLaborHoursPessimisticB: hoursB.Pessimistic,
+            PlannedProductivityA: PlannedProductivity(hoursA.Base, a?.FactPhysicalVolume),
+            PlannedProductivityB: PlannedProductivity(hoursB.Base, b?.FactPhysicalVolume),
+            PlannedProductivityOptimisticA: PlannedProductivity(hoursA.Optimistic, a?.FactPhysicalVolume),
+            PlannedProductivityOptimisticB: PlannedProductivity(hoursB.Optimistic, b?.FactPhysicalVolume),
+            PlannedProductivityPessimisticA: PlannedProductivity(hoursA.Pessimistic, a?.FactPhysicalVolume),
+            PlannedProductivityPessimisticB: PlannedProductivity(hoursB.Pessimistic, b?.FactPhysicalVolume),
+            FactLaborHoursA: a?.FactLaborHours,
+            FactLaborHoursB: b?.FactLaborHours,
+            FactProductivityA: a?.FactProductivity,
+            FactProductivityB: b?.FactProductivity,
+            PlanZScoreA: planZAValue,
+            PlanZScoreB: planZBValue,
+            PlanZDelta: planZDelta,
+            IsTotal: false,
+            Level: row.Level);
+    }
+
+    private static List<FactFacilityRowInternal> EnrichFacilityFromDetail(
+        IReadOnlyList<FactFacilityRowInternal> facility,
+        IReadOnlyList<FactDetailRowInternal> detail)
+    {
+        var byCode = detail
+            .GroupBy(d => d.FacilityCode)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    Name: g.First().FacilityName,
+                    Volume: g.Sum(d => d.Quantity),
+                    Base: g.Sum(d => d.PlannedLaborHoursBase ?? 0m),
+                    Opt: g.Sum(d => d.PlannedLaborHoursOptimistic ?? 0m),
+                    Pes: g.Sum(d => d.PlannedLaborHoursPessimistic ?? 0m)));
+
+        var result = facility
+            .Select(f =>
+            {
+                byCode.TryGetValue(f.Code, out var agg);
+                return new FactFacilityRowInternal
+                {
+                    Code = f.Code,
+                    Name = f.Name,
+                    FactLaborHours = f.FactLaborHours,
+                    ZScore = f.ZScore,
+                    Interpretation = f.Interpretation,
+                    FactPhysicalVolume = agg.Volume > 0 ? agg.Volume : null,
+                    PlannedLaborHoursBase = agg.Base > 0 ? Math.Round(agg.Base, 2) : null,
+                    PlannedLaborHoursOptimistic = agg.Opt > 0 ? Math.Round(agg.Opt, 2) : null,
+                    PlannedLaborHoursPessimistic = agg.Pes > 0 ? Math.Round(agg.Pes, 2) : null,
+                };
+            })
+            .ToList();
+
+        var known = result.Select(f => f.Code).ToHashSet(StringComparer.Ordinal);
+        foreach (var (code, agg) in byCode)
+        {
+            if (known.Contains(code))
+                continue;
+            result.Add(new FactFacilityRowInternal
+            {
+                Code = code,
+                Name = agg.Name,
+                FactPhysicalVolume = agg.Volume > 0 ? agg.Volume : null,
+                PlannedLaborHoursBase = agg.Base > 0 ? Math.Round(agg.Base, 2) : null,
+                PlannedLaborHoursOptimistic = agg.Opt > 0 ? Math.Round(agg.Opt, 2) : null,
+                PlannedLaborHoursPessimistic = agg.Pes > 0 ? Math.Round(agg.Pes, 2) : null,
+            });
+        }
+
+        return result;
     }
 
     private static FactDetailRowInternal ToCompareDetailInternal(ProjectsPageDetailRowDto row) =>
@@ -705,15 +1146,29 @@ public static class ProjectsPageGridBuilder
             FacilityCode = row.FacilityCode,
             FacilityName = row.FacilityName,
             DocumentSet = row.DocumentSet,
-            PvCode = row.CatalogCode,
-            PvName = row.CatalogName,
+            PvCode = string.IsNullOrEmpty(row.PvCode) ? row.CatalogCode : row.PvCode,
+            PvName = string.IsNullOrEmpty(row.PvName) ? row.CatalogName : row.PvName,
             WorkId = row.WorkId,
             WorkName = row.WorkName,
             IicGroupName = row.IicGroupName,
             IicUnitName = row.IicUnitName,
             Quantity = row.Quantity,
+            PlannedLaborHoursBase = row.BaseHours,
+            PlannedLaborHoursOptimistic = row.OptimisticHours,
+            PlannedLaborHoursPessimistic = row.PessimisticHours,
             FactLaborHours = row.FactLaborHours,
             FactProductivity = row.FactProductivity,
             ZScore = row.ZScore,
+            IsEquipment = row.IsEquipment,
+            BindingType = row.BindingType,
+            CatalogId = row.CatalogId,
+            Tag = row.Tag,
+            ItemName = row.ItemName,
+            WorkComment = row.WorkComment,
+            EstimationBasis = row.EstimationBasis,
+            IsAssessment = row.IsAssessment,
+            Coefficient = row.Coefficient,
+            NormProductivity = row.NormProductivity,
+            NormStdDev = row.NormStdDev,
         };
 }

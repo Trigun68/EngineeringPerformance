@@ -10,6 +10,28 @@ export interface ApiProblemDetails {
   errors?: Record<string, string[]>;
 }
 
+const GENERIC_PROBLEM_DETAILS = new Set([
+  'One or more validation errors occurred.',
+  'Invalid request.',
+  'Invalid operation.',
+  'Validation failed.',
+]);
+
+function formatFieldErrors(errors: Record<string, string[]>): string | null {
+  const parts: string[] = [];
+  for (const [field, messages] of Object.entries(errors)) {
+    const firstMessage = messages[0];
+    if (!firstMessage) continue;
+    // FluentValidation root RuleFor(x => x) → key "body" / "" — без префикса поля.
+    if (!field || field === 'body' || field === '$') {
+      parts.push(firstMessage);
+    } else {
+      parts.push(`${field}: ${firstMessage}`);
+    }
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
 /** Извлекает человекочитаемое сообщение из ProblemDetails (RFC 7807) или axios-ошибки. */
 export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка.'): string {
   if (error instanceof ApiContractError) {
@@ -25,21 +47,24 @@ export function getApiErrorMessage(error: unknown, fallback = 'Произошл�
 
   if (typeof data === 'object' && data !== null) {
     const problem = data as ApiProblemDetails;
-    if (problem.detail && problem.detail.trim().length > 0) {
+    // Сначала field errors: detail часто общий английский текст от ApiBehavior.
+    if (problem.errors) {
+      const fromErrors = formatFieldErrors(problem.errors);
+      if (fromErrors) return fromErrors;
+    }
+    if (
+      problem.detail &&
+      problem.detail.trim().length > 0 &&
+      !GENERIC_PROBLEM_DETAILS.has(problem.detail.trim())
+    ) {
       return problem.detail;
     }
-    if (problem.title && problem.title.trim().length > 0) {
+    if (
+      problem.title &&
+      problem.title.trim().length > 0 &&
+      !GENERIC_PROBLEM_DETAILS.has(problem.title.trim())
+    ) {
       return problem.title;
-    }
-    if (problem.errors) {
-      const firstEntry = Object.entries(problem.errors)[0];
-      if (firstEntry) {
-        const [field, messages] = firstEntry;
-        const firstMessage = messages[0];
-        if (firstMessage) {
-          return `${field}: ${firstMessage}`;
-        }
-      }
     }
   }
 

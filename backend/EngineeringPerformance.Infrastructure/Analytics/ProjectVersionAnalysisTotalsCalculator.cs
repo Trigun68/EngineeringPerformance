@@ -11,14 +11,12 @@ public static class ProjectVersionAnalysisTotalsCalculator
     public static ProjectVersionAnalysisSummaryDto Calculate(
         IReadOnlyList<PerformanceRowDto> performanceRows,
         decimal totalPlannedHours,
-        decimal unallocatedPlannedHours)
+        decimal unallocatedPlannedHours,
+        decimal? weightedZ)
     {
-        var weightedZ = WeightedZScoreCalculator.FromRootPerformanceRows(
-            performanceRows,
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-
         var physicalVolumeTotalsByUnit = performanceRows
-            .Where(r => r.WorkDirectionId >= 0
+            .Where(r => !r.IsTotal
+                        && r.WorkDirectionId >= 0
                         && r.FactPhysicalVolume is > 0
                         && !string.IsNullOrWhiteSpace(r.NormUnitName))
             .GroupBy(r => r.NormUnitName!.Trim())

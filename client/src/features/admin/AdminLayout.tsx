@@ -18,6 +18,7 @@ const subNavSx = {
 const ADMIN_TABS = [
   { to: '/admin/logs', label: 'Логи системы' },
   { to: '/admin/health', label: 'Состояние сервисов' },
+  { to: '/admin/monitoring', label: 'Мониторинг' },
   { to: '/admin/audit', label: 'Аудит настроек' },
   { to: '/admin/user-actions', label: 'Журнал действий' },
 ] as const;

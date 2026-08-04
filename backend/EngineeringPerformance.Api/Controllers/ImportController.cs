@@ -27,7 +27,7 @@ public sealed class ImportController : ControllerBase
         int projectId,
         int versionId,
         string dataType,
-        [FromForm] IFormFile file,
+        IFormFile file,
         [FromQuery] string? description,
         [FromQuery] bool addMissingLaborToCatalog = false,
         CancellationToken cancellationToken = default)
@@ -72,7 +72,7 @@ public sealed class ImportController : ControllerBase
     public Task<IActionResult> ImportEquipment(
         int projectId,
         int versionId,
-        [FromForm] IFormFile file,
+        IFormFile file,
         [FromQuery] string? description,
         CancellationToken cancellationToken = default) =>
         Import(projectId, versionId, "equipment", file, description, addMissingLaborToCatalog: false, cancellationToken);

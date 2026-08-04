@@ -29,7 +29,7 @@ describe('projectWorkspacePrefs', () => {
         [LAST_PROJECT_PREF_KEY]: '15',
       },
       { Projects: 1 },
-      'Manager',
+      'Admin',
       '/help',
     );
     expect(path).toBe('/projects/15');
@@ -42,7 +42,7 @@ describe('projectWorkspacePrefs', () => {
         [LAST_PROJECT_PREF_KEY]: '15',
       },
       { Projects: 1 },
-      'Manager',
+      'Admin',
       '/help',
     );
     expect(path).toBe('/projects/9');
@@ -52,7 +52,7 @@ describe('projectWorkspacePrefs', () => {
     const path = resolvePreferredPath(
       { [LAST_PROJECT_PREF_KEY]: '3' },
       { Projects: 1 },
-      'Manager',
+      'Admin',
       '/help',
     );
     expect(path).toBe('/projects/3');

@@ -24,6 +24,7 @@ import {
   fetchProjectsPageData,
 } from '../../api/projectsPageApi';
 import { DataTable } from '../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { buildProjectsPageContextMenu } from './buildContextMenu';
@@ -158,60 +159,60 @@ export function ProjectsPage() {
         return {
           rowData: pageData.forecast.summary,
           columnDefs: createForecastSummaryColumns(),
-          gridId: `pp-${projectId}-forecast-summary`,
+          gridId: 'pp-forecast-summary',
         };
       case 'forecast-facility':
         return {
           rowData: pageData.forecast.facility,
           columnDefs: createForecastFacilityColumns(),
-          gridId: `pp-${projectId}-forecast-facility`,
+          gridId: 'pp-forecast-facility',
         };
       case 'forecast-detail':
         return {
           rowData: pageData.forecast.detail,
           columnDefs: createDetailColumns(),
-          gridId: `pp-${projectId}-forecast-detail`,
+          gridId: 'pp-forecast-detail',
         };
       case 'fact-performance':
         return {
           rowData: pageData.fact.performance,
           columnDefs: createPerformanceColumns(formatters),
-          gridId: `pp-${projectId}-fact-performance`,
+          gridId: 'pp-fact-performance',
         };
       case 'fact-facility':
         return {
           rowData: pageData.fact.facility,
           columnDefs: createFacilityColumns(),
-          gridId: `pp-${projectId}-fact-facility`,
+          gridId: 'pp-fact-facility',
         };
       case 'fact-detail':
         return {
           rowData: pageData.fact.detail,
           columnDefs: createDetailColumns(),
-          gridId: `pp-${projectId}-fact-detail`,
+          gridId: 'pp-fact-detail',
         };
       case 'compare-summary':
         return {
           rowData: pageData.compare?.summary ?? [],
-          columnDefs: createCompareSummaryColumns(),
-          gridId: `pp-${projectId}-compare-summary`,
+          columnDefs: createCompareSummaryColumns('base'),
+          gridId: 'pp-compare-summary',
         };
       case 'compare-facility':
         return {
           rowData: pageData.compare?.facility ?? [],
-          columnDefs: createCompareFacilityColumns(),
-          gridId: `pp-${projectId}-compare-facility`,
+          columnDefs: createCompareFacilityColumns('base'),
+          gridId: 'pp-compare-facility',
         };
       case 'compare-detail':
         return {
           rowData: pageData.compare?.detail ?? [],
-          columnDefs: createCompareDetailColumns(),
-          gridId: `pp-${projectId}-compare-detail`,
+          columnDefs: createCompareDetailColumns('base'),
+          gridId: 'pp-compare-detail',
         };
       default:
         return { rowData: [], columnDefs: [] as ColDef[], gridId: 'empty' };
     }
-  }, [activeTab, formatters, pageData, projectId]);
+  }, [activeTab, formatters, pageData]);
 
   if (!canRead) {
     return <Alert severity="info">Нет прав на просмотр проектов.</Alert>;
@@ -219,6 +220,7 @@ export function ProjectsPage() {
 
   return (
     <Box>
+      <WorkingOverlay open={loading} delayMs={1000} />
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h5">Данные проекта #{projectId}</Typography>
         <Typography

@@ -3,13 +3,43 @@ import { getApiErrorMessage } from './apiError';
 
 type UnauthorizedHandler = () => void;
 type ForbiddenHandler = (message?: string) => void;
+type RemoteLogoutHandler = () => void;
 
 let onUnauthorized: UnauthorizedHandler | null = null;
 let onForbidden: ForbiddenHandler | null = null;
+let onRemoteLogout: RemoteLogoutHandler | null = null;
 let refreshRequestPromise: Promise<boolean> | null = null;
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 const SKIP_REFRESH_HEADER = 'X-Skip-Auth-Refresh';
+const authChannel = typeof BroadcastChannel === 'undefined'
+  ? null
+  : new BroadcastChannel('engineering-performance-auth');
+
+authChannel?.addEventListener('message', (event: MessageEvent<unknown>) => {
+  if (
+    typeof event.data === 'object'
+    && event.data !== null
+    && 'type' in event.data
+    && event.data.type === 'logout'
+  ) {
+    onRemoteLogout?.();
+  }
+});
+
+// localStorage fallback для BroadcastChannel — работает при недоступности BC.
+const AUTH_STORAGE_KEY = 'engineering-performance-auth';
+document.addEventListener('storage', (e: Event) => {
+  const event = e as StorageEvent;
+  if (event.key !== AUTH_STORAGE_KEY) return;
+  if (event.newValue === null) return;
+  try {
+    const msg = JSON.parse(event.newValue);
+    if (msg?.type === 'logout') {
+      onRemoteLogout?.();
+    }
+  } catch { /* malformed */ }
+});
 
 export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
   onUnauthorized = handler;
@@ -17,6 +47,18 @@ export function setUnauthorizedHandler(handler: UnauthorizedHandler): void {
 
 export function setForbiddenHandler(handler: ForbiddenHandler): void {
   onForbidden = handler;
+}
+
+export function setRemoteLogoutHandler(handler: RemoteLogoutHandler): void {
+  onRemoteLogout = handler;
+}
+
+export function broadcastLogout(): void {
+  authChannel?.postMessage({ type: 'logout' });
+  // localStorage fallback для BroadcastChannel.
+  try {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ type: 'logout', ts: Date.now() }));
+  } catch { /* quota */ }
 }
 
 const apiClient: AxiosInstance = axios.create({
@@ -74,8 +116,16 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
       const refreshed = await tryRefreshSession();
       if (refreshed) {
-        return apiClient.request(originalRequest);
+        const retryResponse = await apiClient.request(originalRequest);
+        return retryResponse;
       }
+    }
+
+    if (status === 401 && originalRequest) {
+      // Повторный запрос после refresh тоже 401 — сессия мертва.
+      originalRequest._retry = false;
+      onUnauthorized?.();
+      return;
     }
 
     if (status === 401) {

@@ -32,7 +32,7 @@ vi.mock('../../hooks/usePersistLastRoute', () => ({
 
 vi.mock('../../store/useAuthStore', () => ({
   useAuthStore: (sel: (s: { user: { roleName: string } }) => unknown) =>
-    sel({ user: { roleName: 'Administrator' } }),
+    sel({ user: { roleName: 'SuperAdmin' } }),
 }));
 
 vi.mock('../../store/useDictionaryStore', () => ({

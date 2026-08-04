@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Box, TextField } from '@mui/material';
+import { Alert, Box, FormControl, InputLabel, MenuItem, Select, TextField } from '@mui/material';
 import type { ColDef, GridApi, ValueGetterParams } from 'ag-grid-community';
 import {
   archiveDirectoryEntry,
@@ -16,11 +16,14 @@ import {
   type DirectoryEntry,
   type DirectoryTreeRow,
 } from '../../api/directoriesApi';
+import { fetchProjects } from '../../api/projectsApi';
+import type { Project } from '../../types/project';
 import { getApiErrorMessage } from '../../services/apiError';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { CharacteristicEditDialog } from './CharacteristicEditDialog';
 import { DirectoryEditDialog, DirectoryFormRow } from './DirectoryEditDialog';
@@ -42,6 +45,7 @@ import { isPhysicalVolumeCatalogResource } from './referenceConfig';
 import { formatAsIisNorm } from '../../utils/formatIisNorm';
 import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
 import { collectGridExportData } from '../../utils/directoryExport';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 
 interface DirectoryPageProps {
   config: ReferenceRouteConfig;
@@ -58,6 +62,7 @@ function propertyValue<T extends DirectoryEntry>(row: T, field: DirectoryFieldDe
 
 export function DirectoryPage({ config }: DirectoryPageProps) {
   const { canRead, canEdit } = usePermission(config.permission);
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const invalidateDictionaries = useDictionaryStore((s) => s.invalidate);
   const fetchAllDictionaries = useDictionaryStore((s) => s.fetchAll);
   const getName = useDictionaryStore((s) => s.getName);
@@ -71,6 +76,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   );
 
   const isPhysicalVolumeCatalog = isPhysicalVolumeCatalogResource(config.resource);
+  const isEquipmentCatalog = config.resource === 'equipment';
 
   const fieldDefs = useMemo(() => getDirectoryFields(config.resource), [config.resource]);
   const formFields = useMemo(() => getFormFields(config.resource), [config.resource]);
@@ -78,9 +84,13 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const [rows, setRows] = useState<DirectoryEntry[]>([]);
   const [treeRows, setTreeRows] = useState<DirectoryTreeRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [equipmentProjects, setEquipmentProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
   const showArchivedPrefKey = `references.${config.resource}.showArchived`;
+  const equipmentProjectPrefKey = 'references.equipment.projectId';
 
   useEffect(() => {
     let cancelled = false;
@@ -94,10 +104,40 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     };
   }, [showArchivedPrefKey]);
 
+  useEffect(() => {
+    if (!isEquipmentCatalog) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [projects, prefs] = await Promise.all([fetchProjects(false), getUserPreferences()]);
+        if (cancelled) return;
+        setEquipmentProjects(projects);
+        const saved = Number(prefs[equipmentProjectPrefKey]);
+        if (Number.isFinite(saved) && projects.some((p) => p.id === saved)) {
+          setSelectedProjectId(saved);
+        } else if (projects.length > 0) {
+          setSelectedProjectId(projects[0].id);
+        }
+      } catch {
+        if (!cancelled) setEquipmentProjects([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isEquipmentCatalog]);
+
   const handleShowArchivedChange = useCallback((value: boolean) => {
     setShowArchived(value);
     void putUserPreferences({ [showArchivedPrefKey]: value ? 'true' : 'false' });
   }, [showArchivedPrefKey]);
+
+  const handleEquipmentProjectChange = useCallback((projectId: number | '') => {
+    setSelectedProjectId(projectId);
+    if (projectId !== '') {
+      void putUserPreferences({ [equipmentProjectPrefKey]: String(projectId) });
+    }
+  }, []);
   const [selected, setSelected] = useState<DirectoryEntry | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<DirectoryEntry | null>(null);
@@ -123,19 +163,20 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   }, [config.resource, fetchAllDictionaries]);
 
   const directoryQuery = useQuery({
-    queryKey: ['directory-page', config.resource, showArchived],
-    enabled: canRead,
+    queryKey: ['directory-page', config.resource, showArchived, selectedProjectId],
+    enabled: canRead && (!isEquipmentCatalog || selectedProjectId !== ''),
     staleTime: 30_000,
     queryFn: async () => {
+      const projectId = isEquipmentCatalog && selectedProjectId !== '' ? selectedProjectId : null;
       if (config.isHierarchical) {
-        const tree = await fetchDirectoryTree(config.resource, showArchived);
+        const tree = await fetchDirectoryTree(config.resource, showArchived, projectId);
         const flattened = flattenDirectoryTree(tree, [], {
           hierarchyByCode: isPhysicalVolumeCatalogResource(config.resource),
         });
         return { kind: 'tree' as const, treeRows: flattened, rows: [] as DirectoryEntry[], optionCounts: {} as Record<number, number> };
       }
 
-      const paged = await fetchDirectory(config.resource, showArchived, 1, 100);
+      const paged = await fetchDirectory(config.resource, showArchived, 1, 100, projectId);
       const counts: Record<number, number> = {};
       if (config.resource === 'project-characteristics') {
         for (const item of paged.items) {
@@ -189,27 +230,44 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     <T extends DirectoryEntry>(): ColDef<T>[] =>
       fieldDefs
         .filter((f) => f.showInGrid)
-        .map((field) => ({
-          colId: field.key,
-          headerName: field.label,
-          minWidth: field.gridWidth ?? 120,
-          valueGetter: (params: ValueGetterParams<T>) => {
-            const row = params.data;
-            if (!row) return '';
-            const value = propertyValue(row, field);
-            return formatPropertyValue(field, value, getName, getById, getUnitName, resolveIicUnitName);
-          },
-        })),
+        .map((field) => {
+          const col: ColDef<T> = {
+            colId: field.key,
+            headerName: field.label,
+            minWidth: field.gridWidth ?? 120,
+            valueGetter: (params: ValueGetterParams<T>) => {
+              const row = params.data;
+              if (!row) return '';
+              const value = propertyValue(row, field);
+              return formatPropertyValue(field, value, getName, getById, getUnitName, resolveIicUnitName);
+            },
+          };
+
+          // Lookup: фильтр по стабильному id, в чеклисте — отформатированная подпись.
+          // Иначе Excel-set сравнивает длинные «код — имя (ед.)» и ломается при смене формата/подгрузке словаря.
+          if (field.type === 'lookup') {
+            col.filterValueGetter = (params: ValueGetterParams<T>) => {
+              const row = params.data;
+              if (!row) return '';
+              const value = propertyValue(row, field);
+              if (value == null || value === '') return '';
+              return String(value);
+            };
+          }
+
+          return col;
+        }),
     [fieldDefs, getById, getName, getUnitName, resolveIicUnitName],
   );
 
   const archiveColDef = useMemo<ColDef>(
     () => ({
       colId: 'isArchived',
-      field: 'isArchived',
       headerName: 'Архив',
       maxWidth: 80,
-      valueFormatter: (p) => boolArchive(Boolean(p.value)),
+      // valueGetter (не valueFormatter): Excel-set фильтр читает getter/field, не formatter.
+      valueGetter: (p) => boolArchive(Boolean(p.data?.isArchived)),
+      filterValueGetter: (p) => (p.data?.isArchived ? '1' : '0'),
     }),
     [],
   );
@@ -301,14 +359,15 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       colId: 'ag-Grid-AutoColumn',
       headerName: 'Наименование',
       minWidth: 280,
-      field: 'name',
       cellRendererParams: { suppressCount: true },
+      // Стабильный ключ фильтра — id строки; подпись — имя / formatAsIisNorm.
+      filterValueGetter: (params) => (params.data ? String(params.data.id) : ''),
     };
 
     if (config.resource === 'equipment') {
       return {
         ...base,
-        valueFormatter: (params) => {
+        valueGetter: (params) => {
           const row = params.data;
           if (!row) return '';
           const unitId = row.properties.unitId;
@@ -324,7 +383,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     if (config.resource === 'iic-work-directions') {
       return {
         ...base,
-        valueFormatter: (params) => {
+        valueGetter: (params) => {
           const row = params.data;
           if (!row) return '';
           const code = row.properties.code;
@@ -338,14 +397,25 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       };
     }
 
-    return base;
+    return {
+      ...base,
+      valueGetter: (params) => params.data?.name ?? '',
+    };
   }, [config.resource, getUnitName, isPhysicalVolumeCatalog]);
 
   const openCreate = () => {
+    if (isEquipmentCatalog && selectedProjectId === '') {
+      setError('Выберите проект для справочника оборудования.');
+      return;
+    }
     setEditing(null);
     setName('');
     setParentId('');
-    setProperties(emptyProperties(config.resource));
+    const props = emptyProperties(config.resource);
+    if (isEquipmentCatalog && selectedProjectId !== '') {
+      props.projectId = selectedProjectId;
+    }
+    setProperties(props);
     setFormIsArchived(false);
     setModalOpen(true);
   };
@@ -354,7 +424,11 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     setEditing(row);
     setName(row.name);
     setParentId(row.parentId ?? '');
-    setProperties(propertiesFromEntry(config.resource, row.properties));
+    const props = propertiesFromEntry(config.resource, row.properties);
+    if (isEquipmentCatalog) {
+      props.projectId = row.properties.projectId ?? selectedProjectId;
+    }
+    setProperties(props);
     setFormIsArchived(row.isArchived);
     setModalOpen(true);
   };
@@ -369,11 +443,20 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
+    const payloadProps = buildPropertiesPayload(config.resource, properties);
+    if (isEquipmentCatalog) {
+      const projectId = Number(properties.projectId ?? selectedProjectId);
+      if (!Number.isFinite(projectId) || projectId <= 0) {
+        setError('Для оборудования обязателен проект.');
+        return;
+      }
+      payloadProps.projectId = projectId;
+    }
     const body = {
       name: name.trim(),
       parentId: parentId === '' ? null : Number(parentId),
       sortOrder: editing?.sortOrder ?? 0,
-      properties: buildPropertiesPayload(config.resource, properties),
+      properties: payloadProps,
     };
     try {
       validateDirectoryWrite(body);
@@ -381,23 +464,31 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       setError(err instanceof z.ZodError ? err.issues[0]?.message ?? 'Некорректные данные формы.' : 'Некорректные данные формы.');
       return;
     }
-    if (editing) {
-      await updateDirectoryEntry(config.resource, editing.id, body);
-      await syncArchiveState(editing.id, editing.isArchived);
-    } else {
-      const created = await createDirectoryEntry(config.resource, body);
-      if (formIsArchived) {
-        await archiveDirectoryEntry(config.resource, created.id);
+    setMutating(true);
+    try {
+      if (editing) {
+        await updateDirectoryEntry(config.resource, editing.id, body);
+        await syncArchiveState(editing.id, editing.isArchived);
+      } else {
+        const created = await createDirectoryEntry(config.resource, body);
+        if (formIsArchived) {
+          await archiveDirectoryEntry(config.resource, created.id);
+        }
       }
-    }
 
-    setModalOpen(false);
-    await invalidateDictionaries();
-    await load();
+      setModalOpen(false);
+      await invalidateDictionaries();
+      await load();
+    } finally {
+      setMutating(false);
+    }
   };
 
   const handleDeleteForRow = async (row: DirectoryEntry) => {
-    if (!window.confirm(`Удалить «${row.name}»?`)) return;
+    if (!(await confirm({
+      title: 'Удалить запись?',
+      description: `Удалить «${row.name}»?`,
+    }))) return;
     await deleteDirectoryEntry(config.resource, row.id);
     await invalidateDictionaries();
     await load();
@@ -411,7 +502,11 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   };
 
   const handleDelete = async () => {
-    if (!selected || !window.confirm(`Удалить «${selected.name}»?`)) return;
+    if (!selected) return;
+    if (!(await confirm({
+      title: 'Удалить запись?',
+      description: `Удалить «${selected.name}»?`,
+    }))) return;
     await deleteDirectoryEntry(config.resource, selected.id);
     await invalidateDictionaries();
     await load();
@@ -477,7 +572,14 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
                   getUnitName(typeof unitId === 'number' ? unitId : null),
                 );
               }
-            : undefined
+            : config.resource === 'iic-work-directions'
+              ? (item) =>
+                  formatAsIisNorm(
+                    item.code,
+                    item.name,
+                    resolveIicUnitName(item.id),
+                  )
+              : undefined
         }
       />
     </DirectoryFormRow>
@@ -491,9 +593,30 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <WorkingOverlay open={loading || mutating} delayMs={mutating ? 0 : 1000} />
       <Box sx={{ flexShrink: 0 }}>
+        {isEquipmentCatalog && (
+          <FormControl size="small" sx={{ minWidth: 280, mb: 1, mr: 1 }}>
+            <InputLabel id="equipment-project-label">Проект</InputLabel>
+            <Select
+              labelId="equipment-project-label"
+              label="Проект"
+              value={selectedProjectId === '' ? '' : String(selectedProjectId)}
+              onChange={(e) => {
+                const raw = e.target.value;
+                handleEquipmentProjectChange(raw === '' ? '' : Number(raw));
+              }}
+            >
+              {equipmentProjects.map((p) => (
+                <MenuItem key={p.id} value={String(p.id)}>
+                  {p.code} — {p.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <DirectoryToolbar
-        canEdit={canEdit}
+        canEdit={canEdit && (!isEquipmentCatalog || selectedProjectId !== '')}
         hasSelection={selected !== null}
         showExcel={config.showExcel !== false}
         showArchived={showArchived}
@@ -514,6 +637,12 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
         onExport={() => void handleExport()}
         />
       </Box>
+
+      {isEquipmentCatalog && selectedProjectId === '' && (
+        <Alert severity="info" sx={{ mb: 1, flexShrink: 0 }}>
+          Выберите проект, чтобы просмотреть номенклатуру оборудования.
+        </Alert>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>{error}</Alert>}
 
@@ -609,6 +738,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
           onPropertyChange={(key, value) => setProperties((prev) => ({ ...prev, [key]: value }))}
         />
       </DirectoryEditDialog>
+      {ConfirmDialog}
     </Box>
   );
 }

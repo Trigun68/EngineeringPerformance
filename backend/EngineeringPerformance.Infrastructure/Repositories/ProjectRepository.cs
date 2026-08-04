@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Projects.DTOs;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,6 +93,8 @@ public sealed class ProjectRepository : IProjectRepository
             p.WorkStatus,
             p.WorkStart,
             p.Program,
-            p.AnalysisVersions.Count,
+            // Как в списке версий UI: только неархивные; отдельно план и факт.
+            p.AnalysisVersions.Count(v => !v.IsArchived && v.Direction == AnalysisDirection.Plan),
+            p.AnalysisVersions.Count(v => !v.IsArchived && v.Direction == AnalysisDirection.Fact),
             p.IsArchived);
 }

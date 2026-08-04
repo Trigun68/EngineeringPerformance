@@ -11,7 +11,7 @@ namespace EngineeringPerformance.Infrastructure.Tests.Metrics;
 public sealed class PermissionDriftServiceTests
 {
     [Fact]
-    public async Task GetPermissionDriftAsync_AdministratorWithoutDbRows_ReturnsNoDrift()
+    public async Task GetPermissionDriftAsync_AdminWithCompleteMatrix_ReturnsNoDrift()
     {
         await using var context = CreateContext();
         SeedRoles(context);
@@ -48,7 +48,7 @@ public sealed class PermissionDriftServiceTests
         var drift = await service.GetPermissionDriftAsync();
 
         drift.HasDrift.Should().BeTrue();
-        drift.MissingObjectsByRole.Should().ContainSingle(x => x.RoleName == "ProjectManager");
+        drift.MissingObjectsByRole.Should().ContainSingle(x => x.RoleName == "Admin");
         drift.MissingObjectsByRole[0].MissingObjects.Should().NotContain(PermissionObjectCatalog.AdministrationObjectName);
     }
 
@@ -63,8 +63,9 @@ public sealed class PermissionDriftServiceTests
     private static void SeedRoles(AppDbContext context)
     {
         context.Roles.AddRange(
-            new Role { Id = 1, Name = PermissionObjectCatalog.AdministratorRoleName },
-            new Role { Id = 2, Name = "ProjectManager" },
-            new Role { Id = 3, Name = "Observer" });
+            new Role { Id = 1, Name = PermissionObjectCatalog.SuperAdminRoleName },
+            new Role { Id = 2, Name = "Admin" },
+            new Role { Id = 3, Name = "Engineer" },
+            new Role { Id = 4, Name = "Gip" });
     }
 }

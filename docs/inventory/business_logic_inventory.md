@@ -160,7 +160,8 @@ if (isAssessment && vol > 0 && DocumentSet not empty) {
     zScore = (ln(factProductivity) - normEstimate) / normStdDev;
 }
 
-// Equipment на факте: factHours = vol * normProductivity (без DocSet-распределения)
+// Equipment на факте: только объём в гриде; FactLaborHours = null
+// (не vol × normProductivity — это формула прогноза, не факт. трудоёмкость)
 
 // Строка "(пусто)": totalLiHours - totalMatchedHours > 0
 ```
@@ -168,7 +169,7 @@ if (isAssessment && vol > 0 && DocumentSet not empty) {
 ### ГРАНИЧНЫЕ УСЛОВИЯ:
 - LI без `|` в `DocumentationCode` → DocSet пустой → часы в `(пусто)`
 - DocSet есть в LI, но нет assessment PPV с тем же DocSet → часы в `(пусто)`
-- Equipment: часы только при `IsAssessment && normProductivity`
+- Equipment: без LI часы не заполняются; оценка/Z по оборудованию на факте не считаются
 
 ### ССЫЛКА НА ТЕСТЫ:
 - Косвенно: `PerformanceServiceTests` (источник часов PlannedHours), `DataImportServiceTests.MergeLaborRowsByNaturalKey_*`

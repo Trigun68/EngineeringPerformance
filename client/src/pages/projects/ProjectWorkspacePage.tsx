@@ -35,6 +35,7 @@ import { ParticipantsModal } from '../../components/ParticipantsModal/Participan
 import { ProjectSelectionDialog } from '../../components/ProjectSelectionDialog/ProjectSelectionDialog';
 import { ProjectCharacteristicsDialog } from '../../components/ProjectCharacteristicsDialog/ProjectCharacteristicsDialog';
 import { ProjectParametersDialog } from '../../components/ProjectParametersDialog/ProjectParametersDialog';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { useAuthStore } from '../../store/useAuthStore';
 import type { Project } from '../../types/project';
@@ -43,7 +44,6 @@ import { getVisibleTabs, getDefaultTab } from './projectTabs';
 import { ForecastTab } from './ForecastTab';
 import { AnalysisTab } from './AnalysisTab';
 import { CompareTab } from './CompareTab';
-import { ReportsTab } from './ReportsTab';
 import { ProjectDataTab } from './ProjectDataTab';
 
 export function ProjectWorkspacePage() {
@@ -210,6 +210,7 @@ export function ProjectWorkspacePage() {
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <WorkingOverlay open={loading} delayMs={1000} />
       {/* Header Section - WPF Style */}
       <Paper elevation={1} sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2} alignItems="center">
@@ -390,11 +391,6 @@ export function ProjectWorkspacePage() {
           {/* Compare Tab */}
           {activeTabId === 'compare' && currentPid && (
             <CompareTab projectId={currentPid} />
-          )}
-
-          {/* Reports Tab */}
-          {activeTabId === 'reports' && currentPid && selectedVersionId && (
-            <ReportsTab projectId={currentPid} versionId={selectedVersionId} />
           )}
         </Box>
       </Box>

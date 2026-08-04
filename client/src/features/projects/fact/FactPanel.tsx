@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ColDef } from 'ag-grid-community';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ColDef, GridApi } from 'ag-grid-community';
 import {
   Alert,
   Box,
@@ -13,11 +13,15 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import type { ImportDataType } from '../../../api/importApi';
-import { exportAnalysisExcel, exportAnalysisPdf } from '../../../api/analyticsApi';
 import { exportFactDetailPdf, exportFactFacilityPdf, exportFactSummaryPdf } from '../../../api/visualReportsApi';
-import { fetchProjectVersions, type ProjectVersion } from '../../../api/projectVersionsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
-import { fetchProjectsPageData } from '../../../api/projectsPageApi';
+import {
+  exportFactDetailExcel,
+  exportFactDetailExcelVisible,
+  exportFactDetailSummaryTable,
+  exportFactFacilityExcel,
+  fetchProjectsPageData,
+} from '../../../api/projectsPageApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import {
@@ -30,10 +34,11 @@ import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
 import { getApiErrorMessage } from '../../../services/apiError';
 import {
-  factVersionPrefKey,
   LAST_PROJECT_PREF_KEY,
+  factVersionPrefKey,
   parsePrefId,
 } from '../../../utils/projectWorkspacePrefs';
+import { collectGridExportData } from '../../../utils/directoryExport';
 import {
   createFactDetailColumns,
   createFactFacilityColumns,
@@ -46,9 +51,12 @@ import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import type { ProjectsPageData, ProjectsPageDetailRow, ProjectsPageFacilityRow } from '../types';
 import { DataImportDialog } from '../forecast/DataImportDialog';
 import { IterationDeleteDialog } from '../forecast/IterationDeleteDialog';
+import { PlanningParametersDialog } from '../forecast/PlanningParametersDialog';
+import { shortCatalogName } from '../forecast/catalogShortName';
 import { FactAnalysisDialog } from './FactAnalysisDialog';
 import { useFactDetailContextMenu } from './useFactDetailContextMenu';
 import { buildPerformanceTreeRows, type PerformanceTreeRow } from './performanceTree';
+import type { ProjectVersion } from '../../../api/projectVersionsApi';
 
 type FactSubTab = 'fact-total' | 'fact-facility' | 'fact-detail';
 type ImportDialogType = ImportDataType | null;
@@ -56,20 +64,20 @@ type DeleteDialogType = ImportDataType | null;
 
 export interface FactPanelProps {
   projectId: number;
+  workspaceVersions: ProjectVersion[];
+  workspaceFactVersionId: number | null;
+  workspaceFactVersionLabel: string;
 }
 
 function performanceRowId(row: PerformanceTreeRow, index: number): string {
-  return `perf-${row.workDirectionId}-${index}`;
+  return `perf-${row.workDirectionId}-${row.isTotal ? 'total' : 'row'}-${row.level}-${index}`;
 }
 
-export function FactPanel({ projectId }: FactPanelProps) {
+export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId, workspaceFactVersionLabel }: FactPanelProps) {
   const { canRead } = usePermission('Assessment');
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
-  const { chromeExpanded, setVersionSummary } = useWorkspaceChrome();
+  const { chromeExpanded } = useWorkspaceChrome();
 
-  const [versions, setVersions] = useState<ProjectVersion[]>([]);
-  const [factVersionId, setFactVersionId] = useState<number | null>(null);
-  const [factVersionLabel, setFactVersionLabel] = useState('');
   const [subTab, setSubTab] = usePersistedTabState<FactSubTab>(
     `projects.${projectId}.factSubTab`,
     'fact-total',
@@ -82,41 +90,47 @@ export function FactPanel({ projectId }: FactPanelProps) {
   const [exporting, setExporting] = useState(false);
   const [importDialogType, setImportDialogType] = useState<ImportDialogType>(null);
   const [deleteDialogType, setDeleteDialogType] = useState<DeleteDialogType>(null);
+  const [planningOpen, setPlanningOpen] = useState(false);
+  const detailGridApiRef = useRef<GridApi | null>(null);
+  const [detailGridReady, setDetailGridReady] = useState(false);
+
+  // Пользовательский выбор версии (переопределяет workspace по умолчанию)
+  const [userFactVersionId, setUserFactVersionId] = useState<number | null>(null);
+  const restoredFactPrefForProjectRef = useRef<number | null>(null);
+  const factVersionId = userFactVersionId ?? workspaceFactVersionId;
+  const factVersionLabel = userFactVersionId != null
+    ? (() => {
+        const v = workspaceVersions.find((vv) => vv.id === userFactVersionId);
+        return v ? buildVersionLabel(v) : '';
+      })()
+    : workspaceFactVersionLabel;
 
   useEffect(() => {
-    setFactVersionId(null);
-    setFactVersionLabel('');
+    setUserFactVersionId(null);
     setPageData(null);
     setError(null);
+    restoredFactPrefForProjectRef.current = null;
   }, [projectId]);
 
   useEffect(() => {
-    setVersionSummary(factVersionLabel || null);
-  }, [factVersionLabel, setVersionSummary]);
-
-  useEffect(() => () => setVersionSummary(null), [setVersionSummary]);
-
-  const factPrefKey = factVersionPrefKey(projectId);
-
-  const loadVersions = useCallback(async () => {
-    const [list, prefs] = await Promise.all([
-      fetchProjectVersions(projectId),
-      getUserPreferences().catch(() => ({} as Record<string, string>)),
-    ]);
-    setVersions(list);
-    const savedId = parsePrefId(prefs[factPrefKey]);
-    const saved = savedId != null ? list.find((v) => v.id === savedId) : undefined;
-    const fact = saved
-      ?? list.find((v) => v.direction === ANALYSIS_FACT)
-      ?? null;
-    if (fact) {
-      setFactVersionId(fact.id);
-      setFactVersionLabel(buildVersionLabel(fact));
-    } else {
-      setFactVersionId(null);
-      setFactVersionLabel('');
-    }
-  }, [factPrefKey, projectId]);
+    if (workspaceVersions.length === 0 || restoredFactPrefForProjectRef.current === projectId) return;
+    let cancelled = false;
+    void getUserPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        restoredFactPrefForProjectRef.current = projectId;
+        const saved = parsePrefId(prefs[factVersionPrefKey(projectId)]);
+        if (saved != null && workspaceVersions.some((v) => v.id === saved)) {
+          setUserFactVersionId(saved);
+        }
+      })
+      .catch(() => {
+        restoredFactPrefForProjectRef.current = projectId;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, workspaceVersions]);
 
   const loadPageData = useCallback(async () => {
     if (!factVersionId || !canRead) return;
@@ -134,25 +148,20 @@ export function FactPanel({ projectId }: FactPanelProps) {
   }, [canRead, factVersionId, projectId]);
 
   useEffect(() => {
-    void loadVersions().catch(() => setError('Не удалось загрузить версии.'));
-  }, [loadVersions]);
-
-  useEffect(() => {
     void loadPageData();
   }, [loadPageData]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
-    setFactVersionId(version.id);
-    setFactVersionLabel(buildVersionLabel(version));
+    setUserFactVersionId(version.id);
     void putUserPreferences({
-      [factPrefKey]: String(version.id),
       [LAST_PROJECT_PREF_KEY]: String(projectId),
+      [factVersionPrefKey(projectId)]: String(version.id),
     });
   };
 
   const selectedFactVersion = useMemo(
-    () => versions.find((v) => v.id === factVersionId) ?? null,
-    [factVersionId, versions],
+    () => workspaceVersions.find((v) => v.id === factVersionId) ?? null,
+    [workspaceVersions, factVersionId],
   );
   const physicalVolumeTypes = useDictionaryStore((s) => s.lists.physicalVolumeTypes);
   const catalogTypeName = useMemo(() => {
@@ -160,23 +169,84 @@ export function FactPanel({ projectId }: FactPanelProps) {
     if (!typeId) return null;
     return physicalVolumeTypes.find((t) => t.id === typeId)?.name ?? null;
   }, [physicalVolumeTypes, selectedFactVersion?.physicalVolumeTypeId]);
+  const catalogShortLabel = useMemo(() => shortCatalogName(catalogTypeName), [catalogTypeName]);
   const catalogTypeMissing = selectedFactVersion != null && !selectedFactVersion.physicalVolumeTypeId;
   const importBlocked = !factVersionId || catalogTypeMissing;
 
-  const handleExportAnalysis = async (type: 'excel' | 'pdf') => {
+  const handleExportFacility = async (type: 'excel' | 'pdf') => {
     if (!factVersionId) return;
     setExporting(true);
     setError(null);
     try {
-      if (type === 'excel') {
-        await exportAnalysisExcel(projectId, factVersionId);
-      } else if (subTab === 'fact-facility') {
-        await exportFactFacilityPdf(projectId, factVersionId);
-      } else {
-        await exportAnalysisPdf(projectId, factVersionId);
-      }
+      if (type === 'excel') await exportFactFacilityExcel(projectId, factVersionId);
+      else await exportFactFacilityPdf(projectId, factVersionId);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportDetail = async (type: 'excel' | 'pdf') => {
+    if (!factVersionId) return;
+    setExporting(true);
+    setError(null);
+    try {
+      if (type === 'excel') await exportFactDetailExcel(projectId, factVersionId);
+      else await exportFactDetailPdf(projectId, factVersionId);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleDetailGridApiReady = useCallback((api: GridApi) => {
+    detailGridApiRef.current = api;
+    setDetailGridReady(true);
+  }, []);
+
+  const handleExportDetailVisibleExcel = async () => {
+    if (!factVersionId) return;
+    const api = detailGridApiRef.current;
+    if (!api) {
+      setError('Таблица ещё не загружена.');
+      return;
+    }
+    const { headers, rows: exportRows } = collectGridExportData(api, { includeGroups: true });
+    if (headers.length === 0) {
+      setError('Нет видимых столбцов для экспорта.');
+      return;
+    }
+    if (exportRows.length === 0) {
+      setError('Нет строк для экспорта (проверьте фильтры таблицы).');
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    try {
+      await exportFactDetailExcelVisible(
+        projectId,
+        factVersionId,
+        'Факт_Детально_выделенные',
+        headers,
+        exportRows,
+      );
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт выделенных данных.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportDetailSummaryTable = async () => {
+    if (!factVersionId) return;
+    setExporting(true);
+    setError(null);
+    try {
+      await exportFactDetailSummaryTable(projectId, factVersionId);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выгрузить сводную таблицу.'));
     } finally {
       setExporting(false);
     }
@@ -225,7 +295,13 @@ export function FactPanel({ projectId }: FactPanelProps) {
     [],
   );
 
-  const { contextMenuItems: factDetailContextMenu, contextDialogs: factDetailDialogs } =
+  const performanceGetRowClass = useCallback(
+    (params: { data?: PerformanceTreeRow }) =>
+      params.data?.isTotal ? 'forecast-summary-total-row' : undefined,
+    [],
+  );
+
+  const { contextMenuItems: factDetailContextMenu, contextDialogs: factDetailDialogs, ConfirmDialog: ConfirmDialogFact } =
     useFactDetailContextMenu({
       projectId,
       factVersionId,
@@ -246,6 +322,7 @@ export function FactPanel({ projectId }: FactPanelProps) {
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exporting} />
+      <WorkingOverlay open={loading} delayMs={1000} />
       {chromeExpanded && (
         <>
       <Stack direction="row" sx={panelPrimaryToolbarSx}>
@@ -278,8 +355,9 @@ export function FactPanel({ projectId }: FactPanelProps) {
             </Typography>
           </Box>
         )}
-        {catalogTypeName && (
+        {catalogShortLabel && (
           <Box
+            data-testid="fact-catalog-label"
             sx={{
               backgroundColor: '#FEF9E7',
               border: '1px solid #F9E79F',
@@ -288,10 +366,20 @@ export function FactPanel({ projectId }: FactPanelProps) {
               borderRadius: 1,
             }}
           >
-            <Typography variant="body2" sx={{ color: '#7D6608' }}>
-              Справочник ФО: {catalogTypeName}
+            <Typography variant="body2" sx={{ color: '#7D6608' }} noWrap>
+              {catalogShortLabel}
             </Typography>
           </Box>
+        )}
+        {factVersionId && (
+          <Button
+            variant="outlined"
+            onClick={() => setPlanningOpen(true)}
+            sx={{ textTransform: 'none' }}
+            data-testid="fact-planning-parameters-button"
+          >
+            Параметры
+          </Button>
         )}
         {canImport && (
           <>
@@ -414,7 +502,7 @@ export function FactPanel({ projectId }: FactPanelProps) {
                 variant="outlined"
                 size="small"
                 disabled={!factVersionId || exporting}
-                onClick={() => void handleExportAnalysis('excel')}
+                onClick={() => void handleExportFacility('excel')}
                 startIcon={<FileDownloadIcon />}
                 sx={{ textTransform: 'none' }}
               >
@@ -424,7 +512,7 @@ export function FactPanel({ projectId }: FactPanelProps) {
                 variant="outlined"
                 size="small"
                 disabled={!factVersionId || exporting}
-                onClick={() => void handleExportAnalysis('pdf')}
+                onClick={() => void handleExportFacility('pdf')}
                 startIcon={<PictureAsPdfIcon />}
                 sx={{ textTransform: 'none' }}
               >
@@ -433,24 +521,48 @@ export function FactPanel({ projectId }: FactPanelProps) {
             </>
           )}
           {subTab === 'fact-detail' && (
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={!factVersionId || exporting}
-              onClick={async () => {
-                if (!factVersionId) return;
-                setExporting(true);
-                try {
-                  await exportFactDetailPdf(projectId, factVersionId);
-                } finally {
-                  setExporting(false);
-                }
-              }}
-              startIcon={<PictureAsPdfIcon />}
-              sx={{ textTransform: 'none' }}
-            >
-              Экспорт PDF
-            </Button>
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!factVersionId || exporting}
+                onClick={() => void handleExportDetail('excel')}
+                startIcon={<FileDownloadIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                Экспорт всех excel
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!factVersionId || !detailGridReady || exporting}
+                onClick={() => void handleExportDetailVisibleExcel()}
+                startIcon={<FileDownloadIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                Экспорт выделенных excel
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!factVersionId || exporting}
+                onClick={() => void handleExportDetail('pdf')}
+                startIcon={<PictureAsPdfIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                Экспорт PDF
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                disabled={!factVersionId || exporting}
+                onClick={() => void handleExportDetailSummaryTable()}
+                startIcon={<FileDownloadIcon />}
+                sx={{ textTransform: 'none' }}
+              >
+                Сводная таблица
+              </Button>
+            </>
           )}
         </Stack>
       </Box>
@@ -463,19 +575,30 @@ export function FactPanel({ projectId }: FactPanelProps) {
 
       <Box sx={{ flex: 1, minHeight: 360 }}>
         {subTab === 'fact-total' && (
-          <DataTable<PerformanceTreeRow>
-            rowData={performanceRows}
-            columnDefs={performanceColumns}
-            objectName="FactPerformance"
-            gridId={`fact-performance-${projectId}`}
-            loading={loading}
-            height="100%"
-            treeData
-            getDataPath={(row) => row.hierarchy}
-            autoGroupColumnDef={performanceAutoGroupColumnDef}
-            getRowIdValue={performanceRowId}
-            showColumnSettings
-          />
+          <Box
+            sx={{
+              height: '100%',
+              '& .forecast-summary-total-row': {
+                backgroundColor: 'rgba(41, 128, 185, 0.12) !important',
+                fontWeight: 600,
+              },
+            }}
+          >
+            <DataTable<PerformanceTreeRow>
+              rowData={performanceRows}
+              columnDefs={performanceColumns}
+              objectName="Assessment"
+              gridId="fact-performance"
+              loading={loading}
+              height="100%"
+              treeData
+              getDataPath={(row) => row.hierarchy}
+              autoGroupColumnDef={performanceAutoGroupColumnDef}
+              getRowIdValue={performanceRowId}
+              getRowClass={performanceGetRowClass}
+              showColumnSettings
+            />
+          </Box>
         )}
 
         {subTab === 'fact-facility' && (
@@ -491,8 +614,8 @@ export function FactPanel({ projectId }: FactPanelProps) {
             <DataTable<ProjectsPageFacilityRow>
               rowData={facilityRows}
               columnDefs={facilityColumns}
-              objectName="FactFacility"
-              gridId={`fact-facility-${projectId}`}
+              objectName="Assessment"
+              gridId="fact-facility"
               loading={loading}
               height="100%"
               pinnedBottomRowData={facilityPinnedBottomRow}
@@ -506,13 +629,14 @@ export function FactPanel({ projectId }: FactPanelProps) {
           <DataTable<ProjectsPageDetailRow>
             rowData={detailRows}
             columnDefs={detailColumns}
-            objectName="FactDetail"
-            gridId={`fact-detail-${projectId}`}
+            objectName="Assessment"
+            gridId="fact-detail"
             loading={loading}
             height="100%"
             enableRowGrouping
             showColumnSettings
             contextMenuItems={factDetailContextMenu}
+            onGridApiReady={handleDetailGridApiReady}
             getRowIdValue={(row, index) =>
               row.rowId != null ? `${row.isEquipment ? 'eq' : 'pv'}-${row.rowId}` : `fact-detail-${index}`
             }
@@ -522,14 +646,13 @@ export function FactPanel({ projectId }: FactPanelProps) {
 
       <ProjectVersionPickerDialog
         open={versionPickerOpen}
-        title="Версии факта"
+        title="Выбор версии (факт)"
         projectId={projectId}
-        versions={versions}
+        versions={workspaceVersions}
         directionFilter={ANALYSIS_FACT}
         selectedVersionId={factVersionId}
         onSelect={handleVersionSelect}
         onClose={() => setVersionPickerOpen(false)}
-        onVersionsChanged={() => void loadVersions()}
       />
 
       <FactAnalysisDialog
@@ -540,6 +663,16 @@ export function FactPanel({ projectId }: FactPanelProps) {
       />
 
       {factDetailDialogs}
+      {ConfirmDialogFact}
+
+      <PlanningParametersDialog
+        open={planningOpen}
+        projectId={projectId}
+        versionId={factVersionId}
+        showFactColumn
+        onClose={() => setPlanningOpen(false)}
+        onSaved={() => void loadPageData()}
+      />
 
       {importDialogType && factVersionId && (
         <DataImportDialog
