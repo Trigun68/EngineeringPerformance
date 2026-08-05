@@ -22,9 +22,11 @@ test.describe('IIC norms migration column visibility', () => {
 
     const migrationCheckbox = dialog.getByRole('checkbox', { name: 'Миграция' });
     await expect(migrationCheckbox).toBeVisible();
+    // Controlled MUI: click(), не uncheck()/check() — иначе DOM не меняет React state.
     if (await migrationCheckbox.isChecked()) {
-      await migrationCheckbox.uncheck();
+      await migrationCheckbox.click();
     }
+    await expect(migrationCheckbox).not.toBeChecked();
     await dialog.getByRole('button', { name: 'Применить' }).click();
 
     await expect(page.locator('.ag-header-cell[col-id="migration"]')).toHaveCount(0, {
@@ -34,7 +36,11 @@ test.describe('IIC norms migration column visibility', () => {
     // Restore visibility for repeatable runs
     await page.getByRole('button', { name: 'Настройка столбцов' }).click();
     await expect(dialog).toBeVisible();
-    await dialog.getByRole('checkbox', { name: 'Миграция' }).check();
+    const restoreCheckbox = dialog.getByRole('checkbox', { name: 'Миграция' });
+    if (!(await restoreCheckbox.isChecked())) {
+      await restoreCheckbox.click();
+    }
+    await expect(restoreCheckbox).toBeChecked();
     await dialog.getByRole('button', { name: 'Применить' }).click();
 
     await scrollAgGridToColumn(page, 'migration', 'ref-iic-norms');

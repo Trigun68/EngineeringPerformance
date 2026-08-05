@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loginAsAdmin } from './helpers';
@@ -11,6 +12,10 @@ const SAMPLE_FILES = {
   equipment: path.join(SRC_DIR, 'Оборудование.xlsx'),
   labor: path.join(SRC_DIR, '25-310 Трудоемкость прокта.xlsx'),
 };
+
+function requireSample(filePath: string): void {
+  test.skip(!fs.existsSync(filePath), `Sample missing (gitignored .src): ${path.basename(filePath)}`);
+}
 
 async function openProjectWorkspace(page: import('@playwright/test').Page, projectId = 1) {
   await page.goto(`/projects/${projectId}`);
@@ -63,6 +68,7 @@ test.describe('Project data import (.src samples)', () => {
   });
 
   test('forecast: import physical volumes from .src sample', async ({ page }) => {
+    requireSample(SAMPLE_FILES.physicalVolumes);
     test.setTimeout(240_000);
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
@@ -79,6 +85,7 @@ test.describe('Project data import (.src samples)', () => {
   });
 
   test('forecast: import equipment from .src sample', async ({ page }) => {
+    requireSample(SAMPLE_FILES.equipment);
     test.setTimeout(180_000);
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
@@ -96,6 +103,7 @@ test.describe('Project data import (.src samples)', () => {
   });
 
   test('fact: labor preview and import from .src sample', async ({ page }) => {
+    requireSample(SAMPLE_FILES.labor);
     test.setTimeout(120_000);
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Оценка факта' }).click();
