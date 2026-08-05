@@ -26,7 +26,8 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # ~120 serial Playwright tests × ~30–35s ≈ 60–70 min; keep headroom for retries/build.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
