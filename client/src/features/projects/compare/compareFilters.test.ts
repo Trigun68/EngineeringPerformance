@@ -27,7 +27,7 @@ function summaryBase(overrides: Partial<VersionCompareRow> = {}): VersionCompare
     plannedLaborHoursA: 100,
     plannedLaborHoursB: 100,
     plannedLaborHoursOptimisticA: 80,
-    plannedLaborHoursOptimisticB: 70,
+    plannedLaborHoursOptimisticB: 80,
     plannedLaborHoursPessimisticA: 120,
     plannedLaborHoursPessimisticB: 120,
     planZScoreA: 0.2,
@@ -37,18 +37,20 @@ function summaryBase(overrides: Partial<VersionCompareRow> = {}): VersionCompare
 }
 
 describe('compareFilters', () => {
-  it('hasSummaryDifference hides when FactZ, PlanZ and base plan labor match', () => {
-    expect(hasSummaryDifference(summaryBase(), 'base')).toBe(false);
+  it('hasSummaryDifference hides when FactZ, PlanZ and all three plan-hour pairs match', () => {
+    expect(hasSummaryDifference(summaryBase())).toBe(false);
   });
 
-  it('hasSummaryDifference uses active scenario for planned labor', () => {
-    const row = summaryBase();
-    expect(hasSummaryDifference(row, 'base')).toBe(false);
-    expect(hasSummaryDifference(row, 'optimistic')).toBe(true);
+  it('hasSummaryDifference shows when optimistic hours differ even if base matches', () => {
+    const row = summaryBase({
+      plannedLaborHoursOptimisticA: 80,
+      plannedLaborHoursOptimisticB: 70,
+    });
+    expect(hasSummaryDifference(row)).toBe(true);
   });
 
   it('hasSummaryDifference shows when plan Z differs', () => {
-    expect(hasSummaryDifference(summaryBase({ planZScoreB: -0.1 }), 'base')).toBe(true);
+    expect(hasSummaryDifference(summaryBase({ planZScoreB: -0.1 }))).toBe(true);
   });
 
   it('hasFacilityDifference hides when both fact hours are null', () => {

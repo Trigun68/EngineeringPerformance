@@ -7,10 +7,12 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 
 public sealed class AnalysisVersionRecalculationOrchestrator(
     AppDbContext context,
-    ILaborIntensityRecalculationService recalculation) : IAnalysisVersionRecalculationOrchestrator
+    ILaborIntensityRecalculationService recalculation,
+    IProjectAnalyticsCache analyticsCache) : IAnalysisVersionRecalculationOrchestrator
 {
     private readonly AppDbContext _context = context;
     private readonly ILaborIntensityRecalculationService _recalculation = recalculation;
+    private readonly IProjectAnalyticsCache _analyticsCache = analyticsCache;
 
     public Task<int> RecalculateVersionAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
         RecalculateOneAsync(projectId, versionId, cancellationToken);
@@ -148,6 +150,8 @@ public sealed class AnalysisVersionRecalculationOrchestrator(
     private async Task<int> RecalculateOneAsync(int projectId, int versionId, CancellationToken cancellationToken)
     {
         await _recalculation.RecalculateAsync(projectId, versionId, cancellationToken);
+        // Пересчёт трудоёмкости меняет гриды и отчёт — кэш проекта устарел (ISS-018).
+        await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
         return 1;
     }
 }

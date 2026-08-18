@@ -23,6 +23,31 @@ const num0 = (v: unknown) => formatGridNumber(v, 0);
 
 const rightAlign = { cellStyle: { textAlign: 'right' as const } };
 
+const PLAN_HOUR_COLORS = {
+  pessimisticHours: '#ffebee',
+  baseHours: '#e8f5e9',
+  optimisticHours: '#e3f2fd',
+} as const;
+
+function factPlanHourColumns<T extends { pessimisticHours?: number | null; baseHours?: number | null; optimisticHours?: number | null }>(
+  extras?: Partial<ColDef<T>>,
+): ColDef<T>[] {
+  const num2 = (v: unknown) => formatGridNumber(v, 2);
+  const defs: Array<{ field: 'pessimisticHours' | 'baseHours' | 'optimisticHours'; headerName: string }> = [
+    { field: 'pessimisticHours', headerName: 'План.Труд.Песс.' },
+    { field: 'baseHours', headerName: 'План.Труд.Баз.' },
+    { field: 'optimisticHours', headerName: 'План.Труд.Оптим.' },
+  ];
+  return defs.map(({ field, headerName }) => ({
+    ...extras,
+    field,
+    headerName,
+    width: 140,
+    cellStyle: { textAlign: 'right' as const, backgroundColor: PLAN_HOUR_COLORS[field] },
+    valueFormatter: (p: { value?: unknown }) => num2(p.value),
+  })) as unknown as ColDef<T>[];
+}
+
 /** Число ФО или готовый текст итогов по единицам измерения. */
 export function formatPhysicalVolumeCell(
   display: string | null | undefined,
@@ -312,6 +337,7 @@ export function createFactPerformanceColumns(): ColDef<PerformanceRow>[] {
       ...rightAlign,
       valueFormatter: (p) => num2(p.value),
     },
+    ...factPlanHourColumns<PerformanceRow>(),
     {
       field: 'factProductivity',
       headerName: 'Факт производит.',
@@ -351,6 +377,7 @@ export function createFactFacilityColumns(): ColDef<ProjectsPageFacilityRow>[] {
       ...rightAlign,
       valueFormatter: (p) => num2(p.value),
     },
+    ...factPlanHourColumns<ProjectsPageFacilityRow>(),
     {
       field: 'zScore',
       headerName: 'Z-score',
@@ -405,6 +432,12 @@ export function createFactDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
       allowedAggFuncs: ['sumNullable'],
       aggFunc: 'sumNullable',
     },
+    ...factPlanHourColumns<ProjectsPageDetailRow>({
+      ...rightGroupable,
+      enableValue: true,
+      allowedAggFuncs: ['sumNullable'],
+      aggFunc: 'sumNullable',
+    }),
     {
       field: 'factProductivity',
       headerName: 'Факт производит.',

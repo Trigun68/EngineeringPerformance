@@ -35,6 +35,43 @@ interface CompareMetricColumnOptions<T extends CompareScenarioMetrics> {
 
 const rightAlign = { cellStyle: { textAlign: 'right' as const } };
 
+const PLAN_HOUR_COLORS = {
+  pessimistic: '#ffebee',
+  base: '#e8f5e9',
+  optimistic: '#e3f2fd',
+} as const;
+
+type PlanLaborField =
+  | 'plannedLaborHoursPessimisticA'
+  | 'plannedLaborHoursA'
+  | 'plannedLaborHoursOptimisticA'
+  | 'plannedLaborHoursPessimisticB'
+  | 'plannedLaborHoursB'
+  | 'plannedLaborHoursOptimisticB';
+
+function comparePlanLaborHourColumns<T extends CompareScenarioMetrics>(
+  extras?: Partial<ColDef<T>>,
+): ColDef<T>[] {
+  const num2 = (value: unknown) => formatGridNumber(value, 2);
+  const defs: Array<{ field: PlanLaborField; headerName: string; color: keyof typeof PLAN_HOUR_COLORS }> = [
+    { field: 'plannedLaborHoursPessimisticA', headerName: 'План.Труд. (Песс. v. А)', color: 'pessimistic' },
+    { field: 'plannedLaborHoursA', headerName: 'План.Труд. (Баз. v. А)', color: 'base' },
+    { field: 'plannedLaborHoursOptimisticA', headerName: 'План.Труд. (Опт. v. А)', color: 'optimistic' },
+    { field: 'plannedLaborHoursPessimisticB', headerName: 'План.Труд. (Песс. v. Б)', color: 'pessimistic' },
+    { field: 'plannedLaborHoursB', headerName: 'План.Труд. (Баз. v. Б)', color: 'base' },
+    { field: 'plannedLaborHoursOptimisticB', headerName: 'План.Труд. (Опт. v. Б)', color: 'optimistic' },
+  ];
+  return defs.map(({ field, headerName, color }) => ({
+    ...extras,
+    colId: field,
+    field,
+    headerName,
+    width: 150,
+    cellStyle: { textAlign: 'right' as const, backgroundColor: PLAN_HOUR_COLORS[color] },
+    valueFormatter: (params: { value?: unknown }) => num2(params.value),
+  })) as unknown as ColDef<T>[];
+}
+
 export function getComparePlannedLaborHours<T extends CompareScenarioMetrics>(
   row: T,
   scenario: CompareScenario,
@@ -71,6 +108,7 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
 }>(
   scenario: CompareScenario,
   { getPhysicalVolume, getZScore, getZDelta, zDeltaColumnId }: CompareMetricColumnOptions<T>,
+  planLaborExtras?: Partial<ColDef<T>>,
 ): ColDef<T>[] {
   const num2 = (value: unknown) => formatGridNumber(value, 2);
   const num4 = (value: unknown) => formatGridNumber(value, 4);
@@ -90,20 +128,7 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
       valueGetter: (params) => params.data ? getPhysicalVolume(params.data, 'B') : null,
       valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
     },
-    {
-      headerName: 'Пл.Труд. (v. А)',
-      width: 125,
-      ...rightAlign,
-      valueGetter: (params) => params.data ? getComparePlannedLaborHours(params.data, scenario, 'A') : null,
-      valueFormatter: (params) => num2(params.value),
-    },
-    {
-      headerName: 'Пл.Труд. (v. Б)',
-      width: 125,
-      ...rightAlign,
-      valueGetter: (params) => params.data ? getComparePlannedLaborHours(params.data, scenario, 'B') : null,
-      valueFormatter: (params) => num2(params.value),
-    },
+    ...comparePlanLaborHourColumns<T>(planLaborExtras),
     {
       headerName: 'Ф.труд. (v. А)',
       width: 120,
@@ -247,7 +272,7 @@ export function createCompareDetailColumns(
       getZScore: (row, side) => side === 'A' ? row.zScoreA : row.zScoreB,
       getZDelta: (row) => row.zDelta,
       zDeltaColumnId: 'zDelta',
-    }),
+    }, { aggFunc: 'sumNullable' }),
     { field: 'presence', headerName: 'Наличие', width: 100, ...groupable },
   ];
 }

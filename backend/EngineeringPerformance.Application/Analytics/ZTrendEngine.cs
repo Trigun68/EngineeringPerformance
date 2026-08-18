@@ -63,37 +63,55 @@ public sealed class ZTrendEngine : IZTrendEngine
                         Date = g.Key.Item1,
                         ProjectCount = projectCount,
                         Weight = uniform ? list.Count : list.Sum(x => x.Weight),
+                        Contributions = list
+                            .GroupBy(x => (x.ProjectId, x.VersionId))
+                            .Select(cg =>
+                            {
+                                var p = cg.First();
+                                return new ZTrendContributionDto(
+                                    p.ProjectId,
+                                    p.ProjectCode,
+                                    p.ProjectName,
+                                    p.VersionId,
+                                    p.VersionName,
+                                    p.ZScore.HasValue ? (double)p.ZScore.Value : null,
+                                    (double)(uniform ? 1m : (p.Weight <= 0 ? 1m : p.Weight)));
+                            })
+                            .ToList(),
                     };
                 }
 
-                decimal weightSum;
-                decimal zWeighted;
-                if (uniform)
-                {
-                    weightSum = linePoints.Count;
-                    zWeighted = linePoints.Sum(p => p.ZScore!.Value) / linePoints.Count;
-                }
-                else
-                {
-                    weightSum = linePoints.Sum(p => p.Weight <= 0 ? 0 : p.Weight);
-                    if (weightSum <= 0)
-                    {
-                        weightSum = linePoints.Count;
-                        zWeighted = linePoints.Sum(p => p.ZScore!.Value) / linePoints.Count;
-                    }
-                    else
-                    {
-                        zWeighted = linePoints.Sum(p => p.ZScore!.Value * (p.Weight <= 0 ? 0 : p.Weight)) / weightSum;
-                    }
-                }
+                // Режим «uniform» — равные веса; при нулевых часах откат к среднему арифметическому.
+                var aggregator = new WeightedZAggregator();
+                foreach (var point in linePoints)
+                    aggregator.Add(point.ZScore, uniform ? 1m : point.Weight);
+
+                var zWeighted = aggregator.Result(2, arithmeticFallback: true) ?? 0m;
+                var weightSum = aggregator.WeightSum > 0 ? aggregator.WeightSum : aggregator.SampleCount;
 
                 var sample = linePoints[0];
+                var contributions = list
+                    .GroupBy(x => (x.ProjectId, x.VersionId))
+                    .Select(cg =>
+                    {
+                        var p = cg.First();
+                        return new ZTrendContributionDto(
+                            p.ProjectId,
+                            p.ProjectCode,
+                            p.ProjectName,
+                            p.VersionId,
+                            p.VersionName,
+                            p.ZScore.HasValue ? (double)p.ZScore.Value : null,
+                            (double)(uniform ? 1m : (p.Weight <= 0 ? 1m : p.Weight)));
+                    })
+                    .ToList();
                 return sample with
                 {
                     Date = g.Key.Item1,
-                    ZScore = Math.Round(zWeighted, 2),
+                    ZScore = zWeighted,
                     Weight = weightSum,
                     ProjectCount = projectCount,
+                    Contributions = contributions,
                 };
             })
             .OrderBy(p => p.Date)
@@ -193,14 +211,33 @@ public sealed class ZTrendEngine : IZTrendEngine
         return LightenColor(baseColor, lightenStep, shadeIndex);
     }
 
-    private static ZTrendPointDto ToPointDto(ZTrendRawPoint p) =>
-        new(
+    private static ZTrendPointDto ToPointDto(ZTrendRawPoint p)
+    {
+        var contributions = p.Contributions;
+        if (contributions is null || contributions.Count == 0)
+        {
+            contributions =
+            [
+                new ZTrendContributionDto(
+                    p.ProjectId,
+                    p.ProjectCode,
+                    p.ProjectName,
+                    p.VersionId,
+                    p.VersionName,
+                    p.ZScore.HasValue ? (double)p.ZScore.Value : null,
+                    (double)p.Weight),
+            ];
+        }
+
+        return new(
             p.Date,
             p.ZScore.HasValue ? (double)p.ZScore.Value : null,
             (double)p.Weight,
             p.ProjectCount,
             p.NormId,
-            p.Flag);
+            p.Flag,
+            contributions);
+    }
 
     private static string NormalizeHex(string hex)
     {

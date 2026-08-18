@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Analytics.FactNorm;
 using EngineeringPerformance.Application.Analytics.NormRegistry;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Application.Norms;
@@ -16,17 +17,35 @@ public sealed class IicWorkDirectionNormService : IIicNormService
     private readonly ICacheInvalidator _cacheInvalidator;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly INormRegistryService _normRegistry;
+    private readonly IFactNormCacheGeneration _factNormCache;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
     public IicWorkDirectionNormService(
         AppDbContext context,
         ICacheInvalidator cacheInvalidator,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
-        INormRegistryService normRegistry)
+        INormRegistryService normRegistry,
+        IFactNormCacheGeneration factNormCache,
+        IProjectAnalyticsCache analyticsCache)
     {
         _context = context;
         _cacheInvalidator = cacheInvalidator;
         _recalcOrchestrator = recalcOrchestrator;
         _normRegistry = normRegistry;
+        _factNormCache = factNormCache;
+        _analyticsCache = analyticsCache;
+    }
+
+    /// <summary>
+    /// Сброс всех кэшей, зависящих от норм: справочники, реестр норм и анализ «факт vs норма».
+    /// </summary>
+    private async Task InvalidateNormCachesAsync(CancellationToken cancellationToken)
+    {
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+        await _normRegistry.InvalidateCacheAsync(cancellationToken);
+        await _factNormCache.BumpAsync(cancellationToken);
+        // Норма может участвовать в любой версии любого проекта — сбрасываем аналитику целиком.
+        await _analyticsCache.InvalidateAllAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<IicNormDto>> GetAllAsync(DateTime? asOf, CancellationToken cancellationToken = default)
@@ -111,8 +130,7 @@ public sealed class IicWorkDirectionNormService : IIicNormService
 
         _context.IicWorkDirectionNorms.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
-        await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        await _normRegistry.InvalidateCacheAsync(cancellationToken);
+        await InvalidateNormCachesAsync(cancellationToken);
 
         var recalcCount = await _recalcOrchestrator.AfterNormChangedAsync(
             entity.WorkDirectionId,
@@ -154,8 +172,7 @@ public sealed class IicWorkDirectionNormService : IIicNormService
         NormDtoMapper.ApplyToEntity(entity, request);
 
         await _context.SaveChangesAsync(cancellationToken);
-        await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        await _normRegistry.InvalidateCacheAsync(cancellationToken);
+        await InvalidateNormCachesAsync(cancellationToken);
 
         var recalcCount = await _recalcOrchestrator.AfterNormChangedAsync(
             entity.WorkDirectionId,
@@ -175,8 +192,7 @@ public sealed class IicWorkDirectionNormService : IIicNormService
 
         _context.IicWorkDirectionNorms.Remove(entity);
         await _context.SaveChangesAsync(cancellationToken);
-        await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        await _normRegistry.InvalidateCacheAsync(cancellationToken);
+        await InvalidateNormCachesAsync(cancellationToken);
         return true;
     }
 

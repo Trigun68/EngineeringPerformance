@@ -7,7 +7,6 @@ async function openReportTab(page: import('@playwright/test').Page) {
   await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
   await page.waitForURL(/\/projects\/\d+/);
 
-  // Дождаться шапки проекта (workspace загружен), затем вкладку.
   await expect(page.getByRole('button', { name: 'Выбрать проект' })).toBeVisible({ timeout: 20_000 });
   const reportTab = page.getByRole('tab', { name: 'Отчет' });
   await expect(reportTab).toBeVisible({ timeout: 15_000 });
@@ -15,7 +14,6 @@ async function openReportTab(page: import('@playwright/test').Page) {
 
   const panel = page.getByTestId('performance-report-panel');
   await expect(panel).toBeVisible({ timeout: 40_000 });
-  await expect(page.getByRole('button', { name: /План:/ })).toBeVisible({ timeout: 20_000 });
   // Данные отчёта подгрузились — PDF активен.
   await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeEnabled({ timeout: 40_000 });
 }
@@ -25,17 +23,24 @@ test.describe('Performance report tab', () => {
     await loginAsAdmin(page);
   });
 
-  test('shows plan/fact pickers, dual Z cards, scale, PDF', async ({ page }) => {
+  test('shows KPI cards, scale, directions tree, insights — no version pickers', async ({ page }) => {
     await openReportTab(page);
 
-    await expect(page.getByRole('button', { name: /Факт:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Факт:/ })).toHaveCount(0);
+
     await expect(page.getByTestId('report-summary-cards')).toBeVisible();
     await expect(page.getByTestId('report-plan-z')).toBeVisible();
     await expect(page.getByTestId('report-fact-z')).toBeVisible();
+    await expect(page.getByTestId('report-labor-plan')).toBeVisible();
+    await expect(page.getByTestId('report-labor-fact')).toBeVisible();
+    await expect(page.getByTestId('report-accuracy')).toBeVisible();
     await expect(page.getByTestId('report-z-scale')).toBeVisible();
     await expect(page.getByText('Шкала интерпретации Z-оценки')).toBeVisible();
     await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
-    await expect(page.getByText('Выводы и рекомендации')).toBeVisible();
+    await expect(page.getByTestId('report-insights')).toBeVisible();
+    await expect(page.getByTestId('report-directions-table')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Направление' })).toBeVisible();
   });
 
   test('theme toggle switches dark class on panel', async ({ page }) => {

@@ -19,6 +19,11 @@ export interface Accuracy {
 export interface ChartPoint {
   x: number;
   y: number;
+  projectId?: number;
+  projectCode?: string | null;
+  projectName?: string | null;
+  versionId?: number;
+  versionName?: string | null;
 }
 
 export interface NormComparison {
@@ -39,7 +44,12 @@ export interface NormComparison {
   suggestionId: number | null;
   chartPoints?: ChartPoint[] | null;
   proposedParameters?: Record<string, number> | null;
+  currentParameters?: Record<string, number> | null;
   warning?: string | null;
+  normMeanPerformance: number;
+  factMeanPerformance: number;
+  factStdDeviation: number;
+  normStdDeviation: number;
 }
 
 export interface NormSuggestion {
@@ -106,6 +116,10 @@ function normalizeAccuracy(raw: Record<string, unknown>): Accuracy {
 function normalizeComparison(raw: Record<string, unknown>): NormComparison {
   const points = (raw.chartPoints ?? raw.ChartPoints) as Array<Record<string, unknown>> | null | undefined;
   const params = (raw.proposedParameters ?? raw.ProposedParameters) as Record<string, number> | null | undefined;
+  const currentParams = (raw.currentParameters ?? raw.CurrentParameters) as
+    | Record<string, number>
+    | null
+    | undefined;
   return {
     normId: Number(raw.normId ?? raw.NormId),
     workDirectionId: Number(raw.workDirectionId ?? raw.WorkDirectionId),
@@ -125,9 +139,19 @@ function normalizeComparison(raw: Record<string, unknown>): NormComparison {
     chartPoints: points?.map((p) => ({
       x: Number(p.x ?? p.X ?? 0),
       y: Number(p.y ?? p.Y ?? 0),
+      projectId: Number(p.projectId ?? p.ProjectId ?? 0) || undefined,
+      projectCode: (p.projectCode ?? p.ProjectCode ?? null) as string | null,
+      projectName: (p.projectName ?? p.ProjectName ?? null) as string | null,
+      versionId: Number(p.versionId ?? p.VersionId ?? 0) || undefined,
+      versionName: (p.versionName ?? p.VersionName ?? null) as string | null,
     })),
     proposedParameters: params ?? null,
+    currentParameters: currentParams ?? null,
     warning: (raw.warning ?? raw.Warning ?? null) as string | null,
+    normMeanPerformance: Number(raw.normMeanPerformance ?? raw.NormMeanPerformance ?? 0),
+    factMeanPerformance: Number(raw.factMeanPerformance ?? raw.FactMeanPerformance ?? 0),
+    factStdDeviation: Number(raw.factStdDeviation ?? raw.FactStdDeviation ?? 0),
+    normStdDeviation: Number(raw.normStdDeviation ?? raw.NormStdDeviation ?? 0),
   };
 }
 
@@ -154,41 +178,41 @@ function normalizeSuggestion(raw: Record<string, unknown>): NormSuggestion {
   };
 }
 
+export async function fetchReferenceFormulas(signal?: AbortSignal): Promise<ReferenceFormula[]> {
+  const { data } = await apiClient.get<unknown>('/analytics/reference-formulas', { signal });
+  const list = Array.isArray(data) ? data : [];
+  return list.map((raw) => {
+    const r = raw as Record<string, unknown>;
+    return {
+      code: String(r.code ?? r.Code ?? ''),
+      displayName: String(r.displayName ?? r.DisplayName ?? ''),
+      formula: String(r.formula ?? r.Formula ?? ''),
+      paramNames: (r.paramNames ?? r.ParamNames ?? []) as string[],
+      description: String(r.description ?? r.Description ?? ''),
+    };
+  });
+}
+
 export async function runFactNormAnalysis(
   request: FactNormAnalysisRequest,
   signal?: AbortSignal,
 ): Promise<FactNormAnalysisResponse> {
   const { data } = await apiClient.post<Record<string, unknown>>(
     '/analytics/fact-norm-analysis',
-    {
-      periodStart: request.periodStart,
-      periodEnd: request.periodEnd,
-      projectIds: request.projectIds ?? null,
-      workDirectionIds: request.workDirectionIds ?? null,
-    },
+    request,
     { signal },
   );
   const comparisons = (data.comparisons ?? data.Comparisons ?? []) as Record<string, unknown>[];
   const suggestions = (data.suggestions ?? data.Suggestions ?? []) as Record<string, unknown>[];
   const warnings = (data.warnings ?? data.Warnings ?? []) as string[];
+  const accuracyRaw = (data.accuracy ?? data.Accuracy ?? {}) as Record<string, unknown>;
   return {
-    accuracy: normalizeAccuracy((data.accuracy ?? data.Accuracy ?? {}) as Record<string, unknown>),
+    accuracy: normalizeAccuracy(accuracyRaw),
     comparisons: comparisons.map(normalizeComparison),
     suggestions: suggestions.map(normalizeSuggestion),
     warnings,
     fromCache: Boolean(data.fromCache ?? data.FromCache),
   };
-}
-
-export async function fetchReferenceFormulas(): Promise<ReferenceFormula[]> {
-  const { data } = await apiClient.get<Record<string, unknown>[]>('/analytics/reference-formulas');
-  return (data ?? []).map((raw) => ({
-    code: String(raw.code ?? raw.Code ?? ''),
-    displayName: String(raw.displayName ?? raw.DisplayName ?? ''),
-    formula: String(raw.formula ?? raw.Formula ?? ''),
-    paramNames: (raw.paramNames ?? raw.ParamNames ?? []) as string[],
-    description: String(raw.description ?? raw.Description ?? ''),
-  }));
 }
 
 export async function createNormFromSuggestion(

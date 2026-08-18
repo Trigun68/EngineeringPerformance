@@ -11,7 +11,8 @@ namespace EngineeringPerformance.Infrastructure.Tests.Analytics;
 public sealed class PerformanceCalculationTests
 {
     [Theory]
-    [InlineData(null, "Н/Д")]
+    // Прочерк — общая для проекта заглушка отсутствующего значения (см. PerformancePercentileHelper).
+    [InlineData(null, "—")]
     [InlineData(-1.2, "0-й")]
     [InlineData(-0.9, "0-10-й")]
     [InlineData(-0.7, "10-20-й")]

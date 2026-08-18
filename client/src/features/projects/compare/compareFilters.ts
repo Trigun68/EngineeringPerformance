@@ -23,20 +23,22 @@ function round2(v: number | null | undefined): number {
   return Math.round((v ?? 0) * 100) / 100;
 }
 
+const COMPARE_PLAN_HOUR_SCENARIOS: CompareScenario[] = ['pessimistic', 'base', 'optimistic'];
+
+function planLaborHoursIdentical(row: VersionCompareRow): boolean {
+  return COMPARE_PLAN_HOUR_SCENARIOS.every((scenario) =>
+    round2(getComparePlannedLaborHours(row, scenario, 'A'))
+    === round2(getComparePlannedLaborHours(row, scenario, 'B')));
+}
+
 /**
- * Итого: FactZ + PlanZ + Пл.Труд. (активный сценарий).
+ * Итого: FactZ + PlanZ + любая из трёх пар плановых часов (песс./баз./опт.).
  * Паритет docs/features/version-comparison.md.
  */
-export function hasSummaryDifference(
-  row: VersionCompareRow,
-  scenario: CompareScenario = 'base',
-): boolean {
+export function hasSummaryDifference(row: VersionCompareRow): boolean {
   const factZIdentical = round4(row.factZScoreA) === round4(row.factZScoreB);
   const planZIdentical = round4(row.planZScoreA) === round4(row.planZScoreB);
-  const planLaborIdentical =
-    round2(getComparePlannedLaborHours(row, scenario, 'A'))
-    === round2(getComparePlannedLaborHours(row, scenario, 'B'));
-  return !(factZIdentical && planZIdentical && planLaborIdentical);
+  return !(factZIdentical && planZIdentical && planLaborHoursIdentical(row));
 }
 
 /**
@@ -69,7 +71,7 @@ export function hasDetailDifference(row: VersionCompareDetailRow): boolean {
 export function filterCompareSummaryRows(
   rows: VersionCompareRow[],
   showOnlyDifferences: boolean,
-  scenario: CompareScenario = 'base',
+  _scenario: CompareScenario = 'base',
 ): VersionCompareRow[] {
   if (!showOnlyDifferences) return rows;
 
@@ -78,7 +80,7 @@ export function filterCompareSummaryRows(
 
   for (const row of rows) {
     if (row.isTotal) continue;
-    if (hasSummaryDifference(row, scenario)) {
+    if (hasSummaryDifference(row)) {
       visible.add(row.workDirectionId);
     }
   }

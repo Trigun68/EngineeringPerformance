@@ -66,7 +66,8 @@ public sealed record NormHealthIssueDto(
     int? GroupId,
     string Message,
     object? Details,
-    DateTime DetectedAt);
+    DateTime DetectedAt,
+    string? Recommendation = null);
 
 public sealed record HealthSummaryDto(
     int ErrorCount,
@@ -163,4 +164,9 @@ public sealed record NormRegistryFiltersMetaDto(
     IReadOnlyList<string> FormulaTypes,
     IReadOnlyList<string> Statuses);
 
-public sealed record NormRegistryGroupOptionDto(int Id, string Name, string? Code);
+public sealed record NormRegistryGroupOptionDto(
+    int Id,
+    string Name,
+    string? Code,
+    int? ParentId = null,
+    string? UnitName = null);

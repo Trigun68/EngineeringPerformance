@@ -4,9 +4,6 @@ namespace EngineeringPerformance.Application.Import;
 
 public interface IProjectImportService
 {
-    /// <summary>Импорт списка проектов из Excel (legacy endpoint).</summary>
-    Task<int> ImportFromExcelAsync(int projectId, Stream fileStream, string fileName, CancellationToken cancellationToken = default);
-
     Task<DataImportResultDto> ImportProjectDataAsync(
         int projectId,
         int versionId,

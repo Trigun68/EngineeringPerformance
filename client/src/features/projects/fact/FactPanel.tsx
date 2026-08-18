@@ -24,6 +24,7 @@ import {
 } from '../../../api/projectsPageApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import {
   ANALYSIS_FACT,
   buildVersionLabel,
@@ -269,10 +270,16 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   const facilityPinnedBottomRow = useMemo((): ProjectsPageFacilityRow[] => {
     if (facilityRows.length === 0) return [];
     const total = facilityRows.reduce((s, r) => s + (r.laborHours ?? 0), 0);
+    const pes = facilityRows.reduce((s, r) => s + (r.pessimisticHours ?? 0), 0);
+    const base = facilityRows.reduce((s, r) => s + (r.baseHours ?? 0), 0);
+    const opt = facilityRows.reduce((s, r) => s + (r.optimisticHours ?? 0), 0);
     return [{
       facilityCode: '',
       facilityName: 'ИТОГО',
       laborHours: total,
+      pessimisticHours: pes,
+      baseHours: base,
+      optimisticHours: opt,
       zScore: null,
       interpretation: '',
     }];
@@ -322,7 +329,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exporting} />
-      <WorkingOverlay open={loading} delayMs={1000} />
+      <PanelBusyBar open={loading} />
       {chromeExpanded && (
         <>
       <Stack direction="row" sx={panelPrimaryToolbarSx}>

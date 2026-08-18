@@ -15,7 +15,14 @@ public sealed record AccuracyDto(
     int PeriodLengthDays,
     string? Hint);
 
-public sealed record ChartPointDto(double X, double Y);
+public sealed record ChartPointDto(
+    double X,
+    double Y,
+    int ProjectId = 0,
+    string? ProjectCode = null,
+    string? ProjectName = null,
+    int VersionId = 0,
+    string? VersionName = null);
 
 public sealed record NormComparisonDto(
     int NormId,
@@ -35,7 +42,12 @@ public sealed record NormComparisonDto(
     int? SuggestionId,
     IReadOnlyList<ChartPointDto>? ChartPoints = null,
     IReadOnlyDictionary<string, double>? ProposedParameters = null,
-    string? Warning = null);
+    string? Warning = null,
+    double NormMeanPerformance = 0,
+    double FactMeanPerformance = 0,
+    double FactStdDeviation = 0,
+    double NormStdDeviation = 0,
+    IReadOnlyDictionary<string, double>? CurrentParameters = null);
 
 public sealed record NormSuggestionDto(
     int Id,

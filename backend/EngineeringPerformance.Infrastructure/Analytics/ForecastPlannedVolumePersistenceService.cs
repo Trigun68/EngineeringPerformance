@@ -10,10 +10,14 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVolumePersistenceService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
-    public ForecastPlannedVolumePersistenceService(IDbContextFactory<AppDbContext> contextFactory)
+    public ForecastPlannedVolumePersistenceService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        IProjectAnalyticsCache analyticsCache)
     {
         _contextFactory = contextFactory;
+        _analyticsCache = analyticsCache;
     }
 
     public async Task SavePlannedVolumeAsync(
@@ -69,6 +73,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             }
 
             await context.SaveChangesAsync(cancellationToken);
+            await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
             return;
         }
 
@@ -126,5 +131,6 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
     }
 }

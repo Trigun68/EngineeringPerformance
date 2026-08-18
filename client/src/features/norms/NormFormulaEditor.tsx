@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Alert, CircularProgress, MenuItem, Stack, TextField } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { fetchFormulaTemplates, previewNormCurve } from '../../api/normsApi';
 import type { DeviationFormulaDto, NormFormulaDto } from '../../types/norms';
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
-import { NormBandChart } from './NormBandChart';
+// График норм открывается только в модалке редактирования — Highcharts грузим по требованию (ISS-018).
+const NormBandChart = lazy(() => import('./NormBandChart').then((m) => ({ default: m.NormBandChart })));
 
 export interface NormFormulaEditorProps {
   value: NormFormulaDto;
@@ -139,7 +140,9 @@ export function NormFormulaEditor({
         <Alert severity="warning">При больших объемах норма станет нулевой (a - b·V_max &lt; 0)</Alert>
       )}
 
-      <NormBandChart band={band} deviationRatio={deviationRatio} chartVisible={chartVisible} />
+      <Suspense fallback={<CircularProgress size={20} />}>
+        <NormBandChart band={band} deviationRatio={deviationRatio} chartVisible={chartVisible} />
+      </Suspense>
     </Stack>
   );
 }

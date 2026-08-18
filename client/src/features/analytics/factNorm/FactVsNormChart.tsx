@@ -53,7 +53,7 @@ export function FactVsNormChart({
   const options = useMemo<Highcharts.Options>(() => {
     const xs = points.map((p) => p.x).sort((a, b) => a - b);
     const minX = xs[0] ?? 0;
-    const maxX = xs[xs.length - 1] ?? 1;
+    const maxX = xs.length > 1 ? xs[xs.length - 1]! : minX + 1;
     const curve = (code: string, params: Record<string, number> | null | undefined, name: string, color: string) => {
       if (!params) return null;
       const data: [number, number][] = [];
@@ -75,9 +75,19 @@ export function FactVsNormChart({
     const series: Highcharts.SeriesOptionsType[] = [
       {
         type: 'scatter',
-        name: 'Факт',
-        data: points.map((p) => [p.x, p.y]),
+        name: 'Факт (проекты)',
+        data: points.map((p) => ({
+          x: p.x,
+          y: p.y,
+          projectCode: p.projectCode,
+          projectName: p.projectName,
+          versionName: p.versionName,
+        })),
         color: '#1976d2',
+        tooltip: {
+          pointFormat:
+            '<b>{point.projectCode}</b> {point.projectName}<br/>Версия: {point.versionName}<br/>Объём: {point.x:.3f}<br/>Производительность: {point.y:.4f}',
+        },
       },
     ];
     const current = curve(currentFormula, currentParams ?? null, 'Текущая норма', '#9e9e9e');
@@ -86,44 +96,32 @@ export function FactVsNormChart({
     if (proposed) series.push(proposed);
 
     return {
-      chart: { height: 320 },
+      chart: { height: 360 },
       title: { text: title },
-      xAxis: { title: { text: 'Объём (x)' } },
-      yAxis: { title: { text: 'Производительность (y)' } },
+      xAxis: { title: { text: 'Объём' } },
+      yAxis: { title: { text: 'Производительность' } },
       credits: { enabled: false },
+      legend: { enabled: true },
       series,
-      accessibility: { enabled: true, description: 'График факт vs норма' },
+      accessibility: { enabled: true, description: 'График факт vs норма: X объём, Y производительность' },
     };
   }, [title, points, currentFormula, currentParams, proposedFormula, proposedParams]);
 
   if (points.length === 0) {
     return (
       <Typography variant="body2" color="text.secondary" data-testid="fact-vs-norm-empty">
-        Нет точек для графика
+        Нет точек для графика: в периоде нет primary Fact с объёмом и производительностью по выбранной
+        группе.
       </Typography>
     );
   }
 
   return (
     <Box data-testid="fact-vs-norm-chart" aria-label="График факт против нормы">
+      <Typography variant="subtitle1" component="h3" sx={{ mb: 1 }}>
+        График: производительность (Y) от объёма (X)
+      </Typography>
       <HighchartsReact highcharts={Highcharts} options={options} />
-      <table className="sr-only" style={{ position: 'absolute', left: -9999 }} aria-hidden={false}>
-        <caption>Табличная альтернатива графика</caption>
-        <thead>
-          <tr>
-            <th>x</th>
-            <th>y</th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p, i) => (
-            <tr key={i}>
-              <td>{p.x}</td>
-              <td>{p.y}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </Box>
   );
 }

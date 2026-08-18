@@ -45,7 +45,11 @@ vi.mock('../../components/auth/UserMenu', () => ({
 }));
 
 vi.mock('../../services/apiClient', () => ({
-  default: { post: vi.fn().mockResolvedValue({}) },
+  default: {
+    post: vi.fn().mockResolvedValue({}),
+    get: vi.fn().mockResolvedValue({ data: { sessionExpirationMinutes: 60 } }),
+  },
+  refreshSessionHeartbeat: vi.fn().mockResolvedValue('ok'),
 }));
 
 function renderLayout(path = '/') {

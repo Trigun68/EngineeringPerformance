@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Analytics.FactNorm;
 using EngineeringPerformance.Application.Analytics.NormRegistry;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Registers;
@@ -49,7 +50,14 @@ public sealed class IicWorkDirectionNormServiceTests
         var registry = new Mock<INormRegistryService>();
         registry.Setup(x => x.InvalidateCacheAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var service = new IicWorkDirectionNormService(context, cache.Object, recalc.Object, registry.Object);
+        var factNormCache = CreateFactNormCacheMock();
+        var service = new IicWorkDirectionNormService(
+            context,
+            cache.Object,
+            recalc.Object,
+            registry.Object,
+            factNormCache.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
 
         var created = await service.CreateAsync(new IicNormWriteRequest(
             WorkDirectionId: 7,
@@ -74,6 +82,7 @@ public sealed class IicWorkDirectionNormServiceTests
                 null,
                 It.IsAny<CancellationToken>()),
             Times.Once);
+        factNormCache.Verify(x => x.BumpAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -112,7 +121,14 @@ public sealed class IicWorkDirectionNormServiceTests
         var registry = new Mock<INormRegistryService>();
         registry.Setup(x => x.InvalidateCacheAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
-        var service = new IicWorkDirectionNormService(context, cache.Object, recalc.Object, registry.Object);
+        var factNormCache = CreateFactNormCacheMock();
+        var service = new IicWorkDirectionNormService(
+            context,
+            cache.Object,
+            recalc.Object,
+            registry.Object,
+            factNormCache.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
 
         var updated = await service.UpdateAsync(10, new IicNormWriteRequest(
             WorkDirectionId: 5,
@@ -134,6 +150,14 @@ public sealed class IicWorkDirectionNormServiceTests
                 new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
                 It.IsAny<CancellationToken>()),
             Times.Once);
+        factNormCache.Verify(x => x.BumpAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    private static Mock<IFactNormCacheGeneration> CreateFactNormCacheMock()
+    {
+        var mock = new Mock<IFactNormCacheGeneration>();
+        mock.Setup(x => x.BumpAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        return mock;
     }
 
     private static AppDbContext CreateContext()

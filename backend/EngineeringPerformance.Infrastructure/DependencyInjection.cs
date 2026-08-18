@@ -149,6 +149,8 @@ public static class DependencyInjection
         services.AddScoped<IFactAssessmentPipeline, FactAssessmentPipeline>();
         services.AddSingleton<Application.Analytics.FactNorm.IFactNormAnalysisEngine,
             Application.Analytics.FactNorm.FactNormAnalysisEngine>();
+        services.AddScoped<Application.Analytics.FactNorm.IFactNormCacheGeneration, FactNormCacheGeneration>();
+        services.AddScoped<Application.Analytics.IProjectAnalyticsCache, ProjectAnalyticsCache>();
         services.AddScoped<Application.Analytics.FactNorm.IFactNormAnalysisService, FactNormAnalysisService>();
         services.AddScoped<Application.Analytics.NormRegistry.INormUsageStatsService,
             Analytics.NormRegistry.NormUsageStatsService>();

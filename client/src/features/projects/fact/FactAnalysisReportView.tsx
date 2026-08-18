@@ -39,7 +39,7 @@ const num1 = (v: unknown) => formatGridNumber(v, 1);
 const num2 = (v: unknown) => formatGridNumber(v, 2);
 const num4 = (v: unknown) => formatGridNumber(v, 4);
 
-const GRID_COLUMNS = '80px 1fr 100px 100px 100px 100px 90px 140px';
+const GRID_COLUMNS = '80px 1fr 100px 90px 110px 110px 110px 100px 100px 90px 140px';
 
 function VolumeTable({ title, rows }: { title: string; rows: ProjectVersionPhysicalVolumeItem[] }) {
   if (rows.length === 0) return null;
@@ -143,6 +143,9 @@ function ReportHeaderRow() {
       <Box>Направление</Box>
       <Box sx={{ textAlign: 'right' }}>Факт ФО</Box>
       <Box sx={{ textAlign: 'right' }}>Факт ч</Box>
+      <Box sx={{ textAlign: 'right' }}>План.Труд.Песс.</Box>
+      <Box sx={{ textAlign: 'right' }}>План.Труд.Баз.</Box>
+      <Box sx={{ textAlign: 'right' }}>План.Труд.Оптим.</Box>
       <Box sx={{ textAlign: 'right' }}>Факт произв.</Box>
       <Box sx={{ textAlign: 'right' }}>Норм. произв.</Box>
       <Box sx={{ textAlign: 'right' }}>Z</Box>
@@ -320,6 +323,9 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
                 <Box sx={{ fontWeight: 500 }}>{directionTitle(d)}</Box>
                 <Box sx={{ textAlign: 'right' }}>{num2(d.factPhysicalVolume)}</Box>
                 <Box sx={{ textAlign: 'right', fontWeight: 600 }}>{num1(d.factLaborHours)}</Box>
+                <Box sx={{ textAlign: 'right' }}>{num2(d.pessimisticHours)}</Box>
+                <Box sx={{ textAlign: 'right' }}>{num2(d.baseHours)}</Box>
+                <Box sx={{ textAlign: 'right' }}>{num2(d.optimisticHours)}</Box>
                 <Box sx={{ textAlign: 'right' }}>{num4(d.factProductivity)}</Box>
                 <Box sx={{ textAlign: 'right' }}>{num4(d.normProductivity)}</Box>
                 <Box sx={{ textAlign: 'right' }}>{num4(d.zScore)}</Box>

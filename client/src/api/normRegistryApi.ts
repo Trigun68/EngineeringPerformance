@@ -50,6 +50,7 @@ export interface NormHealthIssue {
   message: string;
   details: unknown;
   detectedAt: string;
+  recommendation: string | null;
 }
 
 export interface HealthSummary {
@@ -120,7 +121,13 @@ export interface TimelineResponse {
 }
 
 export interface NormRegistryFiltersMeta {
-  groups: { id: number; name: string; code: string | null }[];
+  groups: {
+    id: number;
+    name: string;
+    code: string | null;
+    parentId: number | null;
+    unitName: string | null;
+  }[];
   formulaTypes: string[];
   statuses: string[];
 }
@@ -159,6 +166,7 @@ function mapIssue(raw: Record<string, unknown>): NormHealthIssue {
     message: String(raw.message ?? raw.Message ?? ''),
     details: raw.details ?? raw.Details ?? null,
     detectedAt: String(raw.detectedAt ?? raw.DetectedAt ?? ''),
+    recommendation: (raw.recommendation ?? raw.Recommendation ?? null) as string | null,
   };
 }
 
@@ -287,6 +295,8 @@ export async function fetchNormRegistryFilters(
       id: Number(g.id ?? g.Id ?? 0),
       name: String(g.name ?? g.Name ?? ''),
       code: (g.code ?? g.Code ?? null) as string | null,
+      parentId: (g.parentId ?? g.ParentId ?? null) as number | null,
+      unitName: (g.unitName ?? g.UnitName ?? null) as string | null,
     })),
     formulaTypes: asArray<string>(data.formulaTypes ?? data.FormulaTypes).map(String),
     statuses: asArray<string>(data.statuses ?? data.Statuses).map(String),

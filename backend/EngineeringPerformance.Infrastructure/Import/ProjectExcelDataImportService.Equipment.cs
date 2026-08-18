@@ -11,31 +11,33 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 public sealed partial class ProjectExcelDataImportService
 {
-    private Task<DataImportResultDto> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description) =>
+    private Task<DataImportResultDto> ImportEquipmentAsync(
+        int projectId,
+        int versionId,
+        string filePath,
+        string description,
+        ImportSourceMetadata source) =>
         ExecuteWithRetryableTransactionAsync(context =>
-            ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description));
+            ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description, source));
 
     private async Task<DataImportResultDto> ImportEquipmentCoreAsync(
         AppDbContext context,
         int projectId,
         int versionId,
         string filePath,
-        string description)
+        string description,
+        ImportSourceMetadata source)
     {
         // Паритет WPF: полная замена данных оборудования версии перед импортом.
         await ClearEquipmentDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = new DataImportIteration
-        {
-            ProjectId = projectId,
-            ProjectAnalysisVersionId = versionId,
-            DataType = DataImportType.Equipment,
-            Description = description,
-            SourceFileName = Path.GetFileName(filePath),
-            ImportedAt = DateTime.UtcNow,
-        };
-        context.DataImportIterations.Add(iteration);
-        await context.SaveChangesAsync();
+        var iteration = await CreateIterationAsync(
+            context,
+            projectId,
+            versionId,
+            DataImportType.Equipment,
+            description,
+            source);
 
         // ClosedXML: using предотвращает утечки памяти Workbook/Worksheet.
         using var workbook = new XLWorkbook(filePath);

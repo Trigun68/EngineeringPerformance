@@ -17,6 +17,11 @@ function pct(z: number): number {
   return ((clamped - MIN) / (MAX - MIN)) * 100;
 }
 
+function dashPercentile(value: string | null | undefined): string {
+  if (!value || value === 'Н/Д' || value === 'НД') return '—';
+  return value;
+}
+
 type Marker = {
   zScore: number | null;
   label: string;
@@ -28,22 +33,35 @@ type Props = {
   factZ: number | null;
   planPercentile: string;
   factPercentile: string;
+  normSourcesUsed: number;
 };
 
-export function ZScale({ planZ, factZ, planPercentile, factPercentile }: Props) {
-  // По плану UX: факт сверху (↑), план снизу (↓).
+export function ZScale({
+  planZ,
+  factZ,
+  planPercentile,
+  factPercentile,
+  normSourcesUsed,
+}: Props) {
+  // UX: план сверху, факт снизу.
   const markers: Marker[] = [
-    { zScore: factZ, label: 'Факт', side: 'top' },
-    { zScore: planZ, label: 'План', side: 'bottom' },
+    { zScore: planZ, label: 'План', side: 'top' },
+    { zScore: factZ, label: 'Факт', side: 'bottom' },
   ];
+
+  const normsLabel =
+    normSourcesUsed <= 0
+      ? '—'
+      : normSourcesUsed === 1
+        ? '1 версия норм'
+        : `${normSourcesUsed} версии норм`;
 
   return (
     <ReportCard>
       <ReportCardHeader>
-        <ReportCardTitle>Шкала интерпретации Z-оценки</ReportCardTitle>
+        <ReportCardTitle className="text-base md:text-lg">Шкала интерпретации Z-оценки</ReportCardTitle>
         <p className="text-sm text-muted-foreground">
-          Диапазон −3…+3. Меньшая Z — выше производительность (меньше часов на единицу объёма).
-          Маркеры: факт сверху, план снизу.
+          Диапазон −3…+3. Меньшая Z — выше производительность. Маркеры: план сверху, факт снизу.
         </p>
       </ReportCardHeader>
       <ReportCardContent className="flex flex-col gap-6">
@@ -121,11 +139,11 @@ export function ZScale({ planZ, factZ, planPercentile, factPercentile }: Props) 
         <dl className="grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-4">
           <div className="flex flex-col gap-1">
             <dt className="text-xs text-muted-foreground">Перцентиль плана</dt>
-            <dd className="font-mono text-sm font-medium">{planPercentile || '—'}</dd>
+            <dd className="font-mono text-sm font-medium">{dashPercentile(planPercentile)}</dd>
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-xs text-muted-foreground">Перцентиль факта</dt>
-            <dd className="font-mono text-sm font-medium">{factPercentile || '—'}</dd>
+            <dd className="font-mono text-sm font-medium">{dashPercentile(factPercentile)}</dd>
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-xs text-muted-foreground">Метод агрегации</dt>
@@ -133,7 +151,9 @@ export function ZScale({ planZ, factZ, planPercentile, factPercentile }: Props) 
           </div>
           <div className="flex flex-col gap-1">
             <dt className="text-xs text-muted-foreground">Источник норм</dt>
-            <dd className="text-sm font-medium">Снимок версии (ИИС)</dd>
+            <dd className="text-sm font-medium" data-testid="report-norm-sources">
+              {normsLabel}
+            </dd>
           </div>
         </dl>
       </ReportCardContent>

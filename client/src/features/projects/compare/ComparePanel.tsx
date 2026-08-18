@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -35,6 +35,7 @@ import {
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import {
   buildVersionLabel,
   ProjectVersionPickerDialog,
@@ -60,7 +61,10 @@ import {
 } from './compareFilters';
 import { buildCompareTreeRows, type CompareTreeRow } from './compareTree';
 import { exportComparePdf, type ComparePdfSection } from '../../../api/visualReportsApi';
-import { CompareChartView } from './CompareChartView';
+// Highcharts подтягивается только при переключении на режим диаграммы (ISS-018).
+const CompareChartView = lazy(() =>
+  import('./CompareChartView').then((m) => ({ default: m.CompareChartView })),
+);
 
 type CompareSubTab = 'compare-total' | 'compare-facility' | 'compare-detail';
 type CompareViewMode = 'table' | 'chart';
@@ -255,9 +259,12 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchVersionCompare(projectId, versionAId, versionBId);
+      // Таблица и диаграмма независимы — грузим параллельно, а не каскадом.
+      const [data, chart] = await Promise.all([
+        fetchVersionCompare(projectId, versionAId, versionBId),
+        fetchCompareChart(projectId, versionAId, versionBId, 'iic', 'zScore', 20),
+      ]);
       setCompareData(data);
-      const chart = await fetchCompareChart(projectId, versionAId, versionBId, 'iic', 'zScore', 20);
       setChartData(chart);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось загрузить сравнение версий.'));
@@ -353,7 +360,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exportingPdf || exporting} />
-      <WorkingOverlay open={loading} delayMs={1000} />
+      <PanelBusyBar open={loading} />
       {chromeExpanded && (
         <>
           <Stack direction="row" sx={panelPrimaryToolbarSx}>
@@ -677,7 +684,9 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
         )}
         {viewMode === 'chart' && subTab === 'compare-total' && (
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <CompareChartView chart={chartData} height={400} />
+            <Suspense fallback={<PanelBusyBar open delayMs={0} />}>
+              <CompareChartView chart={chartData} height={400} />
+            </Suspense>
           </Box>
         )}
       </Box>

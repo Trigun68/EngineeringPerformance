@@ -62,6 +62,14 @@ function buildFlatOptions(
   return result;
 }
 
+export function buildHierarchicalOptions(
+  items: DictionaryItem[],
+  formatLabel: (item: DictionaryItem) => string = defaultLabel,
+  excludeIds: number[] = [],
+): HierarchicalSelectOption[] {
+  return buildFlatOptions(items, formatLabel, new Set(excludeIds));
+}
+
 export function HierarchicalSelect({
   items,
   value,

@@ -459,7 +459,8 @@ public static class NormHealthCheckEngine
             groupId,
             message,
             details,
-            detectedAt);
+            detectedAt,
+            NormHealthRecommendations.ForRule(rule));
 
     private static string Fmt(DateTime d) => d.ToString("dd.MM.yyyy");
 

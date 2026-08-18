@@ -63,4 +63,19 @@ public interface IPerformanceCalculationEngine
     decimal? ComputeWeightedZFromPerformanceRows(
         IReadOnlyList<PerformanceRowDto> performanceRows,
         int decimalPlaces = 2);
+
+    /// <summary>
+    /// Средневзвешенный Z по произвольной выборке: Σ(Z×вес)/Σ(вес).
+    /// Единственный разрешённый способ агрегировать Z вне корневых строк (ISS-010).
+    /// </summary>
+    decimal? ComputeWeightedZ(
+        IEnumerable<(decimal? ZScore, decimal? Weight)> samples,
+        int decimalPlaces = 2,
+        MidpointRounding rounding = MidpointRounding.ToEven,
+        bool arithmeticFallback = false);
+
+    /// <summary>Z-параметры планирования по направлению ИИС (fallback — значения по умолчанию).</summary>
+    PlanningZParameters ResolvePlanningZ(
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
+        int workDirectionId);
 }

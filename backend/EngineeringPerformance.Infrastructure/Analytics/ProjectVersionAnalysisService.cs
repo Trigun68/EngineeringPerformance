@@ -72,7 +72,9 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         var projectPhysicalVolumes = pvTask.Result;
         var projectEquipments = eqTask.Result;
         var laborIntensities = laborTask.Result;
-        var performanceData = performanceTask.Result;
+        var performanceData = ProjectsPageGridBuilder.AttachStoredPlanHours(
+            performanceTask.Result,
+            projectPhysicalVolumes);
 
         // Группировка ненулевых физ. объёмов по направлению (ClassifierId).
         var pvByDirection = projectPhysicalVolumes
@@ -103,6 +105,9 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 UnitName: r.NormUnitName,
                 FactPhysicalVolume: r.FactPhysicalVolume,
                 FactLaborHours: r.FactLaborHours,
+                PessimisticHours: r.PessimisticHours,
+                BaseHours: r.BaseHours,
+                OptimisticHours: r.OptimisticHours,
                 FactProductivity: r.FactProductivity,
                 FactEstimate: r.FactEstimate,
                 NormProductivity: r.NormProductivity,

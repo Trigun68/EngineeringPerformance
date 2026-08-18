@@ -9,7 +9,9 @@ public sealed record PerformanceReportDto(
     PerformanceReportVersionBlockDto? Fact,
     IReadOnlyList<PerformanceReportVersionHistoryPointDto> VersionHistory,
     PerformanceReportAccuracyDto Accuracy,
-    PerformanceReportInsightsDto Insights);
+    PerformanceReportInsightsDto Insights,
+    IReadOnlyList<PerformanceReportMergedDirectionRowDto> Directions,
+    int NormSourcesUsed);
 
 public sealed record PerformanceReportProjectDto(
     int Id,
@@ -35,6 +37,7 @@ public sealed record PerformanceReportVersionBlockDto(
     IReadOnlyList<PhysicalVolumeTotalByUnitDto> PhysicalVolumeTotalsByUnit,
     IReadOnlyList<PerformanceReportDirectionRowDto> Directions);
 
+/// <summary>Строка направления одной версии (сырой блок plan/fact).</summary>
 public sealed record PerformanceReportDirectionRowDto(
     int WorkDirectionId,
     int? ParentId,
@@ -50,6 +53,28 @@ public sealed record PerformanceReportDirectionRowDto(
     decimal? NormStdDev,
     decimal? ZScore,
     string? Interpretation);
+
+/// <summary>Merged-строка дерева «Направление»: объём факт←план, dual труд/произв/Z.</summary>
+public sealed record PerformanceReportMergedDirectionRowDto(
+    int WorkDirectionId,
+    int? ParentId,
+    int Level,
+    string Code,
+    string Name,
+    string? UnitName,
+    decimal? PhysicalVolume,
+    decimal? PlanLaborHours,
+    decimal? FactLaborHours,
+    decimal? PlanSubtreeHours,
+    decimal? FactSubtreeHours,
+    decimal? PlanProductivity,
+    decimal? FactProductivity,
+    decimal? NormProductivity,
+    decimal? NormStdDev,
+    decimal? PlanZScore,
+    decimal? FactZScore,
+    string? PlanInterpretation,
+    string? FactInterpretation);
 
 public sealed record PerformanceReportVersionHistoryPointDto(
     int VersionId,
@@ -84,4 +109,5 @@ public sealed record PerformanceReportKeyDisciplineDto(
     string Code,
     decimal? ZScore,
     decimal SubtreeHours,
-    decimal InfluenceScore);
+    decimal InfluenceScore,
+    decimal? PhysicalVolume);

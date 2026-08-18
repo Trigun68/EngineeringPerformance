@@ -1,18 +1,17 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import type { PerformanceReportDirectionRow } from '../../../api/performanceReportApi';
+import type { PerformanceReportMergedDirectionRow } from '../../../api/performanceReportApi';
 import { fmt, fmtSigned, interpretationColor } from './reportFormat';
-import { ReportBadge } from './ui';
 
 type Props = {
-  rows: PerformanceReportDirectionRow[];
+  rows: PerformanceReportMergedDirectionRow[];
 };
 
 export function DirectionsTable({ rows }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
 
   const childrenByParent = useMemo(() => {
-    const map = new Map<number | null, PerformanceReportDirectionRow[]>();
+    const map = new Map<number | null, PerformanceReportMergedDirectionRow[]>();
     for (const row of rows) {
       const key = row.parentId;
       const list = map.get(key) ?? [];
@@ -23,7 +22,7 @@ export function DirectionsTable({ rows }: Props) {
   }, [rows]);
 
   const visible = useMemo(() => {
-    const out: PerformanceReportDirectionRow[] = [];
+    const out: PerformanceReportMergedDirectionRow[] = [];
     const walk = (parentId: number | null, hidden: boolean) => {
       const kids = childrenByParent.get(parentId) ?? [];
       for (const row of kids) {
@@ -50,26 +49,28 @@ export function DirectionsTable({ rows }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px] border-collapse text-sm">
+    <div className="overflow-x-auto" data-testid="report-directions-table">
+      <table className="w-full min-w-[1100px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs text-muted-foreground">
-            <th className="px-2 py-2 font-medium">Направление</th>
-            <th className="px-2 py-2 text-right font-medium">Объём</th>
-            <th className="px-2 py-2 text-right font-medium">Часы</th>
-            <th className="px-2 py-2 text-right font-medium">Поддерево</th>
-            <th className="px-2 py-2 text-right font-medium">Факт. произв.</th>
-            <th className="px-2 py-2 text-right font-medium">Норма</th>
-            <th className="px-2 py-2 text-right font-medium">σ</th>
-            <th className="px-2 py-2 text-right font-medium">Z</th>
-            <th className="px-2 py-2 font-medium">Интерпретация</th>
+          <tr className="border-b border-border bg-slate-800 text-left text-xs text-slate-100 dark:bg-slate-900">
+            <th className="px-2 py-2.5 font-semibold">Направление</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Объём</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Труд. план</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Труд. факт</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Произв. план</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Произв. факт</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Норма</th>
+            <th className="px-2 py-2.5 text-right font-semibold">σ</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Z план</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Z факт</th>
           </tr>
         </thead>
         <tbody>
           {visible.map((row) => {
             const hasChildren = (childrenByParent.get(row.workDirectionId) ?? []).length > 0;
             const isCollapsed = collapsed.has(row.workDirectionId);
-            const color = interpretationColor(row.zScore);
+            const planColor = interpretationColor(row.planZScore);
+            const factColor = interpretationColor(row.factZScore);
             return (
               <tr
                 key={row.workDirectionId}
@@ -101,18 +102,15 @@ export function DirectionsTable({ rows }: Props) {
                   </div>
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
-                  {row.factPhysicalVolume == null
-                    ? '—'
-                    : `${fmt(row.factPhysicalVolume)} ${row.unitName ?? ''}`}
+                  {fmt(row.physicalVolume, 0)}
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-xs">{fmt(row.planLaborHours)}</td>
+                <td className="px-2 py-2 text-right font-mono text-xs">{fmt(row.factLaborHours)}</td>
+                <td className="px-2 py-2 text-right font-mono text-xs">
+                  {fmt(row.planProductivity, 1)}
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
-                  {fmt(row.factLaborHours)}
-                </td>
-                <td className="px-2 py-2 text-right font-mono text-xs text-muted-foreground">
-                  {fmt(row.subtreeHours)}
-                </td>
-                <td className="px-2 py-2 text-right font-mono text-xs">
-                  {fmt(row.factProductivity, 4)}
+                  {fmt(row.factProductivity, 1)}
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs text-muted-foreground">
                   {fmt(row.normProductivity, 4)}
@@ -122,18 +120,15 @@ export function DirectionsTable({ rows }: Props) {
                 </td>
                 <td
                   className="px-2 py-2 text-right font-mono text-sm font-semibold"
-                  style={{ color }}
+                  style={{ color: planColor }}
                 >
-                  {fmtSigned(row.zScore)}
+                  {fmtSigned(row.planZScore)}
                 </td>
-                <td className="px-2 py-2">
-                  {row.interpretation ? (
-                    <ReportBadge style={{ color, borderColor: 'currentColor' }}>
-                      {row.interpretation}
-                    </ReportBadge>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Н/Д</span>
-                  )}
+                <td
+                  className="px-2 py-2 text-right font-mono text-sm font-semibold"
+                  style={{ color: factColor }}
+                >
+                  {fmtSigned(row.factZScore)}
                 </td>
               </tr>
             );

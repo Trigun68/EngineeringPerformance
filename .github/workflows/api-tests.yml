@@ -74,6 +74,10 @@ jobs:
         working-directory: backend
         run: dotnet test EngineeringPerformance.Infrastructure.Tests/EngineeringPerformance.Infrastructure.Tests.csproj --verbosity minimal
 
+      - name: Run application unit tests
+        working-directory: backend
+        run: dotnet test EngineeringPerformance.Application.Tests/EngineeringPerformance.Application.Tests.csproj --verbosity minimal
+
       - name: Stop stack
         if: always()
         run: docker compose down -v

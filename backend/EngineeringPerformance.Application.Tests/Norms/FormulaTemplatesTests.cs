@@ -4,10 +4,14 @@ namespace EngineeringPerformance.Application.Tests.Norms;
 
 public sealed class FormulaTemplatesTests
 {
+    // Привязка к enum вместо жёсткого числа: тест не устаревает при добавлении формулы.
     [Fact]
-    public void All_ContainsEightNonNullTemplates()
+    public void All_CoversEveryFormulaTypeWithNonNullMetadata()
     {
-        Assert.Equal(8, FormulaTemplates.All.Count);
-        Assert.All(FormulaTemplates.All, t => Assert.NotNull(t.DisplayName));
+        var declaredTypes = Enum.GetValues<FormulaType>();
+
+        Assert.Equal(declaredTypes.Length, FormulaTemplates.All.Count);
+        Assert.All(FormulaTemplates.All, template => Assert.NotNull(template.DisplayName));
+        Assert.All(declaredTypes, type => Assert.NotNull(FormulaTemplates.Get(type)));
     }
 }

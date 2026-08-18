@@ -1,23 +1,35 @@
 # Отчёт производительности проекта (вкладка «Отчет»)
 
-**Дата:** 2026-07-22  
+**Дата:** 2026-08-08  
 **Код:** `PerformanceReportService`, `PerformanceReportController`, `client/src/features/projects/report/`
 
 ## Назначение
 
-Визуальный отчёт по инженерной производительности выбранных версий **плана** и **факта** проекта: средневзвешенный Z, шкала интерпретации, динамика по версиям, top-3 ± дисциплин, дерево направлений, PDF.
+Визуальный отчёт по инженерной производительности проекта: средневзвешенный Z плана и факта, шкала интерпретации, динамика по версиям, top-3 ± дисциплин, дерево «Направление», PDF.
+
+## Резолв версий (внутреннее правило)
+
+1. **План-метрики** (Z план, труд план, произв. план, норма/σ/Z в дереве): версия факта с `IsPrimary`; если нет — версия плана с `IsPrimary`; иначе latest Fact → latest Plan.
+2. **Факт-метрики** (Z факт, труд факт): только Fact-direction (`IsPrimary` → latest). Часы — **`ActualHours`**, не `PlannedHours`. При ActualHours = 0 → «—».
+3. Объём в дереве: факт, иначе план (в UI не комментируется).
+4. Трудоёмкость плана по направлениям: при наличии объёма и нормы — `ComputeForecastHours` с `ZBase` из параметров планирования.
+
+UI не передаёт `planVersionId` / `factVersionId`.
 
 ## API
 
 | Метод | Путь | Право |
 |-------|------|--------|
-| GET | `/api/projects/{projectId}/performance-report?planVersionId=&factVersionId=` | `Reports` Read |
+| GET | `/api/projects/{projectId}/performance-report` | `Reports` Read |
 | GET | `/api/projects/{projectId}/performance-report/export.pdf` | `Reports` Read |
 
-Z-математика только через существующий движок (`IPerformanceService` / `PerformanceCalculationEngine`). Паритет формул с демо: [performance-report-engine-parity.md](./performance-report-engine-parity.md).
+Ответ: блоки `plan` / `fact`, `versionHistory`, `accuracy`, `insights`, merged `directions`, `normSourcesUsed`.
+
+Z-математика только через `IPerformanceService` / `PerformanceCalculationEngine` (`LaborHoursKind.Planned` | `Actual`).
 
 ## UI
 
-- Вкладка **Отчет** в workspace проекта (`FullProjectsPage` + `useProjectWorkspace`).
-- Пикеры версий план/факт (`ProjectVersionPickerDialog`).
-- Стили: Tailwind-островок `src/features/projects/report/**` (без отдельного Next-приложения); остальной клиент — MUI.
+- 5 KPI: крупные заголовки, значения тёмно-синие (`--ep-report-metric`).
+- Шкала: план сверху, факт снизу.
+- Дерево «Направление»: тёмная шапка; объём целым без ед.; произв. план/факт — 1 знак после запятой.
+- Insights: top-3 по |Z| × subtree hours.

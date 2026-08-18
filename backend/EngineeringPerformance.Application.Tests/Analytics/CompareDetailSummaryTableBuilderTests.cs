@@ -28,6 +28,7 @@ public sealed class CompareDetailSummaryTableBuilderTests
 
         table.Select(row => row.FacilityCode).Should().Equal("01", "02");
         table[0].PlannedLaborHoursA.Should().Be(20m);
+        table[0].PlannedLaborHoursPessimisticA.Should().BeNull();
         table[0].FactLaborHoursB.Should().Be(23m);
         table[0].FactProductivityA.Should().Be(0.48m);
         table[0].ZScoreB.Should().Be(0.1m);

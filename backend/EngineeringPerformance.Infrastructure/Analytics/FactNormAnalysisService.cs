@@ -22,7 +22,6 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 public sealed class FactNormAnalysisService : IFactNormAnalysisService
 {
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
-    private const string GenerationKey = "fact-norm:gen";
 
     private readonly AppDbContext _db;
     private readonly IFactAssessmentPipeline _pipeline;
@@ -30,6 +29,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
     private readonly IIicNormService _normService;
     private readonly IDistributedCache _cache;
     private readonly ICacheInvalidator _cacheInvalidator;
+    private readonly IFactNormCacheGeneration _cacheGeneration;
     private readonly AnalyticsOptions _options;
     private readonly ICurrentUserService _currentUser;
 
@@ -40,6 +40,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         IIicNormService normService,
         IDistributedCache cache,
         ICacheInvalidator cacheInvalidator,
+        IFactNormCacheGeneration cacheGeneration,
         IOptions<AnalyticsOptions> options,
         ICurrentUserService currentUser)
     {
@@ -49,6 +50,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         _normService = normService;
         _cache = cache;
         _cacheInvalidator = cacheInvalidator;
+        _cacheGeneration = cacheGeneration;
         _options = options.Value;
         _currentUser = currentUser;
     }
@@ -58,15 +60,8 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
             .Select(f => new ReferenceFormulaDto(f.Code, f.DisplayName, f.Formula, f.ParamNames.ToArray(), f.Description))
             .ToList();
 
-    public async Task InvalidateCacheAsync(CancellationToken cancellationToken = default)
-    {
-        var gen = await GetGenerationAsync(cancellationToken);
-        await _cache.SetStringAsync(
-            GenerationKey,
-            (gen + 1).ToString(CultureInfo.InvariantCulture),
-            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromDays(30) },
-            cancellationToken);
-    }
+    public Task InvalidateCacheAsync(CancellationToken cancellationToken = default) =>
+        _cacheGeneration.BumpAsync(cancellationToken);
 
     public async Task<FactNormAnalysisResponse> AnalyzeAsync(
         FactNormAnalysisRequest request,
@@ -89,6 +84,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         var versionsQuery = _db.ProjectAnalysisVersions
             .AsNoTracking()
             .Where(v => !v.IsArchived
+                        && v.IsPrimary
                         && v.Direction == AnalysisDirection.Fact
                         && v.CreatedAt >= periodStart
                         && v.CreatedAt < periodEndExclusive);
@@ -96,10 +92,25 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         if (request.ProjectIds is { Length: > 0 } projectIds)
             versionsQuery = versionsQuery.Where(v => projectIds.Contains(v.ProjectId));
 
-        var versions = await versionsQuery
+        // Одна primary Fact на проект: если в периоде несколько — берём последнюю по CreatedAt.
+        var versionRows = await versionsQuery
             .OrderBy(v => v.CreatedAt)
-            .Select(v => new { v.Id, v.ProjectId, v.CreatedAt })
+            .Select(v => new
+            {
+                v.Id,
+                v.ProjectId,
+                v.CreatedAt,
+                v.VersionName,
+                ProjectCode = v.Project!.Code,
+                ProjectName = v.Project.Name,
+            })
             .ToListAsync(cancellationToken);
+
+        var versions = versionRows
+            .GroupBy(v => v.ProjectId)
+            .Select(g => g.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).First())
+            .OrderBy(v => v.CreatedAt)
+            .ToList();
 
         if (versions.Count == 0)
         {
@@ -109,11 +120,12 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
                 ToAccuracyDto(emptyAccuracy),
                 [],
                 [],
-                ["Нет данных за период"]);
+                ["Нет основных (IsPrimary) Fact-версий за период"]);
         }
 
-        // Точки по WorkDirectionId
+        // Точки по WorkDirectionId: не более одной на (project × direction).
         var pointsByDirection = new Dictionary<int, List<FactPoint>>();
+        var pointKeys = new HashSet<(int DirectionId, int ProjectId)>();
         var normIdByDirection = new Dictionary<int, int>();
         var warnings = new List<string>();
 
@@ -150,13 +162,24 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
                 if (row.FactPhysicalVolume is not > 0 || row.FactProductivity is not { } productivity)
                     continue;
 
+                var key = (row.WorkDirectionId, version.ProjectId);
+                if (!pointKeys.Add(key))
+                    continue;
+
                 if (!pointsByDirection.TryGetValue(row.WorkDirectionId, out var list))
                 {
                     list = [];
                     pointsByDirection[row.WorkDirectionId] = list;
                 }
 
-                list.Add(new FactPoint((double)row.FactPhysicalVolume.Value, (double)productivity));
+                list.Add(new FactPoint(
+                    (double)row.FactPhysicalVolume.Value,
+                    (double)productivity,
+                    version.ProjectId,
+                    version.ProjectCode,
+                    version.ProjectName,
+                    version.Id,
+                    version.VersionName));
 
                 if (!normIdByDirection.ContainsKey(row.WorkDirectionId)
                     && snapshotMap.TryGetValue(row.WorkDirectionId, out var normId))
@@ -327,9 +350,21 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
                 cmp.InsufficientData,
                 cmp.SigmaZero,
                 suggestionId,
-                cmp.ChartPoints.Select(p => new ChartPointDto(p.X, p.Y)).ToList(),
+                cmp.ChartPoints.Select(p => new ChartPointDto(
+                    p.X,
+                    p.Y,
+                    p.ProjectId,
+                    p.ProjectCode,
+                    p.ProjectName,
+                    p.VersionId,
+                    p.VersionName)).ToList(),
                 cmp.BestFit?.Parameters.ToDictionary(kv => kv.Key, kv => kv.Value),
-                cmp.Warning));
+                cmp.Warning,
+                cmp.NormMeanPerformance,
+                cmp.FactMeanPerformance,
+                cmp.FactStdDeviation,
+                cmp.NormStdDeviation,
+                cmp.CurrentParameters.ToDictionary(kv => kv.Key, kv => kv.Value)));
         }
 
         await tx.CommitAsync(cancellationToken);
@@ -538,7 +573,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
 
     private async Task<string> BuildCacheKeyAsync(FactNormAnalysisRequest request, CancellationToken ct)
     {
-        var gen = await GetGenerationAsync(ct);
+        var gen = await _cacheGeneration.GetAsync(ct);
         var projects = request.ProjectIds is { Length: > 0 }
             ? string.Join(',', request.ProjectIds.OrderBy(x => x))
             : "all";
@@ -546,12 +581,6 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
             ? string.Join(',', request.WorkDirectionIds.OrderBy(x => x))
             : "all";
         return $"fact-norm:{gen}:{request.PeriodStart:yyyyMMdd}:{request.PeriodEnd:yyyyMMdd}:{projects}:{groups}";
-    }
-
-    private async Task<long> GetGenerationAsync(CancellationToken ct)
-    {
-        var raw = await _cache.GetStringAsync(GenerationKey, ct);
-        return long.TryParse(raw, out var g) ? g : 0;
     }
 
     private static AccuracyDto ToAccuracyDto(AccuracyResult r) =>

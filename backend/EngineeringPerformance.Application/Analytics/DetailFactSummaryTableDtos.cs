@@ -7,14 +7,18 @@ public sealed record DetailFactSummaryInputRow(
     int? ClassifierId,
     decimal Quantity,
     decimal? Coefficient,
-    decimal? PlanHours,
+    decimal? PessimisticHours,
+    decimal? BaseHours,
+    decimal? OptimisticHours,
     decimal? FactHours,
     decimal? ZScore);
 
-/// <summary>Значения ячеек блока: ФО, план. часы, факт. часы, Z.</summary>
+/// <summary>Значения ячеек блока: ФО, три сценария план. часов, факт. часы, Z.</summary>
 public sealed record DetailFactSummaryCellDto(
     decimal PhysicalVolume,
-    decimal PlanHours,
+    decimal PessimisticHours,
+    decimal BaseHours,
+    decimal OptimisticHours,
     decimal FactHours,
     decimal? ZScore);
 

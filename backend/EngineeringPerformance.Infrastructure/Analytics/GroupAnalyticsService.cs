@@ -45,8 +45,7 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
         var (criterion, groupValue, peers) = await ResolvePeerProjectsAsync(anchor, cancellationToken);
 
         var rows = new List<GroupAnalysisProjectRowDto>();
-        decimal weightedNumerator = 0m;
-        decimal weightedDenominator = 0m;
+        var aggregator = new WeightedZAggregator();
 
         foreach (var project in peers.OrderBy(p => p.Code).ThenBy(p => p.Name))
         {
@@ -90,16 +89,10 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
                 z,
                 interpretation));
 
-            if (z.HasValue && hours is > 0)
-            {
-                weightedNumerator += z.Value * hours.Value;
-                weightedDenominator += hours.Value;
-            }
+            aggregator.Add(z, hours);
         }
 
-        decimal? aggregateZ = weightedDenominator > 0
-            ? Math.Round(weightedNumerator / weightedDenominator, 2)
-            : null;
+        var aggregateZ = aggregator.Result();
 
         return new GroupAnalysisResultDto(
             GroupCriterion: criterion,

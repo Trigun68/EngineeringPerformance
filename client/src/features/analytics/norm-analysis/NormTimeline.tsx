@@ -50,19 +50,22 @@ export function NormTimeline({ timeline, onSelectNorm }: Props) {
   }
 
   return (
-    <Box
-      sx={{
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1,
-        p: 1.5,
-        maxHeight: 280,
-        overflow: 'auto',
-      }}
-      data-testid="norm-analysis-timeline"
-      role="img"
-      aria-label="Таймлайн периодов норм по направлениям ИИС"
-    >
+    <Box data-testid="norm-analysis-timeline" role="region" aria-label="Таймлайн периодов норм по направлениям IIC">
+      <Typography variant="subtitle1" component="h3" sx={{ mb: 0.5 }}>
+        Таймлайн действия норм по группам IIC
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        Горизонтальные полосы — периоды EffectiveFrom–EffectiveTo. Красная обводка означает наличие
+        health-issue.
+      </Typography>
+      <Box
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+          p: 1.5,
+        }}
+      >
       {[...byGroup.entries()].map(([groupId, bars]) => {
         const name = bars[0]?.groupName ?? `#${groupId}`;
         return (
@@ -102,6 +105,7 @@ export function NormTimeline({ timeline, onSelectNorm }: Props) {
           </Box>
         );
       })}
+      </Box>
     </Box>
   );
 }

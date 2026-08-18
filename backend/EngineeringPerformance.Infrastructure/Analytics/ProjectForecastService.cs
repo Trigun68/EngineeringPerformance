@@ -342,7 +342,7 @@ public sealed class ProjectForecastService : IProjectForecastService
                 normByDirection.TryGetValue(id, out var n);
                 var v = totalVolume.GetValueOrDefault(id);
                 var lh = hoursByDirection.GetValueOrDefault(id);
-                var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, id);
+                var z = calculationEngine.ResolvePlanningZ(planningZByDirection, id);
                 var (b, o, p, _) = CalcLeafHours(v, n, lh, z, calculation.Method, calculationEngine);
                 return (b, o, p);
             }
@@ -373,7 +373,7 @@ public sealed class ProjectForecastService : IProjectForecastService
 
             var vol = totalVolume.GetValueOrDefault(d.Id);
             var laborHours = hoursByDirection.GetValueOrDefault(d.Id);
-            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, d.Id);
+            var z = calculationEngine.ResolvePlanningZ(planningZByDirection, d.Id);
 
             decimal baseHours;
             decimal opt;

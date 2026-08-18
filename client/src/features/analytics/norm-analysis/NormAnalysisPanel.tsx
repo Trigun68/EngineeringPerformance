@@ -35,7 +35,12 @@ const DEFAULT_FILTERS: NormFilterState = {
   includeFuture: true,
 };
 
-export function NormAnalysisPanel() {
+interface Props {
+  dateFrom: string;
+  dateTo: string;
+}
+
+export function NormAnalysisPanel({ dateFrom, dateTo }: Props) {
   const { canRead, canEdit } = usePermission('IicWorkDirectionNorms');
   const [meta, setMeta] = useState<NormRegistryFiltersMeta | null>(null);
   const [filters, setFilters] = useState<NormFilterState>(DEFAULT_FILTERS);
@@ -70,12 +75,14 @@ export function NormAnalysisPanel() {
       formulaTypes: debounced.formulaTypes.length ? debounced.formulaTypes : null,
       onlyWithIssues: debounced.onlyWithIssues ? true : null,
       search: debounced.search.trim() || null,
+      effectiveFrom: dateFrom || null,
+      effectiveTo: dateTo || null,
       page: 1,
       pageSize: 200,
       sortBy: 'group',
       sortDesc: false,
     }),
-    [debounced],
+    [debounced, dateFrom, dateTo],
   );
 
   const load = useCallback(async () => {
@@ -127,38 +134,35 @@ export function NormAnalysisPanel() {
       data-testid="norm-analysis-panel"
     >
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}>
-        <Typography variant="h6" component="h2">
-          Реестр и health-check норм
+        <Typography variant="body2" color="text.secondary">
+          Период анализа применяется к пересечению EffectiveFrom–EffectiveTo норм. Ниже — фильтры,
+          таймлайн действия и реестр.
         </Typography>
         <Stack direction="row" spacing={1}>
-          {canEdit && (
-            <>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => void exportNormRegistry('xlsx', apiFilter).catch((e: Error) => setError(e.message))}
-                data-testid="norm-analysis-export-xlsx"
-              >
-                Экспорт XLSX
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => void exportNormRegistry('csv', apiFilter).catch((e: Error) => setError(e.message))}
-                data-testid="norm-analysis-export-csv"
-              >
-                Экспорт CSV
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => void exportNormHealthReport('xlsx').catch((e: Error) => setError(e.message))}
-                data-testid="norm-analysis-export-health"
-              >
-                Отчёт health
-              </Button>
-            </>
-          )}
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => void exportNormRegistry('xlsx', apiFilter).catch((e: Error) => setError(e.message))}
+            data-testid="norm-analysis-export-xlsx"
+          >
+            Экспорт XLSX
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => void exportNormRegistry('csv', apiFilter).catch((e: Error) => setError(e.message))}
+            data-testid="norm-analysis-export-csv"
+          >
+            Экспорт CSV
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => void exportNormHealthReport('xlsx').catch((e: Error) => setError(e.message))}
+            data-testid="norm-analysis-export-health"
+          >
+            Отчёт health
+          </Button>
           <Button
             size="small"
             variant="contained"
@@ -191,9 +195,13 @@ export function NormAnalysisPanel() {
         }}
       />
 
+      <Typography variant="subtitle1" component="h3">
+        Реестр норм
+      </Typography>
       <NormRegistryTable
         rows={rows}
         loading={loading}
+        issues={health?.issues ?? []}
         onRowClick={(row) => {
           setSelectedId(row.id);
           setCardOpen(true);

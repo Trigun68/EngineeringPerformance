@@ -59,12 +59,15 @@ public static class CompareReportFilter
         return rows.Where(HasDetailDifference).ToList();
     }
 
-    /// <summary>FactZ + PlanZ + базовые плановые часы (PDF без выбора сценария).</summary>
+    /// <summary>FactZ + PlanZ + любая из трёх пар плановых часов.</summary>
     private static bool HasSummaryDifference(VersionCompareRowDto row)
     {
         var factZIdentical = Round4(row.FactZScoreA) == Round4(row.FactZScoreB);
         var planZIdentical = Round4(row.PlanZScoreA) == Round4(row.PlanZScoreB);
-        var planLaborIdentical = Round2(row.PlannedLaborHoursA) == Round2(row.PlannedLaborHoursB);
+        var planLaborIdentical =
+            Round2(row.PlannedLaborHoursA) == Round2(row.PlannedLaborHoursB)
+            && Round2(row.PlannedLaborHoursOptimisticA) == Round2(row.PlannedLaborHoursOptimisticB)
+            && Round2(row.PlannedLaborHoursPessimisticA) == Round2(row.PlannedLaborHoursPessimisticB);
         return !(factZIdentical && planZIdentical && planLaborIdentical);
     }
 

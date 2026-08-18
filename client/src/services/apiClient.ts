@@ -5,13 +5,22 @@ type UnauthorizedHandler = () => void;
 type ForbiddenHandler = (message?: string) => void;
 type RemoteLogoutHandler = () => void;
 
+/**
+ * `dead` — сервер отверг refresh-токен (сессия закончилась);
+ * `transient` — сеть/5xx, сессия жива и повтор возможен позже.
+ */
+export type RefreshOutcome = 'ok' | 'dead' | 'transient';
+
 let onUnauthorized: UnauthorizedHandler | null = null;
 let onForbidden: ForbiddenHandler | null = null;
 let onRemoteLogout: RemoteLogoutHandler | null = null;
-let refreshRequestPromise: Promise<boolean> | null = null;
+let refreshRequestPromise: Promise<RefreshOutcome> | null = null;
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 const SKIP_REFRESH_HEADER = 'X-Skip-Auth-Refresh';
+const REFRESH_LOCK_KEY = 'engineering-performance-auth-refresh';
+const REFRESH_LOCK_TTL_MS = 10_000;
+const REFRESH_POLL_INTERVAL_MS = 150;
 const authChannel = typeof BroadcastChannel === 'undefined'
   ? null
   : new BroadcastChannel('engineering-performance-auth');
@@ -28,9 +37,9 @@ authChannel?.addEventListener('message', (event: MessageEvent<unknown>) => {
 });
 
 // localStorage fallback для BroadcastChannel — работает при недоступности BC.
+// Событие storage приходит только на window (не на document).
 const AUTH_STORAGE_KEY = 'engineering-performance-auth';
-document.addEventListener('storage', (e: Event) => {
-  const event = e as StorageEvent;
+window.addEventListener('storage', (event: StorageEvent) => {
   if (event.key !== AUTH_STORAGE_KEY) return;
   if (event.newValue === null) return;
   try {
@@ -87,23 +96,111 @@ function shouldSkipRefresh(errorConfig: AxiosError['config']): boolean {
   return String(rawHeader ?? '').toLowerCase() === '1';
 }
 
-async function tryRefreshSession(): Promise<boolean> {
+async function runRefreshRequest(): Promise<RefreshOutcome> {
+  try {
+    await axios.post(`${API_BASE_URL}/auth/refresh`, null, {
+      withCredentials: true,
+      headers: {
+        [SKIP_REFRESH_HEADER]: '1',
+      },
+    });
+    return 'ok';
+  } catch (error) {
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    // Мёртвой сессию считаем только при явном отказе сервера.
+    // Обрыв сети, рестарт backend, 5xx — временный сбой, разлогинивать нельзя.
+    return status === 400 || status === 401 || status === 403 ? 'dead' : 'transient';
+  }
+}
+
+function readRefreshLock(): { startedAt: number; outcome: RefreshOutcome | null } | null {
+  try {
+    const raw = localStorage.getItem(REFRESH_LOCK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { startedAt?: unknown; outcome?: unknown };
+    const startedAt = typeof parsed.startedAt === 'number' ? parsed.startedAt : 0;
+    const outcome = typeof parsed.outcome === 'string' ? (parsed.outcome as RefreshOutcome) : null;
+    return { startedAt, outcome };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Захват лидерства на refresh между вкладками. localStorage не даёт атомарного CAS,
+ * поэтому окно гонки остаётся — его закрывает grace-окно ротации на backend.
+ */
+function acquireRefreshLock(): boolean {
+  const lock = readRefreshLock();
+  if (lock && lock.outcome === null && Date.now() - lock.startedAt < REFRESH_LOCK_TTL_MS) {
+    return false;
+  }
+
+  try {
+    localStorage.setItem(REFRESH_LOCK_KEY, JSON.stringify({ startedAt: Date.now(), outcome: null }));
+  } catch {
+    // Приватный режим / переполнение квоты — работаем без межвкладочной координации.
+  }
+  return true;
+}
+
+function releaseRefreshLock(outcome: RefreshOutcome): void {
+  try {
+    localStorage.setItem(REFRESH_LOCK_KEY, JSON.stringify({ startedAt: Date.now(), outcome }));
+  } catch {
+    // см. acquireRefreshLock
+  }
+}
+
+/** Ожидание результата refresh от вкладки-лидера. null — лидер не отчитался вовремя. */
+async function waitForLeaderOutcome(): Promise<RefreshOutcome | null> {
+  const deadline = Date.now() + REFRESH_LOCK_TTL_MS;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, REFRESH_POLL_INTERVAL_MS));
+    const lock = readRefreshLock();
+    if (lock?.outcome) {
+      return lock.outcome;
+    }
+    if (!lock) {
+      return null;
+    }
+  }
+  return null;
+}
+
+async function coordinateRefresh(): Promise<RefreshOutcome> {
+  if (!acquireRefreshLock()) {
+    const leaderOutcome = await waitForLeaderOutcome();
+    if (leaderOutcome) {
+      return leaderOutcome;
+    }
+  }
+
+  const outcome = await runRefreshRequest();
+  releaseRefreshLock(outcome);
+  return outcome;
+}
+
+/** Single-flight внутри вкладки + координация между вкладками через localStorage-lock. */
+async function tryRefreshSession(): Promise<RefreshOutcome> {
   if (!refreshRequestPromise) {
-    refreshRequestPromise = axios
-      .post(`${API_BASE_URL}/auth/refresh`, null, {
-        withCredentials: true,
-        headers: {
-          [SKIP_REFRESH_HEADER]: '1',
-        },
-      })
-      .then(() => true)
-      .catch(() => false)
-      .finally(() => {
-        refreshRequestPromise = null;
-      });
+    refreshRequestPromise = coordinateRefresh().finally(() => {
+      refreshRequestPromise = null;
+    });
   }
 
   return refreshRequestPromise;
+}
+
+/**
+ * Плановое продление сессии (heartbeat). Разлогинивает только при явном отказе сервера.
+ */
+export async function refreshSessionHeartbeat(): Promise<RefreshOutcome> {
+  const outcome = await tryRefreshSession();
+  if (outcome === 'dead') {
+    onUnauthorized?.();
+  }
+  return outcome;
 }
 
 apiClient.interceptors.response.use(
@@ -114,18 +211,14 @@ apiClient.interceptors.response.use(
 
     if (status === 401 && originalRequest && !originalRequest._retry && !shouldSkipRefresh(originalRequest)) {
       originalRequest._retry = true;
-      const refreshed = await tryRefreshSession();
-      if (refreshed) {
-        const retryResponse = await apiClient.request(originalRequest);
-        return retryResponse;
+      const outcome = await tryRefreshSession();
+      if (outcome === 'ok') {
+        return apiClient.request(originalRequest);
       }
-    }
-
-    if (status === 401 && originalRequest) {
-      // Повторный запрос после refresh тоже 401 — сессия мертва.
-      originalRequest._retry = false;
-      onUnauthorized?.();
-      return;
+      if (outcome === 'transient') {
+        // Сеть или 5xx на refresh: сессия жива, ошибку обрабатывает вызывающий код.
+        return Promise.reject(error);
+      }
     }
 
     if (status === 401) {

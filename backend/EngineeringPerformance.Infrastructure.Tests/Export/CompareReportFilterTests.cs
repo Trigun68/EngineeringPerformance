@@ -55,4 +55,21 @@ public sealed class CompareReportFilterTests
         var filtered = CompareReportFilter.FilterSummary(rows, onlyDifferences: true);
         filtered.Select(r => r.WorkDirectionId).Should().BeEquivalentTo([1, 2]);
     }
+
+    [Fact]
+    public void FilterSummary_KeepsRow_WhenOptimisticHoursDifferAndBaseMatches()
+    {
+        var rows = new List<VersionCompareRowDto>
+        {
+            new(1, null, "Root",
+                FactZScoreA: 0m, FactZScoreB: 0m,
+                PlanZScoreA: 0m, PlanZScoreB: 0m,
+                PlannedLaborHoursA: 100m, PlannedLaborHoursB: 100m,
+                PlannedLaborHoursOptimisticA: 80m, PlannedLaborHoursOptimisticB: 70m,
+                PlannedLaborHoursPessimisticA: 120m, PlannedLaborHoursPessimisticB: 120m),
+        };
+
+        CompareReportFilter.FilterSummary(rows, onlyDifferences: true)
+            .Should().ContainSingle(r => r.WorkDirectionId == 1);
+    }
 }

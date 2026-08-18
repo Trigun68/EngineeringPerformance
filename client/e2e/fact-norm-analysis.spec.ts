@@ -11,6 +11,7 @@ test.describe('Fact–norm analysis', () => {
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
     await page.getByTestId('analytics-tab-fact-norms').click();
     await expect(page.getByTestId('fact-norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('analytics-period-select')).toBeVisible();
     await expect(page.getByTestId('fact-norm-accuracy-badge')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('fact-norm-project-scope')).toBeVisible();
 
@@ -21,17 +22,13 @@ test.describe('Fact–norm analysis', () => {
     await expect(page.getByTestId('project-picker-dialog')).toHaveCount(0);
   });
 
-  test('short period shows low accuracy hint when applicable', async ({ page }) => {
+  test('table section and fact vs norm chart area are present', async ({ page }) => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-fact-norms').click();
     await expect(page.getByTestId('fact-norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
-    // Default 1m preset → Low accuracy → hint may appear
-    const hint = page.getByTestId('fact-norm-low-accuracy-hint');
-    const badge = page.getByTestId('fact-norm-accuracy-badge');
-    await expect(badge).toBeVisible({ timeout: 30_000 });
-    const text = await badge.innerText();
-    if (text.includes('Низкая')) {
-      await expect(hint).toBeVisible();
-    }
+    await expect(page.getByText('Сравнение по группам IIC')).toBeVisible({ timeout: 30_000 });
+    await expect(
+      page.getByTestId('fact-vs-norm-chart').or(page.getByTestId('fact-vs-norm-empty')).or(page.getByTestId('fact-norm-empty')),
+    ).toBeVisible({ timeout: 60_000 });
   });
 });

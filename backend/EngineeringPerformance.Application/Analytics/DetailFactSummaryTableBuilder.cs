@@ -2,7 +2,7 @@ namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Сводная таблица факта «Детально»: объекты × корневые группы IIC,
-/// ячейки — ФО, план. часы (база), факт. часы, Z.
+/// ячейки — ФО, план. часы (песс./баз./опт.), факт. часы, Z.
 /// </summary>
 public static class DetailFactSummaryTableBuilder
 {
@@ -68,7 +68,7 @@ public static class DetailFactSummaryTableBuilder
             return "—";
         }
 
-        var aggregates = new Dictionary<(FacilityKey Fac, ColumnKey Col), (decimal Vol, decimal Plan, decimal Fact, decimal ZWeighted, decimal ZHours)>();
+        var aggregates = new Dictionary<(FacilityKey Fac, ColumnKey Col), (decimal Vol, decimal Pes, decimal Base, decimal Opt, decimal Fact, WeightedZAggregator Z)>();
 
         foreach (var row in rows)
         {
@@ -85,24 +85,23 @@ public static class DetailFactSummaryTableBuilder
             var key = (fac, col);
 
             var volume = row.Quantity * (row.Coefficient is > 0 ? row.Coefficient.Value : 1m);
-            var plan = row.PlanHours ?? 0m;
+            var pes = row.PessimisticHours ?? 0m;
+            var baseHours = row.BaseHours ?? 0m;
+            var opt = row.OptimisticHours ?? 0m;
             var fact = row.FactHours ?? 0m;
-            var zPart = row.ZScore is decimal z && fact > 0 ? z * fact : 0m;
-            var zHours = row.ZScore.HasValue && fact > 0 ? fact : 0m;
 
-            if (aggregates.TryGetValue(key, out var existing))
-            {
-                aggregates[key] = (
-                    existing.Vol + volume,
-                    existing.Plan + plan,
-                    existing.Fact + fact,
-                    existing.ZWeighted + zPart,
-                    existing.ZHours + zHours);
-            }
-            else
-            {
-                aggregates[key] = (volume, plan, fact, zPart, zHours);
-            }
+            var existing = aggregates.TryGetValue(key, out var found)
+                ? found
+                : (Vol: 0m, Pes: 0m, Base: 0m, Opt: 0m, Fact: 0m, Z: new WeightedZAggregator());
+
+            existing.Z.Add(row.ZScore, fact);
+            aggregates[key] = (
+                existing.Vol + volume,
+                existing.Pes + pes,
+                existing.Base + baseHours,
+                existing.Opt + opt,
+                existing.Fact + fact,
+                existing.Z);
         }
 
         var usedColumnKeys = aggregates.Keys
@@ -155,19 +154,19 @@ public static class DetailFactSummaryTableBuilder
             {
                 if (aggregates.TryGetValue((fac, colKey), out var agg))
                 {
-                    decimal? z = agg.ZHours > 0
-                        ? Math.Round(agg.ZWeighted / agg.ZHours, 4, MidpointRounding.AwayFromZero)
-                        : null;
+                    var z = agg.Z.Result(4, MidpointRounding.AwayFromZero);
                     var factHours = Math.Round(agg.Fact, 0, MidpointRounding.AwayFromZero);
                     factLaborTotal += factHours;
                     cells.Add(new DetailFactSummaryCellDto(
                         Math.Round(agg.Vol, 0, MidpointRounding.AwayFromZero),
-                        Math.Round(agg.Plan, 0, MidpointRounding.AwayFromZero),
+                        Math.Round(agg.Pes, 0, MidpointRounding.AwayFromZero),
+                        Math.Round(agg.Base, 0, MidpointRounding.AwayFromZero),
+                        Math.Round(agg.Opt, 0, MidpointRounding.AwayFromZero),
                         factHours,
                         z));
                 }
                 else
-                    cells.Add(new DetailFactSummaryCellDto(0m, 0m, 0m, null));
+                    cells.Add(new DetailFactSummaryCellDto(0m, 0m, 0m, 0m, 0m, null));
             }
 
             var label = string.IsNullOrWhiteSpace(fac.Code)

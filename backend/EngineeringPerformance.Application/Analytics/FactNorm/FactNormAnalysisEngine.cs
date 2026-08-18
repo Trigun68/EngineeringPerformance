@@ -78,7 +78,12 @@ public sealed class FactNormAnalysisEngine : IFactNormAnalysisEngine
                     points,
                     null,
                     null,
-                    "недостаточно данных"));
+                    "недостаточно данных",
+                    group.CurrentNorm.MeanPerformance,
+                    meanFact,
+                    sigmaFact,
+                    group.CurrentNorm.StdDeviation,
+                    group.CurrentNorm.Parameters));
                 continue;
             }
 
@@ -137,7 +142,12 @@ public sealed class FactNormAnalysisEngine : IFactNormAnalysisEngine
                 points,
                 best,
                 suggestion,
-                sigmaZero ? "σ=0" : null));
+                sigmaZero ? "σ=0" : null,
+                group.CurrentNorm.MeanPerformance,
+                meanFact,
+                sigmaFact,
+                group.CurrentNorm.StdDeviation,
+                group.CurrentNorm.Parameters));
         }
 
         var accuracyResult = AccuracyLevelCalculator.Compute(periodStart, periodEnd, totalPoints, options.Accuracy);

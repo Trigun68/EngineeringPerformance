@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Import;
@@ -17,6 +18,7 @@ public sealed partial class ProjectExcelDataImportService
     private readonly IPermissionService _permissionService;
     private readonly IProjectVisibilityService _visibility;
     private readonly IDictionaryService _dictionaryService;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
     public ProjectExcelDataImportService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -24,7 +26,8 @@ public sealed partial class ProjectExcelDataImportService
         ICurrentUserService currentUser,
         IPermissionService permissionService,
         IProjectVisibilityService visibility,
-        IDictionaryService dictionaryService)
+        IDictionaryService dictionaryService,
+        IProjectAnalyticsCache analyticsCache)
     {
         _contextFactory = contextFactory;
         _logger = logger;
@@ -32,21 +35,7 @@ public sealed partial class ProjectExcelDataImportService
         _permissionService = permissionService;
         _visibility = visibility;
         _dictionaryService = dictionaryService;
-    }
-
-    public async Task<int> ImportFromExcelAsync(
-        int projectId,
-        Stream fileStream,
-        string fileName,
-        CancellationToken cancellationToken = default)
-    {
-        await using var ms = new MemoryStream();
-        await fileStream.CopyToAsync(ms, cancellationToken);
-        using var workbook = new ClosedXML.Excel.XLWorkbook(ms);
-        var worksheet = workbook.Worksheets.FirstOrDefault()
-            ?? throw new InvalidOperationException("Excel file contains no worksheets.");
-        var usedRange = worksheet.RangeUsed();
-        return usedRange is null ? 0 : Math.Max(usedRange.RowCount() - 1, 0);
+        _analyticsCache = analyticsCache;
     }
 
     public async Task<DataImportResultDto> ImportProjectDataAsync(
@@ -75,17 +64,22 @@ public sealed partial class ProjectExcelDataImportService
             var size = contentLength ?? new FileInfo(tempPath).Length;
             if (!ImportUploadValidator.TryValidate(fileName, size, contentType, out var validationError))
                 return new DataImportResultDto(false, 0, validationError, 0);
-            var hash = ComputeFileSha256Hex(tempPath);
+            var source = new ImportSourceMetadata(
+                Path.GetFileName(fileName),
+                ComputeFileSha256Hex(tempPath),
+                userId);
+
             var result = await ImportFromFileAsync(
                 projectId,
                 versionId,
                 dataType,
                 tempPath,
                 description ?? fileName,
+                source,
                 addMissingLaborToCatalog);
 
-            if (result.IterationId > 0)
-                await EnrichIterationMetadataAsync(result.IterationId, hash, fileName, userId, cancellationToken);
+            if (result.Success)
+                await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
 
             return result;
         }
@@ -144,24 +138,6 @@ public sealed partial class ProjectExcelDataImportService
         using var sha = SHA256.Create();
         using var fs = File.OpenRead(filePath);
         return Convert.ToHexString(sha.ComputeHash(fs));
-    }
-
-    private async Task EnrichIterationMetadataAsync(
-        int iterationId,
-        string fileHash,
-        string fileName,
-        int? userId,
-        CancellationToken cancellationToken)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var iteration = await context.DataImportIterations.FindAsync([iterationId], cancellationToken);
-        if (iteration is null)
-            return;
-
-        iteration.SourceFileHash = fileHash;
-        iteration.SourceFileName = Path.GetFileName(fileName);
-        iteration.ImportedByUserId = userId;
-        await context.SaveChangesAsync(cancellationToken);
     }
 
     private static void TryDeleteFile(string path)

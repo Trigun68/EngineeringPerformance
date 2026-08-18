@@ -26,6 +26,7 @@ import { exportForecastSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { DataTable, type ContextMenuItem } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import {
   ANALYSIS_PLAN,
   buildVersionLabel,
@@ -545,7 +546,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exporting} />
-      <WorkingOverlay open={loading} delayMs={1000} />
+      <PanelBusyBar open={loading} />
       {chromeExpanded && (
         <>
       <Stack direction="row" sx={panelPrimaryToolbarSx}>

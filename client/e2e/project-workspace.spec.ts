@@ -176,11 +176,12 @@ test.describe('Project Workspace - WPF Style', () => {
 
     await page.getByRole('tab', { name: 'Отчет' }).click();
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: /План:/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Факт:/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Факт:/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
     await expect(page.getByTestId('report-plan-z')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('report-fact-z')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('report-directions-table')).toBeVisible({ timeout: 30_000 });
   });
 
   test('forecast tab shows version selector and import buttons', async ({ page }) => {

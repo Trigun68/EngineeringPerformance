@@ -33,7 +33,7 @@ import {
 } from '../../features/projects/shared/useProjectWorkspace';
 import { WorkspaceChromeProvider, useWorkspaceChrome } from '../../features/projects/shared/workspaceChromeContext';
 import { WorkspaceChromeToggleRow } from '../../features/projects/shared/WorkspaceChromeToggleRow';
-import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../../components/WorkingOverlay/PanelBusyBar';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
 import {
   LAST_PROJECT_PREF_KEY,
@@ -229,7 +229,8 @@ export function FullProjectsPage() {
       chromeExpanded={headerExpanded}
       setChromeExpanded={setHeaderExpanded}
     >
-      <WorkingOverlay open={dataFetching} delayMs={1000} />
+      {/* Шапка проекта и вкладки остаются доступны, пока догружаются данные (ISS-018). */}
+      <PanelBusyBar open={dataFetching} delayMs={600} data-testid="workspace-busy" />
       <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
         {headerExpanded ? (
           <Paper elevation={1} sx={{ p: { xs: 1.5, md: 2 }, mb: 0.5, backgroundColor: '#F8F9FA' }}>
@@ -473,12 +474,7 @@ export function FullProjectsPage() {
         )}
 
         {mainTab === 'report' && currentProjectId && hasProject && workspace && (
-          <ReportPanel
-            projectId={currentProjectId}
-            workspaceVersions={workspace.versions}
-            workspacePlanVersionId={workspace.planVersionId}
-            workspaceFactVersionId={workspace.factVersionId}
-          />
+          <ReportPanel projectId={currentProjectId} />
         )}
         {mainTab === 'report' && (!currentProjectId || !hasProject) && (
           <>

@@ -120,6 +120,10 @@ export async function openFirstProject(page: Page): Promise<number | null> {
 export async function waitForWorkingOverlayHidden(page: Page, timeout = 60_000): Promise<void> {
   // Несколько WorkingOverlay могут быть смонтированы одновременно (layout + page).
   await expect(page.locator('[data-testid="working-overlay"]:visible')).toHaveCount(0, { timeout });
+  // Загрузка данных больше не блокирует экран оверлеем (ISS-018): готовность датасета
+  // показывает PanelBusyBar. Без этой проверки хелпер завершался мгновенно, и тест
+  // обращался к гриду до прихода данных.
+  await expect(page.locator('[data-busy="true"]')).toHaveCount(0, { timeout });
 }
 
 /**

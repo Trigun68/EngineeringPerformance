@@ -28,6 +28,8 @@ export interface PerformanceReportDto {
     topNegative: PerformanceReportKeyDiscipline[];
     topPositive: PerformanceReportKeyDiscipline[];
   };
+  directions: PerformanceReportMergedDirectionRow[];
+  normSourcesUsed: number;
 }
 
 export interface PerformanceReportVersionBlock {
@@ -61,6 +63,28 @@ export interface PerformanceReportDirectionRow {
   interpretation: string | null;
 }
 
+export interface PerformanceReportMergedDirectionRow {
+  workDirectionId: number;
+  parentId: number | null;
+  level: number;
+  code: string;
+  name: string;
+  unitName: string | null;
+  physicalVolume: number | null;
+  planLaborHours: number | null;
+  factLaborHours: number | null;
+  planSubtreeHours: number | null;
+  factSubtreeHours: number | null;
+  planProductivity: number | null;
+  factProductivity: number | null;
+  normProductivity: number | null;
+  normStdDev: number | null;
+  planZScore: number | null;
+  factZScore: number | null;
+  planInterpretation: string | null;
+  factInterpretation: string | null;
+}
+
 export interface PerformanceReportHistoryPoint {
   versionId: number;
   versionName: string;
@@ -77,36 +101,20 @@ export interface PerformanceReportKeyDiscipline {
   zScore: number | null;
   subtreeHours: number;
   influenceScore: number;
+  physicalVolume: number | null;
 }
 
-export async function fetchPerformanceReport(
-  projectId: number,
-  planVersionId?: number | null,
-  factVersionId?: number | null,
-): Promise<PerformanceReportDto> {
+export async function fetchPerformanceReport(projectId: number): Promise<PerformanceReportDto> {
   const { data } = await apiClient.get<PerformanceReportDto>(
     `/projects/${projectId}/performance-report`,
-    {
-      params: {
-        planVersionId: planVersionId ?? undefined,
-        factVersionId: factVersionId ?? undefined,
-      },
-    },
   );
   return data;
 }
 
-export async function exportPerformanceReportPdf(
-  projectId: number,
-  planVersionId?: number | null,
-  factVersionId?: number | null,
-): Promise<void> {
+export async function exportPerformanceReportPdf(projectId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/performance-report/export.pdf`,
-    {
-      planVersionId: planVersionId ?? undefined,
-      factVersionId: factVersionId ?? undefined,
-    },
+    {},
     `PerformanceReport_${projectId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);

@@ -17,6 +17,7 @@
 | `ep_refresh_token` | 7 дней | Opaque refresh (в БД только SHA-256), ротация при `/auth/refresh` |
 
 `POST /api/auth/refresh` — **AllowAnonymous**, читает refresh-cookie (не требует живой access JWT).
+Ротация, grace-окно 30 c и координация вкладок описаны в `docs/auth/session-management.md`.
 
 ## Роли
 

@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -30,7 +31,10 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(context, recalculation.Object);
+        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
+            context,
+            recalculation.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
 
         var count = await orchestrator.AfterNormChangedAsync(
             workDirectionId: 1,
@@ -83,7 +87,10 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(context, recalculation.Object);
+        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
+            context,
+            recalculation.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
 
         var count = await orchestrator.AfterNormChangedAsync(
             workDirectionId: 1,
@@ -142,7 +149,10 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(context, recalculation.Object);
+        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
+            context,
+            recalculation.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
 
         var count = await orchestrator.AfterCatalogAssessmentOrCoefficientChangedAsync(
             "physical-volumes-kfo",
@@ -169,7 +179,10 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(5, 50, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(context, recalculation.Object);
+        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
+            context,
+            recalculation.Object,
+            new Mock<IProjectAnalyticsCache>().Object);
         var count = await orchestrator.RecalculateVersionAsync(5, 50);
 
         count.Should().Be(1);

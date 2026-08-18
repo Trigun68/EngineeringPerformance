@@ -20,6 +20,9 @@ export interface PerformanceRow {
   subtreeHours: number | null;
   isTotal?: boolean;
   factPhysicalVolumeDisplay?: string | null;
+  pessimisticHours?: number | null;
+  baseHours?: number | null;
+  optimisticHours?: number | null;
 }
 
 export interface ProjectVersionAnalysis {
@@ -49,6 +52,9 @@ export interface ProjectVersionDirection {
   unitName: string | null;
   factPhysicalVolume: number | null;
   factLaborHours: number | null;
+  pessimisticHours?: number | null;
+  baseHours?: number | null;
+  optimisticHours?: number | null;
   factProductivity: number | null;
   factEstimate: number | null;
   normProductivity: number | null;

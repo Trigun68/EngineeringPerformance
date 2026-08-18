@@ -115,6 +115,70 @@ describe('ProjectsPage grids', () => {
     }
   });
 
+  it('places plan labor hour columns immediately after fact hours', async () => {
+    const { createFactPerformanceColumns, createFactFacilityColumns, createFactDetailColumns } =
+      await import('../gridColumns');
+
+    const assertAfterFact = (cols: { field?: string }[], factField: string) => {
+      const factIdx = cols.findIndex((c) => c.field === factField);
+      expect(factIdx).toBeGreaterThanOrEqual(0);
+      expect(cols[factIdx + 1]?.field).toBe('pessimisticHours');
+      expect(cols[factIdx + 2]?.field).toBe('baseHours');
+      expect(cols[factIdx + 3]?.field).toBe('optimisticHours');
+    };
+
+    assertAfterFact(createFactPerformanceColumns(), 'factLaborHours');
+    assertAfterFact(createFactFacilityColumns(), 'laborHours');
+    assertAfterFact(createFactDetailColumns(), 'factLaborHours');
+
+    const detail = createFactDetailColumns();
+    expect(detail.find((c) => c.field === 'pessimisticHours')?.headerName).toBe('План.Труд.Песс.');
+    expect(detail.find((c) => c.field === 'baseHours')?.headerName).toBe('План.Труд.Баз.');
+    expect(detail.find((c) => c.field === 'optimisticHours')?.headerName).toBe('План.Труд.Оптим.');
+    expect(detail.find((c) => c.field === 'pessimisticHours')?.aggFunc).toBe('sumNullable');
+  });
+
+  it('places six compare plan labor columns immediately after physical volume', async () => {
+    const {
+      createCompareSummaryColumns,
+      createCompareFacilityColumns,
+      createCompareDetailColumns,
+    } = await import('../gridColumns');
+
+    const expectedFields = [
+      'plannedLaborHoursPessimisticA',
+      'plannedLaborHoursA',
+      'plannedLaborHoursOptimisticA',
+      'plannedLaborHoursPessimisticB',
+      'plannedLaborHoursB',
+      'plannedLaborHoursOptimisticB',
+    ];
+    const expectedHeaders = [
+      'План.Труд. (Песс. v. А)',
+      'План.Труд. (Баз. v. А)',
+      'План.Труд. (Опт. v. А)',
+      'План.Труд. (Песс. v. Б)',
+      'План.Труд. (Баз. v. Б)',
+      'План.Труд. (Опт. v. Б)',
+    ];
+
+    const assertAfterFo = (cols: { field?: string; headerName?: string }[]) => {
+      const foBIdx = cols.findIndex((c) => c.headerName === 'ФО (v. Б)');
+      expect(foBIdx).toBeGreaterThanOrEqual(0);
+      expectedFields.forEach((field, offset) => {
+        expect(cols[foBIdx + 1 + offset]?.field).toBe(field);
+        expect(cols[foBIdx + 1 + offset]?.headerName).toBe(expectedHeaders[offset]);
+      });
+    };
+
+    assertAfterFo(createCompareSummaryColumns() as { field?: string; headerName?: string }[]);
+    assertAfterFo(createCompareFacilityColumns() as { field?: string; headerName?: string }[]);
+    const detail = createCompareDetailColumns();
+    assertAfterFo(detail as { field?: string; headerName?: string }[]);
+    expect(detail.find((c) => c.field === 'plannedLaborHoursPessimisticA')?.aggFunc).toBe('sumNullable');
+    expect(detail.find((c) => c.headerName === 'Пл.Труд. (v. А)')).toBeUndefined();
+  });
+
   it('renders export toolbar buttons and calls export API', async () => {
     renderPage('manager');
 

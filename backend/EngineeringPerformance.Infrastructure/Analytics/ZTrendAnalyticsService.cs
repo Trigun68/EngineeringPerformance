@@ -119,6 +119,8 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 v.CreatedAt,
                 v.Direction,
                 v.VersionName,
+                ProjectCode = v.Project!.Code,
+                ProjectName = v.Project.Name,
             })
             .ToListAsync(cancellationToken);
 
@@ -149,8 +151,8 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var normById = norms.ToDictionary(n => n.Id);
 
         var directions = await _db.IicWorkDirections.AsNoTracking()
+            .Include(d => d.Unit)
             .Where(d => !d.IsArchived)
-            .Select(d => new { d.Id, d.Name, d.Code, d.ParentId })
             .ToListAsync(cancellationToken);
         var directionById = directions.ToDictionary(d => d.Id);
 
@@ -218,7 +220,11 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 regimeKey == "none" ? "Без нормы" : $"Режим норм {regimeKey}",
                 0,
                 "Все направления",
-                overallFlag);
+                overallFlag,
+                ProjectCount: 1,
+                ProjectCode: version.ProjectCode,
+                ProjectName: version.ProjectName,
+                VersionName: version.VersionName);
 
             if (version.Direction == AnalysisDirection.Fact)
                 overallFact.Add(overallPoint);
@@ -252,13 +258,13 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 }
 
                 var dirName = directionById.TryGetValue(row.WorkDirectionId, out var dir)
-                    ? dir.Name
+                    ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dir, directionById)
                     : row.WorkDirectionName;
                 var normName = normId is not null
                     ? (directionById.TryGetValue(
                            normById.TryGetValue(normId.Value, out var nn) ? nn.WorkDirectionId : row.WorkDirectionId,
                            out var nd)
-                        ? $"Норма {nd.Name}"
+                        ? $"Норма {IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(nd, directionById)}"
                         : $"Норма #{normId}")
                     : "Без нормы";
 
@@ -277,7 +283,11 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                     normName,
                     row.WorkDirectionId,
                     dirName,
-                    flag);
+                    flag,
+                    ProjectCount: 1,
+                    ProjectCode: version.ProjectCode,
+                    ProjectName: version.ProjectName,
+                    VersionName: version.VersionName);
 
                 var bucket = version.Direction == AnalysisDirection.Fact ? byGroupFact : byGroupPlan;
                 if (version.Direction is not (AnalysisDirection.Fact or AnalysisDirection.Plan or AnalysisDirection.Forecast))
@@ -315,7 +325,9 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var byGroup = new List<ZTrendGroupDto>();
         foreach (var groupId in groupIds)
         {
-            var name = directionById.TryGetValue(groupId, out var d) ? d.Name : $"Направление {groupId}";
+            var name = directionById.TryGetValue(groupId, out var d)
+                ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(d, directionById)
+                : $"Направление {groupId}";
             byGroup.Add(new ZTrendGroupDto(
                 groupId,
                 name,
@@ -329,7 +341,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 kv.Value.EffectiveFrom,
                 kv.Value.EffectiveTo,
                 directionById.TryGetValue(kv.Value.WorkDirectionId, out var dn)
-                    ? dn.Name
+                    ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dn, directionById)
                     : $"Норма #{kv.Key}",
                 kv.Value.WorkDirectionId)));
 

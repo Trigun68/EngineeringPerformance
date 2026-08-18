@@ -74,12 +74,16 @@ public sealed class ProjectExportService : IProjectExportService
 
                     col.Item().Element(c => RenderTableSection(c, "Факт — итого", new[]
                     {
-                        "Направление", "ФО", "Часы", "Z", "Интерпретация",
+                        "Направление", "ФО", "Часы", "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+                        "Z", "Интерпретация",
                     }, data.Fact.Performance.Select(r => new[]
                     {
                         r.WorkDirectionName,
                         r.FactPhysicalVolume?.ToString("N2") ?? "—",
                         r.FactLaborHours?.ToString("N2") ?? "—",
+                        r.PessimisticHours?.ToString("N2") ?? "—",
+                        r.BaseHours?.ToString("N2") ?? "—",
+                        r.OptimisticHours?.ToString("N2") ?? "—",
                         r.ZScore?.ToString("N4") ?? "—",
                         r.Interpretation?.ToRussian() ?? "—",
                     })));
@@ -372,11 +376,13 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Cell(1, 1).Value = $"Оценка факта по объектам: {projectCode} ({versionName})";
         sheet.Cell(1, 1).Style.Font.Bold = true;
         sheet.Cell(1, 1).Style.Font.FontSize = 13;
-        sheet.Range(1, 1, 1, 5).Merge();
+        sheet.Range(1, 1, 1, 8).Merge();
 
         var headers = new[]
         {
-            "Шифр объекта", "Наименование объекта", "Факт.трудоёмк., ч", "Z-оценка", "Интерпретация",
+            "Шифр объекта", "Наименование объекта", "Факт.трудоёмк., ч",
+            "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+            "Z-оценка", "Интерпретация",
         };
         for (var c = 0; c < headers.Length; c++)
         {
@@ -388,6 +394,9 @@ public sealed class ProjectExportService : IProjectExportService
 
         var row = 3;
         decimal totalHours = 0m;
+        decimal totalPes = 0m;
+        decimal totalBase = 0m;
+        decimal totalOpt = 0m;
         foreach (var item in data.Fact.Facility)
         {
             sheet.Cell(row, 1).Value = item.FacilityCode;
@@ -398,9 +407,27 @@ public sealed class ProjectExportService : IProjectExportService
                 totalHours += item.LaborHours.Value;
             }
 
+            if (item.PessimisticHours.HasValue)
+            {
+                sheet.Cell(row, 4).Value = Math.Round(item.PessimisticHours.Value, 2);
+                totalPes += item.PessimisticHours.Value;
+            }
+
+            if (item.BaseHours.HasValue)
+            {
+                sheet.Cell(row, 5).Value = Math.Round(item.BaseHours.Value, 2);
+                totalBase += item.BaseHours.Value;
+            }
+
+            if (item.OptimisticHours.HasValue)
+            {
+                sheet.Cell(row, 6).Value = Math.Round(item.OptimisticHours.Value, 2);
+                totalOpt += item.OptimisticHours.Value;
+            }
+
             if (item.ZScore.HasValue)
-                sheet.Cell(row, 4).Value = item.ZScore.Value;
-            sheet.Cell(row, 5).Value = item.Interpretation ?? string.Empty;
+                sheet.Cell(row, 7).Value = item.ZScore.Value;
+            sheet.Cell(row, 8).Value = item.Interpretation ?? string.Empty;
             if (row % 2 == 1)
                 sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
             row++;
@@ -408,6 +435,9 @@ public sealed class ProjectExportService : IProjectExportService
 
         sheet.Cell(row, 1).Value = "ИТОГО";
         sheet.Cell(row, 3).Value = Math.Round(totalHours, 2);
+        sheet.Cell(row, 4).Value = Math.Round(totalPes, 2);
+        sheet.Cell(row, 5).Value = Math.Round(totalBase, 2);
+        sheet.Cell(row, 6).Value = Math.Round(totalOpt, 2);
         sheet.Row(row).Style.Font.Bold = true;
         sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
         sheet.Row(row).Style.Font.FontColor = XLColor.White;
@@ -415,8 +445,11 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Column(1).Width = 12;
         sheet.Column(2).Width = 55;
         sheet.Column(3).Width = 16;
-        sheet.Column(4).Width = 12;
-        sheet.Column(5).Width = 22;
+        sheet.Column(4).Width = 16;
+        sheet.Column(5).Width = 16;
+        sheet.Column(6).Width = 16;
+        sheet.Column(7).Width = 12;
+        sheet.Column(8).Width = 22;
         sheet.SheetView.FreezeRows(2);
 
         using var stream = new MemoryStream();
@@ -464,7 +497,9 @@ public sealed class ProjectExportService : IProjectExportService
                 r.ClassifierId,
                 r.Quantity,
                 r.Coefficient,
+                r.PessimisticHours,
                 r.BaseHours,
+                r.OptimisticHours,
                 r.FactLaborHours,
                 r.ZScore))
             .ToList();
@@ -484,11 +519,11 @@ public sealed class ProjectExportService : IProjectExportService
     private static XLWorkbook BuildFactDetailSummaryTableWorkbook(DetailFactSummaryTableDto table)
     {
         var workbook = new XLWorkbook();
-        var ws = workbook.Worksheets.Add("Базовый");
+        var ws = workbook.Worksheets.Add("Сводная");
 
-        const int colsPerBlock = 4;
+        const int colsPerBlock = 6;
         var colCount = Math.Max(1, 1 + table.Columns.Count * colsPerBlock + 1);
-        ws.Cell(1, 1).Value = $"Сводная таблица факта (Базовый): {table.ProjectCode} ({table.VersionName})";
+        ws.Cell(1, 1).Value = $"Сводная таблица факта: {table.ProjectCode} ({table.VersionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
         ws.Range(1, 1, 1, colCount).Merge();
@@ -528,14 +563,22 @@ public sealed class ProjectExportService : IProjectExportService
         blockCol = 2;
         foreach (var _ in table.Columns)
         {
-            var labels = new[] { "ФО", "План Тр.", "Факт Тр.", "Z" };
+            var labels = new[]
+            {
+                ("ФО", "#34495E", XLColor.White),
+                ("План.Труд.Песс.", "#ffebee", XLColor.FromHtml("#2C3E50")),
+                ("План.Труд.Баз.", "#e8f5e9", XLColor.FromHtml("#2C3E50")),
+                ("План.Труд.Оптим.", "#e3f2fd", XLColor.FromHtml("#2C3E50")),
+                ("Факт Тр.", "#34495E", XLColor.White),
+                ("Z", "#34495E", XLColor.White),
+            };
             for (var i = 0; i < labels.Length; i++)
             {
                 var cell = ws.Cell(3, blockCol + i);
-                cell.Value = labels[i];
+                cell.Value = labels[i].Item1;
                 cell.Style.Font.Bold = true;
-                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#34495E");
-                cell.Style.Font.FontColor = XLColor.White;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml(labels[i].Item2);
+                cell.Style.Font.FontColor = labels[i].Item3;
                 cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             }
 
@@ -545,7 +588,9 @@ public sealed class ProjectExportService : IProjectExportService
         var rowIdx = 4;
         var columnCount = table.Columns.Count;
         var totalVolumes = new decimal[columnCount];
-        var totalPlan = new decimal[columnCount];
+        var totalPes = new decimal[columnCount];
+        var totalBase = new decimal[columnCount];
+        var totalOpt = new decimal[columnCount];
         var totalFact = new decimal[columnCount];
         decimal grandFactLabor = 0m;
 
@@ -557,17 +602,21 @@ public sealed class ProjectExportService : IProjectExportService
             {
                 var cell = dataRow.Cells[i];
                 totalVolumes[i] += cell.PhysicalVolume;
-                totalPlan[i] += cell.PlanHours;
+                totalPes[i] += cell.PessimisticHours;
+                totalBase[i] += cell.BaseHours;
+                totalOpt[i] += cell.OptimisticHours;
                 totalFact[i] += cell.FactHours;
 
                 WriteSummaryNumber(ws, rowIdx, cellCol, cell.PhysicalVolume);
-                WriteSummaryNumber(ws, rowIdx, cellCol + 1, cell.PlanHours);
-                WriteSummaryNumber(ws, rowIdx, cellCol + 2, cell.FactHours);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 1, cell.PessimisticHours);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 2, cell.BaseHours);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 3, cell.OptimisticHours);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 4, cell.FactHours);
                 if (cell.ZScore.HasValue)
                 {
-                    ws.Cell(rowIdx, cellCol + 3).Value = cell.ZScore.Value;
-                    ws.Cell(rowIdx, cellCol + 3).Style.NumberFormat.Format = "0.00";
-                    ws.Cell(rowIdx, cellCol + 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    ws.Cell(rowIdx, cellCol + 5).Value = cell.ZScore.Value;
+                    ws.Cell(rowIdx, cellCol + 5).Style.NumberFormat.Format = "0.00";
+                    ws.Cell(rowIdx, cellCol + 5).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
                 }
 
                 cellCol += colsPerBlock;
@@ -592,8 +641,10 @@ public sealed class ProjectExportService : IProjectExportService
             for (var i = 0; i < columnCount; i++)
             {
                 WriteSummaryNumber(ws, rowIdx, totalCol, Math.Round(totalVolumes[i], 0, MidpointRounding.AwayFromZero));
-                WriteSummaryNumber(ws, rowIdx, totalCol + 1, Math.Round(totalPlan[i], 0, MidpointRounding.AwayFromZero));
-                WriteSummaryNumber(ws, rowIdx, totalCol + 2, Math.Round(totalFact[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 1, Math.Round(totalPes[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 2, Math.Round(totalBase[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 3, Math.Round(totalOpt[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 4, Math.Round(totalFact[i], 0, MidpointRounding.AwayFromZero));
                 totalCol += colsPerBlock;
             }
 
@@ -637,7 +688,8 @@ public sealed class ProjectExportService : IProjectExportService
             "ID по каталогу", "TAG", "ID работы", "Наименование", "Комментарий",
             "Описательная часть", "Код", "Наименование ФО", "Оценка", "Коэфф.",
             "Группа ФО IIC", "Ед. изм.", "Производит.", "СО", "Кол-во",
-            "План ч (база)", "Факт ч", "Факт произв.", "Z", "Интерпретация",
+            "Факт ч", "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+            "Факт произв.", "Z", "Интерпретация",
         };
 
         for (var c = 0; c < headers.Length; c++)
@@ -687,8 +739,10 @@ public sealed class ProjectExportService : IProjectExportService
             Set(row.NormProductivity);
             Set(row.NormStdDev);
             Set(row.Quantity);
-            Set(row.BaseHours);
             Set(row.FactLaborHours);
+            Set(row.PessimisticHours);
+            Set(row.BaseHours);
+            Set(row.OptimisticHours);
             Set(row.FactProductivity);
             Set(row.ZScore);
             Set(row.Interpretation);
@@ -850,7 +904,9 @@ public sealed class ProjectExportService : IProjectExportService
         var headers = new[]
         {
             "Шифр объекта", "Наименование объекта", "Группа ФО IIC", "Код позиции", "Наименование позиции",
-            "ID работы", "Наименование работы", "ФО A", "ФО B", "План. труд (база) A", "План. труд (база) B",
+            "ID работы", "Наименование работы", "ФО A", "ФО B",
+            "План.Труд. (Песс. v. А)", "План.Труд. (Баз. v. А)", "План.Труд. (Опт. v. А)",
+            "План.Труд. (Песс. v. Б)", "План.Труд. (Баз. v. Б)", "План.Труд. (Опт. v. Б)",
             "Факт. труд A", "Факт. труд B", "План. произв. A", "План. произв. B",
             "Факт. произв. A", "Факт. произв. B", "Z A", "Z B", "Наличие",
         };
@@ -882,17 +938,21 @@ public sealed class ProjectExportService : IProjectExportService
             sheet.Cell(rowNumber, 7).Value = row.WorkName;
             WriteNullableNumber(sheet, rowNumber, 8, row.PhysicalVolumeA);
             WriteNullableNumber(sheet, rowNumber, 9, row.PhysicalVolumeB);
-            WriteNullableNumber(sheet, rowNumber, 10, row.PlannedLaborHoursA);
-            WriteNullableNumber(sheet, rowNumber, 11, row.PlannedLaborHoursB);
-            WriteNullableNumber(sheet, rowNumber, 12, row.FactLaborHoursA);
-            WriteNullableNumber(sheet, rowNumber, 13, row.FactLaborHoursB);
-            WriteNullableNumber(sheet, rowNumber, 14, row.PlannedProductivityA);
-            WriteNullableNumber(sheet, rowNumber, 15, row.PlannedProductivityB);
-            WriteNullableNumber(sheet, rowNumber, 16, row.FactProductivityA);
-            WriteNullableNumber(sheet, rowNumber, 17, row.FactProductivityB);
-            WriteNullableNumber(sheet, rowNumber, 18, row.ZScoreA);
-            WriteNullableNumber(sheet, rowNumber, 19, row.ZScoreB);
-            sheet.Cell(rowNumber, 20).Value = row.Presence;
+            WriteNullableNumber(sheet, rowNumber, 10, row.PlannedLaborHoursPessimisticA);
+            WriteNullableNumber(sheet, rowNumber, 11, row.PlannedLaborHoursA);
+            WriteNullableNumber(sheet, rowNumber, 12, row.PlannedLaborHoursOptimisticA);
+            WriteNullableNumber(sheet, rowNumber, 13, row.PlannedLaborHoursPessimisticB);
+            WriteNullableNumber(sheet, rowNumber, 14, row.PlannedLaborHoursB);
+            WriteNullableNumber(sheet, rowNumber, 15, row.PlannedLaborHoursOptimisticB);
+            WriteNullableNumber(sheet, rowNumber, 16, row.FactLaborHoursA);
+            WriteNullableNumber(sheet, rowNumber, 17, row.FactLaborHoursB);
+            WriteNullableNumber(sheet, rowNumber, 18, row.PlannedProductivityA);
+            WriteNullableNumber(sheet, rowNumber, 19, row.PlannedProductivityB);
+            WriteNullableNumber(sheet, rowNumber, 20, row.FactProductivityA);
+            WriteNullableNumber(sheet, rowNumber, 21, row.FactProductivityB);
+            WriteNullableNumber(sheet, rowNumber, 22, row.ZScoreA);
+            WriteNullableNumber(sheet, rowNumber, 23, row.ZScoreB);
+            sheet.Cell(rowNumber, 24).Value = row.Presence;
 
             if (rowNumber % 2 == 1)
                 sheet.Row(rowNumber).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
@@ -904,9 +964,9 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Range(2, 1, Math.Max(2, rowNumber - 1), headers.Length).Style.Border.InsideBorder = XLBorderStyleValues.Hair;
         sheet.SheetView.FreezeRows(2);
         sheet.Columns(1, 7).AdjustToContents(1, Math.Max(2, rowNumber - 1));
-        for (var column = 8; column <= 19; column++)
+        for (var column = 8; column <= 23; column++)
             sheet.Column(column).Width = 15;
-        sheet.Column(20).Width = 14;
+        sheet.Column(24).Width = 14;
 
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
@@ -949,14 +1009,20 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Cell(1, 1).Value = "Направление";
         sheet.Cell(1, 2).Value = "ФО";
         sheet.Cell(1, 3).Value = "Часы";
-        sheet.Cell(1, 4).Value = "Z";
+        sheet.Cell(1, 4).Value = "План.Труд.Песс.";
+        sheet.Cell(1, 5).Value = "План.Труд.Баз.";
+        sheet.Cell(1, 6).Value = "План.Труд.Оптим.";
+        sheet.Cell(1, 7).Value = "Z";
         var row = 2;
         foreach (var item in data.Fact.Performance)
         {
             sheet.Cell(row, 1).Value = item.WorkDirectionName;
             sheet.Cell(row, 2).Value = item.FactPhysicalVolume;
             sheet.Cell(row, 3).Value = item.FactLaborHours;
-            sheet.Cell(row, 4).Value = item.ZScore;
+            sheet.Cell(row, 4).Value = item.PessimisticHours;
+            sheet.Cell(row, 5).Value = item.BaseHours;
+            sheet.Cell(row, 6).Value = item.OptimisticHours;
+            sheet.Cell(row, 7).Value = item.ZScore;
             row++;
         }
     }

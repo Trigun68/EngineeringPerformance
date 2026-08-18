@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -8,10 +9,22 @@ namespace EngineeringPerformance.Infrastructure.Projects;
 public sealed class ProjectDataService : IProjectDataService
 {
     private readonly AppDbContext _context;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
-    public ProjectDataService(AppDbContext context)
+    public ProjectDataService(AppDbContext context, IProjectAnalyticsCache analyticsCache)
     {
         _context = context;
+        _analyticsCache = analyticsCache;
+    }
+
+    /// <summary>
+    /// Правка ПОВ / трудоёмкости / оборудования меняет расчёт гридов и отчёта,
+    /// поэтому кэш проекта сбрасывается той же операцией (ISS-018).
+    /// </summary>
+    private async Task SaveAndInvalidateAsync(int projectId, CancellationToken cancellationToken)
+    {
+        await _context.SaveChangesAsync(cancellationToken);
+        await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
     }
 
     public async Task<PagedResult<ProjectPhysicalVolumeDto>> GetPhysicalVolumesAsync(
@@ -92,7 +105,7 @@ public sealed class ProjectDataService : IProjectDataService
         PhysicalVolumeCatalogBinding.AssignCatalogId(entity, request.PhysicalVolumeId, isKfo);
 
         _context.ProjectPhysicalVolumes.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapPpv(entity);
     }
 
@@ -115,7 +128,7 @@ public sealed class ProjectDataService : IProjectDataService
         entity.LaborHoursPerUnit = request.LaborHoursPerUnit;
         entity.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapPpv(entity);
     }
 
@@ -126,7 +139,7 @@ public sealed class ProjectDataService : IProjectDataService
             return false;
 
         _context.ProjectPhysicalVolumes.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return true;
     }
 
@@ -150,7 +163,7 @@ public sealed class ProjectDataService : IProjectDataService
         };
 
         _context.ProjectLaborIntensities.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapLi(entity);
     }
 
@@ -170,7 +183,7 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ActualHours = request.ActualHours;
         entity.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapLi(entity);
     }
 
@@ -181,7 +194,7 @@ public sealed class ProjectDataService : IProjectDataService
             return false;
 
         _context.ProjectLaborIntensities.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return true;
     }
 
@@ -204,7 +217,7 @@ public sealed class ProjectDataService : IProjectDataService
         };
 
         _context.ProjectEquipments.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapEq(entity);
     }
 
@@ -223,7 +236,7 @@ public sealed class ProjectDataService : IProjectDataService
         entity.QuantityInWork = request.QuantityInWork;
         entity.ModifiedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return MapEq(entity);
     }
 
@@ -234,7 +247,7 @@ public sealed class ProjectDataService : IProjectDataService
             return false;
 
         _context.ProjectEquipments.Remove(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+        await SaveAndInvalidateAsync(projectId, cancellationToken);
         return true;
     }
 

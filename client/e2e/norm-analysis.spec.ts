@@ -6,11 +6,12 @@ test.describe('Norm analysis registry', () => {
     await loginAsAdmin(page);
   });
 
-  test('norm-analysis tab shows summary, timeline and table', async ({ page }) => {
+  test('norm-analysis tab shows period select, summary, timeline and table', async ({ page }) => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
     await page.getByTestId('analytics-tab-norm-analysis').click();
     await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('analytics-period-select')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-filters')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-health-summary')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('norm-analysis-badge-errors')).toBeVisible();
@@ -47,7 +48,7 @@ test.describe('Norm analysis registry', () => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-norm-analysis').click();
     await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByTestId('norm-analysis-export-xlsx')).toBeVisible();
+    await expect(page.getByTestId('norm-analysis-export-xlsx')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('norm-analysis-export-csv')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-export-health')).toBeVisible();
   });

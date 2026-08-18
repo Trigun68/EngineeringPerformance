@@ -13,7 +13,17 @@ public sealed record ZTrendPointDto(
     double Weight,
     int ProjectCount,
     int? NormId,
-    string Flag);
+    string Flag,
+    IReadOnlyList<ZTrendContributionDto>? Contributions = null);
+
+public sealed record ZTrendContributionDto(
+    int ProjectId,
+    string ProjectCode,
+    string ProjectName,
+    int VersionId,
+    string VersionName,
+    double? ZScore,
+    double Weight);
 
 public sealed record ZTrendSegmentDto(
     int? NormId,
@@ -74,7 +84,11 @@ public sealed record ZTrendRawPoint(
     int? GroupId,
     string GroupName,
     string Flag,
-    int ProjectCount = 1);
+    int ProjectCount = 1,
+    string ProjectCode = "",
+    string ProjectName = "",
+    string VersionName = "",
+    IReadOnlyList<ZTrendContributionDto>? Contributions = null);
 
 public interface IZTrendEngine
 {

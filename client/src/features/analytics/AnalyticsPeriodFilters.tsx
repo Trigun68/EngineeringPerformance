@@ -5,8 +5,6 @@ import {
   Select,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import {
   ANALYTICS_PERIOD_PRESET_LABELS,
@@ -21,6 +19,8 @@ export interface AnalyticsPeriodFiltersProps {
   onPresetChange: (preset: AnalyticsPeriodPreset) => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
+  /** Доп. контролы в том же ряду (вес, План/Факт, проекты…). */
+  extras?: React.ReactNode;
 }
 
 export function AnalyticsPeriodFilters({
@@ -30,6 +30,7 @@ export function AnalyticsPeriodFilters({
   onPresetChange,
   onDateFromChange,
   onDateToChange,
+  extras,
 }: AnalyticsPeriodFiltersProps) {
   const isCustom = preset === 'custom';
 
@@ -42,59 +43,27 @@ export function AnalyticsPeriodFilters({
       useFlexGap
       data-testid="analytics-period-filters"
     >
-      <ToggleButtonGroup
-        exclusive
-        size="small"
-        value={preset}
-        onChange={(_, next: AnalyticsPeriodPreset | null) => {
-          if (next) onPresetChange(next);
-        }}
-        sx={{
-          flexWrap: 'wrap',
-          gap: 0.5,
-          '& .MuiToggleButtonGroup-grouped': {
-            border: '1px solid #AEB6BF !important',
-            borderRadius: '4px !important',
-            mx: 0,
-            textTransform: 'none',
-            px: 1.5,
-          },
-          display: { xs: 'none', lg: 'inline-flex' },
-        }}
-        data-testid="analytics-period-toggles"
-      >
-        {ANALYTICS_PERIOD_PRESETS.map((p) => (
-          <ToggleButton key={p} value={p} data-testid={`analytics-period-${p}`}>
-            {ANALYTICS_PERIOD_PRESET_LABELS[p]}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
-
-      <FormControl
-        size="small"
-        sx={{ minWidth: 220, display: { xs: 'flex', lg: 'none' } }}
-        data-testid="analytics-period-select"
-      >
-        <InputLabel id="analytics-period-label">Период</InputLabel>
+      <FormControl size="small" sx={{ minWidth: 220 }} data-testid="analytics-period-select">
+        <InputLabel id="analytics-period-label">Отчёт за</InputLabel>
         <Select
           labelId="analytics-period-label"
-          label="Период"
+          label="Отчёт за"
           value={preset}
           onChange={(e) => onPresetChange(e.target.value as AnalyticsPeriodPreset)}
         >
           {ANALYTICS_PERIOD_PRESETS.map((p) => (
-            <MenuItem key={p} value={p}>
+            <MenuItem key={p} value={p} data-testid={`analytics-period-${p}`}>
               {ANALYTICS_PERIOD_PRESET_LABELS[p]}
             </MenuItem>
           ))}
         </Select>
       </FormControl>
 
-      {isCustom && (
+      {isCustom ? (
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
           <TextField
             size="small"
-            label="Дата с"
+            label="Дата начала"
             type="date"
             value={dateFrom}
             onChange={(e) => onDateFromChange(e.target.value)}
@@ -103,7 +72,7 @@ export function AnalyticsPeriodFilters({
           />
           <TextField
             size="small"
-            label="Дата по"
+            label="Дата конца"
             type="date"
             value={dateTo}
             onChange={(e) => onDateToChange(e.target.value)}
@@ -111,7 +80,9 @@ export function AnalyticsPeriodFilters({
             inputProps={{ 'data-testid': 'analytics-date-to' }}
           />
         </Stack>
-      )}
+      ) : null}
+
+      {extras}
     </Stack>
   );
 }

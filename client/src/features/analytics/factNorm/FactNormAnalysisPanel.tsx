@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   Box,
@@ -44,9 +44,10 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
 interface Props {
   dateFrom: string;
   dateTo: string;
+  onToolbarExtras?: (node: ReactNode) => void;
 }
 
-export function FactNormAnalysisPanel({ dateFrom, dateTo }: Props) {
+export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Props) {
   const { canEdit: canEditNorms } = usePermission('IicWorkDirectionNorms');
   const [projectIds, setProjectIds] = useState<number[] | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -97,6 +98,71 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo }: Props) {
     return () => abortRef.current?.abort();
   }, [runAnalysis]);
 
+  const accuracy: Accuracy | null = result?.accuracy ?? null;
+  const projectLabel =
+    projectIds == null
+      ? 'Все проекты'
+      : projectIds.length === 1
+        ? `1 проект`
+        : `${projectIds.length} проектов`;
+
+  useEffect(() => {
+    if (!onToolbarExtras) return;
+    const shortPeriod =
+      accuracy != null && accuracy.periodLengthDays > 0 && accuracy.periodLengthDays < 90;
+    onToolbarExtras(
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        <AccuracyBadge accuracy={accuracy} />
+        {shortPeriod ? (
+          <Chip
+            size="small"
+            color="warning"
+            variant="outlined"
+            label="Короткий период"
+            title={accuracy?.hint ?? `${accuracy?.periodLengthDays ?? 0} дн.`}
+            data-testid="fact-norm-short-period"
+          />
+        ) : null}
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => setPickerOpen(true)}
+          data-testid="fact-norm-project-scope"
+        >
+          {projectLabel}
+        </Button>
+        <Button size="small" variant="outlined" onClick={() => void runAnalysis()} disabled={loading}>
+          Обновить
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          disabled={!result || loading}
+          onClick={() =>
+            void exportFactNormAnalysis(
+              { periodStart: dateFrom, periodEnd: dateTo, projectIds },
+              'xlsx',
+            )
+          }
+          data-testid="fact-norm-export"
+        >
+          Экспорт
+        </Button>
+      </Stack>,
+    );
+    return () => onToolbarExtras(null);
+  }, [
+    onToolbarExtras,
+    accuracy,
+    projectLabel,
+    loading,
+    result,
+    dateFrom,
+    dateTo,
+    projectIds,
+    runAnalysis,
+  ]);
+
   const suggestionById = useMemo(() => {
     const map = new Map<number, NormSuggestion>();
     for (const s of result?.suggestions ?? []) map.set(s.id, s);
@@ -131,26 +197,48 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo }: Props) {
 
   const columnDefs = useMemo<ColDef<NormComparison>[]>(
     () => [
-      { field: 'groupName', headerName: 'Группа', flex: 1.4, minWidth: 180 },
-      { field: 'currentFormula', headerName: 'Тек.тип', width: 120 },
-      { field: 'proposedFormula', headerName: 'Факт.тип', width: 120 },
+      { field: 'groupName', headerName: 'Группа IIC', flex: 1.6, minWidth: 200 },
       {
-        field: 'deltaR2',
-        headerName: 'ΔR²',
-        width: 90,
-        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+        field: 'normMeanPerformance',
+        headerName: 'μ нормы',
+        width: 100,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : '—'),
+      },
+      {
+        field: 'factMeanPerformance',
+        headerName: 'Среднее факт',
+        width: 120,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : '—'),
       },
       {
         field: 'deltaMean',
-        headerName: 'Δmean',
-        width: 100,
-        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : ''),
+        headerName: 'Δμ (факт−норма)',
+        width: 130,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+      },
+      {
+        field: 'normStdDeviation',
+        headerName: 'σ нормы',
+        width: 90,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : '—'),
+      },
+      {
+        field: 'factStdDeviation',
+        headerName: 'σ факт',
+        width: 90,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : '—'),
       },
       {
         field: 'deltaSigma',
         headerName: 'Δσ',
-        width: 90,
-        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : ''),
+        width: 80,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+      },
+      {
+        field: 'deltaR2',
+        headerName: 'ΔR²',
+        width: 80,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
       },
       {
         field: 'verdict',
@@ -172,56 +260,15 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo }: Props) {
     [],
   );
 
-  const accuracy: Accuracy | null = result?.accuracy ?? null;
-  const projectLabel =
-    projectIds == null
-      ? 'Все проекты'
-      : projectIds.length === 1
-        ? `1 проект`
-        : `${projectIds.length} проектов`;
-
   return (
     <Box
-      sx={{ display: 'flex', flexDirection: 'column', gap: 2, minHeight: 0 }}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
       data-testid="fact-norm-analysis-panel"
     >
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems="center" flexWrap="wrap">
-        <Typography variant="h6" component="h2" sx={{ flexGrow: 1 }}>
-          Анализ факта и норм
-        </Typography>
-        <AccuracyBadge accuracy={accuracy} />
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => setPickerOpen(true)}
-          data-testid="fact-norm-project-scope"
-        >
-          Проекты: {projectLabel}
-        </Button>
-        <Button size="small" variant="outlined" onClick={() => void runAnalysis()} disabled={loading}>
-          Обновить
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          disabled={!result || loading}
-          onClick={() =>
-            void exportFactNormAnalysis(
-              { periodStart: dateFrom, periodEnd: dateTo, projectIds },
-              'xlsx',
-            )
-          }
-          data-testid="fact-norm-export"
-        >
-          Экспорт
-        </Button>
-      </Stack>
-
-      {accuracy?.level === 'Low' && accuracy.hint && (
-        <Alert severity="warning" data-testid="fact-norm-low-accuracy-hint">
-          {accuracy.hint}
-        </Alert>
-      )}
+      <Typography variant="body2" color="text.secondary">
+        Сравнение <strong>факта</strong> (основные Fact-версии) с действующей нормой. Plan не
+        участвует. Таблица — полный список направлений; график — динамика объём → производительность.
+      </Typography>
 
       {error && <Alert severity="error">{error}</Alert>}
 
@@ -231,30 +278,32 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo }: Props) {
 
       {!loading && result && result.comparisons.length === 0 && (
         <Alert severity="info" data-testid="fact-norm-empty">
-          Нет данных за период. Выберите другой диапазон или проекты.
+          Нет primary Fact с объёмом и производительностью за период. Выберите другой диапазон или
+          проекты.
         </Alert>
       )}
 
-      <Box sx={{ minHeight: 280 }}>
-        <DataTable<NormComparison>
-          rowData={result?.comparisons ?? []}
-          columnDefs={columnDefs}
-          objectName="GroupTrend"
-          gridId="fact-norm-suggestions"
-          loading={loading}
-          height={320}
-          contextMenuItems={contextMenuItems}
-          onRowClicked={(row) => setSelected(row)}
-          getRowIdValue={(row) => String(row.normId)}
-        />
-      </Box>
+      <Typography variant="subtitle1" component="h2">
+        Сравнение по группам IIC
+      </Typography>
+      <DataTable<NormComparison>
+        rowData={result?.comparisons ?? []}
+        columnDefs={columnDefs}
+        objectName="GroupTrend"
+        gridId="fact-norm-suggestions"
+        loading={loading}
+        height={Math.max(280, Math.min(560, 48 + (result?.comparisons.length ?? 0) * 42))}
+        contextMenuItems={contextMenuItems}
+        onRowClicked={(row) => setSelected(row)}
+        getRowIdValue={(row) => String(row.normId)}
+      />
 
       {selected && (
         <FactVsNormChart
-          title={selected.groupName}
+          title={`${selected.groupName}: производительность vs объём`}
           points={selected.chartPoints ?? []}
           currentFormula={selected.currentFormula}
-          currentParams={null}
+          currentParams={selected.currentParameters}
           proposedFormula={selected.proposedFormula}
           proposedParams={selected.proposedParameters}
         />

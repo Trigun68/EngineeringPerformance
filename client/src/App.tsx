@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
@@ -14,22 +14,46 @@ import { DirectoryPage } from './pages/references/DirectoryPage';
 import { IicNormsPage } from './pages/references/IicNormsPage';
 import { REFERENCE_ROUTES } from './pages/references/referenceConfig';
 import { ReferencesIndexRedirect } from './pages/references/ReferencesIndexRedirect';
-import { UserActionLogPage } from './pages/audit/UserActionLogPage';
-import { SettingsLayout } from './pages/settings/SettingsLayout';
-import { UsersPage } from './pages/settings/UsersPage';
-import { AccessRightsPage } from './pages/settings/AccessRightsPage';
-import { SystemSettingsPage } from './pages/settings/SystemSettingsPage';
-import { HelpPage } from './pages/help/HelpPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
-import { AnalyticsPage } from './pages/analytics/AnalyticsPage';
 import { LoginPage } from './pages/auth/LoginPage';
-import { MonitoringDashboard } from './features/monitoring/MonitoringDashboard';
-import { AdminLayout } from './features/admin/AdminLayout';
-import { LogViewer } from './features/admin/LogViewer';
-import { HealthDashboard } from './features/admin/HealthDashboard';
-import { ConfigAudit } from './features/admin/ConfigAudit';
 import { useAuthStore } from './store/useAuthStore';
 import { resolvePreferredPath } from './utils/projectWorkspacePrefs';
+
+// Аналитика (Highcharts) и админ-разделы не нужны на старте — грузим отдельными чанками.
+const AnalyticsPage = lazy(() =>
+  import('./pages/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
+);
+const HelpPage = lazy(() => import('./pages/help/HelpPage').then((m) => ({ default: m.HelpPage })));
+const AdminLayout = lazy(() =>
+  import('./features/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
+);
+const LogViewer = lazy(() => import('./features/admin/LogViewer').then((m) => ({ default: m.LogViewer })));
+const HealthDashboard = lazy(() =>
+  import('./features/admin/HealthDashboard').then((m) => ({ default: m.HealthDashboard })),
+);
+const ConfigAudit = lazy(() => import('./features/admin/ConfigAudit').then((m) => ({ default: m.ConfigAudit })));
+const MonitoringDashboard = lazy(() =>
+  import('./features/monitoring/MonitoringDashboard').then((m) => ({ default: m.MonitoringDashboard })),
+);
+const UserActionLogPage = lazy(() =>
+  import('./pages/audit/UserActionLogPage').then((m) => ({ default: m.UserActionLogPage })),
+);
+const SettingsLayout = lazy(() =>
+  import('./pages/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })),
+);
+const UsersPage = lazy(() => import('./pages/settings/UsersPage').then((m) => ({ default: m.UsersPage })));
+const AccessRightsPage = lazy(() =>
+  import('./pages/settings/AccessRightsPage').then((m) => ({ default: m.AccessRightsPage })),
+);
+const SystemSettingsPage = lazy(() =>
+  import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
+);
+
+const routeFallback = (
+  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+    <CircularProgress size={28} />
+  </Box>
+);
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -105,6 +129,7 @@ export default function App() {
     <BrowserRouter>
       <>
         {user ? (
+        <Suspense fallback={routeFallback}>
         <Routes>
           <Route element={<AppLayout />}>
             <Route
@@ -226,6 +251,7 @@ export default function App() {
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
         </Routes>
+        </Suspense>
         ) : (
           <LoginPage />
         )}

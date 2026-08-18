@@ -14,17 +14,20 @@ public sealed class ProjectVersionService : IProjectVersionService
     private readonly IProjectVersionDeepCopyService _deepCopy;
     private readonly IProjectVersionPlanningParameterService _planningParameters;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
     public ProjectVersionService(
         AppDbContext context,
         IProjectVersionDeepCopyService deepCopy,
         IProjectVersionPlanningParameterService planningParameters,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IProjectAnalyticsCache analyticsCache)
     {
         _context = context;
         _deepCopy = deepCopy;
         _planningParameters = planningParameters;
         _recalcOrchestrator = recalcOrchestrator;
+        _analyticsCache = analyticsCache;
     }
 
     public async Task<IReadOnlyList<ProjectVersionDto>> ListAsync(int projectId, CancellationToken cancellationToken = default)
@@ -84,6 +87,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         await _context.SaveChangesAsync(cancellationToken);
 
         await _planningParameters.SeedForVersionAsync(entity.Id, cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
 
         return (await GetByIdAsync(projectId, entity.Id, cancellationToken))!;
     }
@@ -171,6 +175,8 @@ public sealed class ProjectVersionService : IProjectVersionService
             recalcCount = 1;
         }
 
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
+
         var dto = await GetByIdAsync(projectId, versionId, cancellationToken);
         return dto is null ? null : dto with { RecalculatedVersionCount = recalcCount };
     }
@@ -192,6 +198,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         if (wasPrimary)
             await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
 
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return true;
     }
 
@@ -205,6 +212,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.IsArchived = false;
         entity.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
 
         return await GetByIdAsync(projectId, versionId, cancellationToken);
     }
@@ -224,25 +232,37 @@ public sealed class ProjectVersionService : IProjectVersionService
             entity.IsPrimary = true;
             entity.ModifiedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync(cancellationToken);
+            await InvalidateAnalyticsAsync(projectId, cancellationToken);
         }
 
         return await GetByIdAsync(projectId, versionId, cancellationToken);
     }
 
-    public Task<ProjectVersionDto> CopyAsync(
+    public async Task<ProjectVersionDto> CopyAsync(
         int projectId,
         int versionId,
         string newVersionName,
         string? newDescription = null,
         AnalysisDirection? targetDirection = null,
-        CancellationToken cancellationToken = default) =>
-        _deepCopy.CopyVersionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var copy = await _deepCopy.CopyVersionAsync(
             projectId,
             versionId,
             newVersionName,
             newDescription,
             targetDirection,
             cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
+        return copy;
+    }
+
+    /// <summary>
+    /// Состав и признаки версий влияют на page-data и отчёт производительности,
+    /// поэтому любая мутация версии сбрасывает кэш проекта (ISS-018).
+    /// </summary>
+    private Task InvalidateAnalyticsAsync(int projectId, CancellationToken cancellationToken) =>
+        _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
 
     /// <summary>
     /// Смена БЭР↔КФО при уже импортированных ФО недопустима: FK указывают на другой каталог.

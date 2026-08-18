@@ -17,7 +17,15 @@ public static class ReferenceFormulaCodes
     ];
 }
 
-public readonly record struct FactPoint(double X, double Y);
+/// <summary>Точка факта (x=объём, y=производительность). Метаданные проекта/версии для UI.</summary>
+public readonly record struct FactPoint(
+    double X,
+    double Y,
+    int ProjectId = 0,
+    string? ProjectCode = null,
+    string? ProjectName = null,
+    int VersionId = 0,
+    string? VersionName = null);
 
 public sealed record FitMetrics(
     double R2,
@@ -110,7 +118,12 @@ public sealed record NormGroupComparisonResult(
     IReadOnlyList<FactPoint> ChartPoints,
     FormulaFitResult? BestFit,
     NormSuggestionDraft? Suggestion,
-    string? Warning);
+    string? Warning,
+    double NormMeanPerformance,
+    double FactMeanPerformance,
+    double FactStdDeviation,
+    double NormStdDeviation,
+    IReadOnlyDictionary<string, double> CurrentParameters);
 
 public sealed record FactNormEngineResult(
     AccuracyResult Accuracy,

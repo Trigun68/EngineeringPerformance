@@ -20,31 +20,28 @@ export function NormLegend({ legend }: Props) {
   if (legend.length === 0) return null;
 
   return (
-    <Stack
-      direction="row"
-      flexWrap="wrap"
-      gap={1.5}
-      data-testid="ztrend-legend"
-      aria-label="Легенда норм"
-    >
-      {legend.map((item) => (
-        <Stack key={item.segmentKey} direction="row" spacing={0.75} alignItems="center">
-          <Box
-            sx={{
-              width: 14,
-              height: 14,
-              borderRadius: 0.5,
-              bgcolor: item.color,
-              border: '1px solid rgba(0,0,0,0.2)',
-            }}
-          />
-          <Typography variant="caption" component="span">
-            {item.normName}
-            {item.groupName ? ` (${item.groupName})` : ''}:{' '}
-            {formatPeriod(item.effectiveFrom, item.effectiveTo)}
-          </Typography>
-        </Stack>
-      ))}
+    <Stack spacing={1} data-testid="ztrend-legend" aria-label="Периоды действия норм">
+      <Typography variant="subtitle2">Периоды действия норм</Typography>
+      <Stack direction="row" flexWrap="wrap" gap={1.5}>
+        {legend.map((item) => (
+          <Stack key={item.segmentKey} direction="row" spacing={0.75} alignItems="center">
+            <Box
+              sx={{
+                width: 14,
+                height: 14,
+                borderRadius: 0.5,
+                bgcolor: item.color,
+                border: '1px solid rgba(0,0,0,0.2)',
+              }}
+            />
+            <Typography variant="caption" component="span">
+              {item.normName}
+              {item.groupName ? ` (${item.groupName})` : ''}:{' '}
+              {formatPeriod(item.effectiveFrom, item.effectiveTo)}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
     </Stack>
   );
 }

@@ -30,7 +30,6 @@ public sealed class ProjectsController : ControllerBase
     private readonly IProjectExportService _exportService;
     private readonly IProjectsCatalogExportService _catalogExportService;
     private readonly IVisualReportService _visualReports;
-    private readonly IProjectImportService _importService;
     private readonly AppDbContext _context;
 
     public ProjectsController(
@@ -44,7 +43,6 @@ public sealed class ProjectsController : ControllerBase
         IProjectExportService exportService,
         IProjectsCatalogExportService catalogExportService,
         IVisualReportService visualReports,
-        IProjectImportService importService,
         AppDbContext context)
     {
         _getProjects = getProjects;
@@ -57,7 +55,6 @@ public sealed class ProjectsController : ControllerBase
         _exportService = exportService;
         _catalogExportService = catalogExportService;
         _visualReports = visualReports;
-        _importService = importService;
         _context = context;
     }
 

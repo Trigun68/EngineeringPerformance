@@ -6,14 +6,16 @@
 
 ## Назначение
 
-Отчёт «Анализ версии проекта» открывается по кнопке под блоком «Производительность» на странице редактирования проекта и собирает в одном окне:
+Отчёт «Анализ версии проекта» на web открывается кнопкой **Анализ версии** на вкладке **Оценка факта → Итого** (`FactAnalysisDialog` / `FactAnalysisReportView`). Собирает в одном окне:
 
 - полностью раскрытую иерархию справочника направлений IIC (с единицами измерения);
 - ненулевые физ. объёмы проекта с привязкой к направлениям (номенклатура, ед. изм., количество);
 - отдельный блок видов работ из трудоёмкости проекта для сопоставления;
-- показатели производительности (факт/норм) и Z‑оценку с интерпретацией по каждому направлению.
+- показатели производительности (факт/норм), **плановые часы трёх сценариев** и Z‑оценку по каждому направлению.
 
-Назначение — предоставить ГИПу/инженеру‑аналитику единый сводный вид по версии без переключения между карточкой проекта, физ. объёмами и трудоёмкостью.
+Назначение — предоставить ГИПу/инженеру‑аналитику единый сводный вид по версии без переключения между гридами факта, физ. объёмами и трудоёмкостью.
+
+Legacy WPF: кнопка под блоком «Производительность» в `ProjectEditWindow`.
 
 ## Архитектура
 
@@ -51,16 +53,19 @@
 
 ## DTOs
 
-`EngineeringPerformance.Core/DTOs/ProjectVersionAnalysisDto.cs`:
+Web: `backend/EngineeringPerformance.Application/Analytics/VersionAnalysisDtos.cs` — `ProjectVersionDirectionDto` включает `PessimisticHours` / `BaseHours` / `OptimisticHours`.
 
-- `ProjectVersionAnalysisDto` — верхний уровень отчёта (ProjectName, VersionName, Directions, LaborIntensities).
-- `ProjectVersionDirectionDto` — узел иерархии IIC с метриками и вложенным списком физ. объёмов.
-- `ProjectVersionPhysicalVolumeDto` — ненулевая позиция физ. объёма проекта (Code, Name, UnitName, Quantity).
-- `ProjectVersionLaborIntensityDto` — запись видов работ (DocumentationCode, Brand, WorkDirectionName, PlannedHours, ActualHours).
+Legacy: `EngineeringPerformance.Core/DTOs/ProjectVersionAnalysisDto.cs` (без плановых сценариев).
 
 ## UI
 
-### Точка входа
+### Точка входа (web)
+
+Кнопка **Анализ версии** на `FactPanel` (подвкладка «Итого»). Требует выбранную версию факта и право `Assessment`.
+
+Дерево направлений: после «Факт ч» колонки **План.Труд.Песс. / Баз. / Оптим.** (`ProjectVersionDirectionDto.PessimisticHours/BaseHours/OptimisticHours` из `AttachStoredPlanHours`). Excel модалки — те же колонки; PDF = `fact-summary/pdf`.
+
+### Точка входа (legacy WPF)
 
 Кнопка «Анализ версии проекта» (`@EngineeringPerformance.App/Views/ProjectEditWindow.xaml`) добавлена под блоком «Производительность» (Row 3 основной сетки). Команда — `OpenVersionAnalysisCommand` в `ProjectEditViewModel`. Требует, чтобы проект был сохранён и была выбрана версия анализа.
 

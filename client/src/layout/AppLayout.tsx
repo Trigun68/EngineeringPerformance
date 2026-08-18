@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import apiClient from '../services/apiClient';
+import apiClient, { refreshSessionHeartbeat } from '../services/apiClient';
 import {
   Box,
   Divider,
@@ -27,7 +27,7 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { UserMenu } from '../components/auth/UserMenu';
-import { WorkingOverlay } from '../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
 import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
 import { isSuperAdmin } from '../utils/permissionAccess';
@@ -36,6 +36,9 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useDictionaryStore } from '../store/useDictionaryStore';
 
 const SIDEBAR_WIDTH = 280;
+
+/** Запас относительно минимально допустимого срока access-токена (5 мин). */
+const DEFAULT_HEARTBEAT_MS = 10 * 60 * 1000;
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/': <HomeOutlinedIcon fontSize="small" />,
@@ -158,27 +161,33 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!user) return undefined;
+
     let intervalId: ReturnType<typeof setInterval> | undefined;
-    (async () => {
-      try {
-        const { sessionExpirationMinutes } = (await apiClient.get<{ sessionExpirationMinutes: number }>('/admin/system-settings')).data;
-        const heartbeatMs = Math.floor(sessionExpirationMinutes * 60 * 1000 * 0.8);
-        intervalId = window.setInterval(() => {
-          void apiClient.post('/auth/refresh').catch(() => {
-            // 401 обработает interceptor apiClient.
-          });
-        }, heartbeatMs);
-      } catch {
-        // fallback: 15 минут
-        intervalId = window.setInterval(() => {
-          void apiClient.post('/auth/refresh').catch(() => {
-            // 401 обработает interceptor apiClient.
-          });
-        }, 15 * 60 * 1000);
-      }
-    })();
-    return () => window.clearInterval(intervalId);
-  }, [user]);
+    let cancelled = false;
+
+    const startHeartbeat = (intervalMs: number) => {
+      if (cancelled) return;
+      intervalId = window.setInterval(() => {
+        void refreshSessionHeartbeat();
+      }, intervalMs);
+    };
+
+    // Настройки сессии доступны только администраторам; остальным ролям запрос вернёт 403
+    // и покажет ложную ошибку «Недостаточно прав», поэтому используем безопасный интервал.
+    if (!isAdmin) {
+      startHeartbeat(DEFAULT_HEARTBEAT_MS);
+    } else {
+      void apiClient
+        .get<{ sessionExpirationMinutes: number }>('/admin/system-settings')
+        .then(({ data }) => startHeartbeat(Math.floor(data.sessionExpirationMinutes * 60 * 1000 * 0.8)))
+        .catch(() => startHeartbeat(DEFAULT_HEARTBEAT_MS));
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [user, isAdmin]);
 
   useEffect(() => {
     if (user) {
@@ -196,6 +205,7 @@ export function AppLayout() {
   );
 
   const pageTitle = projectMatch ? 'Проекты' : resolvePageTitle(location.pathname);
+  const isAnalyticsRoute = location.pathname.startsWith('/analytics');
 
   const navBody = (
     <Box
@@ -213,7 +223,6 @@ export function AppLayout() {
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden', bgcolor: wpColors.pageBg }}>
-      <WorkingOverlay open={dictionariesLoading} delayMs={1000} />
       {!isMobile && (
         <Box component="nav" sx={{ width: SIDEBAR_WIDTH, flexShrink: 0, display: 'flex' }}>
           {navBody}
@@ -280,11 +289,14 @@ export function AppLayout() {
           {user && <UserMenu />}
         </Box>
 
+        {/* Справочники грузятся фоном: страницы остаются доступными (ISS-018). */}
+        <PanelBusyBar open={dictionariesLoading} delayMs={600} data-testid="dictionaries-busy" />
+
         <Box
           sx={{
             flex: 1,
             p: { xs: 1, md: 2 },
-            overflow: 'hidden',
+            overflow: isAnalyticsRoute ? 'auto' : 'hidden',
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
@@ -296,12 +308,12 @@ export function AppLayout() {
               border: `1px solid ${wpColors.cardBorder}`,
               borderRadius: { xs: 1, md: 2 },
               p: { xs: 1, sm: 1.5, md: 2.5 },
-              flex: 1,
-              minHeight: 0,
+              flex: isAnalyticsRoute ? '0 0 auto' : 1,
+              minHeight: isAnalyticsRoute ? 'auto' : 0,
               display: 'flex',
               flexDirection: 'column',
               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              overflow: 'hidden',
+              overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
             <Outlet />

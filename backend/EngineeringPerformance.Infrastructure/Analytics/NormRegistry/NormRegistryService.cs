@@ -216,10 +216,16 @@ public sealed class NormRegistryService(
     {
         var groups = await db.IicWorkDirections
             .AsNoTracking()
+            .Include(d => d.Unit)
             .Where(d => !d.IsArchived)
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
-            .Select(d => new NormRegistryGroupOptionDto(d.Id, d.Name, d.Code))
+            .Select(d => new NormRegistryGroupOptionDto(
+                d.Id,
+                d.Name,
+                d.Code,
+                d.ParentId,
+                d.Unit != null ? d.Unit.Name : null))
             .ToListAsync(cancellationToken);
 
         var formulaTypes = Enum.GetNames<FormulaType>().ToList();

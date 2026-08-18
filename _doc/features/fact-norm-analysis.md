@@ -25,7 +25,7 @@
 
 Чистый движок `IFactNormAnalysisEngine` (Application): CONSTANT, LINEAR, POWER, LOGARITHMIC, EXPONENTIAL, POLYNOMIAL2, HYPERBOLIC; выбор по BIC при adj R² ≥ порога; вердикты ChangeFormulaType / AdjustParameters / NormIsActual.
 
-Точки факта: `IFactAssessmentPipeline` → `PerformanceRowDto` (x=объём, y=производительность). Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
+Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → `PerformanceRowDto` (x=объём, y=производительность). В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
 
 ## UI
 

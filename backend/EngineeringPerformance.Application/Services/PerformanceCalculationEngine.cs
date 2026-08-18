@@ -170,21 +170,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             .Select(g =>
             {
                 var first = g.First();
-                var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
                 decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
                     ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
                     : null;
 
-                decimal? facilityZ = null;
-                if (hoursRows.Count > 0)
-                {
-                    var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
-                    if (sumHours > 0)
-                    {
-                        var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
-                        facilityZ = Math.Round(weighted / sumHours, 4);
-                    }
-                }
+                var facilityZ = ComputeWeightedZ(
+                    g.Select(r => (r.ZScore, r.FactLaborHours)),
+                    decimalPlaces: 4);
 
                 var interp = PerformanceInterpretationMapper.FromZScore(facilityZ);
                 return new FactAssessmentFacilityRowDto(
@@ -434,4 +426,22 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         IReadOnlyList<PerformanceRowDto> performanceRows,
         int decimalPlaces = 2) =>
         WeightedZScoreCalculator.FromRootPerformanceRows(performanceRows, decimalPlaces);
+
+    public decimal? ComputeWeightedZ(
+        IEnumerable<(decimal? ZScore, decimal? Weight)> samples,
+        int decimalPlaces = 2,
+        MidpointRounding rounding = MidpointRounding.ToEven,
+        bool arithmeticFallback = false)
+    {
+        var aggregator = new WeightedZAggregator();
+        foreach (var (zScore, weight) in samples)
+            aggregator.Add(zScore, weight);
+
+        return aggregator.Result(decimalPlaces, rounding, arithmeticFallback);
+    }
+
+    public PlanningZParameters ResolvePlanningZ(
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
+        int workDirectionId) =>
+        ForecastCalculation.ResolvePlanningZ(planningZByDirection, workDirectionId);
 }

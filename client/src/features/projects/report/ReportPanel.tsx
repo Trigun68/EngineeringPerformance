@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, Stack, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
@@ -10,76 +10,37 @@ import {
   fetchPerformanceReport,
   type PerformanceReportDto,
 } from '../../../api/performanceReportApi';
-import type { ProjectVersion } from '../../../api/projectVersionsApi';
-import {
-  buildVersionLabel,
-  ProjectVersionPickerDialog,
-} from '../../../components/ProjectVersionPickerDialog/ProjectVersionPickerDialog';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
+import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import { usePermission } from '../../../hooks/usePermission';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
-import { AccuracyPanel } from './AccuracyPanel';
-import { DirectionBars } from './DirectionBars';
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
 import './report-theme.css';
 import { SummaryCards } from './SummaryCards';
-import { ReportBadge, ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
+import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 import { VersionTrend } from './VersionTrend';
 import { ZScale } from './ZScale';
 
-const ANALYSIS_PLAN = 1;
-const ANALYSIS_FACT = 2;
-
 export interface ReportPanelProps {
   projectId: number;
-  workspaceVersions: ProjectVersion[];
-  workspacePlanVersionId: number | null;
-  workspaceFactVersionId: number | null;
 }
 
-export function ReportPanel({
-  projectId,
-  workspaceVersions,
-  workspacePlanVersionId,
-  workspaceFactVersionId,
-}: ReportPanelProps) {
+export function ReportPanel({ projectId }: ReportPanelProps) {
   const { canRead } = usePermission('Reports');
-  const [planVersionId, setPlanVersionId] = useState<number | null>(workspacePlanVersionId);
-  const [factVersionId, setFactVersionId] = useState<number | null>(workspaceFactVersionId);
-  const [planPickerOpen, setPlanPickerOpen] = useState(false);
-  const [factPickerOpen, setFactPickerOpen] = useState(false);
   const [report, setReport] = useState<PerformanceReportDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dark, setDark] = useState(false);
 
-  useEffect(() => {
-    setPlanVersionId(workspacePlanVersionId);
-  }, [workspacePlanVersionId]);
-
-  useEffect(() => {
-    setFactVersionId(workspaceFactVersionId);
-  }, [workspaceFactVersionId]);
-
-  const planLabel = useMemo(() => {
-    const v = workspaceVersions.find((x) => x.id === planVersionId);
-    return v ? buildVersionLabel(v) : 'Выберите версию плана';
-  }, [planVersionId, workspaceVersions]);
-
-  const factLabel = useMemo(() => {
-    const v = workspaceVersions.find((x) => x.id === factVersionId);
-    return v ? buildVersionLabel(v) : 'Выберите версию факта';
-  }, [factVersionId, workspaceVersions]);
-
   const load = useCallback(async () => {
     if (!canRead || !projectId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPerformanceReport(projectId, planVersionId, factVersionId);
+      const data = await fetchPerformanceReport(projectId);
       setReport(data);
     } catch (e) {
       setReport(null);
@@ -87,7 +48,7 @@ export function ReportPanel({
     } finally {
       setLoading(false);
     }
-  }, [canRead, projectId, planVersionId, factVersionId]);
+  }, [canRead, projectId]);
 
   useEffect(() => {
     void load();
@@ -97,7 +58,7 @@ export function ReportPanel({
     setExporting(true);
     setError(null);
     try {
-      await exportPerformanceReportPdf(projectId, planVersionId, factVersionId);
+      await exportPerformanceReportPdf(projectId);
     } catch (e) {
       setError(getApiErrorMessage(e, 'Не удалось выгрузить PDF отчёта.'));
     } finally {
@@ -114,20 +75,13 @@ export function ReportPanel({
     );
   }
 
-  const directions = report?.fact?.directions ?? report?.plan?.directions ?? [];
-
   return (
     <>
       <WorkspaceChromeToggleRow />
-      <WorkingOverlay open={loading || exporting} />
+      <WorkingOverlay open={exporting} />
+      <PanelBusyBar open={loading} />
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-        <Button size="small" variant="outlined" onClick={() => setPlanPickerOpen(true)}>
-          План: {planLabel}
-        </Button>
-        <Button size="small" variant="outlined" onClick={() => setFactPickerOpen(true)}>
-          Факт: {factLabel}
-        </Button>
         <Button
           size="small"
           variant="outlined"
@@ -190,27 +144,18 @@ export function ReportPanel({
                   <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     EngineeringPerformance · Отчёт производительности
                   </span>
-                  <h1 className="text-xl font-semibold md:text-2xl">{report.project.name}</h1>
+                  <h1 className="text-2xl font-semibold md:text-3xl">{report.project.name}</h1>
                 </div>
                 <div className="ml-auto flex items-center gap-2 text-muted-foreground">
                   {dark ? <Moon className="size-4" /> : <Sun className="size-4" />}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">{report.project.code}</span>
                 {report.project.gip ? <span>ГИП: {report.project.gip}</span> : null}
-                {report.project.customer ? <span>{report.project.customer}</span> : null}
-                {report.plan ? (
-                  <ReportBadge>План · {report.plan.versionName}</ReportBadge>
-                ) : null}
-                {report.fact ? (
-                  <ReportBadge>Факт · {report.fact.versionName}</ReportBadge>
-                ) : null}
-                {report.project.workStatus ? (
-                  <ReportBadge className="bg-primary text-primary-foreground border-transparent">
-                    {report.project.workStatus}
-                  </ReportBadge>
-                ) : null}
+                {report.project.customer ? <span>Заказчик: {report.project.customer}</span> : null}
+                {report.project.type ? <span>Тип: {report.project.type}</span> : null}
+                {report.project.workStatus ? <span>Статус: {report.project.workStatus}</span> : null}
               </div>
             </header>
 
@@ -225,20 +170,8 @@ export function ReportPanel({
               factZ={report.fact?.weightedZScore ?? null}
               planPercentile={report.plan?.weightedZScorePercentile ?? '—'}
               factPercentile={report.fact?.weightedZScorePercentile ?? '—'}
+              normSourcesUsed={report.normSourcesUsed}
             />
-
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <DirectionBars
-                rows={report.plan?.directions ?? []}
-                title="Направления — план"
-                description="Корневые направления выбранной версии плана"
-              />
-              <DirectionBars
-                rows={report.fact?.directions ?? []}
-                title="Направления — факт"
-                description="Корневые направления выбранной версии факта"
-              />
-            </div>
 
             <VersionTrend points={report.versionHistory} />
 
@@ -249,48 +182,17 @@ export function ReportPanel({
               }
             />
 
-            <AccuracyPanel accuracy={report.accuracy} />
-
             <ReportCard>
               <ReportCardHeader>
-                <ReportCardTitle>
-                  Дерево производительности ({report.fact ? 'факт' : 'план'})
-                </ReportCardTitle>
+                <ReportCardTitle className="text-base md:text-lg">Направление</ReportCardTitle>
               </ReportCardHeader>
               <ReportCardContent>
-                <DirectionsTable rows={directions} />
+                <DirectionsTable rows={report.directions} />
               </ReportCardContent>
             </ReportCard>
           </div>
         ) : null}
       </Box>
-
-      <ProjectVersionPickerDialog
-        open={planPickerOpen}
-        title="Версия плана для отчёта"
-        projectId={projectId}
-        versions={workspaceVersions}
-        directionFilter={ANALYSIS_PLAN}
-        selectedVersionId={planVersionId}
-        onSelect={(v) => {
-          setPlanVersionId(v.id);
-          setPlanPickerOpen(false);
-        }}
-        onClose={() => setPlanPickerOpen(false)}
-      />
-      <ProjectVersionPickerDialog
-        open={factPickerOpen}
-        title="Версия факта для отчёта"
-        projectId={projectId}
-        versions={workspaceVersions}
-        directionFilter={ANALYSIS_FACT}
-        selectedVersionId={factVersionId}
-        onSelect={(v) => {
-          setFactVersionId(v.id);
-          setFactPickerOpen(false);
-        }}
-        onClose={() => setFactPickerOpen(false)}
-      />
     </>
   );
 }

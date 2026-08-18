@@ -74,6 +74,17 @@ internal static class VersionCompareMerge
             return list.Count > 0 ? list.Average() : null;
         }
 
+        // ISS-010: Z в compare «Детально» взвешивается по фактическим часам, как во всех
+        // остальных представлениях; без часов остаётся среднее арифметическое.
+        static decimal? WeightedZ(IEnumerable<FactDetailRowInternal> rows)
+        {
+            var aggregator = new WeightedZAggregator();
+            foreach (var row in rows)
+                aggregator.Add(row.ZScore, row.FactLaborHours);
+
+            return aggregator.Result(4, arithmeticFallback: true);
+        }
+
         static decimal? SumNullable(IEnumerable<decimal?> values)
         {
             var list = values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
@@ -95,7 +106,7 @@ internal static class VersionCompareMerge
                     PlanPes: SumNullable(g.Select(d => d.PlannedLaborHoursPessimistic)),
                     FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
                     FactProductivity: AverageNullable(g.Select(d => d.FactProductivity)),
-                    ZScore: AverageNullable(g.Select(d => d.ZScore))));
+                    ZScore: WeightedZ(g)));
 
         var groupedB = detailB
             .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
@@ -109,7 +120,7 @@ internal static class VersionCompareMerge
                     PlanPes: SumNullable(g.Select(d => d.PlannedLaborHoursPessimistic)),
                     FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
                     FactProductivity: AverageNullable(g.Select(d => d.FactProductivity)),
-                    ZScore: AverageNullable(g.Select(d => d.ZScore))));
+                    ZScore: WeightedZ(g)));
 
         var allKeys = groupedA.Keys.Union(groupedB.Keys)
             .OrderBy(k => k.FacilityCode)

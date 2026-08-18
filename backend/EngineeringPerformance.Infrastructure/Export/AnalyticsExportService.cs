@@ -34,11 +34,13 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
             $"Анализ версии: {report.ProjectCode ?? report.ProjectName} ({report.VersionName})";
         directionsSheet.Cell(1, 1).Style.Font.Bold = true;
         directionsSheet.Cell(1, 1).Style.Font.FontSize = 13;
-        directionsSheet.Range(1, 1, 1, 8).Merge();
+        directionsSheet.Range(1, 1, 1, 12).Merge();
 
         var dirHeaders = new[]
         {
-            "Код", "Направление", "Ед.", "Факт ФО", "Факт ч", "Факт произв.", "Норм. произв.", "Z", "Интерпретация",
+            "Код", "Направление", "Ед.", "Факт ФО", "Факт ч",
+            "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+            "Факт произв.", "Норм. произв.", "Z", "Интерпретация",
         };
         for (var c = 0; c < dirHeaders.Length; c++)
         {
@@ -58,13 +60,19 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
                 directionsSheet.Cell(row, 4).Value = direction.FactPhysicalVolume.Value;
             if (direction.FactLaborHours.HasValue)
                 directionsSheet.Cell(row, 5).Value = direction.FactLaborHours.Value;
+            if (direction.PessimisticHours.HasValue)
+                directionsSheet.Cell(row, 6).Value = direction.PessimisticHours.Value;
+            if (direction.BaseHours.HasValue)
+                directionsSheet.Cell(row, 7).Value = direction.BaseHours.Value;
+            if (direction.OptimisticHours.HasValue)
+                directionsSheet.Cell(row, 8).Value = direction.OptimisticHours.Value;
             if (direction.FactProductivity.HasValue)
-                directionsSheet.Cell(row, 6).Value = direction.FactProductivity.Value;
+                directionsSheet.Cell(row, 9).Value = direction.FactProductivity.Value;
             if (direction.NormProductivity.HasValue)
-                directionsSheet.Cell(row, 7).Value = direction.NormProductivity.Value;
+                directionsSheet.Cell(row, 10).Value = direction.NormProductivity.Value;
             if (direction.ZScore.HasValue)
-                directionsSheet.Cell(row, 8).Value = direction.ZScore.Value;
-            directionsSheet.Cell(row, 9).Value = direction.Interpretation?.ToRussian() ?? string.Empty;
+                directionsSheet.Cell(row, 11).Value = direction.ZScore.Value;
+            directionsSheet.Cell(row, 12).Value = direction.Interpretation?.ToRussian() ?? string.Empty;
             if (row % 2 == 1)
                 directionsSheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
             row++;

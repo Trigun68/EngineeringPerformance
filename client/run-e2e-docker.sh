@@ -14,7 +14,10 @@ if [[ -n "${PLAYWRIGHT_ARGS}" ]]; then
   echo "Specs: ${PLAYWRIGHT_ARGS}"
 fi
 
-docker run --rm --network host \
+# --ipc=host обязателен для Chromium: по умолчанию контейнеру достаётся /dev/shm 64 МБ,
+# на тяжёлых гридах (прогноз/факт — десятки тысяч строк) вкладка падает с «Target crashed»,
+# и тест валится не по своей причине, а на login в beforeEach.
+docker run --rm --network host --ipc=host \
   -v "${ROOT}:/work" -w /work \
   -v "${REPO_ROOT}/.src:/samples:ro" \
   -e E2E_BASE_URL="${BASE_URL}" \

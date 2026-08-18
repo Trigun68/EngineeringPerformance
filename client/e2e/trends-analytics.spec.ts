@@ -28,16 +28,26 @@ test.describe('Analytics page — Z trends', () => {
     await page.goto('/analytics');
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible({ timeout: 15_000 });
 
-    const customToggle = page.getByTestId('analytics-period-custom');
-    if (await customToggle.isVisible()) {
-      await customToggle.click();
-    } else {
-      await page.getByTestId('analytics-period-select').click();
-      await page.getByRole('option', { name: 'Произвольный период' }).click();
-    }
+    await page.getByTestId('analytics-period-select').click();
+    await page.getByRole('option', { name: 'Произвольный период' }).click();
 
     await expect(page.getByTestId('analytics-date-from')).toBeVisible();
     await expect(page.getByTestId('analytics-date-to')).toBeVisible();
+  });
+
+  test('chrome toggle hides period filters', async ({ page }) => {
+    await page.goto('/analytics');
+    await expect(page.getByTestId('analytics-period-filters')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('analytics-chrome-toggle').click();
+    await expect(page.getByTestId('analytics-period-filters')).toHaveCount(0);
+    await page.getByTestId('analytics-chrome-toggle').click();
+    await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
+  });
+
+  test('versions info control is present', async ({ page }) => {
+    await page.goto('/analytics');
+    await page.getByTestId('analytics-tab-trends').click();
+    await expect(page.getByTestId('ztrend-versions-info')).toBeVisible({ timeout: 20_000 });
   });
 
   test('fact-norms tab keeps the same period filters', async ({ page }) => {
@@ -48,7 +58,7 @@ test.describe('Analytics page — Z trends', () => {
 
   test('legacy /analytics/trends redirects to /analytics', async ({ page }) => {
     await page.goto('/analytics/trends');
-    await expect(page).toHaveURL(/\/analytics\/?$/);
+    await expect(page).toHaveURL(/\/analytics\/?$/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
   });
 });

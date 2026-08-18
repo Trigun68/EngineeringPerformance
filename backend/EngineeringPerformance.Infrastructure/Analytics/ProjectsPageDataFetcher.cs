@@ -10,13 +10,16 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
 {
     private readonly ProjectsPageRawDataLoader _loader;
     private readonly IPerformanceCalculationEngine _calculationEngine;
+    private readonly IProjectAnalyticsCache _cache;
 
     public ProjectsPageDataFetcher(
         ProjectsPageRawDataLoader loader,
-        IPerformanceCalculationEngine calculationEngine)
+        IPerformanceCalculationEngine calculationEngine,
+        IProjectAnalyticsCache cache)
     {
         _loader = loader;
         _calculationEngine = calculationEngine;
+        _cache = cache;
     }
 
     public async Task<ProjectsPageDataDto> GetProjectsPageDataAsync(
@@ -25,6 +28,13 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         int? compareVersionId = null,
         CancellationToken cancellationToken = default)
     {
+        // Пересчёт 9 гридов стоит секунды: переключение вкладок и возврат на страницу
+        // отдаём из кэша, ключ сбрасывается любой мутацией данных проекта (ISS-018).
+        var cacheKey = $"page-data:v{versionId}:c{compareVersionId?.ToString() ?? "none"}";
+        var cached = await _cache.GetAsync<ProjectsPageDataDto>(projectId, cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
+
         var primaryBundle = await _loader.LoadAsync(projectId, versionId, cancellationToken);
 
         ProjectsPageVersionBundle? compareBundle = null;
@@ -45,7 +55,9 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         {
             var (facility, detail) = ProjectsPageGridBuilder.BuildFactGrids(
                 primaryBundle, primaryPerformance, _calculationEngine);
-            var performanceWithTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(primaryPerformance);
+            var performanceWithPlan = ProjectsPageGridBuilder.AttachStoredPlanHours(
+                primaryPerformance, primaryBundle.PhysicalVolumes);
+            var performanceWithTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(performanceWithPlan);
             return new ProjectsPageFactGridsDto(performanceWithTotals, facility, detail);
         }, cancellationToken);
 
@@ -72,6 +84,8 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
                 _calculationEngine);
         }
 
-        return new ProjectsPageDataDto(forecastTask.Result, factTask.Result, compare);
+        var data = new ProjectsPageDataDto(forecastTask.Result, factTask.Result, compare);
+        await _cache.SetAsync(projectId, cacheKey, data, cancellationToken);
+        return data;
     }
 }

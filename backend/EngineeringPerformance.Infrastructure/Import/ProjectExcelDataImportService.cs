@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Import;
+using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -53,7 +54,14 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ProjectExcelDataImportService> _logger;
 
-    private async Task<DataImportResultDto> ImportFromFileAsync(int projectId, int versionId, DataImportType dataType, string filePath, string description, bool addMissingLaborToCatalog = false)
+    private async Task<DataImportResultDto> ImportFromFileAsync(
+        int projectId,
+        int versionId,
+        DataImportType dataType,
+        string filePath,
+        string description,
+        ImportSourceMetadata source,
+        bool addMissingLaborToCatalog = false)
     {
         if (!File.Exists(filePath))
         {
@@ -64,9 +72,9 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         {
             return dataType switch
             {
-                DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description),
-                DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, addMissingLaborToCatalog),
-                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description),
+                DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description, source),
+                DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, source, addMissingLaborToCatalog),
+                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description, source),
                 _ => new DataImportResultDto(false, 0, $"Unsupported import type: {dataType}", 0),
             };
         }
@@ -94,6 +102,35 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
             .OrderByDescending(i => i.ImportedAt)
             .Select(i => new DataImportIterationInfoDto(i.ImportedAt, i.RecordCount, i.Description, i.SourceFileName))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Единая точка создания итерации импорта: описание, происхождение файла и автор
+    /// сохраняются вместе с данными в одной транзакции.
+    /// </summary>
+    private static async Task<DataImportIteration> CreateIterationAsync(
+        AppDbContext context,
+        int projectId,
+        int versionId,
+        DataImportType dataType,
+        string description,
+        ImportSourceMetadata source)
+    {
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = dataType,
+            Description = description,
+            SourceFileName = source.FileName,
+            SourceFileHash = source.FileHash,
+            ImportedByUserId = source.UserId,
+            ImportedAt = DateTime.UtcNow,
+        };
+
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+        return iteration;
     }
 
     /// <summary>

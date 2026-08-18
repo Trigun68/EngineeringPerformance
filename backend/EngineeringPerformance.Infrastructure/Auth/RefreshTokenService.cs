@@ -12,6 +12,14 @@ public sealed class RefreshTokenService(
     AppDbContext context,
     IOptions<JwtSettings> settings) : IRefreshTokenService
 {
+    private const string RotatedReason = "Rotated";
+
+    /// <summary>
+    /// Окно, в течение которого повторный refresh уже ротированным токеном считается
+    /// конкурентным запросом (несколько вкладок с общей cookie jar), а не компрометацией.
+    /// </summary>
+    private static readonly TimeSpan RotationGracePeriod = TimeSpan.FromSeconds(30);
+
     private readonly AppDbContext _context = context;
     private readonly JwtSettings _settings = settings.Value;
 
@@ -40,11 +48,15 @@ public sealed class RefreshTokenService(
             .FirstOrDefaultAsync(refreshToken => refreshToken.TokenHash == tokenHash, cancellationToken);
 
         if (existing is null
-            || existing.RevokedAt is not null
             || existing.ExpiresAt <= DateTime.UtcNow
             || !existing.User.IsActive)
         {
             return null;
+        }
+
+        if (existing.RevokedAt is not null)
+        {
+            return await TryIssueForConcurrentRefreshAsync(existing, ipAddress, userAgent, cancellationToken);
         }
 
         var issue = CreateIssue();
@@ -52,14 +64,51 @@ public sealed class RefreshTokenService(
         _context.RefreshTokens.Add(replacement);
 
         existing.RevokedAt = DateTime.UtcNow;
-        existing.RevocationReason = "Rotated";
-        await _context.SaveChangesAsync(cancellationToken);
-
-        existing.ReplacedByTokenId = replacement.Id;
+        existing.RevocationReason = RotatedReason;
+        // Навигация вместо FK: EF подставит ReplacedByTokenId после генерации Id,
+        // поэтому отзыв и замена сохраняются одним атомарным SaveChanges.
+        existing.ReplacedByToken = replacement;
         await _context.SaveChangesAsync(cancellationToken);
 
         return new RefreshTokenRotation(existing.User, issue.Token, issue.ExpiresAt);
     }
+
+    /// <summary>
+    /// Вторая вкладка успела прислать refresh с тем же токеном сразу после ротации:
+    /// выдаём новый токен вместо разлогина. Активную замену не отзываем — cookie jar
+    /// общая, и валидным останется последний полученный браузером токен.
+    /// </summary>
+    private async Task<RefreshTokenRotation?> TryIssueForConcurrentRefreshAsync(
+        RefreshToken rotated,
+        string? ipAddress,
+        string? userAgent,
+        CancellationToken cancellationToken)
+    {
+        if (!IsWithinRotationGrace(rotated))
+            return null;
+
+        // После logout или отзыва цепочки повторное использование недопустимо.
+        var replacementIsActive = rotated.ReplacedByTokenId is { } replacementId
+            && await _context.RefreshTokens.AnyAsync(
+                candidate => candidate.Id == replacementId
+                    && candidate.RevokedAt == null
+                    && candidate.ExpiresAt > DateTime.UtcNow,
+                cancellationToken);
+
+        if (!replacementIsActive)
+            return null;
+
+        var issue = CreateIssue();
+        _context.RefreshTokens.Add(CreateEntity(rotated.UserId, issue, ipAddress, userAgent));
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new RefreshTokenRotation(rotated.User, issue.Token, issue.ExpiresAt);
+    }
+
+    private static bool IsWithinRotationGrace(RefreshToken token) =>
+        string.Equals(token.RevocationReason, RotatedReason, StringComparison.Ordinal)
+        && token.RevokedAt is { } revokedAt
+        && DateTime.UtcNow - revokedAt <= RotationGracePeriod;
 
     public async Task<bool> RevokeAsync(
         string token,
