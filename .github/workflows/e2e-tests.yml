@@ -72,9 +72,22 @@ jobs:
             "SET NOCOUNT ON; SELECT 'KFO' t, COUNT(*) c FROM PhysicalVolumesKfo UNION ALL SELECT 'Projects', COUNT(*) FROM Projects;"
 
       # Не run-e2e-docker.sh: nested `docker run` на GHA зависает на npm ci.
+      #
+      # apt внутри `--with-deps` умеет вставать на зеркале Ubuntu: прогон 32171476941
+      # простоял так 1.5 ч и был отменён по timeout-minutes job — E2E не запустился вообще.
+      # Таймауты acquire (их наследует и внутренний apt-get у playwright) плюс повтор
+      # превращают заминку зеркала в минуты вместо потерянного прогона.
       - name: Install Playwright browsers
         working-directory: client
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 20
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+          npx playwright install --with-deps chromium ||
+            npx playwright install --with-deps chromium
 
       - name: Playwright E2E
         working-directory: client
