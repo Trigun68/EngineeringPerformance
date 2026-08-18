@@ -22,6 +22,24 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         _cache = cache;
     }
 
+    public async Task<ProjectsPageDataEncodedDto> GetEncodedPageDataAsync(
+        int projectId,
+        int versionId,
+        int? compareVersionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var cacheKey = $"page-data-encoded:{VersionKey(versionId, compareVersionId)}";
+        var cached = await _cache.GetAsync<ProjectsPageDataEncodedDto>(projectId, cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
+
+        var encoded = ProjectsPageDataEncodedDto.From(
+            await GetProjectsPageDataAsync(projectId, versionId, compareVersionId, cancellationToken));
+
+        await _cache.SetAsync(projectId, cacheKey, encoded, cancellationToken);
+        return encoded;
+    }
+
     public async Task<ProjectsPageDataDto> GetProjectsPageDataAsync(
         int projectId,
         int versionId,
@@ -30,7 +48,7 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
     {
         // Пересчёт 9 гридов стоит секунды: переключение вкладок и возврат на страницу
         // отдаём из кэша, ключ сбрасывается любой мутацией данных проекта (ISS-018).
-        var cacheKey = $"page-data:v{versionId}:c{compareVersionId?.ToString() ?? "none"}";
+        var cacheKey = $"page-data:{VersionKey(versionId, compareVersionId)}";
         var cached = await _cache.GetAsync<ProjectsPageDataDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -88,4 +106,7 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         await _cache.SetAsync(projectId, cacheKey, data, cancellationToken);
         return data;
     }
+
+    private static string VersionKey(int versionId, int? compareVersionId) =>
+        $"v{versionId}:c{compareVersionId?.ToString() ?? "none"}";
 }

@@ -24,6 +24,10 @@ BUDGET_REPORT_COLD="${BUDGET_REPORT_COLD:-10000}"
 BUDGET_REPORT_WARM="${BUDGET_REPORT_WARM:-2000}"
 BUDGET_EXPORT="${BUDGET_EXPORT:-15000}"
 
+# Объём распакованного ответа page-data (МБ). Гриды «Детально» упакованы колоночно (ISS-019):
+# распаковка формата вернула бы ~48 МБ, поэтому регрессия видна по размеру, а не по времени.
+BUDGET_PAGE_DATA_MB="${BUDGET_PAGE_DATA_MB:-12}"
+
 echo "=== Perf smoke: ${BASE_URL} (strict=${PERF_STRICT}) ==="
 
 COOKIE_JAR=$(mktemp)
@@ -83,6 +87,24 @@ time_curl_cached() {
   time_curl "${label} (warm)" "$url" "$warm_budget"
 }
 
+# Размер ответа без сжатия: сжатие маскирует раздутый payload, а разбирать его всё равно клиенту.
+check_payload_size() {
+  local label="$1" url="$2" budget_mb="$3"
+  local bytes size_mb
+  bytes=$(curl -s -o /dev/null -w "%{size_download}" -b "$COOKIE_JAR" "$url")
+  size_mb=$(awk -v b="$bytes" 'BEGIN { printf "%.2f", b / 1048576 }')
+  echo "  ${label} размер: ${size_mb} МБ (бюджет ${budget_mb} МБ)"
+  if awk -v s="$size_mb" -v b="$budget_mb" 'BEGIN { exit !(s > b) }'; then
+    if [[ "$PERF_STRICT" == "1" ]]; then
+      echo "    FAIL ${label}: ${size_mb} МБ > бюджет ${budget_mb} МБ"
+      failures=$((failures + 1))
+    else
+      echo "    WARN ${label}: ${size_mb} МБ > бюджет ${budget_mb} МБ"
+      warnings=$((warnings + 1))
+    fi
+  fi
+}
+
 echo "Endpoints:"
 echo "  login: HTTP ${login_code}, ${login_ms}ms (бюджет ${BUDGET_LOGIN}ms)"
 check_budget "login" "$login_ms" "$BUDGET_LOGIN"
@@ -108,6 +130,8 @@ print(data[0]['id'] if data else '')
     time_curl_cached "page-data" \
       "${API}/projects/${project_id}/versions/${version_id}/page-data" \
       "$BUDGET_PAGE_DATA_COLD" "$BUDGET_PAGE_DATA_WARM"
+    check_payload_size "page-data" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data" "$BUDGET_PAGE_DATA_MB"
     time_curl_cached "performance-report" \
       "${API}/projects/${project_id}/performance-report" \
       "$BUDGET_REPORT_COLD" "$BUDGET_REPORT_WARM"

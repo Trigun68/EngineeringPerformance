@@ -1,22 +1,34 @@
 import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
 import { buildExportFileName } from '../utils/directoryExport';
+import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
 import type {
   ProjectsPageCompareGrids,
   ProjectsPageData,
+  ProjectsPageDetailRow,
   ProjectsPageFactGrids,
   ProjectsPageForecastGrids,
 } from '../features/projects/types';
+
+/** Сетевой вид ответа: гриды «Детально» приходят упакованными (ISS-019). */
+interface ProjectsPageDataResponse extends Omit<ProjectsPageData, 'forecast' | 'fact'> {
+  forecast: Omit<ProjectsPageForecastGrids, 'detail'> & { detail: EncodedGrid };
+  fact: Omit<ProjectsPageFactGrids, 'detail'> & { detail: EncodedGrid };
+}
 
 export async function fetchProjectsPageData(
   projectId: number,
   versionId: number,
   compareVersionId?: number | null,
 ): Promise<ProjectsPageData> {
-  const { data } = await apiClient.get<ProjectsPageData>(
+  const { data } = await apiClient.get<ProjectsPageDataResponse>(
     `/projects/${projectId}/versions/${versionId}/page-data`,
     { params: { compareVersionId: compareVersionId ?? undefined } },
   );
-  return data;
+  return {
+    ...data,
+    forecast: { ...data.forecast, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.forecast.detail) },
+    fact: { ...data.fact, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.fact.detail) },
+  };
 }
 
 export type {
