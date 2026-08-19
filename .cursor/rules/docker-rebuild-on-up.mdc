@@ -7,7 +7,7 @@
 ## Обязательная команда
 
 ```bash
-cd /home/antony/project/EngineeringPerformance
+# Корень репозитория — та папка, из которой открыт Cursor, не захардкоженный путь.
 docker compose build backend frontend
 docker compose up -d
 ```

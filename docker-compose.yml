@@ -1,3 +1,8 @@
+# Имя проекта зафиксировано, чтобы переезд исходников в другую папку не создал
+# новый том SQL (`<имя-папки>_mssql_data`) и не разъехался с бэкапами
+# (`project: engineeringperformance` в host inventory).
+name: engineeringperformance
+
 services:
   redis:
     image: redis:7-alpine

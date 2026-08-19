@@ -1,0 +1,34 @@
+---
+description: Корень репозитория — текущая папка Cursor, не абсолютный путь
+alwaysApply: true
+---
+
+# Корень workspace
+
+Исходники могут переезжать. Docker (контейнеры `ep-*`, том `engineeringperformance_mssql_data`,
+сеть `tech-lab24-edge`) живёт отдельно и **не** переезжает вместе с git-деревом.
+
+## Запрещено
+
+- Хардкодить `/home/antony/project/EngineeringPerformance` в правилах, скриптах репо и командах.
+- `docker compose down -v` после переезда — сотрёт SQL.
+- `COMPOSE_PROJECT_NAME` в `.env` или в shell — перебьёт `name: engineeringperformance` в compose
+  и откроет **другой** том БД.
+
+## После открытия из новой папки (первый заход)
+
+1. Убедиться, что рядом лежит `.env` (он в gitignore — едет только вместе с деревом на диске).
+2. Привязать Compose к новому пути **без** пересборки, если код не менялся:
+
+```bash
+docker compose up -d
+docker inspect ep-backend --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+```
+
+Ожидаемо: `working_dir` = новый корень, проект `engineeringperformance`, том тот же.
+`db-init` пересоздастся (bind-mount `./migrations` и `./scripts/docker-db-init.sh`).
+`backend`/`frontend`/`sqlserver`/`redis` остаются — в образах нет bind исходников.
+
+3. Если контейнеры пересоздавались в сети `tech-lab24-edge` — `refresh-edge-upstreams.sh`.
+
+Подробности: `docs/relocating-sources.md`.
