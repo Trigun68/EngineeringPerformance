@@ -1,6 +1,7 @@
 import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
 import { buildExportFileName } from '../utils/directoryExport';
 import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
+import type { VersionCompareDetailRow } from './analyticsApi';
 import type {
   ProjectsPageCompareGrids,
   ProjectsPageData,
@@ -10,9 +11,21 @@ import type {
 } from '../features/projects/types';
 
 /** Сетевой вид ответа: гриды «Детально» приходят упакованными (ISS-019). */
-interface ProjectsPageDataResponse extends Omit<ProjectsPageData, 'forecast' | 'fact'> {
+interface ProjectsPageDataResponse extends Omit<ProjectsPageData, 'forecast' | 'fact' | 'compare'> {
   forecast: Omit<ProjectsPageForecastGrids, 'detail'> & { detail: EncodedGrid };
   fact: Omit<ProjectsPageFactGrids, 'detail'> & { detail: EncodedGrid };
+  compare: (Omit<ProjectsPageCompareGrids, 'detail'> & { detail: EncodedGrid }) | null;
+}
+
+function decodePageData(data: ProjectsPageDataResponse): ProjectsPageData {
+  return {
+    ...data,
+    forecast: { ...data.forecast, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.forecast.detail) },
+    fact: { ...data.fact, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.fact.detail) },
+    compare: data.compare
+      ? { ...data.compare, detail: decodeEncodedGrid<VersionCompareDetailRow>(data.compare.detail) }
+      : null,
+  };
 }
 
 export async function fetchProjectsPageData(
@@ -24,10 +37,31 @@ export async function fetchProjectsPageData(
     `/projects/${projectId}/versions/${versionId}/page-data`,
     { params: { compareVersionId: compareVersionId ?? undefined } },
   );
+  return decodePageData(data);
+}
+
+export async function fetchProjectsPageDetails(
+  projectId: number,
+  versionId: number,
+  compareVersionId?: number | null,
+): Promise<{
+  forecastDetail: ProjectsPageDetailRow[];
+  factDetail: ProjectsPageDetailRow[];
+  compareDetail: VersionCompareDetailRow[] | null;
+}> {
+  const { data } = await apiClient.get<{
+    forecastDetail: EncodedGrid;
+    factDetail: EncodedGrid;
+    compareDetail: EncodedGrid | null;
+  }>(`/projects/${projectId}/versions/${versionId}/page-data/detail`, {
+    params: { compareVersionId: compareVersionId ?? undefined },
+  });
   return {
-    ...data,
-    forecast: { ...data.forecast, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.forecast.detail) },
-    fact: { ...data.fact, detail: decodeEncodedGrid<ProjectsPageDetailRow>(data.fact.detail) },
+    forecastDetail: decodeEncodedGrid<ProjectsPageDetailRow>(data.forecastDetail),
+    factDetail: decodeEncodedGrid<ProjectsPageDetailRow>(data.factDetail),
+    compareDetail: data.compareDetail
+      ? decodeEncodedGrid<VersionCompareDetailRow>(data.compareDetail)
+      : null,
   };
 }
 

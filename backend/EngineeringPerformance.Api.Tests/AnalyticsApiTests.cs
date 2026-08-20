@@ -76,6 +76,15 @@ public sealed class AnalyticsApiTests : IClassFixture<ApiWebApplicationFactory>
         compareJson.Should().Contain("summary");
         compareJson.Should().Contain("facility");
         compareJson.Should().Contain("detail");
+        using var compareDoc = System.Text.Json.JsonDocument.Parse(compareJson);
+        compareDoc.RootElement.GetProperty("detail").TryGetProperty("columns", out _).Should().BeTrue();
+        compareDoc.RootElement.GetProperty("detail").GetProperty("rows").GetArrayLength().Should().Be(0);
+
+        var detailResponse = await _client.GetAsync(
+            $"/api/projects/{projectId}/compare/detail?versionA={versionA}&versionB={versionB}");
+        detailResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var detailDoc = System.Text.Json.JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        detailDoc.RootElement.TryGetProperty("columns", out _).Should().BeTrue();
     }
 
     [Fact]

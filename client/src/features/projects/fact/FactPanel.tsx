@@ -21,6 +21,7 @@ import {
   exportFactDetailSummaryTable,
   exportFactFacilityExcel,
   fetchProjectsPageData,
+  fetchProjectsPageDetails,
 } from '../../../api/projectsPageApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
@@ -85,6 +86,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   );
   const [pageData, setPageData] = useState<ProjectsPageData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -94,6 +96,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   const [planningOpen, setPlanningOpen] = useState(false);
   const detailGridApiRef = useRef<GridApi | null>(null);
   const [detailGridReady, setDetailGridReady] = useState(false);
+  const detailRequestedKeyRef = useRef<string | null>(null);
 
   // Пользовательский выбор версии (переопределяет workspace по умолчанию)
   const [userFactVersionId, setUserFactVersionId] = useState<number | null>(null);
@@ -135,6 +138,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
 
   const loadPageData = useCallback(async () => {
     if (!factVersionId || !canRead) return;
+    detailRequestedKeyRef.current = null;
     setLoading(true);
     setError(null);
     try {
@@ -151,6 +155,43 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   useEffect(() => {
     void loadPageData();
   }, [loadPageData]);
+
+  useEffect(() => {
+    if (subTab !== 'fact-detail' || !factVersionId || !canRead || !pageData) {
+      return;
+    }
+    const key = `${projectId}:${factVersionId}`;
+    if (pageData.fact.detail.length > 0 || detailRequestedKeyRef.current === key) {
+      return;
+    }
+    detailRequestedKeyRef.current = key;
+    let cancelled = false;
+    setDetailLoading(true);
+    void fetchProjectsPageDetails(projectId, factVersionId)
+      .then((details) => {
+        if (cancelled) {
+          return;
+        }
+        setPageData((prev) =>
+          prev ? { ...prev, fact: { ...prev.fact, detail: details.factDetail } } : prev,
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          detailRequestedKeyRef.current = null;
+          setError(getApiErrorMessage(err, 'Не удалось загрузить детальные данные оценки факта.'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      setDetailLoading(false);
+    };
+  }, [subTab, factVersionId, canRead, pageData, projectId]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     setUserFactVersionId(version.id);
@@ -329,7 +370,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exporting} />
-      <PanelBusyBar open={loading} />
+      <PanelBusyBar open={loading || detailLoading} />
       {chromeExpanded && (
         <>
       <Stack direction="row" sx={panelPrimaryToolbarSx}>

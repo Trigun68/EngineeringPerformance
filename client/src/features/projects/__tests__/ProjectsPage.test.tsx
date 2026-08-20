@@ -6,12 +6,14 @@ import { createForecastSummaryColumns } from '../gridColumns';
 import { ProjectsPage } from '../ProjectsPage';
 
 const fetchProjectsPageData = vi.fn();
+const fetchProjectsPageDetails = vi.fn();
 const fetchProjectVersions = vi.fn();
 const exportProjectsPagePdf = vi.fn();
 const exportProjectsPageExcel = vi.fn();
 
 vi.mock('../../../api/projectsPageApi', () => ({
   fetchProjectsPageData: (...args: unknown[]) => fetchProjectsPageData(...args),
+  fetchProjectsPageDetails: (...args: unknown[]) => fetchProjectsPageDetails(...args),
   exportProjectsPagePdf: (...args: unknown[]) => exportProjectsPagePdf(...args),
   exportProjectsPageExcel: (...args: unknown[]) => exportProjectsPageExcel(...args),
 }));
@@ -85,6 +87,11 @@ describe('ProjectsPage grids', () => {
       { id: 2, versionName: 'v2', name: 'Версия 2', isArchived: false },
     ]);
     fetchProjectsPageData.mockResolvedValue(gridFixture);
+    fetchProjectsPageDetails.mockResolvedValue({
+      forecastDetail: gridFixture.forecast.detail,
+      factDetail: gridFixture.fact.detail,
+      compareDetail: gridFixture.compare?.detail ?? [],
+    });
     exportProjectsPagePdf.mockResolvedValue(undefined);
     exportProjectsPageExcel.mockResolvedValue(undefined);
   });

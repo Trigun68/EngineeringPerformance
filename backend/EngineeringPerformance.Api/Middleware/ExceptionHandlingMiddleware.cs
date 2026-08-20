@@ -29,6 +29,10 @@ public sealed class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // Клиент ушёл (смена вкладки, новый переход). Не пишем 500 в лог и в ответ.
+        }
         catch (Exception ex)
         {
             await HandleExceptionAsync(context, ex);

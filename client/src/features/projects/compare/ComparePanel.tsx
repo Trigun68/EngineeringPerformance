@@ -26,6 +26,7 @@ import {
   exportCompareExcelVisible,
   fetchCompareChart,
   fetchVersionCompare,
+  fetchVersionCompareDetail,
   type CompareChartResult,
   type CompareExportSection,
   type VersionCompareDetailRow,
@@ -115,6 +116,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   );
   const [compareData, setCompareData] = useState<VersionCompareResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<CompareViewMode>('table');
   const [chartData, setChartData] = useState<CompareChartResult | null>(null);
@@ -125,6 +127,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   const [compareScenario, setCompareScenario] = useState<CompareScenario>('base');
   const [activeGridReady, setActiveGridReady] = useState(false);
   const gridApiRef = useRef<GridApi | null>(null);
+  const detailRequestedKeyRef = useRef<string | null>(null);
 
   // Пользовательский выбор версии (переопределяет workspace по умолчанию)
   const [userVersionAId, setUserVersionAId] = useState<number | null>(null);
@@ -256,6 +259,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
 
   const loadCompare = useCallback(async () => {
     if (!versionAId || !versionBId || !canRead) return;
+    detailRequestedKeyRef.current = null;
     setLoading(true);
     setError(null);
     try {
@@ -284,6 +288,41 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   useEffect(() => {
     void loadCompare();
   }, [loadCompare]);
+
+  useEffect(() => {
+    if (subTab !== 'compare-detail' || !versionAId || !versionBId || !canRead || !compareData) {
+      return;
+    }
+    const key = `${projectId}:${versionAId}:${versionBId}`;
+    if (compareData.detail.length > 0 || detailRequestedKeyRef.current === key) {
+      return;
+    }
+    detailRequestedKeyRef.current = key;
+    let cancelled = false;
+    setDetailLoading(true);
+    void fetchVersionCompareDetail(projectId, versionAId, versionBId)
+      .then((detail) => {
+        if (cancelled) {
+          return;
+        }
+        setCompareData((prev) => (prev ? { ...prev, detail } : prev));
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          detailRequestedKeyRef.current = null;
+          setError(getApiErrorMessage(err, 'Не удалось загрузить детальное сравнение версий.'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      setDetailLoading(false);
+    };
+  }, [subTab, versionAId, versionBId, canRead, compareData, projectId]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     if (pickerTarget === 'A') {
@@ -360,7 +399,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exportingPdf || exporting} />
-      <PanelBusyBar open={loading} />
+      <PanelBusyBar open={loading || detailLoading} />
       {chromeExpanded && (
         <>
           <Stack direction="row" sx={panelPrimaryToolbarSx}>

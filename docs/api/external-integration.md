@@ -113,7 +113,10 @@ Severity: `warning` / `info`.
 ## 5. Аналитика (read-only)
 
 - `GET /api/projects/{id}/versions/{vid}/performance`
-- `GET /api/projects/{id}/versions/{vid}/page-data`
+- `GET /api/projects/{id}/versions/{vid}/page-data` — «Итого» / «По объектам»; detail пустой
+- `GET /api/projects/{id}/versions/{vid}/page-data/detail` — гриды «Детально» (encoded)
+- `GET /api/projects/{id}/versions/{vid}/compare?otherVersionId=` — сравнение без detail
+- `GET /api/projects/{id}/versions/{vid}/compare/detail?otherVersionId=` — detail сравнения
 - `GET /api/projects/{id}/versions/{vid}/analysis`
 - `POST /api/analytics/trends/z-score` — тренд Z (план/факт, isPrimary, сегменты по нормам)
 - `GET /api/analytics/trends/z-score/filters` — проекты / направления / weightModes

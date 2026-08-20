@@ -86,6 +86,27 @@ export async function logoutViaUserMenu(page: Page): Promise<void> {
 }
 
 /**
+ * Сбрасывает сохранённые подвкладки проекта на «Итого», чтобы E2E не поднимал
+ * грид «Детально» (десятки тысяч строк) и не ронял Chromium по памяти.
+ */
+export async function resetProjectWorkspaceTabs(page: Page, projectId: number): Promise<void> {
+  await page.evaluate(async (id) => {
+    await fetch('/api/users/me/preferences', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preferences: {
+          [`projects.${id}.forecastSubTab`]: 'forecast-total',
+          [`projects.${id}.factSubTab`]: 'fact-total',
+          [`projects.${id}.compareSubTab`]: 'compare-total',
+        },
+      }),
+    });
+  }, projectId);
+}
+
+/**
  * Открывает проект с данными (по умолчанию 25-310), иначе первую строку списка.
  */
 export async function openPreferredProject(
@@ -94,6 +115,20 @@ export async function openPreferredProject(
 ): Promise<number | null> {
   await page.goto('/projects');
   await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 }).catch(() => null);
+
+  const preferredId = await page.evaluate(async (code) => {
+    const res = await fetch('/api/projects', { credentials: 'include' });
+    if (!res.ok) {
+      return null;
+    }
+    const projects = (await res.json()) as Array<{ id: number; code?: string }>;
+    const match = projects.find((p) => p.code === code);
+    return (match ?? projects[0])?.id ?? null;
+  }, projectCode);
+  if (preferredId != null) {
+    await resetProjectWorkspaceTabs(page, preferredId);
+  }
+
   const preferred = page
     .locator('.ag-center-cols-container .ag-row')
     .filter({ hasText: projectCode });

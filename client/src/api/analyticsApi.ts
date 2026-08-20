@@ -1,5 +1,6 @@
 import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
 import { buildExportFileName } from '../utils/directoryExport';
+import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
 
 export interface PerformanceRow {
   workDirectionId: number;
@@ -386,12 +387,29 @@ export async function fetchVersionCompare(
   versionA: number,
   versionB: number,
 ): Promise<VersionCompareResult> {
-  const { data } = await apiClient.get<VersionCompareResult>(`/projects/${projectId}/compare`, {
+  const { data } = await apiClient.get<Omit<VersionCompareResult, 'detail'> & { detail: EncodedGrid }>(
+    `/projects/${projectId}/compare`,
+    {
+      params: { versionA, versionB },
+      timeout: 300_000,
+    },
+  );
+  return {
+    ...data,
+    detail: decodeEncodedGrid<VersionCompareDetailRow>(data.detail),
+  };
+}
+
+export async function fetchVersionCompareDetail(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+): Promise<VersionCompareDetailRow[]> {
+  const { data } = await apiClient.get<EncodedGrid>(`/projects/${projectId}/compare/detail`, {
     params: { versionA, versionB },
-    // Сравнение план/факт на крупных проектах отдаёт десятки МБ JSON.
     timeout: 300_000,
   });
-  return data;
+  return decodeEncodedGrid<VersionCompareDetailRow>(data);
 }
 
 export type CompareExportSection = 'summary' | 'facility' | 'detail';

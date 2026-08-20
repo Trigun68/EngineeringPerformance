@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Alert,
@@ -22,6 +22,7 @@ import {
   exportProjectsPageExcel,
   exportProjectsPagePdf,
   fetchProjectsPageData,
+  fetchProjectsPageDetails,
 } from '../../api/projectsPageApi';
 import { DataTable } from '../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
@@ -62,6 +63,7 @@ export function ProjectsPage() {
   const [error, setError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const detailRequestedKeyRef = useRef<string | null>(null);
 
   const formatters = useMemo(
     () => ({ getUnitName, getDirectionName }),
@@ -86,6 +88,7 @@ export function ProjectsPage() {
 
   const loadPageData = useCallback(async () => {
     if (!projectId || !versionId || !canRead) return;
+    detailRequestedKeyRef.current = null;
     setLoading(true);
     setError(null);
     try {
@@ -102,6 +105,54 @@ export function ProjectsPage() {
   useEffect(() => {
     void loadPageData();
   }, [loadPageData]);
+
+  useEffect(() => {
+    const isDetailTab =
+      activeTab === 'forecast-detail' || activeTab === 'fact-detail' || activeTab === 'compare-detail';
+    if (!isDetailTab || !projectId || !versionId || !canRead || !pageData) {
+      return;
+    }
+    const needsForecast = activeTab === 'forecast-detail' && pageData.forecast.detail.length === 0;
+    const needsFact = activeTab === 'fact-detail' && pageData.fact.detail.length === 0;
+    const needsCompare = activeTab === 'compare-detail' && (pageData.compare?.detail.length ?? 0) === 0;
+    if (!needsForecast && !needsFact && !needsCompare) {
+      return;
+    }
+    const key = `${projectId}:${versionId}:${compareVersionId ?? 'none'}:${activeTab}`;
+    if (detailRequestedKeyRef.current === key) {
+      return;
+    }
+    detailRequestedKeyRef.current = key;
+    let cancelled = false;
+    void fetchProjectsPageDetails(projectId, versionId, compareVersionId)
+      .then((details) => {
+        if (cancelled) {
+          return;
+        }
+        setPageData((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          return {
+            ...prev,
+            forecast: { ...prev.forecast, detail: details.forecastDetail },
+            fact: { ...prev.fact, detail: details.factDetail },
+            compare: prev.compare
+              ? { ...prev.compare, detail: details.compareDetail ?? prev.compare.detail }
+              : prev.compare,
+          };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          detailRequestedKeyRef.current = null;
+          setError('Не удалось загрузить детальные данные гридов.');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, projectId, versionId, compareVersionId, canRead, pageData]);
 
   const handleExport = useCallback(
     async (type: 'pdf' | 'excel') => {

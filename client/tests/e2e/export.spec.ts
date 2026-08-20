@@ -47,6 +47,13 @@ test.describe('ProjectsPage export', () => {
         { id: 1, projectId: 1, versionName: 'v1', name: 'Версия 1', direction: 0, isArchived: false },
       ]),
     );
+    await page.route('**/api/projects/1/versions/1/page-data/detail**', (route) =>
+      json(route, {
+        forecastDetail: gridData.forecast.detail,
+        factDetail: gridData.fact.detail,
+        compareDetail: gridData.compare?.detail ?? [],
+      }),
+    );
     await page.route('**/api/projects/1/versions/1/page-data**', (route) => json(route, gridData));
   });
 

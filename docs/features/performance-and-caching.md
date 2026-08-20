@@ -1,6 +1,6 @@
 # Отклик приложения: неблокирующий UI и кэш аналитики
 
-Дата обновления: 2026-08-18. Связано: `docs/issues/ISS-018-perf-nonblocking-ui-and-cache.md`,
+Дата обновления: 2026-08-19. Связано: `docs/issues/ISS-018-perf-nonblocking-ui-and-cache.md`,
 `docs/issues/ISS-019-page-data-payload-size.md`.
 
 ## Правило блокировки интерфейса
@@ -15,7 +15,9 @@
 вкладки и уже загруженные наборы остаются доступными, пока догружается остальное.
 
 `PanelBusyBar` резервирует высоту полосы всегда, поэтому появление индикатора не сдвигает вёрстку,
-и включается с задержкой (по умолчанию 300 мс) — быстрые ответы не мигают.
+и включается с задержкой (по умолчанию 300 мс) — быстрые ответы не мигают. Уход с вкладки
+«Детально» до конца запроса обязан сбросить `detailLoading` в cleanup эффекта: иначе полоса
+остаётся `data-busy="true"` навсегда и блокирует E2E (`waitForWorkingOverlayHidden`).
 
 ## Стартовый бандл
 
@@ -31,13 +33,16 @@
 ## Сжатие ответов
 
 Nginx (`client/nginx.conf`) сжимает JSON и статику: `gzip on`, уровень 5, от 1 КБ,
-`gzip_proxied any` (иначе ответы от backend через proxy не сжимаются).
+`gzip_proxied any` (иначе ответы от backend через proxy не сжимаются). Хешированные ассеты
+Vite отдаются из готовых `.gz` (`gzip_static`) с `Cache-Control: public, max-age=31536000, immutable`;
+`index.html` — `no-cache`. На публичном хосте Brotli до браузера делает Cloudflare.
 
 Замер на demo-проекте:
 
 | Ресурс | Без сжатия | gzip |
 |--------|-----------|------|
-| `GET .../page-data` | 6.47 МБ | 1.07 МБ |
+| `GET .../page-data` (без «Детально») | ~0.11 МБ | меньше |
+| `GET .../page-data/detail` | 6.37 МБ | ~1 МБ |
 | `assets/index-*.js` | 2.21 МБ | 618 КБ |
 
 ## Упаковка гридов «Детально»
@@ -46,19 +51,23 @@ Nginx (`client/nginx.conf`) сжимает JSON и статику: `gzip on`, у
 чем данные, а строковые значения приходили из справочников в полторы тысячи значений, поэтому
 ответ разрастался до 48 МБ. Такие гриды передаются колоночно (`EncodedGridDto`): имена полей —
 один раз, повторяющиеся строки — словарём, в ячейке индекс. Итог 48.2 → 6.47 МБ
-(см. `docs/issues/ISS-019-page-data-payload-size.md`).
+(см. `docs/issues/ISS-019-page-data-payload-size.md`). То же кодирование у сравнения версий
+(`CompareDetailEncoder`, `GET /compare` и `GET /compare/detail`).
 
 Кодирование чисто транспортное и обратимое: набор и значения полей не меняются.
 
+Первый экран вкладок «Итого» / «По объектам» не тащит detail: `GET page-data` отдаёт пустые
+encoded-гриды, строки приходят отдельным `GET page-data/detail` при открытии «Детально».
+
 | Слой | Где живёт |
 |------|-----------|
-| Упаковка | `DetailGridEncoder`, только на HTTP-границе (`ProjectsPageDataEncodedDto`) |
-| Распаковка | `decodeEncodedGrid` внутри `fetchProjectsPageData` |
+| Упаковка | `DetailGridEncoder` / `CompareDetailEncoder` на HTTP-границе |
+| Распаковка | `decodeEncodedGrid` в `fetchProjectsPageData` / `fetchVersionCompare` |
 | Экспорты Excel/PDF | работают с исходным `ProjectsPageDataDto`, он не менялся |
 
 Гриды, колонки и контекстные меню про кодирование не знают — контракт `ProjectsPageDetailRow`
-прежний. **Новое поле в `ProjectsPageDetailRowDto` нужно добавить и в список колонок
-`DetailGridEncoder`**, иначе оно просто не доедет до клиента; round-trip тест это ловит.
+прежний. **Новое поле в DTO нужно добавить и в список колонок кодировщика**, иначе оно не
+доедет до клиента; round-trip тест это ловит.
 
 ## Кэш тяжёлых чтений
 
@@ -66,8 +75,9 @@ Nginx (`client/nginx.conf`) сжимает JSON и статику: `gzip on`, у
 
 | Что кэшируется | Ключ | TTL |
 |----------------|------|-----|
-| `GET .../page-data` (9 гридов) | `page-data:v{versionId}:c{compareVersionId}` | 10 мин |
+| Полный упакованный `page-data` (HTTP режет detail) | `page-data-encoded-v2:v{versionId}:c{compareVersionId}` | 10 мин |
 | `GET /projects/{id}/performance-report` | `report:p{planVersionId}:f{factVersionId}` | 10 мин |
+| `GET /dictionaries/all` | `dictionaries:all:v3` + HTTP `ETag` / 304 | 30 мин |
 
 Полный ключ в кэше — `analytics:p{projectId}:g{globalGen}.{projectGen}:{key}`. Инвалидация
 инкрементирует поколение, старые записи становятся недостижимыми и истекают сами: перебирать
@@ -88,6 +98,9 @@ Nginx (`client/nginx.conf`) сжимает JSON и статику: `gzip on`, у
 `IProjectAnalyticsCache.InvalidateProjectAsync` — иначе UI покажет старые цифры до истечения TTL.
 
 Недоступность Redis не ломает чтение: ошибка логируется как warning, ответ считается заново.
+Запись кэша не использует токен отмены HTTP: уход со страницы больше не превращает готовый
+расчёт в 500. Неупакованный `ProjectsPageDataDto` и полный DTO сравнения в Redis не кладём —
+это десятки мегабайт JSON на demo и срывало `GET /compare` / `page-data`.
 
 ## Контроль latency
 

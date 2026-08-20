@@ -101,6 +101,29 @@ public sealed class ExportServiceTests
             LastCompareVersionId = compareVersionId;
             return Task.FromResult(data);
         }
+
+        public Task<ProjectsPageDataEncodedDto> GetEncodedPageDataAsync(
+            int projectId,
+            int versionId,
+            int? compareVersionId = null,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            LastProjectId = projectId;
+            LastVersionId = versionId;
+            LastCompareVersionId = compareVersionId;
+            return Task.FromResult(ProjectsPageDataEncodedDto.From(data).WithoutDetailRows());
+        }
+
+        public Task<ProjectsPageDetailsEncodedDto> GetEncodedPageDetailsAsync(
+            int projectId,
+            int versionId,
+            int? compareVersionId = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ProjectsPageDetailsEncodedDto(
+                DetailGridEncoder.Encode(data.Forecast.Detail),
+                DetailGridEncoder.Encode(data.Fact.Detail),
+                data.Compare is null ? null : CompareDetailEncoder.Encode(data.Compare.Detail)));
     }
 
     private sealed class StubForecastDetailSummaryTableContext : IForecastDetailSummaryTableContext

@@ -28,7 +28,34 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         int? compareVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"page-data-encoded:{VersionKey(versionId, compareVersionId)}";
+        var encoded = await GetFullEncodedPageDataAsync(projectId, versionId, compareVersionId, cancellationToken);
+        return encoded.WithoutDetailRows();
+    }
+
+    public async Task<ProjectsPageDetailsEncodedDto> GetEncodedPageDetailsAsync(
+        int projectId,
+        int versionId,
+        int? compareVersionId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var encoded = await GetFullEncodedPageDataAsync(projectId, versionId, compareVersionId, cancellationToken);
+        return new ProjectsPageDetailsEncodedDto(
+            encoded.Forecast.Detail,
+            encoded.Fact.Detail,
+            encoded.Compare?.Detail);
+    }
+
+    /// <summary>
+    /// Полный упакованный ответ в кэше (включая detail). HTTP режет строки «Детально»
+    /// на границе, чтобы не паковать заново и не держать два ключа.
+    /// </summary>
+    private async Task<ProjectsPageDataEncodedDto> GetFullEncodedPageDataAsync(
+        int projectId,
+        int versionId,
+        int? compareVersionId,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = $"page-data-encoded-v2:{VersionKey(versionId, compareVersionId)}";
         var cached = await _cache.GetAsync<ProjectsPageDataEncodedDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -36,7 +63,8 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         var encoded = ProjectsPageDataEncodedDto.From(
             await GetProjectsPageDataAsync(projectId, versionId, compareVersionId, cancellationToken));
 
-        await _cache.SetAsync(projectId, cacheKey, encoded, cancellationToken);
+        // CancellationToken.None: клиент мог уйти, но 6 МБ encoded всё равно пишем для вкладки «Детально».
+        await _cache.SetAsync(projectId, cacheKey, encoded, CancellationToken.None);
         return encoded;
     }
 
@@ -46,13 +74,8 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         int? compareVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        // Пересчёт 9 гридов стоит секунды: переключение вкладок и возврат на страницу
-        // отдаём из кэша, ключ сбрасывается любой мутацией данных проекта (ISS-018).
-        var cacheKey = $"page-data:{VersionKey(versionId, compareVersionId)}";
-        var cached = await _cache.GetAsync<ProjectsPageDataDto>(projectId, cacheKey, cancellationToken);
-        if (cached is not null)
-            return cached;
-
+        // Неупакованный DTO больше не кладём в Redis: это ~50 МБ JSON на demo и срывало
+        // HTTP при отмене. UI берёт page-data-encoded-v2; Excel/PDF считают из SQL.
         var primaryBundle = await _loader.LoadAsync(projectId, versionId, cancellationToken);
 
         ProjectsPageVersionBundle? compareBundle = null;
@@ -103,7 +126,6 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         }
 
         var data = new ProjectsPageDataDto(forecastTask.Result, factTask.Result, compare);
-        await _cache.SetAsync(projectId, cacheKey, data, cancellationToken);
         return data;
     }
 

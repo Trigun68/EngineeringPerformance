@@ -44,15 +44,18 @@ public sealed class ProjectAnalyticsCache(IDistributedCache cache, ILogger<Proje
     public async Task SetAsync<T>(int projectId, string key, T value, CancellationToken cancellationToken = default)
         where T : class
     {
+        // Расчёт уже готов: запись в Redis не должна зависеть от отмены HTTP.
+        // Иначе уход клиента с вкладки превращает успешный compute в 500, и кэш пустой.
+        _ = cancellationToken;
         try
         {
             await cache.SetStringAsync(
-                await BuildKeyAsync(projectId, key, cancellationToken),
+                await BuildKeyAsync(projectId, key, CancellationToken.None),
                 JsonSerializer.Serialize(value, JsonOptions),
                 new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = EntryLifetime },
-                cancellationToken);
+                CancellationToken.None);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             logger.LogWarning(ex, "Analytics cache write failed for project {ProjectId} key {Key}", projectId, key);
         }

@@ -33,8 +33,8 @@ public sealed class ProjectsPageController : ControllerBase
         _directoryExport = directoryExport;
     }
 
-    /// <summary>Batch-данные для 9 гридов ProjectsPage (прогноз / факт / сравнение).</summary>
-    /// <remarks>Гриды «Детально» отдаются упакованными — см. <see cref="EncodedGridDto"/> (ISS-019).</remarks>
+    /// <summary>Batch-данные для гридов ProjectsPage без строк «Детально».</summary>
+    /// <remarks>Гриды «Детально» — <see cref="GetPageDataDetails"/>; формат <see cref="EncodedGridDto"/>.</remarks>
     [HttpGet("page-data")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
@@ -45,6 +45,24 @@ public sealed class ProjectsPageController : ControllerBase
         CancellationToken cancellationToken)
     {
         var data = await _fetcher.GetEncodedPageDataAsync(
+            projectId,
+            versionId,
+            compareVersionId,
+            cancellationToken);
+        return Ok(data);
+    }
+
+    /// <summary>Упакованные гриды «Детально» (прогноз / факт / сравнение) из того же кэша, что page-data.</summary>
+    [HttpGet("page-data/detail")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    public async Task<ActionResult<ProjectsPageDetailsEncodedDto>> GetPageDataDetails(
+        int projectId,
+        int versionId,
+        [FromQuery] int? compareVersionId,
+        CancellationToken cancellationToken)
+    {
+        var data = await _fetcher.GetEncodedPageDetailsAsync(
             projectId,
             versionId,
             compareVersionId,

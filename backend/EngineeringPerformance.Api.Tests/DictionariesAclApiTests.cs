@@ -34,6 +34,12 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
 
         var response = await _client.GetAsync("/api/dictionaries/all");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.ETag.Should().NotBeNull();
+
+        var cached = new HttpRequestMessage(HttpMethod.Get, "/api/dictionaries/all");
+        cached.Headers.TryAddWithoutValidation("If-None-Match", response.Headers.ETag!.ToString());
+        var notModified = await _client.SendAsync(cached);
+        notModified.StatusCode.Should().Be(HttpStatusCode.NotModified);
     }
 
     [Fact]

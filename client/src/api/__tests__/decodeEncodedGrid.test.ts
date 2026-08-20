@@ -53,6 +53,11 @@ describe('decodeEncodedGrid', () => {
     expect(decodeEncodedGrid(encoded)).toEqual([{ catalogName: null }, { catalogName: 'Бетон' }]);
   });
 
+  it('принимает уже разобранный массив строк (моки E2E)', () => {
+    const rows = [{ rowId: 1, catalogName: 'Бетон' }];
+    expect(decodeEncodedGrid(rows)).toEqual(rows);
+  });
+
   it('возвращает пустой массив на пустом или отсутствующем гриде', () => {
     expect(decodeEncodedGrid(undefined)).toEqual([]);
     expect(decodeEncodedGrid(null)).toEqual([]);

@@ -21,6 +21,7 @@ import {
   exportForecastFacilityExcel,
   exportForecastFacilityPdf,
   fetchProjectsPageData,
+  fetchProjectsPageDetails,
 } from '../../../api/projectsPageApi';
 import { exportForecastSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
@@ -124,12 +125,14 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
   );
   const [pageData, setPageData] = useState<ProjectsPageData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [planningOpen, setPlanningOpen] = useState(false);
   const detailGridApiRef = useRef<GridApi | null>(null);
   const [detailGridReady, setDetailGridReady] = useState(false);
+  const detailRequestedKeyRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importDialogType, setImportDialogType] = useState<ImportDialogType>(null);
   const [deleteDialogType, setDeleteDialogType] = useState<DeleteDialogType>(null);
@@ -192,6 +195,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
 
   const loadPageData = useCallback(async () => {
     if (!planVersionId || !canRead) return;
+    detailRequestedKeyRef.current = null;
     setLoading(true);
     setError(null);
     try {
@@ -208,6 +212,43 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
   useEffect(() => {
     void loadPageData();
   }, [loadPageData]);
+
+  useEffect(() => {
+    if (subTab !== 'forecast-detail' || !planVersionId || !canRead || !pageData) {
+      return;
+    }
+    const key = `${projectId}:${planVersionId}`;
+    if (pageData.forecast.detail.length > 0 || detailRequestedKeyRef.current === key) {
+      return;
+    }
+    detailRequestedKeyRef.current = key;
+    let cancelled = false;
+    setDetailLoading(true);
+    void fetchProjectsPageDetails(projectId, planVersionId)
+      .then((details) => {
+        if (cancelled) {
+          return;
+        }
+        setPageData((prev) =>
+          prev ? { ...prev, forecast: { ...prev.forecast, detail: details.forecastDetail } } : prev,
+        );
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          detailRequestedKeyRef.current = null;
+          setError(getApiErrorMessage(err, 'Не удалось загрузить детальные данные прогнозирования.'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      setDetailLoading(false);
+    };
+  }, [subTab, planVersionId, canRead, pageData, projectId]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     setUserPlanVersionId(version.id);
@@ -546,7 +587,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
   return (
     <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WorkingOverlay open={exporting} />
-      <PanelBusyBar open={loading} />
+      <PanelBusyBar open={loading || detailLoading} />
       {chromeExpanded && (
         <>
       <Stack direction="row" sx={panelPrimaryToolbarSx}>

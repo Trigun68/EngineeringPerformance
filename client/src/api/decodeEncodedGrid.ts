@@ -12,7 +12,10 @@ export interface EncodedGrid {
   rows: (string | number | boolean | null)[][];
 }
 
-export function decodeEncodedGrid<T>(encoded: EncodedGrid | null | undefined): T[] {
+export function decodeEncodedGrid<T>(encoded: EncodedGrid | T[] | null | undefined): T[] {
+  if (Array.isArray(encoded)) {
+    return encoded;
+  }
   if (!encoded?.columns) {
     return [];
   }

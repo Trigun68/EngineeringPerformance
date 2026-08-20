@@ -39,6 +39,13 @@ public sealed class ExternalApiAnalyticsSmokeTests : IClassFixture<ApiWebApplica
         var pageData = await client.GetAsync(
             $"/api/projects/{project.Id}/versions/{versionId}/page-data");
         pageData.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var pageDoc = JsonDocument.Parse(await pageData.Content.ReadAsStringAsync());
+        pageDoc.RootElement.GetProperty("forecast").GetProperty("detail").GetProperty("rows").GetArrayLength()
+            .Should().Be(0);
+
+        var pageDetails = await client.GetAsync(
+            $"/api/projects/{project.Id}/versions/{versionId}/page-data/detail");
+        pageDetails.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     private static async Task<int?> ResolveKfoTypeIdAsync(HttpClient client)

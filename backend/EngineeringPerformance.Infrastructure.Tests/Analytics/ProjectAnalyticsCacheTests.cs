@@ -81,4 +81,18 @@ public sealed class ProjectAnalyticsCacheTests
 
         (await cache.GetAsync<Payload>(1, "report:auto"))!.Value.Should().Be("fresh");
     }
+
+    [Fact]
+    public async Task Set_CancelledToken_StillStoresValue()
+    {
+        var cache = CreateCache();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await cache.SetAsync(1, "page-data:v10", new Payload("grids"), cts.Token);
+
+        var hit = await cache.GetAsync<Payload>(1, "page-data:v10");
+        hit.Should().NotBeNull();
+        hit!.Value.Should().Be("grids");
+    }
 }

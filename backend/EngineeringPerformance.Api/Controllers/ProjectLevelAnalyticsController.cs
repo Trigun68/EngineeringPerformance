@@ -36,12 +36,28 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     [HttpGet("compare")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
-    public Task<VersionCompareResultDto> Compare(
+    public async Task<VersionCompareResultEncodedDto> Compare(
         int projectId,
         [FromQuery] int versionA,
         [FromQuery] int versionB,
-        CancellationToken cancellationToken = default) =>
-        _compare.CompareAsync(projectId, versionA, versionB, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var data = await _compare.CompareAsync(projectId, versionA, versionB, cancellationToken);
+        return VersionCompareResultEncodedDto.WithoutDetail(data);
+    }
+
+    [HttpGet("compare/detail")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    public async Task<EncodedGridDto> CompareDetail(
+        int projectId,
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        CancellationToken cancellationToken = default)
+    {
+        var data = await _compare.CompareAsync(projectId, versionA, versionB, cancellationToken);
+        return CompareDetailEncoder.Encode(data.Detail);
+    }
 
     [HttpGet("compare/chart")]
     [RequireProjectAccess]

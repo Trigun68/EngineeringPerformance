@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { loginAsAdmin, waitForWorkingOverlayHidden } from './helpers';
+import { loginAsAdmin, openPreferredProject, waitForWorkingOverlayHidden } from './helpers';
 
 test.describe('Forecast module - WPF Style', () => {
   test.beforeEach(async ({ page }) => {
@@ -7,12 +7,10 @@ test.describe('Forecast module - WPF Style', () => {
   });
 
   async function openProjectForecast(page: Page) {
-    await page.goto('/projects');
-    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
-    await page.waitForURL(/\/projects\/\d+/);
-    await waitForWorkingOverlayHidden(page);
+    const projectId = await openPreferredProject(page);
+    test.skip(!projectId, 'No projects in seed data');
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
+    await waitForWorkingOverlayHidden(page);
   }
 
   test('forecast tab shows version button and import buttons', async ({ page }) => {

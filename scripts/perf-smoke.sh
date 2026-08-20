@@ -132,6 +132,11 @@ print(data[0]['id'] if data else '')
       "$BUDGET_PAGE_DATA_COLD" "$BUDGET_PAGE_DATA_WARM"
     check_payload_size "page-data" \
       "${API}/projects/${project_id}/versions/${version_id}/page-data" "$BUDGET_PAGE_DATA_MB"
+    time_curl_cached "page-data-detail" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data/detail" \
+      "$BUDGET_PAGE_DATA_COLD" "$BUDGET_PAGE_DATA_WARM"
+    check_payload_size "page-data-detail" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data/detail" "$BUDGET_PAGE_DATA_MB"
     time_curl_cached "performance-report" \
       "${API}/projects/${project_id}/performance-report" \
       "$BUDGET_REPORT_COLD" "$BUDGET_REPORT_WARM"

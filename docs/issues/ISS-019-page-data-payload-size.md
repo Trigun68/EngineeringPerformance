@@ -57,9 +57,12 @@ Gzip снял остроту на транспорте, но оставалас�
 - клиент распаковывает в `fetchProjectsPageData`, поэтому гриды, колонки и контекстные меню
   про кодирование не знают.
 
-Упакованный вид кэшируется **отдельным ключом** (`page-data-encoded:…`). Без этого warm-запрос
-читал бы из кэша 50 МБ и паковал заново на каждый вызов — первый замер дал 2.3 с против прежних
-1.24 с, то есть трафик экономился за счёт CPU.
+Упакованный вид кэшируется **отдельным ключом** (`page-data-encoded-v2:…`). Неупакованный DTO
+в Redis не пишется. Без отдельного ключа warm-запрос читал бы из кэша 50 МБ и паковал заново
+на каждый вызов — первый замер дал 2.3 с против прежних 1.24 с, то есть трафик экономился за счёт CPU.
+
+HTTP-контракт с 2026-08-19: `GET page-data` и `GET /compare` не включают строки «Детально»;
+они приходят с `GET page-data/detail` и `GET /compare/detail` при открытии вкладки.
 
 ## Результат
 
@@ -72,7 +75,7 @@ Gzip снял остроту на транспорте, но оставалас�
 
 ## Acceptance Criteria
 - [x] Сырой ответ `page-data` на demo-проекте < 10 МБ — **6.47 МБ**.
-- [x] Вкладка «Детально» открывается без полной перезагрузки батча (данные уже в кэше страницы).
+- [x] Вкладка «Детально» догружает строки отдельным запросом; «Итого» / «По объектам» не ждут detail.
 - [x] `perf-smoke.sh` укладывается в бюджеты (`page-data` cold 352 мс, warm 434 мс).
 
 ## Проверка
@@ -84,16 +87,17 @@ Gzip снял остроту на транспорте, но оставалас�
   порядок колонок не нарушен.
 
 ## Осталось за рамками
-- `compare.detail` не упакован: вкладка сравнения запрашивается отдельно и на demo-данных
-  не входит в основной батч. Если её объём станет заметен — переиспользовать тот же кодировщик.
-- Серверная пагинация detail-гридов не потребовалась: 6.5 МБ укладывается в бюджет.
+- Серверная пагинация detail-гридов не потребовалась: ленивый `page-data/detail` снимает вес
+  с первого экрана; полный encoded-батч ~6.5 МБ укладывается в бюджет `perf-smoke`.
 
 ## Файлы
 - `backend/EngineeringPerformance.Application/Analytics/DetailGridEncoder.cs`
+- `backend/EngineeringPerformance.Application/Analytics/CompareDetailEncoder.cs`
+- `backend/EngineeringPerformance.Application/Analytics/GridColumnEncoder.cs`
 - `backend/EngineeringPerformance.Application/Analytics/EncodedGridDto.cs`
 - `backend/EngineeringPerformance.Application/Analytics/ProjectsPageDataEncodedDtos.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageDataFetcher.cs`
-- `client/src/api/decodeEncodedGrid.ts`, `client/src/api/projectsPageApi.ts`
+- `client/src/api/decodeEncodedGrid.ts`, `client/src/api/projectsPageApi.ts`, `client/src/api/analyticsApi.ts`
 
 ## Связанные
 - ISS-018 (неблокирующий UI, кэш, gzip)
