@@ -21,6 +21,7 @@ test.describe('Admin module', () => {
 
     await expect(page.getByRole('link', { name: 'Администрирование' })).toBeVisible();
     await page.getByRole('link', { name: 'Администрирование' }).click();
+    await expect(page.getByTestId('app-nav-list')).toBeVisible();
     await expect(page).toHaveURL(/\/admin\/logs$/);
 
     await expect(page.getByRole('link', { name: 'Логи системы' })).toBeVisible();

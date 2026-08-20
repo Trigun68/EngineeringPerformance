@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, Button, Stack } from '@mui/material';
+import { RouteContentFallback } from '../../components/WorkingOverlay/RouteContentFallback';
 import { wpColors } from '../../theme/wpColors';
 import { useAuthStore } from '../../store/useAuthStore';
 import { usePermission } from '../../hooks/usePermission';
@@ -77,7 +79,9 @@ export function SettingsLayout() {
           overflow: 'hidden',
         }}
       >
-        <Outlet />
+        <Suspense fallback={<RouteContentFallback />}>
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

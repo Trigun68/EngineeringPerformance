@@ -9,7 +9,9 @@ test.describe('Monitoring navigation', () => {
     await expect(page.getByTestId('app-nav-list').getByRole('link', { name: 'Мониторинг' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Администрирование' })).toBeVisible();
     await page.getByRole('link', { name: 'Администрирование' }).click();
+    await expect(page.getByTestId('app-nav-list')).toBeVisible();
     await page.getByRole('link', { name: 'Мониторинг' }).click();
+    await expect(page.getByTestId('app-nav-list')).toBeVisible();
     await expect(page).toHaveURL(/\/admin\/monitoring$/);
     await expect(page.getByText('Системный мониторинг (RED)')).toBeVisible({ timeout: 15_000 });
   });

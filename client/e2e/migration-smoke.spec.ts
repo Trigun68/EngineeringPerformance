@@ -15,6 +15,17 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     await expect(page.getByRole('link', { name: 'Настройки' })).toBeVisible();
   });
 
+  test('sidebar stays mounted while opening lazy analytics and admin', async ({ page }) => {
+    const nav = page.getByTestId('app-nav-list');
+    await expect(nav).toBeVisible();
+    await page.getByRole('link', { name: 'Аналитика' }).click();
+    await expect(nav).toBeVisible();
+    await expect(page).toHaveURL(/\/analytics/);
+    await page.getByRole('link', { name: 'Администрирование' }).click();
+    await expect(nav).toBeVisible();
+    await expect(page).toHaveURL(/\/admin/);
+  });
+
   test('dashboard — methodology and sigma chart', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByText('Главная').first()).toBeVisible();

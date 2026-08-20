@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, Button, Stack } from '@mui/material';
+import { RouteContentFallback } from '../../components/WorkingOverlay/RouteContentFallback';
 import { wpColors } from '../../theme/wpColors';
 
 const subNavSx = {
@@ -60,7 +62,9 @@ export function AdminLayout() {
         ))}
       </Stack>
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Outlet />
+        <Suspense fallback={<RouteContentFallback />}>
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

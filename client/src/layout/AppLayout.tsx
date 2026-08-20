@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import apiClient, { refreshSessionHeartbeat } from '../services/apiClient';
 import {
   Box,
@@ -28,6 +28,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { UserMenu } from '../components/auth/UserMenu';
 import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
+import { RouteContentFallback } from '../components/WorkingOverlay/RouteContentFallback';
 import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
 import { isSuperAdmin } from '../utils/permissionAccess';
@@ -316,7 +317,9 @@ export function AppLayout() {
               overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
-            <Outlet />
+            <Suspense fallback={<RouteContentFallback />}>
+              <Outlet />
+            </Suspense>
           </Box>
         </Box>
       </Box>

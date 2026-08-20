@@ -1,6 +1,6 @@
 # Отклик приложения: неблокирующий UI и кэш аналитики
 
-Дата обновления: 2026-08-19. Связано: `docs/issues/ISS-018-perf-nonblocking-ui-and-cache.md`,
+Дата обновления: 2026-08-20. Связано: `docs/issues/ISS-018-perf-nonblocking-ui-and-cache.md`,
 `docs/issues/ISS-019-page-data-payload-size.md`.
 
 ## Правило блокировки интерфейса
@@ -21,8 +21,10 @@
 
 ## Стартовый бандл
 
-- Ленивые маршруты (`React.lazy` + `Suspense` в `App.tsx`): аналитика, справка, админка,
-  настройки, журнал действий.
+- Ленивые **страницы** (`React.lazy`): аналитика, справка, вкладки админки и настроек.
+  `Suspense` стоит вокруг `<Outlet />` в `AppLayout` (и во вторичных каркасах `AdminLayout` /
+  `SettingsLayout`), а не вокруг всего роутера — сайдбар и шапка не снимаются, пока грузится чанк.
+- Каркасы `AdminLayout` / `SettingsLayout` импортируются сразу (как `ReferencesLayout`).
 - Ленивые графики: `CompareChartView` (вкладка «Сравнение» → режим диаграммы),
   `NormBandChart` (модалка редактирования нормы). Highcharts не грузится, пока график не нужен.
 - `manualChunks` в `vite.config.ts`: `highcharts`, `aggrid`, `mui` — отдельные кэшируемые чанки.

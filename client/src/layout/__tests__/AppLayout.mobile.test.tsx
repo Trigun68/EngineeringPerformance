@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { lazy } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,8 +37,8 @@ vi.mock('../../store/useAuthStore', () => ({
 }));
 
 vi.mock('../../store/useDictionaryStore', () => ({
-  useDictionaryStore: (sel: (s: { fetchDictionaries: () => void }) => unknown) =>
-    sel({ fetchDictionaries: vi.fn() }),
+  useDictionaryStore: (sel: (s: { fetchDictionaries: () => void; isLoading: boolean }) => unknown) =>
+    sel({ fetchDictionaries: vi.fn(), isLoading: false }),
 }));
 
 vi.mock('../../components/auth/UserMenu', () => ({
@@ -99,5 +100,36 @@ describe('AppLayout mobile nav', () => {
     expect(screen.getByTestId('references-page')).toBeInTheDocument();
     // keepMounted оставляет Modal в DOM; при закрытии — aria-hidden.
     expect(document.querySelector('.MuiModal-root')).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+const NeverResolvingPage = lazy(() => new Promise<{ default: () => null }>(() => {}));
+
+describe('AppLayout shell during lazy route', () => {
+  beforeEach(() => {
+    mediaQueryMocks.isMobile = false;
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('keeps sidebar and header while content chunk is pending', () => {
+    const theme = createTheme();
+    render(
+      <ThemeProvider theme={theme}>
+        <MemoryRouter initialEntries={['/pending']}>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/pending" element={<NeverResolvingPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByTestId('app-nav-list')).toBeInTheDocument();
+    expect(screen.getByTestId('user-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('route-content-fallback')).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
+import { lazy, useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
@@ -6,6 +6,7 @@ import { AppLayout } from './layout/AppLayout';
 import { AdminRouteGuard } from './components/auth/AdminRouteGuard';
 import { MfaSetupDialog } from './components/auth/MfaSetupDialog';
 import { PermissionGuard, SettingsGuard } from './components/auth/PermissionGuard';
+import { AdminLayout } from './features/admin/AdminLayout';
 import { useFirstAccessiblePath } from './hooks/useAccessibleNavigation';
 import { ProjectsPage as ProjectsListPage } from './pages/projects/ProjectsPage';
 import { FullProjectsPage } from './pages/projects/FullProjectsPage';
@@ -16,17 +17,16 @@ import { REFERENCE_ROUTES } from './pages/references/referenceConfig';
 import { ReferencesIndexRedirect } from './pages/references/ReferencesIndexRedirect';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { LoginPage } from './pages/auth/LoginPage';
+import { SettingsLayout } from './pages/settings/SettingsLayout';
 import { useAuthStore } from './store/useAuthStore';
 import { resolvePreferredPath } from './utils/projectWorkspacePrefs';
 
-// Аналитика (Highcharts) и админ-разделы не нужны на старте — грузим отдельными чанками.
+// Тяжёлые страницы — отдельные чанки. Каркасы AdminLayout / SettingsLayout грузятся сразу,
+// чтобы вторичное меню не исчезало, пока подгружается вкладка.
 const AnalyticsPage = lazy(() =>
   import('./pages/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
 );
 const HelpPage = lazy(() => import('./pages/help/HelpPage').then((m) => ({ default: m.HelpPage })));
-const AdminLayout = lazy(() =>
-  import('./features/admin/AdminLayout').then((m) => ({ default: m.AdminLayout })),
-);
 const LogViewer = lazy(() => import('./features/admin/LogViewer').then((m) => ({ default: m.LogViewer })));
 const HealthDashboard = lazy(() =>
   import('./features/admin/HealthDashboard').then((m) => ({ default: m.HealthDashboard })),
@@ -38,21 +38,12 @@ const MonitoringDashboard = lazy(() =>
 const UserActionLogPage = lazy(() =>
   import('./pages/audit/UserActionLogPage').then((m) => ({ default: m.UserActionLogPage })),
 );
-const SettingsLayout = lazy(() =>
-  import('./pages/settings/SettingsLayout').then((m) => ({ default: m.SettingsLayout })),
-);
 const UsersPage = lazy(() => import('./pages/settings/UsersPage').then((m) => ({ default: m.UsersPage })));
 const AccessRightsPage = lazy(() =>
   import('./pages/settings/AccessRightsPage').then((m) => ({ default: m.AccessRightsPage })),
 );
 const SystemSettingsPage = lazy(() =>
   import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
-);
-
-const routeFallback = (
-  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-    <CircularProgress size={28} />
-  </Box>
 );
 
 const LOGO_SRC = '/assets/logo.png';
@@ -92,7 +83,6 @@ function DefaultRedirect() {
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
   const isInitialized = useAuthStore((state) => state.isInitialized);
-  const isLoading = useAuthStore((state) => state.isLoading);
   const user = useAuthStore((state) => state.user);
   const requiresMfaSetup = useAuthStore((state) => state.requiresMfaSetup);
   const completeMfaSetup = useAuthStore((state) => state.completeMfaSetup);
@@ -101,7 +91,7 @@ export default function App() {
     void initialize();
   }, [initialize]);
 
-  if (!isInitialized || isLoading) {
+  if (!isInitialized) {
     return (
       <Box
         sx={{
@@ -129,7 +119,6 @@ export default function App() {
     <BrowserRouter>
       <>
         {user ? (
-        <Suspense fallback={routeFallback}>
         <Routes>
           <Route element={<AppLayout />}>
             <Route
@@ -251,7 +240,6 @@ export default function App() {
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
         </Routes>
-        </Suspense>
         ) : (
           <LoginPage />
         )}
