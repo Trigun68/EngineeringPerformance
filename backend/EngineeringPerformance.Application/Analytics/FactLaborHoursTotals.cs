@@ -15,6 +15,10 @@ public static class FactLaborHoursTotals
     public static decimal? FromActualHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         FromHours(laborIntensities.Sum(li => li.ActualHours));
 
+    /// <summary>Σ ActualHours только по строкам с группой IIC. Неотнесённые не входят в KPI факта.</summary>
+    public static decimal? FromAllocatedActualHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
+        FromHours(laborIntensities.Where(li => li.WorkDirectionId.HasValue).Sum(li => li.ActualHours));
+
     public static decimal UnallocatedPlannedHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         laborIntensities.Where(li => !li.WorkDirectionId.HasValue).Sum(li => li.PlannedHours);
 

@@ -41,6 +41,11 @@ test.describe('Performance report tab', () => {
     await expect(page.getByTestId('report-insights')).toBeVisible();
     await expect(page.getByTestId('report-directions-table')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Направление' })).toBeVisible();
+    await expect(page.getByTestId('report-z-tick')).toHaveCount(7);
+    const planVersion = page.getByTestId('report-plan-version');
+    if ((await planVersion.count()) > 0) {
+      await expect(planVersion).toContainText('План:');
+    }
   });
 
   test('theme toggle switches dark class on panel', async ({ page }) => {

@@ -63,7 +63,7 @@ Legacy: `EngineeringPerformance.Core/DTOs/ProjectVersionAnalysisDto.cs` (без 
 
 Кнопка **Анализ версии** на `FactPanel` (подвкладка «Итого»). Требует выбранную версию факта и право `Assessment`.
 
-Дерево направлений: после «Факт ч» колонки **План.Труд.Песс. / Баз. / Оптим.** (`ProjectVersionDirectionDto.PessimisticHours/BaseHours/OptimisticHours` из `AttachStoredPlanHours`). Excel модалки — те же колонки; PDF = `fact-summary/pdf`.
+Дерево направлений: после «Факт ч» колонки **План.Труд.Песс. / Баз. / Оптим.** (`AttachLivePlanHours`). Excel модалки — те же колонки; PDF = `fact-summary/pdf`.
 
 ### Точка входа (legacy WPF)
 

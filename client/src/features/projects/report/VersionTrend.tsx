@@ -1,5 +1,5 @@
 import type { PerformanceReportHistoryPoint } from '../../../api/performanceReportApi';
-import { fmt, fmtSigned, interpretationColor } from './reportFormat';
+import { fmt, fmtSigned } from './reportFormat';
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 
 const W = 640;
@@ -10,22 +10,50 @@ const PAD_Y = 28;
 const PLAN = 1;
 const FACT = 2;
 
+const PLAN_COLOR = 'var(--ep-report-primary)';
+const FACT_COLOR = 'var(--ep-report-perf-critical)';
+
 type Props = {
   points: PerformanceReportHistoryPoint[];
 };
 
+type PointWithZ = {
+  p: PerformanceReportHistoryPoint;
+  z: number;
+  t: number;
+  snapshotChanged: boolean;
+};
+
 function seriesPath(
-  indexed: Array<{ i: number; z: number }>,
-  x: (i: number) => number,
+  items: Array<{ t: number; z: number }>,
+  x: (t: number) => number,
   y: (v: number) => number,
 ): string {
-  return indexed.map((p) => `${x(p.i)},${y(p.z)}`).join(' ');
+  return items.map((p) => `${x(p.t)},${y(p.z)}`).join(' ');
+}
+
+function withSnapshotTint(points: PerformanceReportHistoryPoint[]): PointWithZ[] {
+  const previousKey = new Map<number, string | null | undefined>();
+  return points
+    .map((p) => {
+      const z = p.weightedZScore;
+      if (z == null) return null;
+      const prev = previousKey.get(p.direction);
+      const snapshotChanged =
+        prev !== undefined && (p.normSnapshotKey ?? null) !== (prev ?? null);
+      previousKey.set(p.direction, p.normSnapshotKey);
+      return {
+        p,
+        z,
+        t: new Date(p.createdAt).getTime(),
+        snapshotChanged,
+      };
+    })
+    .filter((x): x is PointWithZ => x != null);
 }
 
 export function VersionTrend({ points }: Props) {
-  const withZ = points
-    .map((p, i) => ({ p, i, z: p.weightedZScore }))
-    .filter((x): x is { p: PerformanceReportHistoryPoint; i: number; z: number } => x.z != null);
+  const withZ = withSnapshotTint(points);
 
   if (points.length === 0 || withZ.length === 0) {
     return (
@@ -34,7 +62,9 @@ export function VersionTrend({ points }: Props) {
           <ReportCardTitle className="text-base md:text-lg">Динамика Z-оценки по версиям</ReportCardTitle>
         </ReportCardHeader>
         <ReportCardContent>
-          <p className="text-sm text-muted-foreground">Нет версий с рассчитанной Z-оценкой.</p>
+          <p className="text-sm text-muted-foreground" data-testid="report-version-trend-empty">
+            Нет версий с рассчитанной Z-оценкой.
+          </p>
         </ReportCardContent>
       </ReportCard>
     );
@@ -44,20 +74,24 @@ export function VersionTrend({ points }: Props) {
   const max = Math.max(...zs, 0.6);
   const min = Math.min(...zs, -0.2);
   const span = max - min || 1;
+  const times = points.map((p) => new Date(p.createdAt).getTime());
+  const minT = Math.min(...times);
+  const maxT = Math.max(...times);
+  const tSpan = maxT - minT || 1;
 
-  const x = (i: number) => PAD_X + (i * (W - PAD_X * 2)) / Math.max(points.length - 1, 1);
+  const x = (t: number) => PAD_X + ((t - minT) / tSpan) * (W - PAD_X * 2);
   const y = (v: number) => PAD_Y + ((max - v) / span) * (H - PAD_Y * 2);
 
-  const planSeries = withZ.filter((x) => x.p.direction === PLAN).map((x) => ({ i: x.i, z: x.z }));
-  const factSeries = withZ.filter((x) => x.p.direction === FACT).map((x) => ({ i: x.i, z: x.z }));
+  const planSeries = withZ.filter((x) => x.p.direction === PLAN).map((x) => ({ t: x.t, z: x.z }));
+  const factSeries = withZ.filter((x) => x.p.direction === FACT).map((x) => ({ t: x.t, z: x.z }));
 
   return (
     <ReportCard>
       <ReportCardHeader>
         <ReportCardTitle className="text-base md:text-lg">Динамика Z-оценки по версиям</ReportCardTitle>
         <p className="text-sm text-muted-foreground">
-          Версии упорядочены по дате создания. Точки без Z не отображаются. План и факт — отдельные
-          серии.
+          Ось X — дата создания версии. План — синий, факт — красный. Смена состава снимка норм
+          подсвечена более светлой точкой.
         </p>
       </ReportCardHeader>
       <ReportCardContent className="flex flex-col gap-4">
@@ -89,7 +123,7 @@ export function VersionTrend({ points }: Props) {
             <polyline
               points={seriesPath(planSeries, x, y)}
               fill="none"
-              stroke="var(--ep-report-primary)"
+              stroke={PLAN_COLOR}
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -99,7 +133,7 @@ export function VersionTrend({ points }: Props) {
             <polyline
               points={seriesPath(factSeries, x, y)}
               fill="none"
-              stroke="var(--ep-report-perf-attention)"
+              stroke={FACT_COLOR}
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -107,46 +141,52 @@ export function VersionTrend({ points }: Props) {
             />
           ) : null}
 
-          {withZ.map(({ p, i, z }) => (
-            <g key={`${p.versionId}-${p.direction}`}>
-              <circle
-                cx={x(i)}
-                cy={y(z)}
-                r={5}
-                fill={interpretationColor(z)}
-                stroke="var(--ep-report-card)"
-                strokeWidth={2}
-              />
-              <text
-                x={x(i)}
-                y={y(z) - 12}
-                textAnchor="middle"
-                className="fill-[var(--ep-report-foreground)] font-mono text-[10px] font-semibold"
-              >
-                {fmtSigned(z)}
-              </text>
-              <text
-                x={x(i)}
-                y={H - 6}
-                textAnchor="middle"
-                className="fill-[var(--ep-report-muted-foreground)] text-[10px]"
-              >
-                {p.versionName}
-              </text>
-            </g>
-          ))}
+          {withZ.map(({ p, z, t, snapshotChanged }) => {
+            const color = p.direction === PLAN ? PLAN_COLOR : FACT_COLOR;
+            return (
+              <g key={`${p.versionId}-${p.direction}`}>
+                <circle
+                  cx={x(t)}
+                  cy={y(z)}
+                  r={5}
+                  fill={color}
+                  fillOpacity={snapshotChanged ? 0.45 : 1}
+                  stroke="var(--ep-report-card)"
+                  strokeWidth={2}
+                  data-series={p.direction === PLAN ? 'plan' : 'fact'}
+                  data-snapshot-changed={snapshotChanged ? 'true' : 'false'}
+                />
+                <text
+                  x={x(t)}
+                  y={y(z) - 12}
+                  textAnchor="middle"
+                  className="fill-[var(--ep-report-foreground)] font-mono text-[10px] font-semibold"
+                >
+                  {fmtSigned(z)}
+                </text>
+                <text
+                  x={x(t)}
+                  y={H - 6}
+                  textAnchor="middle"
+                  className="fill-[var(--ep-report-muted-foreground)] text-[10px]"
+                >
+                  {p.versionName}
+                </text>
+              </g>
+            );
+          })}
         </svg>
 
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-0.5 w-4 bg-primary" /> План
+            <span className="inline-block h-0.5 w-4" style={{ backgroundColor: PLAN_COLOR }} /> План
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span
               className="inline-block h-0.5 w-4"
               style={{
                 background:
-                  'repeating-linear-gradient(90deg, var(--ep-report-perf-attention) 0 4px, transparent 4px 8px)',
+                  'repeating-linear-gradient(90deg, var(--ep-report-perf-critical) 0 4px, transparent 4px 8px)',
               }}
             />{' '}
             Факт

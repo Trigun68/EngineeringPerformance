@@ -18,15 +18,18 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IPerformanceService _performanceService;
     private readonly IPerformanceCalculationEngine _calculationEngine;
+    private readonly ProjectsPageRawDataLoader _rawLoader;
 
     public ProjectVersionAnalysisService(
         IDbContextFactory<AppDbContext> contextFactory,
         IPerformanceService performanceService,
-        IPerformanceCalculationEngine calculationEngine)
+        IPerformanceCalculationEngine calculationEngine,
+        ProjectsPageRawDataLoader rawLoader)
     {
         _contextFactory = contextFactory;
         _performanceService = performanceService;
         _calculationEngine = calculationEngine;
+        _rawLoader = rawLoader;
     }
 
     public async Task<ProjectVersionAnalysisDto> GenerateReportAsync(int projectId, int versionId)
@@ -72,9 +75,11 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         var projectPhysicalVolumes = pvTask.Result;
         var projectEquipments = eqTask.Result;
         var laborIntensities = laborTask.Result;
-        var performanceData = ProjectsPageGridBuilder.AttachStoredPlanHours(
+        var bundle = await _rawLoader.LoadAsync(projectId, versionId);
+        var performanceData = ProjectsPageGridBuilder.AttachLivePlanHours(
             performanceTask.Result,
-            projectPhysicalVolumes);
+            bundle,
+            _calculationEngine);
 
         // Группировка ненулевых физ. объёмов по направлению (ClassifierId).
         var pvByDirection = projectPhysicalVolumes

@@ -31,4 +31,29 @@ public sealed class FactLaborHoursTotalsTests
 
         FactLaborHoursTotals.FromActualHours(labor).Should().Be(50.5m);
     }
+
+    [Fact]
+    public void FromAllocatedActualHours_IgnoresUnallocatedRows()
+    {
+        var labor = new List<ProjectLaborIntensity>
+        {
+            new() { WorkDirectionId = 1, ActualHours = 40m, PlannedHours = 100m },
+            new() { WorkDirectionId = null, ActualHours = 51342m, PlannedHours = 0m },
+        };
+
+        FactLaborHoursTotals.FromAllocatedActualHours(labor).Should().Be(40m);
+        FactLaborHoursTotals.FromActualHours(labor).Should().Be(51382m);
+    }
+
+    [Fact]
+    public void FromAllocatedActualHours_AllUnallocated_ReturnsNull()
+    {
+        var labor = new List<ProjectLaborIntensity>
+        {
+            new() { WorkDirectionId = null, ActualHours = 51_342m },
+        };
+
+        FactLaborHoursTotals.FromAllocatedActualHours(labor).Should().BeNull();
+        FactLaborHoursTotals.UnallocatedActualHours(labor).Should().Be(51_342m);
+    }
 }

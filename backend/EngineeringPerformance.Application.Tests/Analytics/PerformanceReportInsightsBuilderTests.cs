@@ -37,6 +37,39 @@ public sealed class PerformanceReportInsightsBuilderTests
         insights.TopPositive.Should().BeEmpty();
     }
 
+
+    [Fact]
+    public void Build_UsesPlanZ_WhenFactZMissing()
+    {
+        var directions = new List<PerformanceReportMergedDirectionRowDto>
+        {
+            new(
+                WorkDirectionId: 2,
+                ParentId: null,
+                Level: 0,
+                Code: "A",
+                Name: "План-лист",
+                UnitName: "ч",
+                PhysicalVolume: 10m,
+                PlanLaborHours: 100m,
+                FactLaborHours: null,
+                PlanSubtreeHours: 100m,
+                FactSubtreeHours: null,
+                PlanProductivity: null,
+                FactProductivity: null,
+                NormProductivity: 1m,
+                NormStdDev: 0.1m,
+                PlanZScore: -0.4m,
+                FactZScore: null,
+                PlanInterpretation: null,
+                FactInterpretation: null),
+        };
+
+        var insights = PerformanceReportInsightsBuilder.Build(directions);
+        insights.Items.Should().NotBeEmpty();
+        insights.TopPositive.Should().ContainSingle(r => r.Name == "План-лист");
+    }
+
     private static PerformanceReportMergedDirectionRowDto Merged(
         int id,
         int? parentId,

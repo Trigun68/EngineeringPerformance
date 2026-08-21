@@ -92,6 +92,7 @@ export interface PerformanceReportHistoryPoint {
   direction: number;
   weightedZScore: number | null;
   totalLaborHours: number | null;
+  normSnapshotKey?: string | null;
 }
 
 export interface PerformanceReportKeyDiscipline {

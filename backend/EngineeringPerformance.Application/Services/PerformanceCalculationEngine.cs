@@ -291,7 +291,9 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         var factVolume = volumeByDirection.GetValueOrDefault(direction.Id);
         var factHours = hoursByDirection.GetValueOrDefault(direction.Id);
 
-        decimal? factProductivity = factVolume > 0 ? Math.Max(0m, factHours / factVolume) : null;
+        decimal? factProductivity = factVolume > 0 && factHours > 0
+            ? Math.Round(factHours / factVolume, 4)
+            : null;
 
         decimal? ownFactEstimate = null;
         if (factProductivity is > 0)

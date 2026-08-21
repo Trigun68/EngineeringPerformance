@@ -152,6 +152,12 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">{report.project.code}</span>
+                {report.plan?.versionName ? (
+                  <span data-testid="report-plan-version">План: {report.plan.versionName}</span>
+                ) : null}
+                {report.fact?.versionName ? (
+                  <span data-testid="report-fact-version">Факт: {report.fact.versionName}</span>
+                ) : null}
                 {report.project.gip ? <span>ГИП: {report.project.gip}</span> : null}
                 {report.project.customer ? <span>Заказчик: {report.project.customer}</span> : null}
                 {report.project.type ? <span>Тип: {report.project.type}</span> : null}
@@ -177,9 +183,7 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
 
             <InsightsPanel
               insights={report.insights}
-              totalHours={
-                report.fact?.totalLaborHours ?? report.plan?.totalLaborHours ?? null
-              }
+              totalHours={report.fact?.totalLaborHours ?? null}
             />
 
             <ReportCard>

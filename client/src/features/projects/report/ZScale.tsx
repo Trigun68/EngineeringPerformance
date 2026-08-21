@@ -128,9 +128,11 @@ export function ZScale({
               ),
             )}
 
-            <div className="mt-2 flex justify-between font-mono text-[11px] text-muted-foreground">
+            <div className="mt-2 flex justify-between font-mono text-xs font-semibold text-foreground">
               {['−3', '−2', '−1', '0', '+1', '+2', '+3'].map((tick) => (
-                <span key={tick}>{tick}</span>
+                <span key={tick} data-testid="report-z-tick">
+                  {tick}
+                </span>
               ))}
             </div>
           </div>

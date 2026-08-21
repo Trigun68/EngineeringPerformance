@@ -166,8 +166,8 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
 
         CopyEquipments(source.Equipments.ToList(), copy.Id, source.ProjectId, createdAt);
 
-        await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
-            _context, copy.Id, createdAt, cancellationToken);
+        await AnalysisVersionSnapshotService.CopyFromVersionAsync(
+            _context, source.Id, copy.Id, copy.CreatedAt, cancellationToken);
 
         await _planningParameters.CopyFromVersionAsync(source.Id, copy.Id, cancellationToken);
 

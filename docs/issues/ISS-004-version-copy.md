@@ -6,6 +6,11 @@
 **Приоритет:** 🟡 Medium
 **Связано:** `ProjectVersionPickerDialog`, `ProjectAnalysisVersion`, `ProjectPhysicalVolume`, `ProjectLaborIntensity`, `DataImportIteration`, `AnalysisVersionSnapshot`
 
+
+## Уточнение 2026-08-20 (web)
+
+Продуктовое правило: копия версии **наследует** `AnalysisVersionSnapshot` источника (`AnalysisVersionSnapshotService.CopyFromVersionAsync` / `CreateCopies`). Fallback `PopulateSnapshotAsync` только если у источника снимка нет. Исторические снимки существующих версий не переписываются.
+
 ## Контекст
 
 На странице **Проекты** при выборе версии анализа (как на вкладке «Прогнозирование», так и на вкладке «Анализ факта») открывается модальное окно `ProjectVersionPickerDialog`. Пользователь просит добавить кнопку **«Копировать»** для создания новой версии с полным копированием данных.

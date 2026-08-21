@@ -8,9 +8,10 @@ using FluentAssertions;
 namespace EngineeringPerformance.Infrastructure.Tests.Analytics;
 
 /// <summary>
-/// Плановые часы на «Оценка факта» читаются из сохранённых колонок ФО, без повторного N(V).
+/// Плановые часы на «Оценка факта» и в дереве — live N(V)×Z, как Forecast «ИТОГО».
+/// Сохранённые LaborIntensity* не читаются.
 /// </summary>
-public sealed class FactStoredPlanHoursTests
+public sealed class FactLivePlanHoursTests
 {
     private readonly IPerformanceCalculationEngine _engine =
         new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
@@ -84,24 +85,29 @@ public sealed class FactStoredPlanHoursTests
     private static PerformanceRowDto PerfRow(decimal? factHours = null) => new(
         DirId, "Строительство", "IIC-3", null, 0, "м²", 10m, factHours, null, null, 10m, null, 1m, null, null);
 
+    private (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ExpectedHours(decimal volume) =>
+        _engine.ComputeForecastHours(volume, 10m, 1m, PlanningZParameters.Default);
+
     [Fact]
-    public void BuildFactGrids_Detail_UsesStoredPpvHours_NotVolumeTimesNorm()
+    public void BuildFactGrids_Detail_UsesLiveHours_IgnoresStoredPpvHours()
     {
         var kfo = Kfo();
         var bundle = Bundle([Ppv(100, quantity: 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
         var performance = new List<PerformanceRowDto> { PerfRow() };
+        var expected = ExpectedHours(10m);
 
         var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
 
         var row = detail.Should().ContainSingle(r => !r.IsEquipment).Subject;
-        row.PessimisticHours.Should().Be(12m);
-        row.BaseHours.Should().Be(50m, "сохранённые часы, а не 10×10 нормы");
-        row.OptimisticHours.Should().Be(8m);
+        row.BaseHours.Should().Be(expected.Base);
+        row.OptimisticHours.Should().Be(expected.Optimistic);
+        row.PessimisticHours.Should().Be(expected.Pessimistic);
+        row.BaseHours.Should().NotBe(50m);
         row.FactLaborHours.Should().BeNull();
     }
 
     [Fact]
-    public void BuildFactGrids_Equipment_HasNoPlanHours()
+    public void BuildFactGrids_Equipment_HasLivePlanHours()
     {
         var kfo = Kfo();
         var eq = new ProjectEquipment
@@ -122,17 +128,18 @@ public sealed class FactStoredPlanHoursTests
         };
         var bundle = Bundle([Ppv(100, 10m, "01", 12m, 50m, 8m, kfo)], [eq]);
         var performance = new List<PerformanceRowDto> { PerfRow() };
+        var expectedEq = ExpectedHours(100m);
 
         var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
 
         var eqRow = detail.Should().ContainSingle(r => r.IsEquipment).Subject;
-        eqRow.BaseHours.Should().BeNull();
-        eqRow.OptimisticHours.Should().BeNull();
-        eqRow.PessimisticHours.Should().BeNull();
+        eqRow.BaseHours.Should().Be(expectedEq.Base);
+        eqRow.OptimisticHours.Should().Be(expectedEq.Optimistic);
+        eqRow.PessimisticHours.Should().Be(expectedEq.Pessimistic);
     }
 
     [Fact]
-    public void BuildFactGrids_Facility_SumsStoredPlanHoursByFacilityCode()
+    public void BuildFactGrids_Facility_SumsLivePlanHoursByFacilityCode()
     {
         var kfo = Kfo();
         var bundle = Bundle(
@@ -142,52 +149,73 @@ public sealed class FactStoredPlanHoursTests
             Ppv(3, 4m, "B", pes: 5m, bas: 20m, opt: 2m, kfo),
         ]);
         var performance = new List<PerformanceRowDto> { PerfRow() };
+        var expectedA = ExpectedHours(2m).Base + ExpectedHours(8m).Base;
+        var expectedB = ExpectedHours(4m).Base;
 
         var (facility, _) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
 
         var a = facility.Should().ContainSingle(f => f.FacilityCode == "A").Subject;
-        a.PessimisticHours.Should().Be(10m);
-        a.BaseHours.Should().Be(50m);
-        a.OptimisticHours.Should().Be(10m);
+        a.BaseHours.Should().Be(expectedA);
+        a.BaseHours.Should().NotBe(50m);
 
         var b = facility.Should().ContainSingle(f => f.FacilityCode == "B").Subject;
-        b.BaseHours.Should().Be(20m);
+        b.BaseHours.Should().Be(expectedB);
     }
 
     [Fact]
-    public void AttachStoredPlanHours_ThenTotals_RollUpScenarios()
+    public void BuildFactGrids_Facility_FilledWhenStoredLaborIntensityNull()
+    {
+        var kfo = Kfo();
+        var bundle = Bundle([Ppv(1, 10m, "A", pes: null, bas: null, opt: null, kfo)]);
+        var performance = new List<PerformanceRowDto> { PerfRow() };
+        var expected = ExpectedHours(10m);
+
+        var (facility, _) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
+
+        facility.Should().ContainSingle(f => f.FacilityCode == "A")
+            .Which.BaseHours.Should().Be(expected.Base);
+    }
+
+    [Fact]
+    public void AttachLivePlanHours_ThenTotals_RollUpScenarios()
     {
         var kfo = Kfo();
         var parent = new PerformanceRowDto(1, "Root", "R", null, 0, "м²", 10m, 4m, null, null, null, null, null, null, null);
-        var leaf = new PerformanceRowDto(DirId, "Leaf", "L", 1, 1, "м²", 10m, 4m, null, null, null, null, null, null, null);
-        var attached = ProjectsPageGridBuilder.AttachStoredPlanHours(
+        var leaf = new PerformanceRowDto(DirId, "Leaf", "L", 1, 1, "м²", 10m, 4m, null, null, 10m, null, 1m, null, null);
+        var bundle = Bundle([Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
+        var expected = ExpectedHours(10m);
+        var attached = ProjectsPageGridBuilder.AttachLivePlanHours(
             [parent, leaf],
-            [Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
+            bundle,
+            _engine);
 
-        attached.Single(r => r.WorkDirectionId == DirId).BaseHours.Should().Be(50m);
+        attached.Single(r => r.WorkDirectionId == DirId).BaseHours.Should().Be(expected.Base);
         attached.Single(r => r.WorkDirectionId == 1).BaseHours.Should().BeNull();
 
         var withTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(attached);
         var rootTotal = withTotals.Single(r => r.IsTotal && r.WorkDirectionName.StartsWith("Итого:"));
-        rootTotal.PessimisticHours.Should().Be(12m);
-        rootTotal.BaseHours.Should().Be(50m);
-        rootTotal.OptimisticHours.Should().Be(8m);
+        rootTotal.BaseHours.Should().Be(expected.Base);
+        rootTotal.PessimisticHours.Should().Be(expected.Pessimistic);
+        rootTotal.OptimisticHours.Should().Be(expected.Optimistic);
         rootTotal.FactLaborHours.Should().Be(8m);
 
         var grand = withTotals.Single(r => r.WorkDirectionName == "ИТОГО");
-        grand.BaseHours.Should().Be(50m);
+        grand.BaseHours.Should().Be(expected.Base);
         grand.FactLaborHours.Should().Be(8m);
     }
 
     [Fact]
-    public void AttachStoredPlanHours_MapsOntoAnalysisDirectionDto()
+    public void AttachLivePlanHours_MapsOntoAnalysisDirectionDto()
     {
         var kfo = Kfo();
         var leaf = new PerformanceRowDto(
-            DirId, "Leaf", "L", null, 0, "м²", 10m, 4m, null, null, null, null, null, null, null);
-        var attached = ProjectsPageGridBuilder.AttachStoredPlanHours(
+            DirId, "Leaf", "L", null, 0, "м²", 10m, 4m, null, null, 10m, null, 1m, null, null);
+        var bundle = Bundle([Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
+        var expected = ExpectedHours(10m);
+        var attached = ProjectsPageGridBuilder.AttachLivePlanHours(
             [leaf],
-            [Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
+            bundle,
+            _engine);
         var row = attached.Should().ContainSingle().Subject;
 
         var dto = new ProjectVersionDirectionDto(
@@ -213,9 +241,39 @@ public sealed class FactStoredPlanHoursTests
             EquipmentVolumes: [],
             DirectionLaborIntensities: []);
 
-        dto.PessimisticHours.Should().Be(12m);
-        dto.BaseHours.Should().Be(50m);
-        dto.OptimisticHours.Should().Be(8m);
+        dto.BaseHours.Should().Be(expected.Base);
+        dto.PessimisticHours.Should().Be(expected.Pessimistic);
+        dto.OptimisticHours.Should().Be(expected.Optimistic);
         dto.FactLaborHours.Should().Be(4m);
+        dto.BaseHours.Should().NotBe(50m);
+    }
+
+    [Fact]
+    public void BuildForecastGrids_GrandTotals_MatchFactLiveFacilitySum()
+    {
+        var kfo = Kfo();
+        var eq = new ProjectEquipment
+        {
+            Id = 200,
+            Quantity = 5m,
+            FacilityCode = "01",
+            FacilityName = "Объект",
+            CatalogName = "Насос",
+            Equipment = new Equipment
+            {
+                Id = 7,
+                Name = "Насос",
+                ClassifierId = DirId,
+                IsAssessment = true,
+                Coefficient = 1m,
+            },
+        };
+        var bundle = Bundle([Ppv(100, 10m, "01", null, null, null, kfo)], [eq]);
+        var performance = new List<PerformanceRowDto> { PerfRow() };
+
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance, _engine);
+        var (facility, _) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
+
+        facility.Sum(f => f.BaseHours ?? 0m).Should().Be(forecast.GrandTotals.BaseHours);
     }
 }

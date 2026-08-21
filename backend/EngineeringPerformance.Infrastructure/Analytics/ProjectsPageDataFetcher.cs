@@ -96,8 +96,8 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         {
             var (facility, detail) = ProjectsPageGridBuilder.BuildFactGrids(
                 primaryBundle, primaryPerformance, _calculationEngine);
-            var performanceWithPlan = ProjectsPageGridBuilder.AttachStoredPlanHours(
-                primaryPerformance, primaryBundle.PhysicalVolumes);
+            var performanceWithPlan = ProjectsPageGridBuilder.AttachLivePlanHours(
+                primaryPerformance, primaryBundle, _calculationEngine);
             var performanceWithTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(performanceWithPlan);
             return new ProjectsPageFactGridsDto(performanceWithTotals, facility, detail);
         }, cancellationToken);

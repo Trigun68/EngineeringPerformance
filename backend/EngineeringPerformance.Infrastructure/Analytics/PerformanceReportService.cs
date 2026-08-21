@@ -16,7 +16,8 @@ public sealed class PerformanceReportService(
     IPerformanceService performanceService,
     IPerformanceCalculationEngine calculationEngine,
     IProjectCharacteristicSelectionService characteristics,
-    IProjectAnalyticsCache cache) : IPerformanceReportService
+    IProjectAnalyticsCache cache,
+    ProjectsPageRawDataLoader rawLoader) : IPerformanceReportService
 {
     public async Task<PerformanceReportDto> GetReportAsync(
         int projectId,
@@ -24,8 +25,8 @@ public sealed class PerformanceReportService(
         int? factVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        // Отчёт считает план + факт + историю всех версий — самый дорогой read-путь (ISS-018).
-        var cacheKey = $"report:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
+        // v2: live N(V)×Z для плана, allocated ActualHours для факта (не кэшировать старый Z).
+        var cacheKey = $"report:v2:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
         var cached = await cache.GetAsync<PerformanceReportDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -54,31 +55,36 @@ public sealed class PerformanceReportService(
         PerformanceReportVersionBlockDto? planBlock = null;
         PerformanceReportVersionBlockDto? factBlock = null;
 
+        var bundleByVersion = new Dictionary<int, ProjectsPageVersionBundle>();
+        var snapshotKeyByVersion = await LoadSnapshotKeysAsync(
+            versions.Select(v => v.Id).ToList(),
+            cancellationToken);
+
         if (assessmentId is int assessId)
         {
-            planBlock = await BuildVersionBlockAsync(
+            planBlock = await BuildPlanBlockAsync(
                 projectId,
                 assessId,
-                LaborHoursKind.Planned,
-                applyPlanningZLabor: true,
+                bundleByVersion,
                 cancellationToken);
         }
 
         if (factId is int fid)
         {
-            factBlock = await BuildVersionBlockAsync(
-                projectId,
-                fid,
-                LaborHoursKind.Actual,
-                applyPlanningZLabor: false,
-                cancellationToken);
+            factBlock = await BuildFactBlockAsync(projectId, fid, cancellationToken);
         }
 
         var history = new List<PerformanceReportVersionHistoryPointDto>();
         foreach (var version in versions.Where(v =>
                      v.Direction is AnalysisDirection.Plan or AnalysisDirection.Fact))
         {
-            history.Add(await BuildHistoryPointAsync(projectId, version, cancellationToken));
+            snapshotKeyByVersion.TryGetValue(version.Id, out var snapKey);
+            history.Add(await BuildHistoryPointAsync(
+                projectId,
+                version,
+                snapKey,
+                bundleByVersion,
+                cancellationToken));
         }
 
         history = history
@@ -196,40 +202,112 @@ public sealed class PerformanceReportService(
         return count;
     }
 
-    private async Task<PerformanceReportVersionBlockDto> BuildVersionBlockAsync(
+    private async Task<ProjectsPageVersionBundle> GetBundleAsync(
         int projectId,
         int versionId,
-        LaborHoursKind hoursKind,
-        bool applyPlanningZLabor,
+        Dictionary<int, ProjectsPageVersionBundle> bundleCache,
+        CancellationToken cancellationToken)
+    {
+        if (bundleCache.TryGetValue(versionId, out var cached))
+            return cached;
+        var bundle = await rawLoader.LoadAsync(projectId, versionId, cancellationToken);
+        bundleCache[versionId] = bundle;
+        return bundle;
+    }
+
+    private async Task<PerformanceReportVersionBlockDto> BuildPlanBlockAsync(
+        int projectId,
+        int versionId,
+        Dictionary<int, ProjectsPageVersionBundle> bundleCache,
         CancellationToken cancellationToken)
     {
         var version = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
-        var performance = await performanceService.GetPerformanceDataAsync(projectId, versionId, hoursKind);
+        var bundle = await GetBundleAsync(projectId, versionId, bundleCache, cancellationToken);
+        var performance = await performanceService.GetPerformanceDataAsync(
+            projectId, versionId, LaborHoursKind.Planned);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance, calculationEngine);
+        var liveHours = ProjectsPageGridBuilder.ResolveLivePlanHoursByDirection(
+            bundle, performance, calculationEngine);
+
         var labor = await context.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
 
-        var totalHours = hoursKind == LaborHoursKind.Actual
-            ? FactLaborHoursTotals.FromActualHours(labor)
-            : FactLaborHoursTotals.FromLaborIntensities(labor);
-        var unallocated = hoursKind == LaborHoursKind.Actual
-            ? FactLaborHoursTotals.UnallocatedActualHours(labor)
-            : FactLaborHoursTotals.UnallocatedPlannedHours(labor);
+        var directions = ApplyLivePlanHoursToDirections(
+            MapDirectionRows(performance),
+            liveHours,
+            bundle.PlanningZByDirection,
+            calculationEngine);
 
-        var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
-            performance,
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
+        var weightedZ = WeightedZFromDirectionRoots(directions);
+        var totalHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
+        var unallocated = FactLaborHoursTotals.UnallocatedPlannedHours(labor);
         var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
             performance,
             totalHours ?? 0m,
             unallocated,
             weightedZ);
 
-        var directions = performance
+        return ToVersionBlock(version, summary, totalHours, directions);
+    }
+
+    private async Task<PerformanceReportVersionBlockDto> BuildFactBlockAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var version = await context.ProjectAnalysisVersions
+            .AsNoTracking()
+            .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
+
+        var performance = await performanceService.GetPerformanceDataAsync(
+            projectId, versionId, LaborHoursKind.Actual);
+        var labor = await context.ProjectLaborIntensities
+            .AsNoTracking()
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .ToListAsync(cancellationToken);
+
+        var totalHours = FactLaborHoursTotals.FromAllocatedActualHours(labor);
+        var unallocated = FactLaborHoursTotals.UnallocatedActualHours(labor);
+        var weightedZ = totalHours is > 0
+            ? calculationEngine.ComputeWeightedZFromPerformanceRows(
+                performance,
+                decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces)
+            : null;
+        var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
+            performance,
+            totalHours ?? 0m,
+            unallocated,
+            weightedZ);
+
+        return ToVersionBlock(version, summary, totalHours, MapDirectionRows(performance));
+    }
+
+    private static PerformanceReportVersionBlockDto ToVersionBlock(
+        Domain.Entities.ProjectAnalysisVersion version,
+        ProjectVersionAnalysisSummaryDto summary,
+        decimal? totalLaborHours,
+        IReadOnlyList<PerformanceReportDirectionRowDto> directions) =>
+        new(
+            VersionId: version.Id,
+            VersionName: version.VersionName,
+            CreatedAt: version.CreatedAt,
+            Direction: version.Direction,
+            WeightedZScore: summary.WeightedZScore,
+            WeightedZScorePercentile: summary.WeightedZScorePercentile,
+            WeightedZScoreInterpretation: summary.WeightedZScoreInterpretation?.ToRussian(),
+            TotalLaborHours: totalLaborHours,
+            UnallocatedLaborHours: summary.UnallocatedLaborHours,
+            PhysicalVolumeTotalsByUnit: summary.PhysicalVolumeTotalsByUnit,
+            Directions: directions);
+
+    private static List<PerformanceReportDirectionRowDto> MapDirectionRows(
+        IReadOnlyList<PerformanceRowDto> performance) =>
+        performance
             .Where(r => r.WorkDirectionId >= 0 && !r.IsTotal)
             .Select(r => new PerformanceReportDirectionRowDto(
                 WorkDirectionId: r.WorkDirectionId,
@@ -248,109 +326,165 @@ public sealed class PerformanceReportService(
                 Interpretation: r.Interpretation?.ToRussian()))
             .ToList();
 
-        if (applyPlanningZLabor)
-            directions = await ApplyPlanningZLaborAsync(versionId, directions, cancellationToken);
-
-        var totalLabor = applyPlanningZLabor
-            ? SumDirectionLaborHours(directions) ?? summary.TotalFactLaborHours
-            : summary.TotalFactLaborHours;
-
-        return new PerformanceReportVersionBlockDto(
-            VersionId: version.Id,
-            VersionName: version.VersionName,
-            CreatedAt: version.CreatedAt,
-            Direction: version.Direction,
-            WeightedZScore: summary.WeightedZScore,
-            WeightedZScorePercentile: summary.WeightedZScorePercentile,
-            WeightedZScoreInterpretation: summary.WeightedZScoreInterpretation?.ToRussian(),
-            TotalLaborHours: totalLabor,
-            UnallocatedLaborHours: summary.UnallocatedLaborHours,
-            PhysicalVolumeTotalsByUnit: summary.PhysicalVolumeTotalsByUnit,
-            Directions: directions);
-    }
-
     /// <summary>
-    /// Подставляет трудоёмкость плана с учётом ZBase (ForecastCalculation через engine).
-    /// Если расчёт недоступен — оставляем PlannedHours из LI.
+    /// План в отчёте: часы = live N(V)×Z (как Forecast ИТОГО), Z листа = ZBase, родитель = Σ(Z×часы).
     /// </summary>
-    private async Task<List<PerformanceReportDirectionRowDto>> ApplyPlanningZLaborAsync(
-        int versionId,
-        List<PerformanceReportDirectionRowDto> directions,
-        CancellationToken cancellationToken)
+    public static IReadOnlyList<PerformanceReportDirectionRowDto> ApplyLivePlanHoursToDirections(
+        IReadOnlyList<PerformanceReportDirectionRowDto> directions,
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> liveHours,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZ,
+        IPerformanceCalculationEngine engine)
     {
-        var planningParams = await context.ProjectVersionPlanningParameters
-            .AsNoTracking()
-            .Where(p => p.ProjectAnalysisVersionId == versionId)
-            .ToListAsync(cancellationToken);
+        static decimal? Pos(decimal? value) =>
+            value is > 0 ? Math.Round(value.Value, 2) : null;
 
-        var zByDirection = planningParams.ToDictionary(
-            p => p.IicWorkDirectionId,
-            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
-
-        return directions.Select(d =>
+        var stamped = directions.Select(d =>
         {
-            if (d.FactPhysicalVolume is not > 0 || d.NormProductivity is null)
-                return d;
-
-            var z = calculationEngine.ResolvePlanningZ(zByDirection, d.WorkDirectionId);
-            var (baseH, _, _) = calculationEngine.ComputeForecastHours(
-                d.FactPhysicalVolume.Value,
-                d.NormProductivity,
-                d.NormStdDev,
-                z);
-
-            if (baseH is not > 0)
-                return d;
-
-            var hours = Math.Round(baseH.Value, 2);
-            decimal? productivity = d.FactPhysicalVolume > 0
-                ? Math.Round(hours / d.FactPhysicalVolume.Value, 4)
-                : d.FactProductivity;
-
+            liveHours.TryGetValue(d.WorkDirectionId, out var hours);
+            var baseH = Pos(hours.Base);
+            var zParams = engine.ResolvePlanningZ(planningZ, d.WorkDirectionId);
+            decimal? zScore = baseH is > 0 ? zParams.ZBase : null;
+            decimal? productivity = d.FactPhysicalVolume is > 0 && baseH is > 0
+                ? Math.Round(baseH.Value / d.FactPhysicalVolume.Value, 4)
+                : null;
             return d with
             {
-                FactLaborHours = hours,
+                FactLaborHours = baseH,
                 FactProductivity = productivity,
+                ZScore = zScore,
+                Interpretation = ToInterpretationRu(zScore),
+                SubtreeHours = baseH,
             };
         }).ToList();
+
+        var byId = stamped.ToDictionary(d => d.WorkDirectionId);
+        var children = stamped.Where(d => d.ParentId.HasValue).ToLookup(d => d.ParentId!.Value);
+
+        foreach (var node in stamped.OrderByDescending(d => d.Level).ThenBy(d => d.WorkDirectionId))
+        {
+            var kids = children[node.WorkDirectionId]
+                .Select(k => byId[k.WorkDirectionId])
+                .ToList();
+            var current = byId[node.WorkDirectionId];
+            var own = current.FactLaborHours ?? 0m;
+            var childHours = kids.Sum(k => k.SubtreeHours ?? 0m);
+            var subtree = own + childHours;
+            decimal? subtreeHours = subtree > 0 ? Math.Round(subtree, 2) : null;
+
+            decimal? zScore = current.ZScore;
+            if (kids.Count > 0)
+            {
+                var samples = kids.Select(k => (k.ZScore, k.SubtreeHours)).ToList();
+                if (own > 0)
+                {
+                    samples.Add((
+                        engine.ResolvePlanningZ(planningZ, node.WorkDirectionId).ZBase,
+                        own));
+                }
+
+                zScore = engine.ComputeWeightedZ(
+                    samples,
+                    decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
+            }
+
+            byId[node.WorkDirectionId] = current with
+            {
+                SubtreeHours = subtreeHours,
+                ZScore = zScore,
+                Interpretation = ToInterpretationRu(zScore),
+            };
+        }
+
+        return stamped.Select(d => byId[d.WorkDirectionId]).ToList();
     }
 
-    private static decimal? SumDirectionLaborHours(IReadOnlyList<PerformanceReportDirectionRowDto> directions)
+    private decimal? WeightedZFromDirectionRoots(IReadOnlyList<PerformanceReportDirectionRowDto> directions) =>
+        calculationEngine.ComputeWeightedZ(
+            directions.Where(d => d.ParentId is null).Select(d => (d.ZScore, d.SubtreeHours)),
+            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
+
+    private static string? ToInterpretationRu(decimal? z)
     {
-        // Сумма только листьев (нет детей в наборе), чтобы не удвоить иерархию.
-        var parentIds = directions
-            .Where(d => d.ParentId.HasValue)
-            .Select(d => d.ParentId!.Value)
-            .ToHashSet();
-        var leaves = directions.Where(d => !parentIds.Contains(d.WorkDirectionId)).ToList();
-        var sum = leaves.Sum(d => d.FactLaborHours ?? 0m);
-        return sum > 0 ? Math.Round(sum, 2) : null;
+        var ru = PerformanceInterpretationMapper.FromZScore(z)?.ToRussian();
+        return string.IsNullOrEmpty(ru) ? null : ru;
+    }
+
+    private async Task<Dictionary<int, string?>> LoadSnapshotKeysAsync(
+        IReadOnlyList<int> versionIds,
+        CancellationToken cancellationToken)
+    {
+        if (versionIds.Count == 0)
+            return new Dictionary<int, string?>();
+
+        var rows = await context.AnalysisVersionSnapshots
+            .AsNoTracking()
+            .Where(s => versionIds.Contains(s.ProjectAnalysisVersionId))
+            .Select(s => new { s.ProjectAnalysisVersionId, s.WorkDirectionId, s.NormId })
+            .ToListAsync(cancellationToken);
+
+        return versionIds.ToDictionary(
+            id => id,
+            id => AnalysisVersionSnapshotService.FormatKey(
+                rows.Where(r => r.ProjectAnalysisVersionId == id)
+                    .Select(r => (r.WorkDirectionId, r.NormId))));
     }
 
     private async Task<PerformanceReportVersionHistoryPointDto> BuildHistoryPointAsync(
         int projectId,
         Domain.Entities.ProjectAnalysisVersion version,
+        string? normSnapshotKey,
+        Dictionary<int, ProjectsPageVersionBundle> bundleCache,
         CancellationToken cancellationToken)
     {
-        // Динамика Z — assessment path (PlannedHours), не ActualHours.
-        var performance = await performanceService.GetPerformanceDataAsync(
-            projectId, version.Id, LaborHoursKind.Planned);
-        var labor = await context.ProjectLaborIntensities
-            .AsNoTracking()
-            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == version.Id)
-            .ToListAsync(cancellationToken);
+        if (version.Direction == AnalysisDirection.Fact)
+        {
+            var labor = await context.ProjectLaborIntensities
+                .AsNoTracking()
+                .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == version.Id)
+                .ToListAsync(cancellationToken);
+            var allocated = FactLaborHoursTotals.FromAllocatedActualHours(labor);
+            decimal? weightedZ = null;
+            if (allocated is > 0)
+            {
+                var performance = await performanceService.GetPerformanceDataAsync(
+                    projectId, version.Id, LaborHoursKind.Actual);
+                weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
+                    performance,
+                    decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
+            }
 
-        var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
-            performance,
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
+            return new PerformanceReportVersionHistoryPointDto(
+                VersionId: version.Id,
+                VersionName: version.VersionName,
+                CreatedAt: version.CreatedAt,
+                Direction: version.Direction,
+                WeightedZScore: weightedZ,
+                TotalLaborHours: allocated,
+                NormSnapshotKey: normSnapshotKey);
+        }
+
+        var bundle = await GetBundleAsync(projectId, version.Id, bundleCache, cancellationToken);
+        var planPerformance = await performanceService.GetPerformanceDataAsync(
+            projectId, version.Id, LaborHoursKind.Planned);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(
+            bundle, planPerformance, calculationEngine);
+        var liveHours = ProjectsPageGridBuilder.ResolveLivePlanHoursByDirection(
+            bundle, planPerformance, calculationEngine);
+        var planDirections = ApplyLivePlanHoursToDirections(
+            MapDirectionRows(planPerformance),
+            liveHours,
+            bundle.PlanningZByDirection,
+            calculationEngine);
+        var planHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
 
         return new PerformanceReportVersionHistoryPointDto(
             VersionId: version.Id,
             VersionName: version.VersionName,
             CreatedAt: version.CreatedAt,
             Direction: version.Direction,
-            WeightedZScore: weightedZ,
-            TotalLaborHours: FactLaborHoursTotals.FromLaborIntensities(labor));
+            WeightedZScore: WeightedZFromDirectionRoots(planDirections),
+            TotalLaborHours: planHours,
+            NormSnapshotKey: normSnapshotKey);
     }
 
     private async Task<PerformanceReportAccuracyDto> BuildAccuracyAsync(
