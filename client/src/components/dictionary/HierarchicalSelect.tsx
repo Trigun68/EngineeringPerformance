@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Autocomplete, TextField } from '@mui/material';
 import type { DictionaryItem } from '../../types/dictionary';
-import { formatIisNorm } from '../../utils/formatIisNorm';
 
 export interface HierarchicalSelectOption {
   id: number | null;
@@ -21,8 +20,11 @@ export interface HierarchicalSelectProps {
   disabled?: boolean;
 }
 
+// Формат IIC («код — имя (ед.)») — только через явный formatLabel для IIC-ресурсов;
+// по умолчанию обычный каталог: «код имя».
 function defaultLabel(item: DictionaryItem): string {
-  return formatIisNorm({ code: item.code, name: item.name });
+  const code = item.code?.trim();
+  return code ? `${code} ${item.name}` : item.name;
 }
 
 function buildFlatOptions(

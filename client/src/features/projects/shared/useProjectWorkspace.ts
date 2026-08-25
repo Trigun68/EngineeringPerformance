@@ -5,7 +5,7 @@ import {
 } from '@/api/projectsApi';
 import { fetchProjectVersions, type ProjectVersion } from '@/api/projectVersionsApi';
 import { fetchProjectPermissions, type ProjectPermission } from '@/api/projectPermissionsApi';
-import { fetchProjectCharacteristics } from '@/api/projectCharacteristicsApi';
+import { fetchProjectCharacteristics, type ProjectCharacteristicSelection } from '@/api/projectCharacteristicsApi';
 import { canReadPermission } from '@/utils/permissionAccess';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { Project } from '@/types/project';
@@ -27,7 +27,7 @@ function computeWorkspaceData(
   project: Project,
   versions: ProjectVersion[],
   participants: ProjectPermission[],
-  characteristics: any[],
+  characteristics: ProjectCharacteristicSelection[],
 ): ProjectWorkspaceData {
   const planVersion =
     versions.find((v) => v.direction === 1 && v.isPrimary)
@@ -40,11 +40,11 @@ function computeWorkspaceData(
     ?? planVersion;
 
   const percents = characteristics
-    .map((c: any) => c.selectedValuePercent)
-    .filter((v: any): v is number => v != null);
+    .map((c) => c.selectedValuePercent)
+    .filter((v): v is number => v != null);
   const deviationPercent =
     percents.length > 0
-      ? Math.round((percents.reduce((a: number, b: number) => a + b, 0) / percents.length) * 100) / 100
+      ? Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 100) / 100
       : null;
 
   return {
@@ -62,7 +62,7 @@ function computeWorkspaceData(
 }
 
 export function useProjectWorkspace(projectId: number | null, canRead: boolean) {
-  const user = useAuthStore((s: any) => s.user);
+  const user = useAuthStore((s) => s.user);
   const permissions = user?.permissions;
   const roleName = user?.roleName;
 

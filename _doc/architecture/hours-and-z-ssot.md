@@ -3,7 +3,7 @@
 **Дата:** 2026-08-25  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
-Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../../docs/features/forecast-algorithm.md), [performance-report.md](../../docs/features/performance-report.md), [version-comparison.md](../../docs/features/version-comparison.md).
+Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
 
 Два независимых алгоритма. Параметры планирования `ZBase` / `ZOptimistic` / `ZPessimistic` — **входы в часы плана**, не колонка «оценка».
 

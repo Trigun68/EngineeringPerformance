@@ -7,7 +7,7 @@
 **Связанные документы:**
 - [Бизнес-логика](../architecture/business-logic.md)
 - [Roadmap совершенствования архитектуры](./architecture-comparison-and-improvement-roadmap.md)
-- [Development roadmap](../../docs/development_roadmap.md)
+- [Development roadmap](../development_roadmap.md)
 
 ---
 

@@ -78,7 +78,7 @@ App (WPF, MVVM)
 ## Документация проекта
 
 ```
-docs/
+_doc/
 ├── adr/         # Архитектурные решения (ADR-NNN-*.md)
 ├── changelog/   # CHANGELOG.md (раздел [Unreleased])
 ├── database/    # Схемы, описания таблиц

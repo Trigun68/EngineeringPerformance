@@ -11,7 +11,7 @@
 
 - Microsoft SQL Server (совместимый с используемым в проекте уровнем совместимости БД).
 - Утилита [sqlcmd](https://learn.microsoft.com/sql/tools/sqlcmd/sqlcmd-utility) (входит в состав SQL Server или доступна отдельно).
-- Для разработки альтернативно: .NET SDK и `dotnet ef database update` (см. [документацию по миграциям](../docs/database/migration.md)).
+- Для разработки альтернативно: .NET SDK и `dotnet ef database update` (см. [документацию по миграциям](../_doc/database/migration.md)).
 
 ## Важно: пути в `:r`
 
@@ -37,7 +37,7 @@ cd <корень_репозитория>\migrations
 | `schema/006_Consolidated_20260415.sql` | Накопительный DDL (нормы ИИС, версии анализа, связи физ. объёмов, `DataImportIterations` и т.д.). |
 | `schema/007_PhysicalVolumeCoefficient.sql` | Столбец `PhysicalVolumes.Coefficient` (перевод количества в единицы группы физ. объёмов ИИС), запись в `__EFMigrationsHistory`. |
 
-> **Отставание от EF:** цепочка `FullMigration_01` подключает только `001`, `006`, `007` (+ отдельные `008`–`016` в каталоге `schema/`, но не все входят в master). Схема **оборудования**, **V2** (снимки версий, `ProjectPermissions`) и миграции после 2026-05 **отсутствуют** в sqlcmd-пайплайне. Для актуальной схемы используйте `dotnet ef database update` или `EngineeringPerformance.DbInitializer`. Подробнее: [docs/database/migration.md](../docs/database/migration.md#source-of-truth-and-legacy-drift-2026-06).
+> **Отставание от EF:** цепочка `FullMigration_01` подключает только `001`, `006`, `007` (+ отдельные `008`–`016` в каталоге `schema/`, но не все входят в master). Схема **оборудования**, **V2** (снимки версий, `ProjectPermissions`) и миграции после 2026-05 **отсутствуют** в sqlcmd-пайплайне. Для актуальной схемы используйте `dotnet ef database update` или `EngineeringPerformance.DbInitializer`. Подробнее: [_doc/database/migration.md](../_doc/database/migration.md#source-of-truth-and-legacy-drift-2026-06).
 
 ### Часть 2 — данные (`FullMigration_02_DataImport.sql`)
 
@@ -103,5 +103,5 @@ cd <корень_репозитория>\install
 
 ## Документация
 
-- Подробности по скриптам, EF Core и сущностям: [docs/database/migration.md](../docs/database/migration.md).
-- Сущность номенклатуры и коэффициент: [docs/database/entities/PhysicalVolume.md](../docs/database/entities/PhysicalVolume.md).
+- Подробности по скриптам, EF Core и сущностям: [_doc/database/migration.md](../_doc/database/migration.md).
+- Сущность номенклатуры и коэффициент: [_doc/database/entities/PhysicalVolume.md](../docs/database/entities/PhysicalVolume.md).

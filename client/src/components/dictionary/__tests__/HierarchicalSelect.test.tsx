@@ -14,7 +14,7 @@ describe('HierarchicalSelect', () => {
 
     const input = screen.getByRole('combobox');
     fireEvent.mouseDown(input);
-    fireEvent.click(await screen.findByText('C1 — Child'));
+    fireEvent.click(await screen.findByText('C1 Child'));
 
     expect(onChange).toHaveBeenCalledWith(2);
   });
@@ -26,7 +26,7 @@ describe('HierarchicalSelect', () => {
     fireEvent.change(input, { target: { value: 'child' } });
 
     await waitFor(() => {
-      expect(screen.getByText('C1 — Child')).toBeInTheDocument();
+      expect(screen.getByText('C1 Child')).toBeInTheDocument();
     });
   });
 });

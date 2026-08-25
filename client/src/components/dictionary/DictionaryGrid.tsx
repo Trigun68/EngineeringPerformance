@@ -32,7 +32,11 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
-import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
+import {
+  agGridLocaleRu,
+  GRID_OVERLAY_LOADING_TEMPLATE,
+  GRID_OVERLAY_NO_ROWS_TEMPLATE,
+} from '../DataTable/gridDefaults';
 import {
   filterPrefKey,
   loadGridLayout,
@@ -534,8 +538,8 @@ function DictionaryGridInternal<T extends { id: number }>({
           onRowDoubleClicked={(event) => {
             if (event.data && onRowDoubleClicked) onRowDoubleClicked(event.data);
           }}
-          overlayLoadingTemplate='<span class="ag-overlay-loading-center">Загрузка...</span>'
-          overlayNoRowsTemplate='<span class="ag-overlay-loading-center">Нет данных</span>'
+          overlayLoadingTemplate={GRID_OVERLAY_LOADING_TEMPLATE}
+          overlayNoRowsTemplate={GRID_OVERLAY_NO_ROWS_TEMPLATE}
         />
       </GridViewport>
 

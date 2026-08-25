@@ -25,7 +25,11 @@ import {
 } from '../../constants/permissionObjectHierarchy';
 import { useAuthStore } from '../../store/useAuthStore';
 import { usePermissionMatrixStore } from '../../store/usePermissionMatrixStore';
-import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
+import {
+  agGridLocaleRu,
+  GRID_OVERLAY_LOADING_TEMPLATE,
+  GRID_OVERLAY_NO_ROWS_TEMPLATE,
+} from '../DataTable/gridDefaults';
 
 const EDITABLE_LEVELS: { value: MatrixAccessLevel; label: string }[] = [
   { value: 'None', label: 'Нет доступа' },
@@ -367,8 +371,8 @@ export function PermissionMatrixGrid() {
           getRowId={(params) => params.data.id}
           onGridReady={onGridReady}
           onFilterChanged={onFilterChanged}
-          overlayLoadingTemplate='<span class="ag-overlay-loading-center">Загрузка...</span>'
-          overlayNoRowsTemplate='<span class="ag-overlay-loading-center">Нет данных</span>'
+          overlayLoadingTemplate={GRID_OVERLAY_LOADING_TEMPLATE}
+          overlayNoRowsTemplate={GRID_OVERLAY_NO_ROWS_TEMPLATE}
         />
       </Box>
     </Box>

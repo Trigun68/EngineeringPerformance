@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, FormControl, InputLabel, MenuItem, Select, TextField } from '@mui/material';
-import type { ColDef, GridApi, ValueGetterParams } from 'ag-grid-community';
+import type { GridApi } from 'ag-grid-community';
 import {
   archiveDirectoryEntry,
   createDirectoryEntry,
@@ -32,16 +32,15 @@ import { DirectoryToolbar } from './DirectoryToolbar';
 import {
   buildPropertiesPayload,
   emptyProperties,
-  formatPropertyValue,
   getDirectoryFields,
   getFormFields,
   propertiesFromEntry,
 } from './directoryFieldConfig';
 import { validateDirectoryWrite } from './directoryWriteSchema';
 import { z } from 'zod';
-import type { DirectoryFieldDef } from './directoryFieldConfig';
 import type { ReferenceRouteConfig } from './referenceConfig';
 import { isPhysicalVolumeCatalogResource } from './referenceConfig';
+import { useDirectoryColumnDefs } from './useDirectoryColumnDefs';
 import { formatAsIisNorm } from '../../utils/formatIisNorm';
 import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
 import { collectGridExportData } from '../../utils/directoryExport';
@@ -51,14 +50,6 @@ interface DirectoryPageProps {
   config: ReferenceRouteConfig;
 }
 
-function boolArchive(value: boolean): string {
-  return value ? 'Да' : 'Нет';
-}
-
-function propertyValue<T extends DirectoryEntry>(row: T, field: DirectoryFieldDef): unknown {
-  const key = field.propertyKey ?? field.key;
-  return row.properties[key] ?? row.properties[field.key];
-}
 
 export function DirectoryPage({ config }: DirectoryPageProps) {
   const { canRead, canEdit } = usePermission(config.permission);
@@ -226,102 +217,16 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     }
   }, [directoryQuery.error, directoryQuery.isFetching]);
 
-  const buildPropertyColumns = useCallback(
-    <T extends DirectoryEntry>(): ColDef<T>[] =>
-      fieldDefs
-        .filter((f) => f.showInGrid)
-        .map((field) => {
-          const col: ColDef<T> = {
-            colId: field.key,
-            headerName: field.label,
-            minWidth: field.gridWidth ?? 120,
-            valueGetter: (params: ValueGetterParams<T>) => {
-              const row = params.data;
-              if (!row) return '';
-              const value = propertyValue(row, field);
-              return formatPropertyValue(field, value, getName, getById, getUnitName, resolveIicUnitName);
-            },
-          };
-
-          // Lookup: фильтр по стабильному id, в чеклисте — отформатированная подпись.
-          // Иначе Excel-set сравнивает длинные «код — имя (ед.)» и ломается при смене формата/подгрузке словаря.
-          if (field.type === 'lookup') {
-            col.filterValueGetter = (params: ValueGetterParams<T>) => {
-              const row = params.data;
-              if (!row) return '';
-              const value = propertyValue(row, field);
-              if (value == null || value === '') return '';
-              return String(value);
-            };
-          }
-
-          return col;
-        }),
-    [fieldDefs, getById, getName, getUnitName, resolveIicUnitName],
-  );
-
-  const archiveColDef = useMemo<ColDef>(
-    () => ({
-      colId: 'isArchived',
-      headerName: 'Архив',
-      maxWidth: 80,
-      // valueGetter (не valueFormatter): Excel-set фильтр читает getter/field, не formatter.
-      valueGetter: (p) => boolArchive(Boolean(p.data?.isArchived)),
-      filterValueGetter: (p) => (p.data?.isArchived ? '1' : '0'),
-    }),
-    [],
-  );
-
-  const propertyColumns = useMemo(() => buildPropertyColumns<DirectoryEntry>(), [buildPropertyColumns]);
-  const treePropertyColumns = useMemo(() => buildPropertyColumns<DirectoryTreeRow>(), [buildPropertyColumns]);
-
-  const flatColumnDefs = useMemo<ColDef<DirectoryEntry>[]>(() => {
-    if (config.resource === 'project-characteristics') {
-      return [
-        { colId: 'name', field: 'name', headerName: 'Наименование характеристики', minWidth: 280, flex: 1 },
-        {
-          colId: 'optionCount',
-          headerName: 'Кол-во вариантов',
-          maxWidth: 140,
-          valueGetter: (p) => (p.data ? (optionCounts[p.data.id] ?? 0) : 0),
-        },
-        archiveColDef,
-      ];
-    }
-    if (isPhysicalVolumeCatalog) {
-      return [
-        {
-          colId: 'code',
-          headerName: 'Код',
-          minWidth: 120,
-          valueGetter: (p) => {
-            const code = p.data?.properties?.code;
-            return code != null ? String(code) : '';
-          },
-        },
-        { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 },
-        ...propertyColumns,
-        archiveColDef,
-      ];
-    }
-    return [
-      { colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 },
-      ...propertyColumns,
-      archiveColDef,
-    ];
-  }, [archiveColDef, config.resource, isPhysicalVolumeCatalog, optionCounts, propertyColumns]);
-
-  const nameColumnDef = useMemo<ColDef<DirectoryTreeRow>>(
-    () => ({ colId: 'name', field: 'name', headerName: 'Наименование', minWidth: 240, flex: 1 }),
-    [],
-  );
-
-  const treeColumnDefs = useMemo<ColDef<DirectoryTreeRow>[]>(
-    () => (isPhysicalVolumeCatalog
-      ? [nameColumnDef, ...treePropertyColumns, archiveColDef as ColDef<DirectoryTreeRow>]
-      : [...treePropertyColumns, archiveColDef as ColDef<DirectoryTreeRow>]),
-    [archiveColDef, isPhysicalVolumeCatalog, nameColumnDef, treePropertyColumns],
-  );
+  const { flatColumnDefs, treeColumnDefs, autoGroupColumnDef } = useDirectoryColumnDefs({
+    resource: config.resource,
+    isPhysicalVolumeCatalog,
+    fieldDefs,
+    optionCounts,
+    getName,
+    getById,
+    getUnitName,
+    resolveIicUnitName,
+  });
 
   const parentOptions = useMemo(
     () => (config.isHierarchical ? treeRows : rows).filter((r) => !r.isArchived),
@@ -338,70 +243,6 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     const { headers, rows: exportRows } = collectGridExportData(api);
     await exportDirectoryExcel(config.resource, config.title, headers, exportRows);
   }, [config.resource, config.title]);
-
-  const autoGroupColumnDef = useMemo<ColDef<DirectoryTreeRow>>(() => {
-    if (isPhysicalVolumeCatalog) {
-      return {
-        colId: 'ag-Grid-AutoColumn',
-        headerName: 'Код',
-        minWidth: 280,
-        valueGetter: (params) => {
-          const row = params.data;
-          if (!row) return '';
-          const code = row.properties.code;
-          return code != null ? String(code) : '';
-        },
-        cellRendererParams: { suppressCount: true },
-      };
-    }
-
-    const base: ColDef<DirectoryTreeRow> = {
-      colId: 'ag-Grid-AutoColumn',
-      headerName: 'Наименование',
-      minWidth: 280,
-      cellRendererParams: { suppressCount: true },
-      // Стабильный ключ фильтра — id строки; подпись — имя / formatAsIisNorm.
-      filterValueGetter: (params) => (params.data ? String(params.data.id) : ''),
-    };
-
-    if (config.resource === 'equipment') {
-      return {
-        ...base,
-        valueGetter: (params) => {
-          const row = params.data;
-          if (!row) return '';
-          const unitId = row.properties.unitId;
-          return formatAsIisNorm(
-            null,
-            row.name,
-            getUnitName(typeof unitId === 'number' ? unitId : null),
-          );
-        },
-      };
-    }
-
-    if (config.resource === 'iic-work-directions') {
-      return {
-        ...base,
-        valueGetter: (params) => {
-          const row = params.data;
-          if (!row) return '';
-          const code = row.properties.code;
-          const unitId = row.properties.unitId;
-          return formatAsIisNorm(
-            typeof code === 'string' ? code : null,
-            row.name,
-            getUnitName(typeof unitId === 'number' ? unitId : null),
-          );
-        },
-      };
-    }
-
-    return {
-      ...base,
-      valueGetter: (params) => params.data?.name ?? '',
-    };
-  }, [config.resource, getUnitName, isPhysicalVolumeCatalog]);
 
   const openCreate = () => {
     if (isEquipmentCatalog && selectedProjectId === '') {
@@ -562,24 +403,14 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
         emptyLabel="(корень)"
         excludeIds={editing ? [editing.id] : []}
         formatLabel={
-          config.resource === 'equipment'
-            ? (item) => {
-                const row = parentOptions.find((p) => p.id === item.id);
-                const unitId = row?.properties?.unitId;
-                return formatAsIisNorm(
+          config.resource === 'iic-work-directions'
+            ? (item) =>
+                formatAsIisNorm(
                   item.code,
                   item.name,
-                  getUnitName(typeof unitId === 'number' ? unitId : null),
-                );
-              }
-            : config.resource === 'iic-work-directions'
-              ? (item) =>
-                  formatAsIisNorm(
-                    item.code,
-                    item.name,
-                    resolveIicUnitName(item.id),
-                  )
-              : undefined
+                  resolveIicUnitName(item.id),
+                )
+            : undefined
         }
       />
     </DirectoryFormRow>

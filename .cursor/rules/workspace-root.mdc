@@ -46,4 +46,4 @@ docker inspect ep-backend --format '{{index .Config.Labels "com.docker.compose.p
 
 3. Если контейнеры пересоздавались в сети `tech-lab24-edge` — `refresh-edge-upstreams.sh`.
 
-Подробности: `docs/relocating-sources.md`.
+Подробности: `_doc/relocating-sources.md`.

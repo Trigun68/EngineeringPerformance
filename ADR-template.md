@@ -51,9 +51,9 @@
 
 ## Связанные документы
 
-- [ADR-001](docs/adr/ADR-001-v2-schema-normalization.md) — предыдущее решение по схеме
-- [feature-name.md](docs/features/feature-name.md)
+- [ADR-001](_doc/adr/ADR-001-v2-schema-normalization.md) — предыдущее решение по схеме
+- [feature-name.md](_doc/features/feature-name.md)
 
 ---
 
-*Шаблон версии 1.0 | Сохранять готовые ADR в `docs/adr/ADR-NNN-title.md`*
+*Шаблон версии 1.0 | Сохранять готовые ADR в `_doc/adr/ADR-NNN-title.md`*

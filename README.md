@@ -21,7 +21,7 @@ docker compose up -d
 | `client/` | React + Vite + MUI + AG Grid |
 | `EngineeringPerformance.App/` | WPF reference (archived) |
 | `_install/DEPLOY.md` | Развёртывание и rollback |
-| `docs/migration_map.md` | Карта миграции WPF → Web |
+| `_doc/migration_map.md` | Карта миграции WPF → Web |
 
 ## Проверки
 

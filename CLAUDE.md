@@ -16,7 +16,7 @@
 | **Коммиты & PR** | 🇬🇧 English (заголовок), 🇷🇺 Русский (описание при необходимости) | `feat(auth): add JWT refresh` / Описание задачи на русском |
 
 📌 **Правила:**
-- Документация в `_doc/`, `_install/`, `docs/` → только на русском.
+- Документация в `_doc/`, `_install/`, `_doc/` → только на русском.
 - Техническая документация (OpenAPI, схемы) → термины на английском, описания на русском.
 - Имена задач в оркестрации (`AUTH-001`) → английский, описания в планах → русский.
 
@@ -147,8 +147,8 @@ git remote add origin <url>
 **Шаг 1 — проверка перед коммитом:**
 ```bash
 git status                                      # что изменилось
-dotnet build EngineeringPerformance.slnx        # сборка green
-dotnet test EngineeringPerformance.slnx         # все тесты green
+dotnet build EngineeringPerformance.Legacy.slnx        # сборка green
+dotnet test EngineeringPerformance.Legacy.slnx         # все тесты green
 ```
 
 **Шаг 2 — стейджинг:**
@@ -175,7 +175,7 @@ git push origin <branch>
 | Новая фича | `feat/<description>` | `feat/projects-page` |
 | Баг-фикс | `fix/<description>` | `fix/performance-filter` |
 | Рефакторинг | `refactor/<description>` | `refactor/data-import` |
-| Документация | `docs/<description>` | `docs/git-workflow` |
+| Документация | `_doc/<description>` | `_doc/git-workflow` |
 | Задача/обслуживание | `chore/<description>` | `chore/update-deps` |
 
 ### Типы коммитов
@@ -197,7 +197,7 @@ git push origin <branch>
 - Заголовок: **английский**, строчные, без точки, ≤ 50 символов
 - Тело (опционально): **русский**, объясняет «почему», не «что»
 - Каждый коммит компилируется и тесты проходят
-- `docs/changelog/CHANGELOG.md` обновляется **в том же коммите**, что и код
+- `_doc/changelog/CHANGELOG.md` обновляется **в том же коммите**, что и код
 - При изменении схемы БД — миграция и SQL-скрипт в одном коммите с кодом
 
 ### Ветковая стратегия

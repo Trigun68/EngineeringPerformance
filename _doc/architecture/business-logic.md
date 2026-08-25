@@ -8,11 +8,11 @@
 
 **Связанные документы:**
 - [Единый SoT часов и Z](./hours-and-z-ssot.md)
-- [Алгоритм прогнозирования](../../docs/features/forecast-algorithm.md)
-- [Аналитика производительности](../../docs/features/performance-analytics.md)
-- [Сравнение версий](../../docs/features/version-comparison.md)
-- [Импорт данных](../../docs/features/data-import.md)
-- [Отчёт ревизии web](../../docs/revision_report.md)
+- [Алгоритм прогнозирования](../features/forecast-algorithm.md)
+- [Аналитика производительности](../features/performance-analytics.md)
+- [Сравнение версий](../features/version-comparison.md)
+- [Импорт данных](../features/data-import.md)
+- [Отчёт ревизии web](../revision_report.md)
 - [WPF — архив (не развиваем)](./wpf-reference-archive.md)
 
 **Исходный код (единая точка математики):**
@@ -85,7 +85,7 @@ Project
 | **Infrastructure** | `backend/EngineeringPerformance.Infrastructure/` | EF, импорт/экспорт (Export/), аналитика |
 | **Frontend** | `client/src/` | React UI, AG Grid, отчёты |
 
-Интеграция внешних модулей (Bearer JWT, JSON-ingest, OpenAPI): [docs/api/README.md](../../docs/api/README.md).
+Интеграция внешних модулей (Bearer JWT, JSON-ingest, OpenAPI): [_doc/api/README.md](../api/README.md).
 
 Desktop (`EngineeringPerformance.App/`) **не рассматривается** при проектировании и приёмке. См. [wpf-reference-archive.md](./wpf-reference-archive.md).
 

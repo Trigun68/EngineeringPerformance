@@ -5,7 +5,7 @@
 - Frontend: React 18+, TypeScript, MUI, AG Grid, Zustand, Vite
 - Infra: Docker Compose, Nginx (+ auth-spnego for Windows Auth), JWT cookie fallback
 
-**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`, `_install/`, `docs/`).
+**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`, `_install/`).
 
 ---
 
@@ -126,11 +126,11 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 
 ## 8. Workflow for AI agents
 
-1. Read `docs/revision_report.md` and `docs/development_roadmap.md` before large features.
-2. Match WPF behavior via `docs/migration_map.md` and `EngineeringPerformance.App/`.
-3. After logic changes: `dotnet build EngineeringPerformance.slnx`, `dotnet test`, rebuild `web` if client changed.
+1. Read `_doc/revision_report.md` and `_doc/development_roadmap.md` before large features.
+2. Match WPF behavior via `_doc/migration_map.md` and `EngineeringPerformance.App/`.
+3. After logic changes: `dotnet build EngineeringPerformance.Legacy.slnx`, `dotnet test`, rebuild `web` if client changed.
 4. After **UI changes**: rebuild frontend, run Playwright on `:8081` per `.cursor/rules/playwright-e2e-verify.mdc`.
-5. Docs: update `docs/changelog/CHANGELOG.md` for user-visible changes.
+5. Docs: update `_doc/changelog/CHANGELOG.md` for user-visible changes.
 
 ---
 

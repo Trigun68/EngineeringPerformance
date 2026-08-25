@@ -34,7 +34,7 @@ function planLaborHoursIdentical(row: VersionCompareRow): boolean {
 
 /**
  * Итого: FactZ + PlanZ + любая из трёх пар плановых часов (песс./баз./опт.).
- * Паритет docs/features/version-comparison.md.
+ * Паритет _doc/features/version-comparison.md.
  */
 export function hasSummaryDifference(
   row: VersionCompareRow,

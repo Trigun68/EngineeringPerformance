@@ -67,6 +67,6 @@
 
 `dotnet` не установлен в окружении — сборка/тесты не выполнены. Рекомендуется проверить локально:
 ```bash
-dotnet build EngineeringPerformance.slnx
-dotnet test EngineeringPerformance.slnx
+dotnet build EngineeringPerformance.Legacy.slnx
+dotnet test EngineeringPerformance.Legacy.slnx
 ```
