@@ -43,7 +43,7 @@ import { getVisibleTabs, getDefaultTab } from './projectTabs';
 import { ForecastTab } from './ForecastTab';
 import { AnalysisTab } from './AnalysisTab';
 import { CompareTab } from './CompareTab';
-import { ReportsTab } from './ReportsTab';
+import { ReportsTab } from './reports/ReportsTab';
 import { ProjectDataTab } from './ProjectDataTab';
 
 export function ProjectWorkspacePage() {
@@ -393,8 +393,13 @@ export function ProjectWorkspacePage() {
           )}
 
           {/* Reports Tab */}
-          {activeTabId === 'reports' && currentPid && selectedVersionId && (
-            <ReportsTab projectId={currentPid} versionId={selectedVersionId} />
+          {activeTabId === 'reports' && currentPid && selectedVersionId && project && (
+            <ReportsTab
+              projectId={currentPid}
+              versionId={selectedVersionId}
+              project={project}
+              versions={versions}
+            />
           )}
         </Box>
       </Box>
