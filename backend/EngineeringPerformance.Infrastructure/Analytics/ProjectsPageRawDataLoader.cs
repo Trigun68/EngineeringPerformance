@@ -74,6 +74,128 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
         }
     }
 
+    public async Task<IReadOnlyDictionary<int, ProjectsPageVersionBundle>> LoadManyAsync(
+        IReadOnlyList<(int ProjectId, int VersionId)> keys,
+        CancellationToken cancellationToken = default)
+    {
+        if (keys.Count == 0)
+            return new Dictionary<int, ProjectsPageVersionBundle>();
+
+        var userId = _currentUser.UserId
+            ?? throw new UnauthorizedAccessException("User is not authenticated.");
+        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToHashSet();
+
+        // VersionId глобально уникален (PK), поэтому фильтр по нему достаточен.
+        var allowedKeys = keys
+            .Where(k => accessible.Contains(k.ProjectId))
+            .GroupBy(k => k.VersionId)
+            .Select(g => g.First())
+            .ToList();
+        if (allowedKeys.Count == 0)
+            return new Dictionary<int, ProjectsPageVersionBundle>();
+
+        var versionIds = allowedKeys.Select(k => k.VersionId).ToList();
+
+        await _sqlGate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var context = await _analyticsDb.CreateDbContextAsync(cancellationToken);
+
+            var workDirections = await GetWorkDirectionsAsync(context, cancellationToken);
+            var classifierMap = workDirections.ToDictionary(d => d.Id);
+
+            var versionRows = await context.ProjectAnalysisVersions
+                .AsNoTracking()
+                .Where(v => versionIds.Contains(v.Id))
+                .Select(v => new { v.Id, v.ProjectId, v.PlanningScenario, v.Direction })
+                .ToListAsync(cancellationToken);
+            var versionById = versionRows.ToDictionary(v => v.Id);
+
+            var physicalVolumes = await context.ProjectPhysicalVolumes
+                .AsNoTracking()
+                .AsSplitQuery()
+                .Include(x => x.PhysicalVolumeKfo).Include(x => x.PhysicalVolumeBer)
+                .Where(pv => versionIds.Contains(pv.ProjectAnalysisVersionId))
+                .ToListAsync(cancellationToken);
+
+            var equipment = await context.ProjectEquipments
+                .AsNoTracking()
+                .Include(e => e.Equipment)
+                .Where(e => versionIds.Contains(e.ProjectAnalysisVersionId))
+                .ToListAsync(cancellationToken);
+
+            var laborIntensities = await context.ProjectLaborIntensities
+                .AsNoTracking()
+                .Where(li => versionIds.Contains(li.ProjectAnalysisVersionId))
+                .ToListAsync(cancellationToken);
+
+            var snapshots = await context.AnalysisVersionSnapshots
+                .AsNoTracking()
+                .Where(s => versionIds.Contains(s.ProjectAnalysisVersionId))
+                .Include(s => s.Norm)
+                .ToListAsync(cancellationToken);
+
+            var planningRows = await context.ProjectVersionPlanningParameters
+                .AsNoTracking()
+                .Where(p => versionIds.Contains(p.ProjectAnalysisVersionId))
+                .Select(p => new { p.ProjectAnalysisVersionId, p.IicWorkDirectionId, p.ZPessimistic, p.ZBase, p.ZOptimistic })
+                .ToListAsync(cancellationToken);
+
+            var pvByVersion = physicalVolumes.GroupBy(pv => pv.ProjectAnalysisVersionId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<ProjectPhysicalVolume>)g.ToList());
+            var eqByVersion = equipment.GroupBy(e => e.ProjectAnalysisVersionId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<ProjectEquipment>)g.ToList());
+            var liByVersion = laborIntensities.GroupBy(li => li.ProjectAnalysisVersionId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyList<ProjectLaborIntensity>)g.ToList());
+            var snapByVersion = snapshots.GroupBy(s => s.ProjectAnalysisVersionId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            var planningByVersion = planningRows.GroupBy(p => p.ProjectAnalysisVersionId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var result = new Dictionary<int, ProjectsPageVersionBundle>();
+            foreach (var key in allowedKeys)
+            {
+                if (!versionById.TryGetValue(key.VersionId, out var version))
+                    continue; // версия удалена/архивирована между запросами — пропускаем
+
+                var versionSnapshots = snapByVersion.GetValueOrDefault(key.VersionId) ?? [];
+                var normsByDirection = versionSnapshots
+                    .Where(s => s.Norm is not null)
+                    .GroupBy(s => s.WorkDirectionId)
+                    .ToDictionary(
+                        g => g.Key,
+                        g => NormSnapshotFactory.FromEntity(g.First().Norm!));
+
+                result[key.VersionId] = new ProjectsPageVersionBundle
+                {
+                    VersionExists = true,
+                    WorkDirections = workDirections,
+                    PhysicalVolumes = pvByVersion.GetValueOrDefault(key.VersionId) ?? [],
+                    Equipment = eqByVersion.GetValueOrDefault(key.VersionId) ?? [],
+                    LaborIntensities = liByVersion.GetValueOrDefault(key.VersionId) ?? [],
+                    NormsByDirection = normsByDirection,
+                    ClassifierMap = classifierMap,
+                    PlanningZByDirection = planningByVersion.GetValueOrDefault(key.VersionId)?
+                        .ToDictionary(
+                            p => p.IicWorkDirectionId,
+                            p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic))
+                        ?? new Dictionary<int, PlanningZParameters>(),
+                    NormIdByDirection = versionSnapshots
+                        .GroupBy(s => s.WorkDirectionId)
+                        .ToDictionary(g => g.Key, g => g.First().NormId),
+                    PlanningScenario = version.PlanningScenario,
+                    Direction = version.Direction,
+                };
+            }
+
+            return result;
+        }
+        finally
+        {
+            _sqlGate.Release();
+        }
+    }
+
     private async Task<ProjectsPageVersionBundle> LoadWithContextAsync(
         AppDbContext context,
         int projectId,

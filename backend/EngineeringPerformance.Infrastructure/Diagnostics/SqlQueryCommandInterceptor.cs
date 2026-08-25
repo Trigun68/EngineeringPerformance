@@ -13,7 +13,9 @@ public sealed class SqlProfilingOptions
 {
     public const string SectionName = "SqlProfiling";
 
-    public bool Enabled { get; set; } = true;
+    // По умолчанию выключено: замер и persist метрик добавляют overhead на каждый запрос.
+    // Включать точечно через SqlProfiling__Enabled=true при расследовании производительности.
+    public bool Enabled { get; set; }
 
     /// <summary>Не писать в БД команды короче порога (мс). 0 = писать все.</summary>
     public double MinDurationMsToPersist { get; set; } = 50;

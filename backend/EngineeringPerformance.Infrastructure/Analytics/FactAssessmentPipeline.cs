@@ -38,6 +38,76 @@ public sealed class FactAssessmentPipeline : IFactAssessmentPipeline
             throw new InvalidOperationException("Неизвестная формула оценки.");
 
         var bundle = await _rawLoader.LoadAsync(request.ProjectId, request.VersionId, cancellationToken);
+        return EvaluateBundle(request, bundle);
+    }
+
+    public async Task<BatchAssessmentResult> EvaluateManyAsync(
+        IReadOnlyList<AssessmentRequest> requests,
+        CancellationToken cancellationToken = default)
+    {
+        var results = new Dictionary<int, AssessmentResultDto>();
+        var errors = new Dictionary<int, string>();
+        if (requests.Count == 0)
+            return new BatchAssessmentResult(results, errors);
+
+        foreach (var request in requests)
+        {
+            if (request.FormulaId != DocSetProportionalFormula.Id)
+                errors[request.VersionId] = "Неизвестная формула оценки.";
+        }
+
+        var valid = requests
+            .Where(r => r.FormulaId == DocSetProportionalFormula.Id)
+            .GroupBy(r => r.VersionId)
+            .Select(g => g.First())
+            .ToList();
+
+        // Чанки ограничивают пик памяти: bundle крупной версии — десятки тысяч строк ФО.
+        const int chunkSize = 8;
+        foreach (var chunk in valid.Chunk(chunkSize))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            IReadOnlyDictionary<int, ProjectsPageVersionBundle> bundles;
+            try
+            {
+                bundles = await _rawLoader.LoadManyAsync(
+                    chunk.Select(r => (r.ProjectId, r.VersionId)).ToList(),
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                foreach (var request in chunk)
+                    errors[request.VersionId] = ex.Message;
+                continue;
+            }
+
+            foreach (var request in chunk)
+            {
+                if (!bundles.TryGetValue(request.VersionId, out var bundle))
+                {
+                    errors[request.VersionId] = "Версия недоступна или не найдена.";
+                    continue;
+                }
+
+                try
+                {
+                    results[request.VersionId] = EvaluateBundle(request, bundle);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    errors[request.VersionId] = ex.Message;
+                }
+            }
+        }
+
+        return new BatchAssessmentResult(results, errors);
+    }
+
+    private AssessmentResultDto EvaluateBundle(
+        AssessmentRequest request,
+        ProjectsPageVersionBundle bundle)
+    {
         var isPlan = bundle.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast;
         var performance = isPlan
             ? ProjectsPageGridBuilder.BuildPlanPerformance(bundle, _calculationEngine)

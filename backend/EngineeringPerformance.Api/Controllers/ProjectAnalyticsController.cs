@@ -41,14 +41,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
     public Task<IReadOnlyList<PerformanceRowDto>> Performance(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _performance.GetPerformanceDataAsync(projectId, versionId);
+        _performance.GetPerformanceDataAsync(projectId, versionId, cancellationToken);
 
     [HttpGet("analysis")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
     public Task<ProjectVersionAnalysisDto> Analysis(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _analysis.GenerateReportAsync(projectId, versionId);
+        _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
 
     [HttpGet("forecast")]
     [RequireProjectAccess]
@@ -64,7 +64,8 @@ public sealed class ProjectAnalyticsController : ControllerBase
         _forecast.GenerateForecastAsync(
             projectId,
             versionId,
-            calculation: BuildCalculationOptions(method, zOptimistic, zBase, zPessimistic));
+            calculation: BuildCalculationOptions(method, zOptimistic, zBase, zPessimistic),
+            cancellationToken: cancellationToken);
 
     [HttpPost("forecast/preview")]
     [RequireProjectAccess]
@@ -78,7 +79,8 @@ public sealed class ProjectAnalyticsController : ControllerBase
             projectId,
             versionId,
             request?.NodePlannedTotals,
-            request?.Calculation);
+            request?.Calculation,
+            cancellationToken);
 
     [HttpPost("forecast/calculate")]
     [RequireProjectAccess]
@@ -92,14 +94,15 @@ public sealed class ProjectAnalyticsController : ControllerBase
             projectId,
             versionId,
             request?.NodePlannedTotals,
-            request?.Calculation);
+            request?.Calculation,
+            cancellationToken);
 
     [HttpGet("forecast/assessment-volumes")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
     public Task<ProjectForecastAssessmentVolumesDto> ForecastAssessmentVolumes(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId);
+        _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId, cancellationToken);
 
     [HttpPut("forecast/planned-volumes")]
     [RequireProjectAccess(AccessLevel.Edit)]

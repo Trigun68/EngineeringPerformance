@@ -1,4 +1,3 @@
-using System.Text.Json;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Norms;
@@ -9,7 +8,6 @@ using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
@@ -22,11 +20,6 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
 {
     private const string SnapshotPointerWarning =
         "Индекс строится по записям регистра норм. Снимки версий хранят только NormId, коэффициенты не замораживаются.";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
 
     private static readonly IReadOnlyDictionary<FormulaType, string> FormulaColors =
         new Dictionary<FormulaType, string>
@@ -48,7 +41,7 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
     private readonly ICurrentUserService _currentUser;
     private readonly IProjectVisibilityService _visibility;
     private readonly IPerformanceCalculationEngine _engine;
-    private readonly IDistributedCache _cache;
+    private readonly IProjectAnalyticsCache _cache;
     private readonly AnalyticsTrendsOptions _options;
 
     public ProductivityTrendAnalyticsService(
@@ -56,7 +49,7 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
         ICurrentUserService currentUser,
         IProjectVisibilityService visibility,
         IPerformanceCalculationEngine engine,
-        IDistributedCache cache,
+        IProjectAnalyticsCache cache,
         IOptions<AnalyticsTrendsOptions> options)
     {
         _analytics = analytics;
@@ -85,13 +78,10 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
             $"{string.Join(',', projectIds.OrderBy(x => x))}:" +
             $"{string.Join(',', (request.WorkDirectionIds ?? []).OrderBy(x => x))}";
 
-        var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
-        if (!string.IsNullOrEmpty(cached))
-        {
-            var hit = JsonSerializer.Deserialize<ProductivityTrendResponse>(cached, JsonOptions);
-            if (hit is not null)
-                return hit;
-        }
+        // Портфельное поколение в ключе: мутация любого проекта сбрасывает выборку без TTL.
+        var cached = await _cache.GetPortfolioAsync<ProductivityTrendResponse>(cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
 
         var warnings = new List<string> { SnapshotPointerWarning };
         if (projectIds.Count == 0)
@@ -295,15 +285,8 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
         return response;
     }
 
-    private async Task CacheAsync(string key, ProductivityTrendResponse response, CancellationToken ct)
-    {
-        var ttl = TimeSpan.FromMinutes(Math.Max(1, _options.CacheTtlMinutes));
-        await _cache.SetStringAsync(
-            key,
-            JsonSerializer.Serialize(response, JsonOptions),
-            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
-            ct);
-    }
+    private Task CacheAsync(string key, ProductivityTrendResponse response, CancellationToken ct) =>
+        _cache.SetPortfolioAsync(key, response, ct);
 
     private decimal? HoursAt(IicWorkDirectionNorm norm, decimal vStar)
     {

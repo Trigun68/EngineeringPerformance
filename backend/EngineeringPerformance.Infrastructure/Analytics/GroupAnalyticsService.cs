@@ -48,20 +48,37 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
 
         var (criterion, groupValue, peers) = await ResolvePeerProjectsAsync(anchor, cancellationToken);
 
+        // Видимость одним запросом вместо CanAccessProjectAsync на каждый проект (N+1).
+        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToHashSet();
+        var visiblePeers = peers
+            .Where(p => accessible.Contains(p.Id))
+            .OrderBy(p => p.Code).ThenBy(p => p.Name)
+            .ToList();
+
+        // Последние Fact-версии всех peer-проектов одним запросом.
+        var peerIds = visiblePeers.Select(p => p.Id).ToList();
+        var latestFactByProject = (await _db.ProjectAnalysisVersions.AsNoTracking()
+                .Where(v => peerIds.Contains(v.ProjectId) && !v.IsArchived && v.Direction == AnalysisDirection.Fact)
+                .Select(v => new { v.Id, v.ProjectId, v.CreatedAt, v.VersionName })
+                .ToListAsync(cancellationToken))
+            .GroupBy(v => v.ProjectId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.Id).First());
+
+        // Оценка всех версий батчем: данные грузятся пакетно, без N+1.
+        var batch = await _pipeline.EvaluateManyAsync(
+            latestFactByProject.Values
+                .Select(v => new AssessmentRequest(v.ProjectId, v.Id))
+                .ToList(),
+            cancellationToken);
+
         var rows = new List<GroupAnalysisProjectRowDto>();
         var samples = new List<(decimal? ZScore, decimal? Weight)>();
 
-        foreach (var project in peers.OrderBy(p => p.Code).ThenBy(p => p.Name))
+        foreach (var project in visiblePeers)
         {
-            if (!await _visibility.CanAccessProjectAsync(userId, project.Id, AccessLevel.Read, cancellationToken))
-                continue;
-
-            var latestFact = await _db.ProjectAnalysisVersions.AsNoTracking()
-                .Where(v => v.ProjectId == project.Id && !v.IsArchived && v.Direction == AnalysisDirection.Fact)
-                .OrderByDescending(v => v.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            if (latestFact is null)
+            if (!latestFactByProject.TryGetValue(project.Id, out var latestFact))
             {
                 rows.Add(new GroupAnalysisProjectRowDto(
                     project.Id,
@@ -75,9 +92,19 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
                 continue;
             }
 
-            var assessment = await _pipeline.EvaluateAsync(
-                new AssessmentRequest(project.Id, latestFact.Id),
-                cancellationToken);
+            if (!batch.Results.TryGetValue(latestFact.Id, out var assessment))
+            {
+                rows.Add(new GroupAnalysisProjectRowDto(
+                    project.Id,
+                    project.Code,
+                    project.Name,
+                    latestFact.Id,
+                    latestFact.VersionName,
+                    null,
+                    null,
+                    null));
+                continue;
+            }
 
             var hours = assessment.Summary.TotalFactLaborHours;
             var z = assessment.Summary.WeightedZScore;
@@ -119,12 +146,8 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
             ?? throw new KeyNotFoundException($"Project {projectId} not found.");
 
         var (_, _, peers) = await ResolvePeerProjectsAsync(anchor, cancellationToken);
-        var visibleCount = 0;
-        foreach (var peer in peers)
-        {
-            if (await _visibility.CanAccessProjectAsync(userId, peer.Id, AccessLevel.Read, cancellationToken))
-                visibleCount++;
-        }
+        var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToHashSet();
+        var visibleCount = peers.Count(peer => accessible.Contains(peer.Id));
 
         return new GroupTrendInfoDto(
             Message: "Тренд по версиям проекта доступен на странице аналитики.",

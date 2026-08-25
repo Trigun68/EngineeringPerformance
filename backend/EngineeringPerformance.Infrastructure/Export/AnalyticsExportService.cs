@@ -24,7 +24,7 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public async Task<byte[]> ExportAnalysisExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _analysisService.GenerateReportAsync(projectId, versionId);
+        var report = await _analysisService.GenerateReportAsync(projectId, versionId, cancellationToken);
         var document = FactTableDocumentBuilder.BuildAnalysis(report) with
         {
             HeaderLines = TabularReportBanner.Lines(report.ProjectCode ?? string.Empty, report.ProjectName, report.VersionName),
@@ -34,7 +34,7 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public async Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _analysisService.GenerateReportAsync(projectId, versionId);
+        var report = await _analysisService.GenerateReportAsync(projectId, versionId, cancellationToken);
         var document = FactTableDocumentBuilder.BuildAnalysis(report) with
         {
             HeaderLines = TabularReportBanner.Lines(report.ProjectCode ?? string.Empty, report.ProjectName, report.VersionName),
@@ -44,7 +44,7 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public async Task<byte[]> ExportForecastExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _forecastService.GenerateForecastAsync(projectId, versionId);
+        var report = await _forecastService.GenerateForecastAsync(projectId, versionId, cancellationToken: cancellationToken);
 
         using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();

@@ -171,7 +171,7 @@ public sealed class VisualReportService : IVisualReportService
 
     public async Task<byte[]> ExportFactSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _analysis.GenerateReportAsync(projectId, versionId);
+        var report = await _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
         var summary = report.Summary;
@@ -423,7 +423,7 @@ public sealed class VisualReportService : IVisualReportService
     {
         var planData = await _pageData.GetProjectsPageDataAsync(projectId, planVersionId, null, cancellationToken);
         var factData = await _pageData.GetProjectsPageDataAsync(projectId, factVersionId, null, cancellationToken);
-        var analysis = await _analysis.GenerateReportAsync(projectId, factVersionId);
+        var analysis = await _analysis.GenerateReportAsync(projectId, factVersionId, cancellationToken);
         var compareChart = await _compare.GetChartAsync(projectId, compareVersionAId, compareVersionBId, "iic", "zScore", 10, cancellationToken);
         var trends = await _trends.GetTrendsAsync(projectId, null, null, "version", formulaId, cancellationToken);
 

@@ -18,14 +18,15 @@ public sealed class ProjectForecastService : IProjectForecastService
         int projectId,
         int versionId,
         IReadOnlyDictionary<int, decimal>? nodePlannedTotalsByWorkDirectionId = null,
-        ForecastCalculationOptionsDto? calculation = null)
+        ForecastCalculationOptionsDto? calculation = null,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var version = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .Include(v => v.Project)
-            .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId);
+            .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
         if (version is null)
         {
@@ -36,13 +37,13 @@ public sealed class ProjectForecastService : IProjectForecastService
             .AsNoTracking()
             .Include(x => x.PhysicalVolumeKfo).Include(x => x.PhysicalVolumeBer)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var equipmentRows = await context.ProjectEquipments
             .AsNoTracking()
             .Include(e => e.Equipment)
             .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         // V2-B.1: forecast строится на снимке норм версии. Раньше runtime-фильтр
         // по EffectiveFrom/EffectiveTo + g.First() давал недетерминированный выбор
@@ -52,7 +53,7 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Where(s => s.ProjectAnalysisVersionId == versionId)
             .Include(s => s.Norm)
             .Select(s => s.Norm)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var workDirections = await context.IicWorkDirections
             .AsNoTracking()
@@ -60,7 +61,7 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Where(d => !d.IsArchived)
             .OrderBy(d => d.SortOrder)
             .ThenBy(d => d.Name)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var normByDirection = snapshotNorms
             .Where(n => n is not null)
@@ -507,9 +508,10 @@ public sealed class ProjectForecastService : IProjectForecastService
 
     public async Task<ProjectForecastAssessmentVolumesDto> GetAssessmentVolumesByDirectionAsync(
         int projectId,
-        int versionId)
+        int versionId,
+        CancellationToken cancellationToken = default)
     {
-        await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
 
         var pvList = await context.ProjectPhysicalVolumes
             .AsNoTracking()
@@ -517,7 +519,7 @@ public sealed class ProjectForecastService : IProjectForecastService
             .Include(pv => pv.PhysicalVolumeBer).ThenInclude(b => b!.Unit)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .WherePositiveAssessmentWithClassifier()
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var pvByDirection = pvList
             .GroupBy(pv => pv.GetClassifierId()!.Value)
@@ -545,7 +547,7 @@ public sealed class ProjectForecastService : IProjectForecastService
                          && eq.Quantity > 0
                          && eq.Equipment!.IsAssessment == true
                          && eq.Equipment.ClassifierId != null)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var eqByDirection = eqList
             .GroupBy(eq => eq.Equipment!.ClassifierId!.Value)

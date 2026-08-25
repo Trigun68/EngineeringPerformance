@@ -1,28 +1,21 @@
-using System.Text.Json;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-    };
-
     private readonly AppDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IProjectVisibilityService _visibility;
     private readonly IFactAssessmentPipeline _pipeline;
     private readonly IZTrendEngine _engine;
-    private readonly IDistributedCache _cache;
+    private readonly IProjectAnalyticsCache _cache;
     private readonly AnalyticsTrendsOptions _options;
 
     public ZTrendAnalyticsService(
@@ -31,7 +24,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         IProjectVisibilityService visibility,
         IFactAssessmentPipeline pipeline,
         IZTrendEngine engine,
-        IDistributedCache cache,
+        IProjectAnalyticsCache cache,
         IOptions<AnalyticsTrendsOptions> options)
     {
         _db = db;
@@ -77,18 +70,15 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             ? request.ProjectIds.Where(accessible.Contains).ToList()
             : accessible;
 
+        // Портфельное поколение в ключе: мутация любого проекта сбрасывает выборку без TTL.
         var cacheKey =
             $"ztrends:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
             $"{string.Join(',', projectIds.OrderBy(x => x))}:" +
             $"{string.Join(',', (request.WorkDirectionIds ?? []).OrderBy(x => x))}";
 
-        var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
-        if (!string.IsNullOrEmpty(cached))
-        {
-            var hit = JsonSerializer.Deserialize<ZTrendResponse>(cached, JsonOptions);
-            if (hit is not null)
-                return hit;
-        }
+        var cached = await _cache.GetPortfolioAsync<ZTrendResponse>(cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
 
         var warnings = new List<string>();
         if (projectIds.Count == 0)
@@ -167,16 +157,14 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             ? request.WorkDirectionIds.ToHashSet()
             : null;
 
+        // Батч-оценка: данные всех версий грузятся пакетно, без N+1.
+        var batch = await _pipeline.EvaluateManyAsync(
+            versions.Select(v => new AssessmentRequest(v.ProjectId, v.Id)).ToList(),
+            cancellationToken);
+
         foreach (var version in versions)
         {
-            AssessmentResultDto assessment;
-            try
-            {
-                assessment = await _pipeline.EvaluateAsync(
-                    new AssessmentRequest(version.ProjectId, version.Id),
-                    cancellationToken);
-            }
-            catch
+            if (!batch.Results.TryGetValue(version.Id, out var assessment))
             {
                 warnings.Add($"Версия {version.Id}: не удалось рассчитать показатели.");
                 continue;
@@ -432,14 +420,6 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             warnings.Distinct().ToList());
     }
 
-    private async Task CacheAsync(string key, ZTrendResponse response, CancellationToken cancellationToken)
-    {
-        var ttl = TimeSpan.FromMinutes(Math.Max(1, _options.CacheTtlMinutes));
-        var json = JsonSerializer.Serialize(response, JsonOptions);
-        await _cache.SetStringAsync(
-            key,
-            json,
-            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ttl },
-            cancellationToken);
-    }
+    private Task CacheAsync(string key, ZTrendResponse response, CancellationToken cancellationToken) =>
+        _cache.SetPortfolioAsync(key, response, cancellationToken);
 }

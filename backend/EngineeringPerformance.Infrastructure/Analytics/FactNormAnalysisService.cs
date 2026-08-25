@@ -15,20 +15,17 @@ using EngineeringPerformance.Domain.Norms;
 using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 public sealed class FactNormAnalysisService : IFactNormAnalysisService
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(5);
-
     private readonly AppDbContext _db;
     private readonly IFactAssessmentPipeline _pipeline;
     private readonly IFactNormAnalysisEngine _engine;
     private readonly IIicNormService _normService;
-    private readonly IDistributedCache _cache;
+    private readonly IProjectAnalyticsCache _cache;
     private readonly ICacheInvalidator _cacheInvalidator;
     private readonly IFactNormCacheGeneration _cacheGeneration;
     private readonly AnalyticsOptions _options;
@@ -39,7 +36,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         IFactAssessmentPipeline pipeline,
         IFactNormAnalysisEngine engine,
         IIicNormService normService,
-        IDistributedCache cache,
+        IProjectAnalyticsCache cache,
         ICacheInvalidator cacheInvalidator,
         IFactNormCacheGeneration cacheGeneration,
         IOptions<AnalyticsOptions> options,
@@ -70,14 +67,12 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
     {
         ValidatePeriod(request);
 
+        // Двойное версионирование ключа: портфельное поколение (мутации проектов)
+        // внутри GetPortfolioAsync + поколение норм (gen) в самом ключе.
         var cacheKey = await BuildCacheKeyAsync(request, cancellationToken);
-        var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
-        if (!string.IsNullOrEmpty(cached))
-        {
-            var fromCache = JsonSerializer.Deserialize<FactNormAnalysisResponse>(cached);
-            if (fromCache is not null)
-                return fromCache with { FromCache = true };
-        }
+        var fromCache = await _cache.GetPortfolioAsync<FactNormAnalysisResponse>(cacheKey, cancellationToken);
+        if (fromCache is not null)
+            return fromCache with { FromCache = true };
 
         var periodStart = DateTime.SpecifyKind(request.PeriodStart.Date, DateTimeKind.Utc);
         var periodEndExclusive = DateTime.SpecifyKind(request.PeriodEnd.Date.AddDays(1), DateTimeKind.Utc);
@@ -130,28 +125,35 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         var normIdByDirection = new Dictionary<int, int>();
         var warnings = new List<string>();
 
+        // Батч-оценка всех версий и батч-загрузка снимков норм — без N+1.
+        var batch = await _pipeline.EvaluateManyAsync(
+            versions.Select(v => new AssessmentRequest(v.ProjectId, v.Id)).ToList(),
+            cancellationToken);
+
+        var versionIds = versions.Select(v => v.Id).ToList();
+        var snapshotRows = await _db.AnalysisVersionSnapshots
+            .AsNoTracking()
+            .Where(s => versionIds.Contains(s.ProjectAnalysisVersionId))
+            .Select(s => new { s.ProjectAnalysisVersionId, s.WorkDirectionId, s.NormId })
+            .ToListAsync(cancellationToken);
+        var snapshotsByVersion = snapshotRows
+            .GroupBy(s => s.ProjectAnalysisVersionId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToDictionary(s => s.WorkDirectionId, s => s.NormId));
+
         foreach (var version in versions)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            AssessmentResultDto assessment;
-            try
+            if (!batch.Results.TryGetValue(version.Id, out var assessment))
             {
-                assessment = await _pipeline.EvaluateAsync(
-                    new AssessmentRequest(version.ProjectId, version.Id),
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                warnings.Add($"Версия {version.Id}: {ex.Message}");
+                var error = batch.Errors.GetValueOrDefault(version.Id, "не удалось рассчитать показатели");
+                warnings.Add($"Версия {version.Id}: {error}");
                 continue;
             }
 
-            var snapshotNorms = await _db.AnalysisVersionSnapshots
-                .AsNoTracking()
-                .Where(s => s.ProjectAnalysisVersionId == version.Id)
-                .Select(s => new { s.WorkDirectionId, s.NormId })
-                .ToListAsync(cancellationToken);
-            var snapshotMap = snapshotNorms.ToDictionary(s => s.WorkDirectionId, s => s.NormId);
+            var snapshotMap = snapshotsByVersion.GetValueOrDefault(version.Id)
+                ?? new Dictionary<int, int>();
 
             foreach (var row in assessment.Performance)
             {
@@ -376,11 +378,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
             suggestionDtos,
             warnings);
 
-        await _cache.SetStringAsync(
-            cacheKey,
-            JsonSerializer.Serialize(response),
-            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl },
-            cancellationToken);
+        await _cache.SetPortfolioAsync(cacheKey, response, cancellationToken);
 
         return response;
     }

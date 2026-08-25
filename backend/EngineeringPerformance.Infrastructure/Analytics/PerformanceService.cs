@@ -34,13 +34,17 @@ public sealed class PerformanceService : IPerformanceService
     /// <inheritdoc />
     public void InvalidateWorkDirectionHierarchyCache() => _workDirectionsCache = null;
 
-    public Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId) =>
-        GetPerformanceDataAsync(projectId, versionId, LaborHoursKind.Planned);
+    public Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        GetPerformanceDataAsync(projectId, versionId, LaborHoursKind.Planned, cancellationToken);
 
     public async Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(
         int projectId,
         int versionId,
-        LaborHoursKind hoursKind)
+        LaborHoursKind hoursKind,
+        CancellationToken cancellationToken = default)
     {
         // GAP WPF: defense-in-depth — проверка ProjectVisibility с уровнем Read
         // (дополняет [RequireProjectAccess] на контроллере; без учёта Level в WPF данные утекали).
@@ -52,27 +56,27 @@ public sealed class PerformanceService : IPerformanceService
         // GAP: один scoped DbContext на запрос (раньше — до 5 параллельных factory-контекстов).
         var versionExists = await _context.ProjectAnalysisVersions
             .AsNoTracking()
-            .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId);
+            .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
-        var workDirections = await GetWorkDirectionsAsync();
+        var workDirections = await GetWorkDirectionsAsync(cancellationToken);
 
         var physicalVolumes = await _context.ProjectPhysicalVolumes
             .AsNoTracking()
             .AsSplitQuery()
             .Include(x => x.PhysicalVolumeKfo).Include(x => x.PhysicalVolumeBer)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var equipmentRows = await _context.ProjectEquipments
             .AsNoTracking()
             .Include(e => e.Equipment)
             .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var laborIntensities = await _context.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection;
         if (versionExists)
@@ -81,7 +85,7 @@ public sealed class PerformanceService : IPerformanceService
                 .AsNoTracking()
                 .Where(s => s.ProjectAnalysisVersionId == versionId)
                 .Include(s => s.Norm)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
 
             normsByDirection = snapshots
                 .Where(s => s.Norm is not null)
@@ -138,12 +142,12 @@ public sealed class PerformanceService : IPerformanceService
         return ProjectsPageGridBuilder.ApplyFormattedWorkDirectionNames(rows, directionById);
     }
 
-    private async Task<List<IicWorkDirection>> GetWorkDirectionsAsync()
+    private async Task<List<IicWorkDirection>> GetWorkDirectionsAsync(CancellationToken cancellationToken)
     {
         if (_workDirectionsCache is not null)
             return _workDirectionsCache;
 
-        await _cacheLock.WaitAsync();
+        await _cacheLock.WaitAsync(cancellationToken);
         try
         {
             if (_workDirectionsCache is not null)
@@ -153,7 +157,7 @@ public sealed class PerformanceService : IPerformanceService
                 .AsNoTracking()
                 .Include(d => d.Unit)
                 .Where(d => !d.IsArchived)
-                .ToListAsync();
+                .ToListAsync(cancellationToken);
             return _workDirectionsCache;
         }
         finally

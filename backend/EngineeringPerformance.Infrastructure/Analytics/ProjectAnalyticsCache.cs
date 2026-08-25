@@ -14,6 +14,7 @@ public sealed class ProjectAnalyticsCache(IDistributedCache cache, ILogger<Proje
     : IProjectAnalyticsCache
 {
     private const string GlobalGenerationKey = "analytics:gen:all";
+    private const string PortfolioGenerationKey = "analytics:gen:portfolio";
     // Свежесть даёт generation (invalidate после persist). Короткий TTL устраивал холодный stampede.
     private static readonly TimeSpan EntryLifetime = TimeSpan.FromHours(12);
     private static readonly TimeSpan GenerationLifetime = TimeSpan.FromDays(30);
@@ -62,11 +63,62 @@ public sealed class ProjectAnalyticsCache(IDistributedCache cache, ILogger<Proje
         }
     }
 
-    public Task InvalidateProjectAsync(int projectId, CancellationToken cancellationToken = default) =>
-        BumpAsync(ProjectGenerationKey(projectId), cancellationToken);
+    // Мутация проекта поднимает и портфельное поколение: портфельные выборки
+    // (тренды, факт vs норма) читают данные многих проектов сразу.
+    public async Task InvalidateProjectAsync(int projectId, CancellationToken cancellationToken = default)
+    {
+        await BumpAsync(ProjectGenerationKey(projectId), cancellationToken);
+        await BumpAsync(PortfolioGenerationKey, cancellationToken);
+    }
 
-    public Task InvalidateAllAsync(CancellationToken cancellationToken = default) =>
-        BumpAsync(GlobalGenerationKey, cancellationToken);
+    public async Task InvalidateAllAsync(CancellationToken cancellationToken = default)
+    {
+        await BumpAsync(GlobalGenerationKey, cancellationToken);
+        await BumpAsync(PortfolioGenerationKey, cancellationToken);
+    }
+
+    public async Task<T?> GetPortfolioAsync<T>(string key, CancellationToken cancellationToken = default)
+        where T : class
+    {
+        try
+        {
+            var payload = await cache.GetStringAsync(
+                await BuildPortfolioKeyAsync(key, cancellationToken),
+                cancellationToken);
+
+            return string.IsNullOrEmpty(payload) ? null : JsonSerializer.Deserialize<T>(payload, JsonOptions);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Portfolio analytics cache read failed for key {Key}", key);
+            return null;
+        }
+    }
+
+    public async Task SetPortfolioAsync<T>(string key, T value, CancellationToken cancellationToken = default)
+        where T : class
+    {
+        // См. SetAsync: запись не должна зависеть от отмены HTTP-запроса.
+        _ = cancellationToken;
+        try
+        {
+            await cache.SetStringAsync(
+                await BuildPortfolioKeyAsync(key, CancellationToken.None),
+                JsonSerializer.Serialize(value, JsonOptions),
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = EntryLifetime },
+                CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Portfolio analytics cache write failed for key {Key}", key);
+        }
+    }
+
+    private async Task<string> BuildPortfolioKeyAsync(string key, CancellationToken cancellationToken)
+    {
+        var portfolio = await ReadGenerationAsync(PortfolioGenerationKey, cancellationToken);
+        return $"analytics:portfolio:g{portfolio}:{key}";
+    }
 
     private async Task<string> BuildKeyAsync(int projectId, string key, CancellationToken cancellationToken)
     {

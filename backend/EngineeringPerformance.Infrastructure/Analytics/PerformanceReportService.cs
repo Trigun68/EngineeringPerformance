@@ -259,7 +259,7 @@ public sealed class PerformanceReportService(
             .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
         var performance = await performanceService.GetPerformanceDataAsync(
-            projectId, versionId, LaborHoursKind.Planned);
+            projectId, versionId, LaborHoursKind.Planned, cancellationToken);
         var labor = await context.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
@@ -358,7 +358,7 @@ public sealed class PerformanceReportService(
             if (allocated is > 0)
             {
                 var performance = await performanceService.GetPerformanceDataAsync(
-                    projectId, version.Id, LaborHoursKind.Planned);
+                    projectId, version.Id, LaborHoursKind.Planned, cancellationToken);
                 weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
                     performance,
                     decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
