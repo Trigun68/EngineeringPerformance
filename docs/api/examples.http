@@ -56,3 +56,63 @@ Content-Type: application/json
 ### Readiness (подставьте projectId / versionId)
 GET {{baseUrl}}/api/projects/1/versions/1/readiness
 Authorization: Bearer {{login.response.body.accessToken}}
+
+### JSON ingest labor (подставьте ids)
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/labor-intensities
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "description": "from-erp",
+    "items": [
+        {
+            "documentTypeName": "РД-технология",
+            "plannedHours": 10,
+            "actualHours": 0
+        }
+    ]
+}
+
+### JSON ingest physical volumes
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/physical-volumes
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "items": [
+        {
+            "epCode": "01-01-001-01",
+            "quantity": 1,
+            "facilityCode": "OBJ-1",
+            "facilityName": "Объект",
+            "workId": "W-1"
+        }
+    ]
+}
+
+### JSON ingest equipment
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/equipment
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "items": [
+        {
+            "catalogName": "Насос",
+            "unitName": "шт",
+            "quantity": 1
+        }
+    ]
+}
+
+### Labor ingest preview
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/labor-intensities/preview
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "documentTypeNames": ["РД-технология"]
+}

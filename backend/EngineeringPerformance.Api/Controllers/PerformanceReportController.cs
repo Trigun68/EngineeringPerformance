@@ -13,7 +13,8 @@ namespace EngineeringPerformance.Api.Controllers;
 [Route("api/projects/{projectId:int}/performance-report")]
 public sealed class PerformanceReportController(
     IPerformanceReportService reportService,
-    IVisualReportService visualReports) : ControllerBase
+    IVisualReportService visualReports,
+    IExportFileNameService fileNames) : ControllerBase
 {
     [HttpGet]
     [RequireProjectAccess]
@@ -47,6 +48,11 @@ public sealed class PerformanceReportController(
             planVersionId,
             factVersionId,
             cancellationToken);
-        return File(bytes, "application/pdf", $"PerformanceReport_{projectId}.pdf");
+        var fileName = await fileNames.ForPerformanceReportAsync(
+            projectId,
+            planVersionId,
+            factVersionId,
+            cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 }

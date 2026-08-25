@@ -56,7 +56,6 @@ export async function exportUserActionLogsExcel(query: UserActionLogQuery = {}):
   const { blob, filename } = await downloadBlob(
     '/audit/user-actions/export.xlsx',
     query as Record<string, string | number | boolean | undefined>,
-    'user-action-log.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }

@@ -1,5 +1,4 @@
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
-import { buildExportFileName } from '../utils/directoryExport';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
 import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
 import type { VersionCompareDetailRow } from './analyticsApi';
 import type {
@@ -32,10 +31,11 @@ export async function fetchProjectsPageData(
   projectId: number,
   versionId: number,
   compareVersionId?: number | null,
+  signal?: AbortSignal,
 ): Promise<ProjectsPageData> {
   const { data } = await apiClient.get<ProjectsPageDataResponse>(
     `/projects/${projectId}/versions/${versionId}/page-data`,
-    { params: { compareVersionId: compareVersionId ?? undefined } },
+    { params: { compareVersionId: compareVersionId ?? undefined }, signal },
   );
   return decodePageData(data);
 }
@@ -44,6 +44,7 @@ export async function fetchProjectsPageDetails(
   projectId: number,
   versionId: number,
   compareVersionId?: number | null,
+  signal?: AbortSignal,
 ): Promise<{
   forecastDetail: ProjectsPageDetailRow[];
   factDetail: ProjectsPageDetailRow[];
@@ -55,6 +56,7 @@ export async function fetchProjectsPageDetails(
     compareDetail: EncodedGrid | null;
   }>(`/projects/${projectId}/versions/${versionId}/page-data/detail`, {
     params: { compareVersionId: compareVersionId ?? undefined },
+    signal,
   });
   return {
     forecastDetail: decodeEncodedGrid<ProjectsPageDetailRow>(data.forecastDetail),
@@ -80,7 +82,6 @@ export async function exportProjectsPagePdf(
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/pdf`,
     { compareVersionId: compareVersionId ?? undefined },
-    `Project_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -93,7 +94,26 @@ export async function exportProjectsPageExcel(
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/excel`,
     { compareVersionId: compareVersionId ?? undefined },
-    `Project_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastSummaryExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-summary/excel`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportForecastSummaryPdf(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/forecast-summary/pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -104,8 +124,6 @@ export async function exportForecastFacilityExcel(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-facility/excel`,
-    {},
-    `ForecastFacility_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -116,8 +134,6 @@ export async function exportForecastFacilityPdf(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-facility/pdf`,
-    {},
-    `ForecastFacility_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -128,8 +144,6 @@ export async function exportForecastDetailExcel(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-detail/excel`,
-    {},
-    `ForecastDetail_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -141,15 +155,11 @@ export async function exportForecastDetailExcelVisible(
   headers: string[],
   rows: string[][],
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     `/projects/${projectId}/versions/${versionId}/export/forecast-detail/excel-visible`,
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
   );
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  triggerBrowserDownload(blob, buildExportFileName(tabName || `ForecastDetail_visible_${projectId}_v${versionId}`));
+  triggerBrowserDownload(blob, filename);
 }
 
 export async function exportForecastDetailPdf(
@@ -158,8 +168,6 @@ export async function exportForecastDetailPdf(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-detail/pdf`,
-    {},
-    `ForecastDetail_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -170,8 +178,16 @@ export async function exportForecastDetailSummaryTable(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-detail/summary-table`,
-    {},
-    `ForecastDetailSummary_${projectId}_v${versionId}.xlsx`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportFactSummaryExcel(
+  projectId: number,
+  versionId: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/fact-summary/excel`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -182,8 +198,6 @@ export async function exportFactFacilityExcel(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-facility/excel`,
-    {},
-    `FactFacility_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -194,8 +208,6 @@ export async function exportFactDetailExcel(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-detail/excel`,
-    {},
-    `FactDetail_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -207,15 +219,11 @@ export async function exportFactDetailExcelVisible(
   headers: string[],
   rows: string[][],
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     `/projects/${projectId}/versions/${versionId}/export/fact-detail/excel-visible`,
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
   );
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  triggerBrowserDownload(blob, buildExportFileName(tabName || `FactDetail_visible_${projectId}_v${versionId}`));
+  triggerBrowserDownload(blob, filename);
 }
 
 export async function exportFactDetailSummaryTable(
@@ -224,8 +232,6 @@ export async function exportFactDetailSummaryTable(
 ): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-detail/summary-table`,
-    {},
-    `FactDetailSummary_${projectId}_v${versionId}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }

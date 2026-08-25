@@ -185,7 +185,7 @@ export function useFactDetailContextMenu({
         },
       });
       items.push({
-        name: 'Редактировать норму EAC',
+        name: 'Редактировать норму IIC',
         disabled: (row) => !canEditNorms || !row?.normId || !row.classifierId,
         action: (row) => {
           if (!canEditNorms || !row?.normId || !row.classifierId) return;

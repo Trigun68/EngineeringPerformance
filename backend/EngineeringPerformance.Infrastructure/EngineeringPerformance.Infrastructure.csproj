@@ -30,6 +30,9 @@
     <ProjectReference Include="..\EngineeringPerformance.Domain\EngineeringPerformance.Domain.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="EngineeringPerformance.Infrastructure.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Include="Assets\Fonts\DejaVuSans.ttf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

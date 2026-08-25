@@ -19,6 +19,7 @@ public sealed partial class ProjectExcelDataImportService
     private readonly IProjectVisibilityService _visibility;
     private readonly IDictionaryService _dictionaryService;
     private readonly IProjectAnalyticsCache _analyticsCache;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
 
     public ProjectExcelDataImportService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -27,7 +28,8 @@ public sealed partial class ProjectExcelDataImportService
         IPermissionService permissionService,
         IProjectVisibilityService visibility,
         IDictionaryService dictionaryService,
-        IProjectAnalyticsCache analyticsCache)
+        IProjectAnalyticsCache analyticsCache,
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
     {
         _contextFactory = contextFactory;
         _logger = logger;
@@ -36,6 +38,7 @@ public sealed partial class ProjectExcelDataImportService
         _visibility = visibility;
         _dictionaryService = dictionaryService;
         _analyticsCache = analyticsCache;
+        _recalcOrchestrator = recalcOrchestrator;
     }
 
     public async Task<DataImportResultDto> ImportProjectDataAsync(
@@ -79,7 +82,12 @@ public sealed partial class ProjectExcelDataImportService
                 addMissingLaborToCatalog);
 
             if (result.Success)
-                await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+            {
+                if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
+                    await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+                else
+                    await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+            }
 
             return result;
         }
@@ -111,13 +119,24 @@ public sealed partial class ProjectExcelDataImportService
         CancellationToken cancellationToken = default) =>
         GetImportIterationsCoreAsync(projectId, versionId, dataType, cancellationToken);
 
-    public Task<int> DeleteIterationAsync(
+    public async Task<int> DeleteIterationAsync(
         int projectId,
         int versionId,
         DataImportType dataType,
         DateTime importedAt,
-        CancellationToken cancellationToken = default) =>
-        DeleteIterationCoreAsync(projectId, versionId, dataType, importedAt, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var deleted = await DeleteIterationCoreAsync(projectId, versionId, dataType, importedAt, cancellationToken);
+        if (deleted > 0)
+        {
+            if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
+                await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+            else
+                await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+        }
+
+        return deleted;
+    }
 
     private static async Task<string> SaveTempFileAsync(Stream stream, string fileName, CancellationToken cancellationToken)
     {

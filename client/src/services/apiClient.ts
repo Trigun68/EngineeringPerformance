@@ -235,18 +235,24 @@ export interface DownloadResult {
   filename: string;
 }
 
-function parseFilename(contentDisposition: string | undefined): string {
+function parseFilename(contentDisposition: string | undefined): string | null {
   if (!contentDisposition) {
-    return 'download';
+    return null;
   }
 
-  const utf8Match = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition);
+  const utf8Match = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(contentDisposition);
   if (utf8Match?.[1]) {
-    return decodeURIComponent(utf8Match[1]);
+    const raw = utf8Match[1].replace(/"/g, '').trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
   }
 
   const asciiMatch = /filename="?([^";]+)"?/i.exec(contentDisposition);
-  return asciiMatch?.[1] ?? 'download';
+  const ascii = asciiMatch?.[1]?.trim();
+  return ascii ? ascii : null;
 }
 
 export async function downloadBlob(
@@ -259,6 +265,20 @@ export async function downloadBlob(
     responseType: 'blob',
   });
 
+  const filename = parseFilename(response.headers['content-disposition']) || defaultFilename;
+  return { blob: response.data, filename };
+}
+
+export async function downloadBlobPost(
+  url: string,
+  body: unknown,
+  defaultFilename = 'download',
+  params?: Record<string, string | number | boolean | undefined>,
+): Promise<DownloadResult> {
+  const response = await apiClient.post<Blob>(url, body, {
+    params,
+    responseType: 'blob',
+  });
   const filename = parseFilename(response.headers['content-disposition']) || defaultFilename;
   return { blob: response.data, filename };
 }

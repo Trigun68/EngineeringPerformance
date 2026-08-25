@@ -18,34 +18,30 @@ public sealed class IicWorkDirectionNormService : IIicNormService
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly INormRegistryService _normRegistry;
     private readonly IFactNormCacheGeneration _factNormCache;
-    private readonly IProjectAnalyticsCache _analyticsCache;
 
     public IicWorkDirectionNormService(
         AppDbContext context,
         ICacheInvalidator cacheInvalidator,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
         INormRegistryService normRegistry,
-        IFactNormCacheGeneration factNormCache,
-        IProjectAnalyticsCache analyticsCache)
+        IFactNormCacheGeneration factNormCache)
     {
         _context = context;
         _cacheInvalidator = cacheInvalidator;
         _recalcOrchestrator = recalcOrchestrator;
         _normRegistry = normRegistry;
         _factNormCache = factNormCache;
-        _analyticsCache = analyticsCache;
     }
 
     /// <summary>
-    /// Сброс всех кэшей, зависящих от норм: справочники, реестр норм и анализ «факт vs норма».
+    /// Сброс кэшей справочника и реестра норм. Аналитику проектов сбрасывает
+    /// пересчёт затронутых версий (AfterNormChangedAsync), не InvalidateAll.
     /// </summary>
     private async Task InvalidateNormCachesAsync(CancellationToken cancellationToken)
     {
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         await _normRegistry.InvalidateCacheAsync(cancellationToken);
         await _factNormCache.BumpAsync(cancellationToken);
-        // Норма может участвовать в любой версии любого проекта — сбрасываем аналитику целиком.
-        await _analyticsCache.InvalidateAllAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<IicNormDto>> GetAllAsync(DateTime? asOf, CancellationToken cancellationToken = default)
@@ -190,9 +186,18 @@ public sealed class IicWorkDirectionNormService : IIicNormService
         if (entity is null)
             return false;
 
+        var workDirectionId = entity.WorkDirectionId;
+        var effectiveFrom = entity.EffectiveFrom;
+        var effectiveTo = entity.EffectiveTo;
+
         _context.IicWorkDirectionNorms.Remove(entity);
         await _context.SaveChangesAsync(cancellationToken);
         await InvalidateNormCachesAsync(cancellationToken);
+        await _recalcOrchestrator.AfterNormChangedAsync(
+            workDirectionId,
+            effectiveFrom,
+            effectiveTo,
+            cancellationToken);
         return true;
     }
 

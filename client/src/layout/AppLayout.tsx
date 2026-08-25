@@ -46,7 +46,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   '/projects': <FolderOutlinedIcon fontSize="small" />,
   '/analytics': <MenuBookOutlinedIcon fontSize="small" />,
   '/references': <MenuBookOutlinedIcon fontSize="small" />,
-  '/settings/users': <SettingsOutlinedIcon fontSize="small" />,
+  '/settings': <SettingsOutlinedIcon fontSize="small" />,
   '/help': <HelpOutlineIcon fontSize="small" />,
   '/admin': <AdminPanelSettingsOutlinedIcon fontSize="small" />,
 };

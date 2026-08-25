@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton } from './helpers';
 
 async function openFirstProject(page: import('@playwright/test').Page) {
   await page.goto('/projects');
@@ -17,14 +17,14 @@ test.describe('PDF visual reports export', () => {
     await openFirstProject(page);
     await page.getByRole('tab', { name: 'Сравнение версий' }).click();
     await expect(page.getByRole('button', { name: /Версия А/ })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible({ timeout: 15_000 });
+    await expect(actionButton(page, 'exportPdf')).toBeVisible({ timeout: 15_000 });
   });
 
   test('report tab has PDF export for performance report', async ({ page }) => {
     await openFirstProject(page);
     await page.getByRole('tab', { name: 'Отчет' }).click();
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible();
+    await expect(actionButton(page, 'exportPdf')).toBeVisible();
   });
 
   test('analytics page shell is reachable (charts deferred)', async ({ page }) => {

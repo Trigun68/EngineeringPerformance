@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { loginAsAdmin } from './helpers';
 
-test.describe('Analytics page — Z trends', () => {
+test.describe('Analytics page — trends', () => {
   test.beforeEach(async ({ page }) => {
     await loginAsAdmin(page);
   });
@@ -9,6 +9,7 @@ test.describe('Analytics page — Z trends', () => {
   test('trends tab shows panel with weight toggle and plan/fact switches', async ({ page }) => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('analytics-tab-trends')).toHaveText('Анализ тренда оценки факта');
     await page.getByTestId('analytics-tab-trends').click();
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
     await expect(page.getByTestId('ztrend-panel')).toBeVisible({ timeout: 20_000 });
@@ -54,6 +55,23 @@ test.describe('Analytics page — Z trends', () => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-fact-norms').click();
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
+  });
+
+  test('productivity trend tab shares period and shows panel', async ({ page }) => {
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('analytics-tab-productivity-trend')).toHaveText(
+      'Анализ тренда производительности',
+    );
+    await page.getByTestId('analytics-tab-productivity-trend').click();
+    await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
+    await expect(page.getByTestId('prod-trend-volume-mode')).toBeVisible();
+    await expect(page.getByTestId('prod-trend-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByTestId('prod-trend-overall-chart')
+        .or(page.getByTestId('prod-trend-empty'))
+        .or(page.getByTestId('prod-trend-error')),
+    ).toBeVisible({ timeout: 60_000 });
   });
 
   test('legacy /analytics/trends redirects to /analytics', async ({ page }) => {

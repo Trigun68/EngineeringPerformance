@@ -61,7 +61,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             .Select(d => new ZTrendFilterGroupDto(d.Id, d.Code ?? string.Empty, d.Name))
             .ToListAsync(cancellationToken);
 
-        return new ZTrendFiltersDto(projects, groups, ["basisHours", "uniform"]);
+        return new ZTrendFiltersDto(projects, groups, ["basisHours"]);
     }
 
     public async Task<ZTrendResponse> GetZTrendsAsync(ZTrendRequest request, CancellationToken cancellationToken = default)
@@ -69,9 +69,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var userId = _currentUser.UserId
             ?? throw new UnauthorizedAccessException("User is not authenticated.");
 
-        var weightMode = string.IsNullOrWhiteSpace(request.WeightMode)
-            ? _options.WeightMode
-            : request.WeightMode;
+        var weightMode = "basisHours";
 
         var accessible = (await _visibility.GetAccessibleProjectIdsAsync(userId, cancellationToken)).ToList();
         // List (not int[]): array.Contains binds to MemoryExtensions under C# 13 / newer SDKs and breaks EF.
@@ -189,9 +187,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 ? "none"
                 : string.Join('-', versionSnaps.OrderBy(s => s.WorkDirectionId).Select(s => s.NormId));
 
-            var weight = string.Equals(weightMode, "uniform", StringComparison.OrdinalIgnoreCase)
-                ? 1m
-                : Math.Max(0m, assessment.Summary.TotalFactLaborHours ?? 0m);
+            var weight = Math.Max(0m, assessment.Summary.TotalFactLaborHours ?? 0m);
 
             var clippedOverall = _engine.ClipZ(assessment.Summary.WeightedZScore, _options.ZClipMax, out var overallFlag);
             if (assessment.Summary.WeightedZScore is null)
@@ -212,9 +208,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 version.Id,
                 version.ProjectId,
                 clippedOverall,
-                weight <= 0 && !string.Equals(weightMode, "uniform", StringComparison.OrdinalIgnoreCase)
-                    ? 1m
-                    : weight,
+                weight,
                 regimeKey,
                 null,
                 regimeKey == "none" ? "Без нормы" : $"Режим норм {regimeKey}",
@@ -268,16 +262,14 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                         : $"Норма #{normId}")
                     : "Без нормы";
 
-                var rowWeight = string.Equals(weightMode, "uniform", StringComparison.OrdinalIgnoreCase)
-                    ? 1m
-                    : Math.Max(0m, row.SubtreeHours ?? row.FactLaborHours ?? 0m);
+                var rowWeight = Math.Max(0m, row.SubtreeHours ?? row.FactLaborHours ?? 0m);
 
                 var groupPoint = new ZTrendRawPoint(
                     version.CreatedAt,
                     version.Id,
                     version.ProjectId,
                     z,
-                    rowWeight <= 0 ? 1m : rowWeight,
+                    rowWeight,
                     normId?.ToString() ?? "none",
                     normId,
                     normName,

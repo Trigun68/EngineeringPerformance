@@ -2,17 +2,20 @@ using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 public sealed class AnalysisVersionRecalculationOrchestrator(
     AppDbContext context,
     ILaborIntensityRecalculationService recalculation,
-    IProjectAnalyticsCache analyticsCache) : IAnalysisVersionRecalculationOrchestrator
+    IProjectAnalyticsCache analyticsCache,
+    ILogger<AnalysisVersionRecalculationOrchestrator> logger) : IAnalysisVersionRecalculationOrchestrator
 {
     private readonly AppDbContext _context = context;
     private readonly ILaborIntensityRecalculationService _recalculation = recalculation;
     private readonly IProjectAnalyticsCache _analyticsCache = analyticsCache;
+    private readonly ILogger<AnalysisVersionRecalculationOrchestrator> _logger = logger;
 
     public Task<int> RecalculateVersionAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
         RecalculateOneAsync(projectId, versionId, cancellationToken);
@@ -147,11 +150,36 @@ public sealed class AnalysisVersionRecalculationOrchestrator(
         return count;
     }
 
+    public async Task<int> RecalculateAllVersionsAsync(
+        bool includeArchived = true,
+        CancellationToken cancellationToken = default)
+    {
+        var versions = await _context.ProjectAnalysisVersions.AsNoTracking()
+            .Where(v => includeArchived || !v.IsArchived)
+            .Select(v => new { v.Id, v.ProjectId })
+            .ToListAsync(cancellationToken);
+
+        var count = 0;
+        foreach (var version in versions)
+        {
+            await RecalculateOneAsync(version.ProjectId, version.Id, cancellationToken);
+            count++;
+        }
+
+        return count;
+    }
+
     private async Task<int> RecalculateOneAsync(int projectId, int versionId, CancellationToken cancellationToken)
     {
-        await _recalculation.RecalculateAsync(projectId, versionId, cancellationToken);
-        // Пересчёт трудоёмкости меняет гриды и отчёт — кэш проекта устарел (ISS-018).
+        var updated = await _recalculation.RecalculateAsync(projectId, versionId, cancellationToken);
+        // Persist колонок уже SoT; кэш сбрасываем. Первый GET page-data сам заполнит Redis
+        // (singleflight), без warm на том же запросе что persist.
         await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
-        return 1;
+        _logger.LogDebug(
+            "Recalculated labor intensity for project {ProjectId} version {VersionId}: {Updated} rows.",
+            projectId,
+            versionId,
+            updated);
+        return updated;
     }
 }

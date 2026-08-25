@@ -42,24 +42,24 @@ const PLAN_HOUR_COLORS = {
 } as const;
 
 type PlanLaborField =
-  | 'plannedLaborHoursPessimisticA'
-  | 'plannedLaborHoursA'
   | 'plannedLaborHoursOptimisticA'
-  | 'plannedLaborHoursPessimisticB'
+  | 'plannedLaborHoursA'
+  | 'plannedLaborHoursPessimisticA'
+  | 'plannedLaborHoursOptimisticB'
   | 'plannedLaborHoursB'
-  | 'plannedLaborHoursOptimisticB';
+  | 'plannedLaborHoursPessimisticB';
 
 function comparePlanLaborHourColumns<T extends CompareScenarioMetrics>(
   extras?: Partial<ColDef<T>>,
 ): ColDef<T>[] {
   const num2 = (value: unknown) => formatGridNumber(value, 2);
   const defs: Array<{ field: PlanLaborField; headerName: string; color: keyof typeof PLAN_HOUR_COLORS }> = [
-    { field: 'plannedLaborHoursPessimisticA', headerName: 'План.Труд. (Песс. v. А)', color: 'pessimistic' },
-    { field: 'plannedLaborHoursA', headerName: 'План.Труд. (Баз. v. А)', color: 'base' },
     { field: 'plannedLaborHoursOptimisticA', headerName: 'План.Труд. (Опт. v. А)', color: 'optimistic' },
-    { field: 'plannedLaborHoursPessimisticB', headerName: 'План.Труд. (Песс. v. Б)', color: 'pessimistic' },
-    { field: 'plannedLaborHoursB', headerName: 'План.Труд. (Баз. v. Б)', color: 'base' },
+    { field: 'plannedLaborHoursA', headerName: 'План.Труд. (Баз. v. А)', color: 'base' },
+    { field: 'plannedLaborHoursPessimisticA', headerName: 'План.Труд. (Песс. v. А)', color: 'pessimistic' },
     { field: 'plannedLaborHoursOptimisticB', headerName: 'План.Труд. (Опт. v. Б)', color: 'optimistic' },
+    { field: 'plannedLaborHoursB', headerName: 'План.Труд. (Баз. v. Б)', color: 'base' },
+    { field: 'plannedLaborHoursPessimisticB', headerName: 'План.Труд. (Песс. v. Б)', color: 'pessimistic' },
   ];
   return defs.map(({ field, headerName, color }) => ({
     ...extras,
@@ -84,6 +84,60 @@ export function getComparePlannedLaborHours<T extends CompareScenarioMetrics>(
     return side === 'A' ? row.plannedLaborHoursPessimisticA : row.plannedLaborHoursPessimisticB;
   }
   return side === 'A' ? row.plannedLaborHoursA : row.plannedLaborHoursB;
+}
+
+/** Плановые часы выбранного сценария: B − A. Null считаем нулём. */
+export function plannedLaborHoursDelta<T extends CompareScenarioMetrics>(
+  row: T,
+  scenario: CompareScenario,
+): number {
+  return (getComparePlannedLaborHours(row, scenario, 'B') ?? 0)
+    - (getComparePlannedLaborHours(row, scenario, 'A') ?? 0);
+}
+
+export function sumPlannedLaborHoursDelta<T extends CompareScenarioMetrics>(
+  rows: readonly T[],
+  scenario: CompareScenario,
+): number {
+  let sum = 0;
+  for (const row of rows) {
+    sum += plannedLaborHoursDelta(row, scenario);
+  }
+  return sum;
+}
+
+/**
+ * Чип «Различия версий» на «Итого»: только строка ИТОГО (level === -1).
+ * Сумма дерева дала бы двойной счёт из‑за «Итого: …» у корней.
+ */
+export function summaryTotalPlannedLaborHoursDelta<
+  T extends CompareScenarioMetrics & { isTotal?: boolean; level?: number },
+>(rows: readonly T[], scenario: CompareScenario): number | null {
+  const grand = rows.find((row) => row.isTotal && row.level === -1);
+  if (!grand) return null;
+  return plannedLaborHoursDelta(grand, scenario);
+}
+
+export type CompareHoursDeltaTab = 'compare-total' | 'compare-facility' | 'compare-detail';
+
+export function compareTabPlannedHoursDelta(
+  subTab: CompareHoursDeltaTab,
+  data: {
+    summary: Array<CompareScenarioMetrics & { isTotal?: boolean; level?: number }>;
+    facility: CompareScenarioMetrics[];
+    detail: CompareScenarioMetrics[];
+  } | null,
+  scenario: CompareScenario,
+): number | null {
+  if (!data) return null;
+  if (subTab === 'compare-total') {
+    return summaryTotalPlannedLaborHoursDelta(data.summary, scenario);
+  }
+  if (subTab === 'compare-facility') {
+    return sumPlannedLaborHoursDelta(data.facility, scenario);
+  }
+  if (data.detail.length === 0) return null;
+  return sumPlannedLaborHoursDelta(data.detail, scenario);
 }
 
 export function getComparePlannedProductivity<T extends CompareScenarioMetrics>(
@@ -196,15 +250,60 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
   ];
 }
 
+export function getComparePlanZScore(
+  row: VersionCompareRow,
+  scenario: CompareScenario,
+  side: VersionSide,
+): number | null | undefined {
+  if (scenario === 'optimistic') {
+    return side === 'A' ? row.planZScoreOptimisticA : row.planZScoreOptimisticB;
+  }
+  if (scenario === 'pessimistic') {
+    return side === 'A' ? row.planZScorePessimisticA : row.planZScorePessimisticB;
+  }
+  return side === 'A' ? row.planZScoreA : row.planZScoreB;
+}
+
 export function createCompareSummaryColumns(scenario: CompareScenario = 'base'): ColDef<VersionCompareRow>[] {
-  return createCompareSharedMetricColumns<VersionCompareRow>(scenario, {
-    getPhysicalVolume: (row, side) => side === 'A'
-      ? row.factPhysicalVolumeDisplayA ?? row.factPhysicalVolumeA
-      : row.factPhysicalVolumeDisplayB ?? row.factPhysicalVolumeB,
-    getZScore: (row, side) => side === 'A' ? row.factZScoreA : row.factZScoreB,
-    getZDelta: (row) => row.factZDelta,
-    zDeltaColumnId: 'factZDelta',
-  });
+  const num4 = (value: unknown) => formatGridNumber(value, 4);
+  return [
+    ...createCompareSharedMetricColumns<VersionCompareRow>(scenario, {
+      getPhysicalVolume: (row, side) => side === 'A'
+        ? row.factPhysicalVolumeDisplayA ?? row.factPhysicalVolumeA
+        : row.factPhysicalVolumeDisplayB ?? row.factPhysicalVolumeB,
+      getZScore: (row, side) => side === 'A' ? row.factZScoreA : row.factZScoreB,
+      getZDelta: (row) => row.factZDelta,
+      zDeltaColumnId: 'factZDelta',
+    }),
+    {
+      headerName: 'Пл.Z (v. А)',
+      width: 120,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'A') : null,
+      valueFormatter: (params) => num4(params.value),
+    },
+    {
+      headerName: 'Пл.Z (v. Б)',
+      width: 120,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'B') : null,
+      valueFormatter: (params) => num4(params.value),
+    },
+    {
+      colId: 'planZDelta',
+      headerName: 'Δ Пл.Z',
+      width: 110,
+      ...rightAlign,
+      valueGetter: (params) => {
+        if (!params.data) return null;
+        const a = getComparePlanZScore(params.data, scenario, 'A');
+        const b = getComparePlanZScore(params.data, scenario, 'B');
+        if (a == null || b == null) return null;
+        return b - a;
+      },
+      valueFormatter: (params) => num4(params.value),
+    },
+  ];
 }
 
 export function createCompareFacilityColumns(

@@ -56,8 +56,7 @@ public sealed class IicWorkDirectionNormServiceTests
             cache.Object,
             recalc.Object,
             registry.Object,
-            factNormCache.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+            factNormCache.Object);
 
         var created = await service.CreateAsync(new IicNormWriteRequest(
             WorkDirectionId: 7,
@@ -127,8 +126,7 @@ public sealed class IicWorkDirectionNormServiceTests
             cache.Object,
             recalc.Object,
             registry.Object,
-            factNormCache.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+            factNormCache.Object);
 
         var updated = await service.UpdateAsync(10, new IicNormWriteRequest(
             WorkDirectionId: 5,

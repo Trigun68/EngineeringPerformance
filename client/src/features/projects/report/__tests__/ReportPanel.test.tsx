@@ -14,6 +14,11 @@ vi.mock('../../../../hooks/usePermission', () => ({
   usePermission: () => ({ canRead: true, canEdit: false }),
 }));
 
+vi.mock('../../../../api/userPreferencesApi', () => ({
+  getUserPreferences: vi.fn(async () => ({})),
+  putUserPreferences: vi.fn(async () => undefined),
+}));
+
 vi.mock('../../shared/WorkspaceChromeToggleRow', () => ({
   WorkspaceChromeToggleRow: () => null,
 }));

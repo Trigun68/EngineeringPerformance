@@ -17,11 +17,16 @@ public interface IAnalysisVersionRecalculationOrchestrator
         DateTime? effectiveTo,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Версии с привязкой к позиции каталога (КФО/БЭР/оборудование): пересчёт LI.
-    /// </summary>
+    /// <summary>Версии с привязкой к позиции каталога (КФО/БЭР/оборудование): пересчёт LI.</summary>
     Task<int> AfterCatalogAssessmentOrCoefficientChangedAsync(
         string resource,
         int catalogId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Пересчёт сохранённых <c>LaborIntensity*</c> по всем версиям (актуальный движок).
+    /// </summary>
+    Task<int> RecalculateAllVersionsAsync(
+        bool includeArchived = true,
         CancellationToken cancellationToken = default);
 }

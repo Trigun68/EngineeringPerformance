@@ -5,6 +5,7 @@ using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Analytics.NormRegistry;
 using EngineeringPerformance.Application.Audit;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
@@ -281,7 +282,11 @@ public sealed class NormRegistryService(
                     r.IssueCount));
             }
 
-            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "norm-registry.csv");
+            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv",
+                ExportFileNameBuilder.Build(
+                    ExportFileNameBuilder.Modules.Analytics,
+                    "csv",
+                    ExportFileNameBuilder.Views.Norms));
         }
 
         using var workbook = new XLWorkbook();
@@ -316,7 +321,11 @@ public sealed class NormRegistryService(
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
-        return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "norm-registry.xlsx");
+        return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ExportFileNameBuilder.Build(
+                ExportFileNameBuilder.Modules.Analytics,
+                "xlsx",
+                ExportFileNameBuilder.Views.Norms));
     }
 
     public async Task<(byte[] Content, string ContentType, string FileName)> ExportHealthReportAsync(
@@ -347,7 +356,11 @@ public sealed class NormRegistryService(
                     i.DetectedAt.ToString("O")));
             }
 
-            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "norm-health.csv");
+            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv",
+                ExportFileNameBuilder.Build(
+                    ExportFileNameBuilder.Modules.Analytics,
+                    "csv",
+                    ExportFileNameBuilder.Views.NormHealth));
         }
 
         using var workbook = new XLWorkbook();
@@ -372,7 +385,11 @@ public sealed class NormRegistryService(
 
         using var ms = new MemoryStream();
         workbook.SaveAs(ms);
-        return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "norm-health.xlsx");
+        return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ExportFileNameBuilder.Build(
+                ExportFileNameBuilder.Modules.Analytics,
+                "xlsx",
+                ExportFileNameBuilder.Views.NormHealth));
     }
 
     public async Task<NormListItemDto> ArchiveAsync(

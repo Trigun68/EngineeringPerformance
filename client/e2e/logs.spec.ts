@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton } from './helpers';
 
 test.describe('Audit logs page', () => {
   test.beforeEach(async ({ page }) => {
@@ -9,7 +9,7 @@ test.describe('Audit logs page', () => {
   test('shows toolbar actions and grid', async ({ page }) => {
     await page.goto('/admin/user-actions');
     await expect(page.getByRole('heading', { name: 'Журнал действий пользователей' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Выгрузить в Excel' })).toBeVisible();
+    await expect(actionButton(page, 'exportExcel')).toBeVisible();
     await expect(page.getByRole('button', { name: 'В архив' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Восстановить' })).toBeVisible();
     await page.waitForSelector('.ag-root', { timeout: 15_000 });

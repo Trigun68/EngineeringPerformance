@@ -324,6 +324,9 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
                 SupplyStandard = eq.SupplyStandard,
                 OlReference = eq.OlReference,
                 EstimationBasis = eq.EstimationBasis,
+                LaborIntensityBase = eq.LaborIntensityBase,
+                LaborIntensityPessimistic = eq.LaborIntensityPessimistic,
+                LaborIntensityOptimistic = eq.LaborIntensityOptimistic,
                 CreatedAt = createdAt,
             });
         }

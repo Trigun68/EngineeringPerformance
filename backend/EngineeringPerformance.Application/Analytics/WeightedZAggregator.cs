@@ -36,8 +36,8 @@ public struct WeightedZAggregator
     }
 
     /// <param name="arithmeticFallback">
-    /// При нулевом суммарном весе вернуть среднее арифметическое Z вместо null
-    /// (режим «uniform» трендов и compare без часов).
+    /// При нулевом суммарном весе вернуть среднее арифметическое Z вместо null.
+    /// Web-путь (тренд, compare, отчёт) не использует этот режим.
     /// </param>
     public readonly decimal? Result(
         int decimalPlaces = 2,

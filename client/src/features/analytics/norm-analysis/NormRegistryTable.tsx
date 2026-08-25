@@ -139,6 +139,7 @@ export function NormRegistryTable({ rows, loading, issues, onRowClick }: Props) 
         getRowIdValue={(r) => String(r.id)}
         onRowClicked={onRowClick}
         objectName="IicWorkDirectionNorms"
+        gridId="norm-analysis-registry"
         gridTestId="norm-analysis-grid"
       />
     </Box>

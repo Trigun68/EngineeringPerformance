@@ -18,19 +18,22 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IVisualReportService _visualReports;
     private readonly IProjectExportService _projectExport;
     private readonly IDirectoryExportService _directoryExport;
+    private readonly IExportFileNameService _fileNames;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
         IGroupAnalyticsService groupAnalytics,
         IVisualReportService visualReports,
         IProjectExportService projectExport,
-        IDirectoryExportService directoryExport)
+        IDirectoryExportService directoryExport,
+        IExportFileNameService fileNames)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
         _visualReports = visualReports;
         _projectExport = projectExport;
         _directoryExport = directoryExport;
+        _fileNames = fileNames;
     }
 
     [HttpGet("compare")]
@@ -93,7 +96,14 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         };
         var bytes = await _visualReports.ExportComparePdfAsync(
             projectId, versionA, versionB, sectionEnum, showOnlyDifferences, top, cancellationToken);
-        return File(bytes, "application/pdf", $"Compare_{projectId}_{versionA}_{versionB}.pdf");
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "pdf",
+            ExportFileNameBuilder.CompareView(section),
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     /// <summary>Excel текущего вида раздела сравнения (видимые колонки и отфильтрованные строки).</summary>
@@ -101,22 +111,28 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     [RequireProjectAccess]
     [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
     [EnableRateLimiting("export")]
-    public IActionResult ExportCompareExcelVisible(
+    public async Task<IActionResult> ExportCompareExcelVisible(
         int projectId,
         string section,
-        [FromBody] DirectoryExportRequest request)
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        [FromBody] DirectoryExportRequest request,
+        [FromQuery] bool visibleOnly = false,
+        CancellationToken cancellationToken = default)
     {
-        _ = projectId;
         if (!IsCompareExportSection(section))
             return BadRequest("Поддерживаются разделы summary, facility и detail.");
 
         var bytes = _directoryExport.ExportToExcel(request);
-        var safeName = SanitizeFileName(request.TabName);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"{safeName}_{timestamp}.xlsx");
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "xlsx",
+            ExportFileNameBuilder.CompareView(section),
+            visibleOnly ? ExportFileNameBuilder.Qualifiers.Visible : null,
+            cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("compare/export/detail/excel")]
@@ -130,10 +146,14 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     {
         var bytes = await _projectExport.ExportCompareDetailExcelAsync(
             projectId, versionA, versionB, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"CompareDetail_{projectId}_{versionA}_{versionB}.xlsx");
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "xlsx",
+            ExportFileNameBuilder.Views.Detail,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("compare/export/detail/summary-table")]
@@ -147,10 +167,15 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     {
         var bytes = await _projectExport.ExportCompareDetailSummaryTableAsync(
             projectId, versionA, versionB, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"CompareDetailSummary_{projectId}_{versionA}_{versionB}.xlsx");
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "xlsx",
+            ExportFileNameBuilder.Views.Detail,
+            ExportFileNameBuilder.Qualifiers.SummaryTable,
+            cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("group-analysis")]
@@ -173,10 +198,4 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         section.Equals("summary", StringComparison.OrdinalIgnoreCase)
         || section.Equals("facility", StringComparison.OrdinalIgnoreCase)
         || section.Equals("detail", StringComparison.OrdinalIgnoreCase);
-
-    private static string SanitizeFileName(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        return string.Concat(value.Select(character => invalid.Contains(character) ? '_' : character));
-    }
 }

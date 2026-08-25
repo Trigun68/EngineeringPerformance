@@ -74,15 +74,14 @@ internal static class VersionCompareMerge
             return list.Count > 0 ? list.Average() : null;
         }
 
-        // ISS-010: Z в compare «Детально» взвешивается по фактическим часам, как во всех
-        // остальных представлениях; без часов остаётся среднее арифметическое.
+        // ISS-010: Z в compare «Детально» — только Σ(Z×часы)/Σ(часы); без часов → null.
         static decimal? WeightedZ(IEnumerable<FactDetailRowInternal> rows)
         {
             var aggregator = new WeightedZAggregator();
             foreach (var row in rows)
                 aggregator.Add(row.ZScore, row.FactLaborHours);
 
-            return aggregator.Result(4, arithmeticFallback: true);
+            return aggregator.Result(4);
         }
 
         static decimal? SumNullable(IEnumerable<decimal?> values)

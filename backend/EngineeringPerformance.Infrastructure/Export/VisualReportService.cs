@@ -40,7 +40,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
         var totals = data.Forecast.GrandTotals;
 
         var scenarioChart = _charts.RenderScenarioTotalsChart(
@@ -77,8 +77,8 @@ public sealed class VisualReportService : IVisualReportService
                 [
                     r.DisplayName,
                     r.FactPhysicalVolume?.ToString("N2") ?? "—",
-                    r.BaseHours?.ToString("N0") ?? "—",
                     r.OptimisticHours?.ToString("N0") ?? "—",
+                    r.BaseHours?.ToString("N0") ?? "—",
                     r.PessimisticHours?.ToString("N0") ?? "—",
                 ]));
 
@@ -91,7 +91,7 @@ public sealed class VisualReportService : IVisualReportService
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeHierarchicalTable(
                 c, "Итого по направлениям",
-                ["Направление", "План. объём", "База", "Опт.", "Пессим."],
+                ["Направление", "План. объём", "Опт.", "База", "Пессим."],
                 hierRows));
         }, "Прогноз — Итого", $"Проект: {projectCode}", $"Версия: {versionName}");
     }
@@ -99,7 +99,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportForecastFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var chartItems = data.Forecast.Facility
             .OrderByDescending(f => f.BaseHours ?? 0)
@@ -115,8 +115,8 @@ public sealed class VisualReportService : IVisualReportService
         {
             f.FacilityCode,
             f.FacilityName,
-            f.BaseHours?.ToString("N0") ?? "—",
             f.OptimisticHours?.ToString("N0") ?? "—",
+            f.BaseHours?.ToString("N0") ?? "—",
             f.PessimisticHours?.ToString("N0") ?? "—",
         });
 
@@ -126,7 +126,7 @@ public sealed class VisualReportService : IVisualReportService
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
                 c, "По объектам",
-                ["Код", "Объект", "База ч", "Опт.", "Пессим."],
+                ["Код", "Объект", "Опт.", "База ч", "Пессим."],
                 tableRows));
         }, "Прогноз — По объектам", $"Проект: {projectCode}", $"Версия: {versionName}");
     }
@@ -134,7 +134,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportForecastDetailPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var chartItems = data.Forecast.Detail
             .OrderByDescending(d => d.BaseHours ?? 0)
@@ -173,7 +173,7 @@ public sealed class VisualReportService : IVisualReportService
     {
         var report = await _analysis.GenerateReportAsync(projectId, versionId);
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
         var summary = report.Summary;
 
         var chartItems = data.Fact.Performance
@@ -207,7 +207,7 @@ public sealed class VisualReportService : IVisualReportService
                         r.WorkDirectionCode,
                         r.FactPhysicalVolume?.ToString("N2") ?? "—",
                         r.FactLaborHours?.ToString("N0") ?? "—",
-                        ..FactPlanHourCells(r.PessimisticHours, r.BaseHours, r.OptimisticHours),
+                        ..FactPlanHourCells(r.OptimisticHours, r.BaseHours, r.PessimisticHours),
                         r.ZScore?.ToString("N2") ?? "—",
                         PerformancePercentileHelper.GetPercentile(r.ZScore),
                         interp,
@@ -238,7 +238,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportFactFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var chartItems = data.Fact.Facility
             .OrderByDescending(f => f.LaborHours ?? 0)
@@ -255,7 +255,7 @@ public sealed class VisualReportService : IVisualReportService
             f.FacilityCode,
             f.FacilityName,
             f.LaborHours?.ToString("N0") ?? "—",
-            ..FactPlanHourCells(f.PessimisticHours, f.BaseHours, f.OptimisticHours),
+            ..FactPlanHourCells(f.OptimisticHours, f.BaseHours, f.PessimisticHours),
             f.ZScore?.ToString("N2") ?? "—",
             PerformancePercentileHelper.GetPercentile(f.ZScore),
             f.Interpretation ?? "—",
@@ -276,7 +276,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportFactDetailPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var chartItems = data.Fact.Detail
             .Where(d => d.ZScore.HasValue)
@@ -299,7 +299,7 @@ public sealed class VisualReportService : IVisualReportService
             d.CatalogName,
             d.Quantity.ToString("N2"),
             d.FactLaborHours?.ToString("N0") ?? "—",
-            ..FactPlanHourCells(d.PessimisticHours, d.BaseHours, d.OptimisticHours),
+            ..FactPlanHourCells(d.OptimisticHours, d.BaseHours, d.PessimisticHours),
             d.ZScore?.ToString("N2") ?? "—",
             PerformancePercentileHelper.GetPercentile(d.ZScore),
             d.Interpretation ?? "—",
@@ -560,8 +560,8 @@ public sealed class VisualReportService : IVisualReportService
                 r.Name,
                 r.FactPhysicalVolumeA?.ToString("N2") ?? "—",
                 r.FactPhysicalVolumeB?.ToString("N2") ?? "—",
-                ..ComparePlanHourCells(r.PlannedLaborHoursPessimisticA, r.PlannedLaborHoursA, r.PlannedLaborHoursOptimisticA,
-                    r.PlannedLaborHoursPessimisticB, r.PlannedLaborHoursB, r.PlannedLaborHoursOptimisticB),
+                ..ComparePlanHourCells(r.PlannedLaborHoursOptimisticA, r.PlannedLaborHoursA, r.PlannedLaborHoursPessimisticA,
+                    r.PlannedLaborHoursOptimisticB, r.PlannedLaborHoursB, r.PlannedLaborHoursPessimisticB),
                 r.FactLaborHoursA?.ToString("N0") ?? "—",
                 r.FactLaborHoursB?.ToString("N0") ?? "—",
                 r.PlannedProductivityA?.ToString("N4") ?? "—",
@@ -616,13 +616,13 @@ public sealed class VisualReportService : IVisualReportService
             chart.VersionBName,
             options: new ChartRenderOptions(XAxisLabel: "Объект", YAxisLabel: "Часы"));
 
-        var tableRows = facility.Select(f => (string[])
+        var dataRows = facility.Select(f => (string[])
         [
             f.FacilityName,
             f.FactPhysicalVolumeA?.ToString("N2") ?? "—",
             f.FactPhysicalVolumeB?.ToString("N2") ?? "—",
-            ..ComparePlanHourCells(f.PlannedLaborHoursPessimisticA, f.PlannedLaborHoursA, f.PlannedLaborHoursOptimisticA,
-                f.PlannedLaborHoursPessimisticB, f.PlannedLaborHoursB, f.PlannedLaborHoursOptimisticB),
+            ..ComparePlanHourCells(f.PlannedLaborHoursOptimisticA, f.PlannedLaborHoursA, f.PlannedLaborHoursPessimisticA,
+                f.PlannedLaborHoursOptimisticB, f.PlannedLaborHoursB, f.PlannedLaborHoursPessimisticB),
             f.FactLaborHoursA?.ToString("N0") ?? "—",
             f.FactLaborHoursB?.ToString("N0") ?? "—",
             f.PlannedProductivityA?.ToString("N4") ?? "—",
@@ -632,6 +632,29 @@ public sealed class VisualReportService : IVisualReportService
             f.ZScoreA?.ToString("N4") ?? "—",
             f.ZScoreB?.ToString("N4") ?? "—",
         ]);
+        var tableRows = facility.Count == 0
+            ? dataRows
+            : dataRows.Append(
+            [
+                "ИТОГО",
+                SumNullableDisplay(facility.Select(f => f.FactPhysicalVolumeA), "N2"),
+                SumNullableDisplay(facility.Select(f => f.FactPhysicalVolumeB), "N2"),
+                ..ComparePlanHourCells(
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursOptimisticA)),
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursA)),
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursPessimisticA)),
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursOptimisticB)),
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursB)),
+                    SumNullable(facility.Select(f => f.PlannedLaborHoursPessimisticB))),
+                SumNullableDisplay(facility.Select(f => f.FactLaborHoursA), "N0"),
+                SumNullableDisplay(facility.Select(f => f.FactLaborHoursB), "N0"),
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+                "—",
+            ]);
 
         col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chartPng, "Сравнение трудоёмкости по объектам"));
         col.Item().PageBreak();
@@ -674,8 +697,8 @@ public sealed class VisualReportService : IVisualReportService
             d.PvName,
             d.QuantityA?.ToString("N2") ?? "—",
             d.QuantityB?.ToString("N2") ?? "—",
-            ..ComparePlanHourCells(d.PlannedLaborHoursPessimisticA, d.PlannedLaborHoursA, d.PlannedLaborHoursOptimisticA,
-                d.PlannedLaborHoursPessimisticB, d.PlannedLaborHoursB, d.PlannedLaborHoursOptimisticB),
+            ..ComparePlanHourCells(d.PlannedLaborHoursOptimisticA, d.PlannedLaborHoursA, d.PlannedLaborHoursPessimisticA,
+                d.PlannedLaborHoursOptimisticB, d.PlannedLaborHoursB, d.PlannedLaborHoursPessimisticB),
             d.FactLaborHoursA?.ToString("N0") ?? "—",
             d.FactLaborHoursB?.ToString("N0") ?? "—",
             d.PlannedProductivityA?.ToString("N4") ?? "—",
@@ -800,31 +823,43 @@ public sealed class VisualReportService : IVisualReportService
 
     private static readonly string[] FactPlanHourHeaders =
     [
-        "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+        "План.Труд.Оптим.", "План.Труд.Баз.", "План.Труд.Песс.",
     ];
 
-    private static string[] FactPlanHourCells(decimal? pes, decimal? baseHours, decimal? opt) =>
+    private static string[] FactPlanHourCells(decimal? opt, decimal? baseHours, decimal? pes) =>
     [
-        pes?.ToString("N2") ?? "—",
-        baseHours?.ToString("N2") ?? "—",
         opt?.ToString("N2") ?? "—",
+        baseHours?.ToString("N2") ?? "—",
+        pes?.ToString("N2") ?? "—",
     ];
 
     private static readonly string[] ComparePlanHourHeaders =
     [
-        "План.Труд. (Песс. v. А)", "План.Труд. (Баз. v. А)", "План.Труд. (Опт. v. А)",
-        "План.Труд. (Песс. v. Б)", "План.Труд. (Баз. v. Б)", "План.Труд. (Опт. v. Б)",
+        "План.Труд. (Опт. v. А)", "План.Труд. (Баз. v. А)", "План.Труд. (Песс. v. А)",
+        "План.Труд. (Опт. v. Б)", "План.Труд. (Баз. v. Б)", "План.Труд. (Песс. v. Б)",
     ];
 
     private static string[] ComparePlanHourCells(
-        decimal? pesA, decimal? baseA, decimal? optA,
-        decimal? pesB, decimal? baseB, decimal? optB) =>
+        decimal? optA, decimal? baseA, decimal? pesA,
+        decimal? optB, decimal? baseB, decimal? pesB) =>
     [
-        pesA?.ToString("N2") ?? "—",
-        baseA?.ToString("N2") ?? "—",
         optA?.ToString("N2") ?? "—",
-        pesB?.ToString("N2") ?? "—",
-        baseB?.ToString("N2") ?? "—",
+        baseA?.ToString("N2") ?? "—",
+        pesA?.ToString("N2") ?? "—",
         optB?.ToString("N2") ?? "—",
+        baseB?.ToString("N2") ?? "—",
+        pesB?.ToString("N2") ?? "—",
     ];
+
+    private static decimal? SumNullable(IEnumerable<decimal?> values)
+    {
+        var sum = values.Where(v => v.HasValue).Select(v => v!.Value).Sum();
+        return sum > 0m ? Math.Round(sum, 2) : null;
+    }
+
+    private static string SumNullableDisplay(IEnumerable<decimal?> values, string format)
+    {
+        var total = SumNullable(values);
+        return total?.ToString(format) ?? "—";
+    }
 }

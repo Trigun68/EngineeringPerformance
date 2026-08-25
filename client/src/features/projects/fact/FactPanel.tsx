@@ -9,9 +9,11 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import type { ImportDataType } from '../../../api/importApi';
 import { exportFactDetailPdf, exportFactFacilityPdf, exportFactSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
@@ -20,6 +22,7 @@ import {
   exportFactDetailExcelVisible,
   exportFactDetailSummaryTable,
   exportFactFacilityExcel,
+  exportFactSummaryExcel,
   fetchProjectsPageData,
   fetchProjectsPageDetails,
 } from '../../../api/projectsPageApi';
@@ -66,6 +69,8 @@ type DeleteDialogType = ImportDataType | null;
 
 export interface FactPanelProps {
   projectId: number;
+  projectName?: string;
+  projectCode?: string;
   workspaceVersions: ProjectVersion[];
   workspaceFactVersionId: number | null;
   workspaceFactVersionLabel: string;
@@ -75,7 +80,14 @@ function performanceRowId(row: PerformanceTreeRow, index: number): string {
   return `perf-${row.workDirectionId}-${row.isTotal ? 'total' : 'row'}-${row.level}-${index}`;
 }
 
-export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId, workspaceFactVersionLabel }: FactPanelProps) {
+export function FactPanel({
+  projectId,
+  projectName = '',
+  projectCode = '',
+  workspaceVersions,
+  workspaceFactVersionId,
+  workspaceFactVersionLabel,
+}: FactPanelProps) {
   const { canRead } = usePermission('Assessment');
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
   const { chromeExpanded } = useWorkspaceChrome();
@@ -431,64 +443,52 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
         )}
         {canImport && (
           <>
-            <Button
-              variant="outlined"
-              size="small"
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               title={catalogTypeMissing ? 'Укажите справочник КФО или БЭР в версии проекта' : undefined}
               onClick={() => setImportDialogType('physical-volumes')}
-              startIcon={<FileDownloadIcon />}
+              startIcon={<UploadFileIcon />}
             >
-              Импорт ФО
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.importPhysicalVolumes}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               onClick={() => setDeleteDialogType('physical-volumes')}
               startIcon={<DeleteIcon />}
               color="error"
             >
-              Удалить ФО
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.deletePhysicalVolumes}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               onClick={() => setImportDialogType('equipment')}
-              startIcon={<FileDownloadIcon />}
+              startIcon={<UploadFileIcon />}
             >
-              Импорт оборуд.
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.importEquipment}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               onClick={() => setDeleteDialogType('equipment')}
               startIcon={<DeleteIcon />}
               color="error"
             >
-              Удалить оборуд.
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.deleteEquipment}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               onClick={() => setImportDialogType('labor-intensities')}
-              startIcon={<FileDownloadIcon />}
+              startIcon={<UploadFileIcon />}
             >
-              Импорт труд.
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.importLabor}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={importBlocked || loading}
               onClick={() => setDeleteDialogType('labor-intensities')}
               startIcon={<DeleteIcon />}
               color="error"
             >
-              Удалить труд.
-            </Button>
+              {ACTION_LABELS.deleteLabor}
+            </ToolbarActionButton>
           </>
         )}
       </Stack>
@@ -524,92 +524,84 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
               >
                 📊 Анализ версии
               </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={async () => {
                   if (!factVersionId) return;
                   setExporting(true);
+                  setError(null);
                   try {
-                    await exportFactSummaryPdf(projectId, factVersionId);
+                    await exportFactSummaryExcel(projectId, factVersionId);
+                  } catch (err) {
+                    setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
                   } finally {
                     setExporting(false);
                   }
                 }}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={async () => {
+                  if (!factVersionId) return;
+                  setExporting(true);
+                  setError(null);
+                  try {
+                    await exportFactSummaryPdf(projectId, factVersionId);
+                  } catch (err) {
+                    setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+              />
             </>
           )}
           {subTab === 'fact-facility' && (
             <>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={() => void handleExportFacility('excel')}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт Excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={() => void handleExportFacility('pdf')}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
+              />
             </>
           )}
           {subTab === 'fact-detail' && (
             <>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetail('excel')}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт всех excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || !detailGridReady || exporting}
+              />
+              <ExportActionButton
+                kind="excelSelected"
+                disabled={!factVersionId || !detailGridReady}
+                loading={exporting}
                 onClick={() => void handleExportDetailVisibleExcel()}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт выделенных excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetail('pdf')}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!factVersionId || exporting}
+              />
+              <ExportActionButton
+                kind="excelSummary"
+                disabled={!factVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetailSummaryTable()}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Сводная таблица
-              </Button>
+              />
             </>
           )}
         </Stack>
@@ -637,6 +629,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
               columnDefs={performanceColumns}
               objectName="Assessment"
               gridId="fact-performance"
+              projectId={projectId}
               loading={loading}
               height="100%"
               treeData
@@ -664,6 +657,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
               columnDefs={facilityColumns}
               objectName="Assessment"
               gridId="fact-facility"
+              projectId={projectId}
               loading={loading}
               height="100%"
               pinnedBottomRowData={facilityPinnedBottomRow}
@@ -679,6 +673,7 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
             columnDefs={detailColumns}
             objectName="Assessment"
             gridId="fact-detail"
+            projectId={projectId}
             loading={loading}
             height="100%"
             enableRowGrouping
@@ -707,6 +702,9 @@ export function FactPanel({ projectId, workspaceVersions, workspaceFactVersionId
         open={analysisOpen}
         projectId={projectId}
         versionId={factVersionId}
+        projectName={projectName}
+        projectCode={projectCode}
+        versionLabel={factVersionLabel}
         onClose={() => setAnalysisOpen(false)}
       />
 

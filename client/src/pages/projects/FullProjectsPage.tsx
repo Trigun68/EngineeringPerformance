@@ -439,6 +439,8 @@ export function FullProjectsPage() {
         {mainTab === 'fact' && currentProjectId && hasProject && workspace && (
           <FactPanel
             projectId={currentProjectId}
+            projectName={resolvedProject!.name}
+            projectCode={resolvedProject!.code}
             workspaceVersions={workspace.versions}
             workspaceFactVersionId={workspace.factVersionId}
             workspaceFactVersionLabel={workspace.factVersionLabel}

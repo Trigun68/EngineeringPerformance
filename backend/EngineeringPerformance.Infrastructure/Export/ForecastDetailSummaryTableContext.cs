@@ -7,7 +7,7 @@ namespace EngineeringPerformance.Infrastructure.Export;
 
 public sealed class ForecastDetailSummaryTableContext(AppDbContext context) : IForecastDetailSummaryTableContext
 {
-    public async Task<(string ProjectCode, string VersionName, IReadOnlyList<IicDirectionNodeDto> Directions)> LoadAsync(
+    public async Task<(string ProjectCode, string ProjectName, string VersionName, IReadOnlyList<IicDirectionNodeDto> Directions)> LoadAsync(
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default)
@@ -15,7 +15,7 @@ public sealed class ForecastDetailSummaryTableContext(AppDbContext context) : IF
         var metadata = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .Where(v => v.Id == versionId && v.ProjectId == projectId)
-            .Select(v => new { v.VersionName, ProjectCode = v.Project.Code })
+            .Select(v => new { v.VersionName, ProjectCode = v.Project.Code, ProjectName = v.Project.Name })
             .FirstOrDefaultAsync(cancellationToken);
 
         if (metadata is null)
@@ -36,6 +36,6 @@ public sealed class ForecastDetailSummaryTableContext(AppDbContext context) : IF
                 d.Unit != null ? d.Unit.Name : null))
             .ToListAsync(cancellationToken);
 
-        return (metadata.ProjectCode, metadata.VersionName, directions);
+        return (metadata.ProjectCode, metadata.ProjectName, metadata.VersionName, directions);
     }
 }

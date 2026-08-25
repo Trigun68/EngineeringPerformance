@@ -14,6 +14,8 @@ import {
   Typography,
 } from '@mui/material';
 import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
+import { ExportActionButton } from '../export/ExportActionButton';
+import { ToolbarActionButton } from '../export/ToolbarActionButton';
 import { AgGridReact } from 'ag-grid-react';
 import type {
   ColDef,
@@ -465,24 +467,18 @@ function DictionaryGridInternal<T extends { id: number }>({
       <Stack direction="row" spacing={0.5} sx={{ mb: 1, justifyContent: 'space-between', flexShrink: 0 }}>
         {treeData ? (
           <Stack direction="row" spacing={0.5}>
-            <Button
-              size="small"
-              variant="outlined"
+            <ToolbarActionButton
               onClick={() => gridApiRef.current?.expandAll()}
-              sx={{ textTransform: 'none' }}
               aria-label="Развернуть всё"
             >
               Развернуть всё
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
+            </ToolbarActionButton>
+            <ToolbarActionButton
               onClick={() => gridApiRef.current?.collapseAll()}
-              sx={{ textTransform: 'none' }}
               aria-label="Свернуть всё"
             >
               Свернуть всё
-            </Button>
+            </ToolbarActionButton>
           </Stack>
         ) : (
           <Box />
@@ -494,14 +490,7 @@ function DictionaryGridInternal<T extends { id: number }>({
           </IconButton>
         </Tooltip>
         {showExportButton && onExportExcel && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={onExportExcel}
-            sx={{ textTransform: 'none' }}
-          >
-            Выгрузить в Excel
-          </Button>
+          <ExportActionButton kind="excel" onClick={onExportExcel} />
         )}
         </Stack>
       </Stack>

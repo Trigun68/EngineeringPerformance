@@ -86,43 +86,88 @@ public sealed class PerformanceReportResolveTests
     }
 
     [Fact]
-    public void ApplyLivePlanHoursToDirections_StampsZBase_AndRollsUpParent()
+    public void BuildPlanPerformance_ComputesZFromLiveHours_NotZBaseStamp()
     {
         var engine = new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
-        var live = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>
+        const int dirId = 2;
+        var classifier = new IicWorkDirection
         {
-            [2] = (100m, 80m, 120m),
-            [3] = (50m, 40m, 60m),
+            Id = dirId,
+            Code = "IIC-2",
+            Name = "Лист",
+            Unit = new UnitOfMeasurement { Id = 1, Name = "шт" },
         };
-        var planning = new Dictionary<int, PlanningZParameters>
+        var kfo = new PhysicalVolumeKfo
         {
-            [1] = new(0.5m, 0m, -0.5m),
-            [2] = new(0.5m, -0.4m, -0.5m),
-            [3] = new(0.5m, 0.2m, -0.5m),
+            Id = 5,
+            Code = "K",
+            Name = "K",
+            IsAssessment = true,
+            ClassifierId = dirId,
+            Coefficient = 1m,
         };
-        var rows = new List<PerformanceReportDirectionRowDto>
+        var bundle = new ProjectsPageVersionBundle
         {
-            Dir(1, null, 0, volume: 15m),
-            Dir(2, 1, 1, volume: 10m),
-            Dir(3, 1, 1, volume: 5m),
+            VersionExists = true,
+            WorkDirections = [classifier],
+            PhysicalVolumes =
+            [
+                new ProjectPhysicalVolume
+                {
+                    Id = 10,
+                    Quantity = 10m,
+                    FacilityCode = "A",
+                    PhysicalVolumeKfoId = kfo.Id,
+                    PhysicalVolumeKfo = kfo,
+                },
+            ],
+            Equipment = [],
+            LaborIntensities = [],
+            NormsByDirection = new Dictionary<int, NormCalculationSnapshot>
+            {
+                [dirId] = new(
+                    10m, 0m, 1m,
+                    NormFormulaMapper.FromLegacyPerformance(10m),
+                    NormFormulaMapper.FromLegacyStdDev(10m, 1m)),
+            },
+            ClassifierMap = new Dictionary<int, IicWorkDirection> { [dirId] = classifier },
+            PlanningZByDirection = new Dictionary<int, PlanningZParameters>
+            {
+                [dirId] = new(0.5m, 0.2m, -0.5m),
+            },
+            NormIdByDirection = new Dictionary<int, int>(),
         };
+        StoredPlanHoursTestHelper.ApplyEngineHours(bundle, engine);
 
-        var result = PerformanceReportService.ApplyLivePlanHoursToDirections(rows, live, planning, engine);
+        var plan = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, engine);
+        var leaf = plan.Should().ContainSingle(r => !r.IsTotal && r.WorkDirectionId == dirId).Subject;
+        leaf.ZScore.Should().NotBe(0.2m);
+        leaf.FactLaborHours.Should().BePositive();
 
-        var leafA = result.Single(r => r.WorkDirectionId == 2);
-        leafA.FactLaborHours.Should().Be(100m);
-        leafA.ZScore.Should().Be(-0.4m);
-        leafA.SubtreeHours.Should().Be(100m);
-
-        var leafB = result.Single(r => r.WorkDirectionId == 3);
-        leafB.ZScore.Should().Be(0.2m);
-
-        var root = result.Single(r => r.WorkDirectionId == 1);
-        root.SubtreeHours.Should().Be(150m);
-        root.ZScore.Should().Be(engine.ComputeWeightedZ(
-            [(-0.4m, 100m), (0.2m, 50m)],
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces));
-        root.ZScore.Should().NotBeNull();
+        var liveHours = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle, engine);
+        var labor = new List<ProjectLaborIntensity>
+        {
+            new()
+            {
+                WorkDirectionId = dirId,
+                PlannedHours = liveHours[dirId].Base ?? 0m,
+            },
+        };
+        var factBundle = new ProjectsPageVersionBundle
+        {
+            VersionExists = true,
+            WorkDirections = [classifier],
+            PhysicalVolumes = bundle.PhysicalVolumes,
+            Equipment = [],
+            LaborIntensities = labor,
+            NormsByDirection = bundle.NormsByDirection,
+            ClassifierMap = bundle.ClassifierMap,
+            PlanningZByDirection = bundle.PlanningZByDirection,
+            NormIdByDirection = bundle.NormIdByDirection,
+        };
+        var fact = ProjectsPageGridBuilder.BuildPerformance(factBundle, engine);
+        var factLeaf = fact.Should().ContainSingle(r => !r.IsTotal && r.WorkDirectionId == dirId).Subject;
+        leaf.ZScore.Should().Be(factLeaf.ZScore);
     }
 
     [Fact]
@@ -177,26 +222,5 @@ public sealed class PerformanceReportResolveTests
             NormProductivity: 1m,
             NormStdDev: 0.1m,
             ZScore: z,
-            Interpretation: null);
-
-    private static PerformanceReportDirectionRowDto Dir(
-        int id,
-        int? parentId,
-        int level,
-        decimal volume) =>
-        new(
-            WorkDirectionId: id,
-            ParentId: parentId,
-            Level: level,
-            Code: $"C{id}",
-            Name: $"N{id}",
-            UnitName: "шт",
-            FactPhysicalVolume: volume,
-            FactLaborHours: null,
-            SubtreeHours: null,
-            FactProductivity: null,
-            NormProductivity: 1m,
-            NormStdDev: 0.1m,
-            ZScore: null,
             Interpretation: null);
 }

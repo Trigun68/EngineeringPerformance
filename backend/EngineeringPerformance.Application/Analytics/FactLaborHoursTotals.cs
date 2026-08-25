@@ -3,7 +3,7 @@ using EngineeringPerformance.Domain.Entities;
 namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
-/// Суммы часов LI: план = PlannedHours, факт ввода = ActualHours.
+/// Суммы часов LI: оценка факта = PlannedHours (ActualHours хранится, в Z/KPI не входит).
 /// </summary>
 public static class FactLaborHoursTotals
 {
@@ -15,7 +15,11 @@ public static class FactLaborHoursTotals
     public static decimal? FromActualHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         FromHours(laborIntensities.Sum(li => li.ActualHours));
 
-    /// <summary>Σ ActualHours только по строкам с группой IIC. Неотнесённые не входят в KPI факта.</summary>
+    /// <summary>Σ PlannedHours только по строкам с группой IIC. SoT факта для Z и KPI.</summary>
+    public static decimal? FromAllocatedPlannedHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
+        FromHours(laborIntensities.Where(li => li.WorkDirectionId.HasValue).Sum(li => li.PlannedHours));
+
+    /// <summary>Σ ActualHours только по строкам с группой IIC. Колонка хранится, в оценку не входит.</summary>
     public static decimal? FromAllocatedActualHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         FromHours(laborIntensities.Where(li => li.WorkDirectionId.HasValue).Sum(li => li.ActualHours));
 

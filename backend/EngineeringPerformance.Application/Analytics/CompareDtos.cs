@@ -37,6 +37,10 @@ public sealed record VersionCompareRowDto(
     decimal? PlanZScoreA = null,
     decimal? PlanZScoreB = null,
     decimal? PlanZDelta = null,
+    decimal? PlanZScoreOptimisticA = null,
+    decimal? PlanZScoreOptimisticB = null,
+    decimal? PlanZScorePessimisticA = null,
+    decimal? PlanZScorePessimisticB = null,
     bool IsTotal = false,
     int Level = 0);
 

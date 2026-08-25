@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
   Paper,
   Stack,
@@ -13,22 +12,32 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import {
   exportAnalysisExcel,
   exportAnalysisPdf,
   fetchVersionAnalysis,
   type ProjectVersionAnalysis,
-  type ProjectVersionDirection,
+  type ProjectVersionDirectionLaborRow,
   type ProjectVersionLaborRow,
   type ProjectVersionPhysicalVolumeItem,
 } from '../../../api/analyticsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { formatGridNumber } from '../../../utils/formatGridNumber';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
+import { REPORT_COLUMN_HEADER_FONT_SIZE } from '../utils/projectModalTitle';
+import { ReportHeaderCell } from '../utils/ReportHeaderCell';
 import { usePermission } from '../../../hooks/usePermission';
+import {
+  factFoForCard,
+  orderDirectionsForCards,
+  ownLabor,
+  ownVolumes,
+  sumFactCardHours,
+} from './factAnalysisTree';
 
 export interface FactAnalysisReportViewProps {
   projectId: number;
@@ -39,7 +48,18 @@ const num1 = (v: unknown) => formatGridNumber(v, 1);
 const num2 = (v: unknown) => formatGridNumber(v, 2);
 const num4 = (v: unknown) => formatGridNumber(v, 4);
 
-const GRID_COLUMNS = '80px 1fr 100px 90px 110px 110px 110px 100px 100px 90px 140px';
+/** Пастель колонок плана — как грид «Оценка факта / Итого». */
+const PLAN_HOUR_BG = {
+  optimistic: '#e3f2fd',
+  base: '#e8f5e9',
+  pessimistic: '#ffebee',
+} as const;
+
+const OPT_COLOR = '#27AE60';
+const PES_COLOR = '#E74C3C';
+
+const GRID_COLUMNS = '90px minmax(220px, 1.4fr) 110px 100px 130px 120px 130px 110px 110px 80px minmax(140px, 1fr)';
+const GRID_MIN_WIDTH = 1280;
 
 function VolumeTable({ title, rows }: { title: string; rows: ProjectVersionPhysicalVolumeItem[] }) {
   if (rows.length === 0) return null;
@@ -76,8 +96,53 @@ function VolumeTable({ title, rows }: { title: string; rows: ProjectVersionPhysi
   );
 }
 
+function DirectionLaborTable({ rows }: { rows: ProjectVersionDirectionLaborRow[] }) {
+  if (rows.length === 0) return null;
+  const planned = rows.reduce((s, r) => s + (r.plannedHours ?? 0), 0);
+  const actual = rows.reduce((s, r) => s + (r.actualHours ?? 0), 0);
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Typography variant="caption" sx={{ color: '#64748B', fontWeight: 600, display: 'block', mb: 0.5 }}>
+        Трудоёмкость версии
+      </Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Шифр документации</TableCell>
+            <TableCell>Марка</TableCell>
+            <TableCell align="right">План, ч</TableCell>
+            <TableCell align="right">Факт, ч</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, idx) => (
+            <TableRow key={`${row.documentationCode}-${idx}`}>
+              <TableCell>{row.documentationCode}</TableCell>
+              <TableCell>{row.brand ?? '—'}</TableCell>
+              <TableCell align="right">{num1(row.plannedHours)}</TableCell>
+              <TableCell align="right">{num1(row.actualHours)}</TableCell>
+            </TableRow>
+          ))}
+          <TableRow sx={{ bgcolor: '#EEF4FF' }}>
+            <TableCell colSpan={2} sx={{ fontWeight: 700 }}>
+              ИТОГО
+            </TableCell>
+            <TableCell align="right" sx={{ fontWeight: 700 }}>
+              {num1(planned)}
+            </TableCell>
+            <TableCell align="right" sx={{ fontWeight: 700 }}>
+              {num1(actual)}
+            </TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
 function LaborBlock({ rows }: { rows: ProjectVersionLaborRow[] }) {
-  const total = rows.reduce((s, r) => s + (r.plannedHours ?? 0), 0);
+  const planned = rows.reduce((s, r) => s + (r.plannedHours ?? 0), 0);
+  const actual = rows.reduce((s, r) => s + (r.actualHours ?? 0), 0);
   return (
     <Box sx={{ mt: 3 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1, color: '#2C3E50' }}>
@@ -95,7 +160,8 @@ function LaborBlock({ rows }: { rows: ProjectVersionLaborRow[] }) {
               <TableCell>Шифр документации</TableCell>
               <TableCell>Марка</TableCell>
               <TableCell>Направление IIC</TableCell>
-              <TableCell align="right">Плановые часы</TableCell>
+              <TableCell align="right">План, ч</TableCell>
+              <TableCell align="right">Факт, ч</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -105,6 +171,7 @@ function LaborBlock({ rows }: { rows: ProjectVersionLaborRow[] }) {
                 <TableCell>{row.brand ?? '—'}</TableCell>
                 <TableCell>{row.workDirectionName ?? '—'}</TableCell>
                 <TableCell align="right">{num1(row.plannedHours)}</TableCell>
+                <TableCell align="right">{num1(row.actualHours)}</TableCell>
               </TableRow>
             ))}
             <TableRow sx={{ bgcolor: '#EEF4FF' }}>
@@ -112,7 +179,10 @@ function LaborBlock({ rows }: { rows: ProjectVersionLaborRow[] }) {
                 ИТОГО
               </TableCell>
               <TableCell align="right" sx={{ fontWeight: 700 }}>
-                {num1(total)}
+                {num1(planned)}
+              </TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                {num1(actual)}
               </TableCell>
             </TableRow>
           </TableBody>
@@ -130,31 +200,134 @@ function ReportHeaderRow() {
         gridTemplateColumns: GRID_COLUMNS,
         gap: 1,
         bgcolor: '#2C3E50',
-        color: '#94A3B8',
+        color: '#FFFFFF',
         px: 2,
-        py: 1,
+        py: 1.5,
         borderRadius: 1,
         mb: 0.5,
-        fontSize: 11,
+        minWidth: GRID_MIN_WIDTH,
+        fontSize: REPORT_COLUMN_HEADER_FONT_SIZE,
         fontWeight: 600,
+        alignItems: 'end',
       }}
     >
-      <Box>Шифр</Box>
-      <Box>Направление</Box>
-      <Box sx={{ textAlign: 'right' }}>Факт ФО</Box>
-      <Box sx={{ textAlign: 'right' }}>Факт ч</Box>
-      <Box sx={{ textAlign: 'right' }}>План.Труд.Песс.</Box>
-      <Box sx={{ textAlign: 'right' }}>План.Труд.Баз.</Box>
-      <Box sx={{ textAlign: 'right' }}>План.Труд.Оптим.</Box>
-      <Box sx={{ textAlign: 'right' }}>Факт произв.</Box>
-      <Box sx={{ textAlign: 'right' }}>Норм. произв.</Box>
-      <Box sx={{ textAlign: 'right' }}>Z</Box>
-      <Box>Интерпретация</Box>
+      <ReportHeaderCell>Шифр</ReportHeaderCell>
+      <ReportHeaderCell>Направление</ReportHeaderCell>
+      <ReportHeaderCell align="right">Факт ФО</ReportHeaderCell>
+      <ReportHeaderCell align="right">Факт ч</ReportHeaderCell>
+      <ReportHeaderCell align="right" sx={{ color: OPT_COLOR }}>
+        План.Труд.Оптим.
+      </ReportHeaderCell>
+      <ReportHeaderCell align="right">План.Труд.Баз.</ReportHeaderCell>
+      <ReportHeaderCell align="right" sx={{ color: PES_COLOR }}>
+        План.Труд.Песс.
+      </ReportHeaderCell>
+      <ReportHeaderCell align="right">Факт произв.</ReportHeaderCell>
+      <ReportHeaderCell align="right">Норм. произв.</ReportHeaderCell>
+      <ReportHeaderCell align="right">Z</ReportHeaderCell>
+      <ReportHeaderCell>Интерпретация</ReportHeaderCell>
     </Box>
   );
 }
 
-function directionTitle(d: ProjectVersionDirection): string {
+function ReportDataRow({
+  code,
+  name,
+  factFo,
+  factHours,
+  optH,
+  baseH,
+  pesH,
+  factProd,
+  normProd,
+  zScore,
+  interpretation,
+  dark = false,
+}: {
+  code: string;
+  name: string;
+  factFo: unknown;
+  factHours: unknown;
+  optH: unknown;
+  baseH: unknown;
+  pesH: unknown;
+  factProd: unknown;
+  normProd: unknown;
+  zScore: unknown;
+  interpretation: string;
+  dark?: boolean;
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: GRID_COLUMNS,
+        gap: 1,
+        alignItems: 'center',
+        px: 2,
+        py: 1.25,
+        minWidth: GRID_MIN_WIDTH,
+        bgcolor: dark ? '#1E3A5F' : '#FFFFFF',
+        color: dark ? '#FFFFFF' : '#2C3E50',
+        border: dark ? 'none' : '1px solid #E2E8F0',
+        borderRadius: 1,
+        mb: dark ? 1 : 0,
+        fontSize: dark ? 13 : 14,
+        fontWeight: dark ? 700 : 400,
+      }}
+    >
+      <Box sx={{ fontWeight: dark ? 700 : 600, fontFamily: code ? 'monospace' : 'inherit' }}>
+        {code || (dark ? 'ИТОГО' : '—')}
+      </Box>
+      <Box sx={{ fontWeight: dark ? 600 : 500 }}>{name}</Box>
+      <Box sx={{ textAlign: 'right' }}>
+        {typeof factFo === 'string' ? factFo : dark ? (factFo != null && factFo !== '' ? String(factFo) : '—') : num2(factFo)}
+      </Box>
+      <Box sx={{ textAlign: 'right' }}>{num1(factHours)}</Box>
+      <Box
+        sx={{
+          textAlign: 'right',
+          fontWeight: 600,
+          color: dark ? '#A9DFBF' : OPT_COLOR,
+          bgcolor: dark ? 'transparent' : PLAN_HOUR_BG.optimistic,
+          borderRadius: 0.5,
+          px: 0.5,
+        }}
+      >
+        {num1(optH)}
+      </Box>
+      <Box
+        sx={{
+          textAlign: 'right',
+          fontWeight: 600,
+          bgcolor: dark ? 'transparent' : PLAN_HOUR_BG.base,
+          borderRadius: 0.5,
+          px: 0.5,
+        }}
+      >
+        {num1(baseH)}
+      </Box>
+      <Box
+        sx={{
+          textAlign: 'right',
+          fontWeight: 600,
+          color: dark ? '#F1948A' : PES_COLOR,
+          bgcolor: dark ? 'transparent' : PLAN_HOUR_BG.pessimistic,
+          borderRadius: 0.5,
+          px: 0.5,
+        }}
+      >
+        {num1(pesH)}
+      </Box>
+      <Box sx={{ textAlign: 'right' }}>{dark ? '—' : num4(factProd)}</Box>
+      <Box sx={{ textAlign: 'right' }}>{dark ? '—' : num4(normProd)}</Box>
+      <Box sx={{ textAlign: 'right' }}>{num4(zScore)}</Box>
+      <Box>{interpretation}</Box>
+    </Box>
+  );
+}
+
+function directionTitle(d: { code: string; name: string; unitName: string | null }): string {
   return formatIisNorm({ code: d.code, name: d.name, unitName: d.unitName });
 }
 
@@ -190,12 +363,29 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
     void load();
   }, [load]);
 
-  const directionsSorted = useMemo(() => {
-    if (!report) return [];
-    return [...report.directions].sort(
-      (a, b) => a.level - b.level || a.code.localeCompare(b.code, 'ru'),
-    );
-  }, [report]);
+  const cardRows = useMemo(
+    () => (report ? orderDirectionsForCards(report.directions) : []),
+    [report],
+  );
+
+  const projectTotal = useMemo(() => {
+    if (!report) return null;
+    const allIds = cardRows.map((d) => d.id);
+    const hours = sumFactCardHours(cardRows, allIds);
+    const fo = (report.summary.physicalVolumeTotalsByUnit ?? [])
+      .map((u) => `${num2(u.totalVolume)} ${u.unitName}`.trim())
+      .filter(Boolean)
+      .join('; ');
+    return {
+      fo: fo || '—',
+      hours: report.summary.totalFactLaborHours,
+      opt: hours.optimisticHours,
+      base: hours.baseHours,
+      pes: hours.pessimisticHours,
+      z: report.summary.weightedZScore,
+      interpretation: report.summary.weightedZScoreInterpretation,
+    };
+  }, [report, cardRows]);
 
   const handleExport = async (type: 'excel' | 'pdf') => {
     setExporting(true);
@@ -237,9 +427,6 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
         sx={{ mb: 2, flexShrink: 0 }}
       >
         <Box>
-          <Typography variant="body2" color="text.secondary">
-            {report.projectCode ?? '—'} — {report.projectName} ({report.versionName})
-          </Typography>
           <Typography variant="caption" color="text.secondary">
             {[
               s.weightedZScore != null ? `Z (взвеш.): ${num4(s.weightedZScore)}` : null,
@@ -251,35 +438,23 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
           </Typography>
         </Box>
         <Stack direction="row" spacing={1}>
-          <Button
-            size="small"
-            variant="outlined"
+          <ToolbarActionButton
             startIcon={<RefreshIcon />}
             disabled={loading || exporting}
             onClick={() => void load()}
           >
-            Обновить
-          </Button>
-          <Button
-            size="small"
-            variant="contained"
-            sx={{ bgcolor: '#27AE60', '&:hover': { bgcolor: '#229954' } }}
-            startIcon={<FileDownloadIcon />}
-            disabled={exporting}
+            {ACTION_LABELS.refresh}
+          </ToolbarActionButton>
+          <ExportActionButton
+            kind="excel"
+            loading={exporting}
             onClick={() => void handleExport('excel')}
-          >
-            Excel
-          </Button>
-          <Button
-            size="small"
-            variant="contained"
-            sx={{ bgcolor: '#E74C3C', '&:hover': { bgcolor: '#C0392B' } }}
-            startIcon={<PictureAsPdfIcon />}
-            disabled={exporting}
+          />
+          <ExportActionButton
+            kind="pdf"
+            loading={exporting}
             onClick={() => void handleExport('pdf')}
-          >
-            PDF
-          </Button>
+          />
         </Stack>
       </Stack>
 
@@ -291,50 +466,64 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
 
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         <ReportHeaderRow />
-        {directionsSorted.map((d) => {
-          const pv = d.physicalVolumes ?? [];
-          const eq = d.equipmentVolumes ?? [];
-          const hasVolumes = pv.length > 0 || eq.length > 0;
+        {projectTotal && (
+          <ReportDataRow
+            code=""
+            name="По проекту"
+            factFo={projectTotal.fo}
+            factHours={projectTotal.hours}
+            optH={projectTotal.opt}
+            baseH={projectTotal.base}
+            pesH={projectTotal.pes}
+            factProd={null}
+            normProd={null}
+            zScore={projectTotal.z}
+            interpretation={interpretLabel(projectTotal.interpretation)}
+            dark
+          />
+        )}
+        {cardRows.map((d) => {
+          const pv = ownVolumes(d, 'physicalVolumes');
+          const eq = ownVolumes(d, 'equipmentVolumes');
+          const labor = ownLabor(d);
+          const factFo = factFoForCard(d, [...pv, ...eq]);
+          const hasDetail = pv.length > 0 || eq.length > 0 || labor.length > 0;
           return (
             <Paper
               key={d.id}
+              data-testid={`fact-analysis-card-${d.id}`}
               elevation={0}
               sx={{
-                mb: 1,
-                ml: `${d.level * 24}px`,
+                mb: 1.5,
+                ml: `${Math.max(0, d.level) * 24}px`,
                 border: '1px solid #E2E8F0',
                 borderRadius: 1,
                 overflow: 'hidden',
               }}
             >
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: GRID_COLUMNS,
-                  gap: 1,
-                  alignItems: 'center',
-                  px: 2,
-                  py: 1.25,
-                  bgcolor: '#FFFFFF',
-                  fontSize: 14,
-                }}
-              >
-                <Box sx={{ fontWeight: 600, fontFamily: 'monospace' }}>{d.code || '—'}</Box>
-                <Box sx={{ fontWeight: 500 }}>{directionTitle(d)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num2(d.factPhysicalVolume)}</Box>
-                <Box sx={{ textAlign: 'right', fontWeight: 600 }}>{num1(d.factLaborHours)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num2(d.pessimisticHours)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num2(d.baseHours)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num2(d.optimisticHours)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num4(d.factProductivity)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num4(d.normProductivity)}</Box>
-                <Box sx={{ textAlign: 'right' }}>{num4(d.zScore)}</Box>
-                <Box>{interpretLabel(d.interpretation)}</Box>
-              </Box>
-              {hasVolumes && (
+              <ReportDataRow
+                code={d.code || '—'}
+                name={directionTitle(d)}
+                factFo={factFo}
+                factHours={d.factLaborHours}
+                optH={d.optimisticHours}
+                baseH={d.baseHours}
+                pesH={d.pessimisticHours}
+                factProd={d.factProductivity}
+                normProd={d.normProductivity}
+                zScore={d.zScore}
+                interpretation={interpretLabel(d.interpretation)}
+              />
+              {d.unitName && (
+                <Typography variant="caption" sx={{ color: '#64748B', display: 'block', px: 2, pt: 0.5 }}>
+                  ед. изм.: <strong>{d.unitName}</strong>
+                </Typography>
+              )}
+              {hasDetail && (
                 <Box sx={{ px: 2, pb: 1.5, bgcolor: '#F8FAFC' }}>
                   <VolumeTable title="Физ. объёмы проекта" rows={pv} />
                   <VolumeTable title="Оборудование проекта" rows={eq} />
+                  <DirectionLaborTable rows={labor} />
                 </Box>
               )}
             </Paper>

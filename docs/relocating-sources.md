@@ -2,6 +2,10 @@
 
 Дата обновления: 2026-08-19.
 
+**Следующая сессия:** пользователь откроет Cursor из новой папки и просто напишет в чат.
+Это сигнал сразу привязать Compose к новому пути (`docker compose up -d`, без `-v`) и
+проверить, что том SQL тот же. См. пометку в `.cursor/rules/workspace-root.mdc`.
+
 Исходники (git-дерево) и runtime Docker — разные вещи. Контейнеры `ep-backend`,
 `ep-frontend`, `ep-sqlserver`, `ep-redis`, том `engineeringperformance_mssql_data` и
 пин `172.18.0.8` в `tech-lab24-edge` остаются на хосте. Переезжает только каталог с кодом.

@@ -97,12 +97,12 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 export async function exportProjectsExcel(): Promise<void> {
-  const { blob, filename } = await downloadBlob('/projects/export/excel', undefined, 'projects.xlsx');
+  const { blob, filename } = await downloadBlob('/projects/export/excel');
   triggerBrowserDownload(blob, filename);
 }
 
 export async function exportProjectsPdf(): Promise<void> {
-  const { blob, filename } = await downloadBlob('/projects/export/pdf', undefined, 'projects.pdf');
+  const { blob, filename } = await downloadBlob('/projects/export/pdf');
   triggerBrowserDownload(blob, filename);
 }
 

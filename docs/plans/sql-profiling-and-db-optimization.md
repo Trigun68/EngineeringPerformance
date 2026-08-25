@@ -17,7 +17,8 @@
 Конфиг (`SqlProfiling` в appsettings):
 
 - `Enabled` (default true)
-- `MinDurationMsToPersist` — порог записи
+- `MinDurationMsToPersist` — порог записи (**50 мс** в Docker/prod: короткие команды не пишутся)
+- `PersistCommandTimeoutSeconds` — таймаут INSERT метрик (**8 с**); сбой persist — warning, пользовательский SQL не ждёт 30 с
 - `RetentionDays` (default 14)
 
 ## 2. Как читать отчёты

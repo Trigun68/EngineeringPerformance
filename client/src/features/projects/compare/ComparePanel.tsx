@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -17,17 +17,14 @@ import {
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import type { GridApi } from 'ag-grid-community';
 import {
   exportCompareDetailExcel,
   exportCompareDetailSummaryTable,
   exportCompareExcelVisible,
-  fetchCompareChart,
   fetchVersionCompare,
   fetchVersionCompareDetail,
-  type CompareChartResult,
   type CompareExportSection,
   type VersionCompareDetailRow,
   type VersionCompareFacilityRow,
@@ -41,11 +38,20 @@ import {
   buildVersionLabel,
   ProjectVersionPickerDialog,
 } from '../../../components/ProjectVersionPickerDialog/ProjectVersionPickerDialog';
+import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { usePermission } from '../../../hooks/usePermission';
 import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import {
+  compareScenarioPrefKey,
+  compareShowDiffPrefKey,
+  compareVersionAPrefKey,
+  compareVersionBPrefKey,
+  parsePrefId,
+} from '../../../utils/projectWorkspacePrefs';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
 import { collectGridExportData } from '../../../utils/directoryExport';
+import { formatGridNumber } from '../../../utils/formatGridNumber';
 import {
   createCompareDetailColumns,
   createCompareFacilityColumns,
@@ -55,6 +61,8 @@ import {
 import { shortCatalogName } from '../forecast/catalogShortName';
 import { panelPrimaryToolbarSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
 import { useWorkspaceChrome } from '../shared/workspaceChromeContext';
+import { compareTabPlannedHoursDelta } from './compareColumns';
+import { buildCompareFacilityPinnedTotal } from './compareFacilityTotals';
 import {
   filterCompareDetailRows,
   filterCompareFacilityRows,
@@ -62,13 +70,8 @@ import {
 } from './compareFilters';
 import { buildCompareTreeRows, type CompareTreeRow } from './compareTree';
 import { exportComparePdf, type ComparePdfSection } from '../../../api/visualReportsApi';
-// Highcharts подтягивается только при переключении на режим диаграммы (ISS-018).
-const CompareChartView = lazy(() =>
-  import('./CompareChartView').then((m) => ({ default: m.CompareChartView })),
-);
 
 type CompareSubTab = 'compare-total' | 'compare-facility' | 'compare-detail';
-type CompareViewMode = 'table' | 'chart';
 
 function subTabToExportSection(subTab: CompareSubTab): CompareExportSection {
   if (subTab === 'compare-facility') return 'facility';
@@ -118,22 +121,36 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<CompareViewMode>('table');
-  const [chartData, setChartData] = useState<CompareChartResult | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<'A' | 'B' | null>(null);
-  const [showOnlyDifferences, setShowOnlyDifferences] = useState(false);
-  const [compareScenario, setCompareScenario] = useState<CompareScenario>('base');
+  const [showDiffRaw, setShowDiffRaw] = usePersistedTabState<'0' | '1'>(
+    compareShowDiffPrefKey(projectId),
+    '0',
+  );
+  const showOnlyDifferences = showDiffRaw === '1';
+  const [compareScenario, setCompareScenario] = usePersistedTabState<CompareScenario>(
+    compareScenarioPrefKey(projectId),
+    'base',
+  );
   const [activeGridReady, setActiveGridReady] = useState(false);
   const gridApiRef = useRef<GridApi | null>(null);
-  const detailRequestedKeyRef = useRef<string | null>(null);
 
   // Пользовательский выбор версии (переопределяет workspace по умолчанию)
   const [userVersionAId, setUserVersionAId] = useState<number | null>(null);
   const [userVersionBId, setUserVersionBId] = useState<number | null>(null);
+  const restoredComparePrefForProjectRef = useRef<number | null>(null);
   const versionAId = userVersionAId ?? workspaceCompareVersionAId;
   const versionBId = userVersionBId ?? workspaceCompareVersionBId;
+  const versionAIdRef = useRef<number | null>(null);
+  const versionBIdRef = useRef<number | null>(null);
+  const projectIdRef = useRef(projectId);
+  const compareLoadGenRef = useRef(0);
+  const compareAbortRef = useRef<AbortController | null>(null);
+  const loadedComparePairRef = useRef<string | null>(null);
+  versionAIdRef.current = versionAId;
+  versionBIdRef.current = versionBId;
+  projectIdRef.current = projectId;
   const versionALabel = userVersionAId != null
     ? (() => {
         const v = workspaceVersions.find((vv) => vv.id === userVersionAId);
@@ -176,7 +193,7 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   useEffect(() => {
     gridApiRef.current = null;
     setActiveGridReady(false);
-  }, [subTab, viewMode]);
+  }, [subTab]);
 
   const handleExportVisibleExcel = useCallback(async () => {
     if (!versionAId || !versionBId) return;
@@ -206,6 +223,9 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
         `${tabLabel}_выделенные`,
         headers,
         exportRows,
+        versionAId,
+        versionBId,
+        true,
       );
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт выделенных данных.'));
@@ -235,7 +255,16 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
         }
         const section = subTabToExportSection(subTab);
         const tabLabel = section === 'facility' ? 'Сравнение_По_объектам' : 'Сравнение_Итого';
-        await exportCompareExcelVisible(projectId, section, `${tabLabel}_все`, headers, exportRows);
+        await exportCompareExcelVisible(
+          projectId,
+          section,
+          `${tabLabel}_все`,
+          headers,
+          exportRows,
+          versionAId,
+          versionBId,
+          false,
+        );
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт Excel.'));
@@ -259,76 +288,153 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
 
   const loadCompare = useCallback(async () => {
     if (!versionAId || !versionBId || !canRead) return;
-    detailRequestedKeyRef.current = null;
+    const requestedA = versionAId;
+    const requestedB = versionBId;
+    const requestedPair = `${requestedA}:${requestedB}`;
+    const loadGen = ++compareLoadGenRef.current;
+    compareAbortRef.current?.abort();
+    const controller = new AbortController();
+    compareAbortRef.current = controller;
     setLoading(true);
     setError(null);
     try {
-      // Таблица и диаграмма независимы — грузим параллельно, а не каскадом.
-      const [data, chart] = await Promise.all([
-        fetchVersionCompare(projectId, versionAId, versionBId),
-        fetchCompareChart(projectId, versionAId, versionBId, 'iic', 'zScore', 20),
-      ]);
-      setCompareData(data);
-      setChartData(chart);
+      const data = await fetchVersionCompare(projectId, requestedA, requestedB, controller.signal);
+      if (
+        loadGen !== compareLoadGenRef.current
+        || requestedA !== versionAIdRef.current
+        || requestedB !== versionBIdRef.current
+      ) {
+        return;
+      }
+      setCompareData((prev) => {
+        const keepDetail =
+          prev != null
+          && prev.detail.length > 0
+          && data.detail.length === 0
+          && loadedComparePairRef.current === requestedPair;
+        loadedComparePairRef.current = requestedPair;
+        return keepDetail ? { ...data, detail: prev.detail } : data;
+      });
     } catch (err) {
+      if (isRequestCanceled(err) || loadGen !== compareLoadGenRef.current) return;
       setError(getApiErrorMessage(err, 'Не удалось загрузить сравнение версий.'));
       setCompareData(null);
     } finally {
-      setLoading(false);
+      if (loadGen === compareLoadGenRef.current) {
+        setLoading(false);
+      }
     }
   }, [canRead, projectId, versionAId, versionBId]);
 
   useEffect(() => {
+    compareAbortRef.current?.abort();
+    compareLoadGenRef.current += 1;
     setUserVersionAId(null);
     setUserVersionBId(null);
     setCompareData(null);
     setError(null);
+    restoredComparePrefForProjectRef.current = null;
+    loadedComparePairRef.current = null;
   }, [projectId]);
+
+  useEffect(() => {
+    if (workspaceVersions.length === 0 || restoredComparePrefForProjectRef.current === projectId) return;
+    let cancelled = false;
+    void getUserPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        restoredComparePrefForProjectRef.current = projectId;
+        const savedA = parsePrefId(prefs[compareVersionAPrefKey(projectId)]);
+        const savedB = parsePrefId(prefs[compareVersionBPrefKey(projectId)]);
+        if (savedA != null && workspaceVersions.some((v) => v.id === savedA)) {
+          setUserVersionAId(savedA);
+        }
+        if (savedB != null && workspaceVersions.some((v) => v.id === savedB)) {
+          setUserVersionBId(savedB);
+        }
+      })
+      .catch(() => {
+        restoredComparePrefForProjectRef.current = projectId;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, workspaceVersions]);
 
   useEffect(() => {
     void loadCompare();
   }, [loadCompare]);
 
+  const compareDetailLength = compareData?.detail.length ?? 0;
+  const hasComparePayload = compareData != null;
+
+  // Детально догружается отдельно. Не завязывать эффект на объект compareData и не
+  // глушить fetch в cleanup — иначе prefs версий A/B оставляют грид пустым.
   useEffect(() => {
-    if (subTab !== 'compare-detail' || !versionAId || !versionBId || !canRead || !compareData) {
+    if (subTab !== 'compare-detail' || !versionAId || !versionBId || !canRead || !hasComparePayload) {
       return;
     }
-    const key = `${projectId}:${versionAId}:${versionBId}`;
-    if (compareData.detail.length > 0 || detailRequestedKeyRef.current === key) {
+    if (compareDetailLength > 0) {
       return;
     }
-    detailRequestedKeyRef.current = key;
-    let cancelled = false;
+    const requestedA = versionAId;
+    const requestedB = versionBId;
+    const requestedProjectId = projectId;
+    const loadGen = compareLoadGenRef.current;
+    const controller = new AbortController();
     setDetailLoading(true);
-    void fetchVersionCompareDetail(projectId, versionAId, versionBId)
+    void fetchVersionCompareDetail(projectId, requestedA, requestedB, controller.signal)
       .then((detail) => {
-        if (cancelled) {
+        if (
+          requestedProjectId !== projectIdRef.current
+          || requestedA !== versionAIdRef.current
+          || requestedB !== versionBIdRef.current
+        ) {
+          return;
+        }
+        if (loadGen !== compareLoadGenRef.current) {
           return;
         }
         setCompareData((prev) => (prev ? { ...prev, detail } : prev));
       })
       .catch((err) => {
-        if (!cancelled) {
-          detailRequestedKeyRef.current = null;
-          setError(getApiErrorMessage(err, 'Не удалось загрузить детальное сравнение версий.'));
+        if (
+          isRequestCanceled(err)
+          || requestedA !== versionAIdRef.current
+          || requestedB !== versionBIdRef.current
+        ) {
+          return;
         }
+        setError(getApiErrorMessage(err, 'Не удалось загрузить детальное сравнение версий.'));
       })
       .finally(() => {
-        if (!cancelled) {
+        if (
+          requestedA === versionAIdRef.current
+          && requestedB === versionBIdRef.current
+          && loadGen === compareLoadGenRef.current
+        ) {
           setDetailLoading(false);
         }
       });
     return () => {
-      cancelled = true;
+      if (
+        versionAIdRef.current !== requestedA
+        || versionBIdRef.current !== requestedB
+        || projectIdRef.current !== requestedProjectId
+      ) {
+        controller.abort();
+      }
       setDetailLoading(false);
     };
-  }, [subTab, versionAId, versionBId, canRead, compareData, projectId]);
+  }, [subTab, versionAId, versionBId, canRead, hasComparePayload, compareDetailLength, projectId]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     if (pickerTarget === 'A') {
       setUserVersionAId(version.id);
+      void putUserPreferences({ [compareVersionAPrefKey(projectId)]: String(version.id) });
     } else if (pickerTarget === 'B') {
       setUserVersionBId(version.id);
+      void putUserPreferences({ [compareVersionBPrefKey(projectId)]: String(version.id) });
     }
     setPickerTarget(null);
   };
@@ -342,6 +448,10 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
   const facilityRows = useMemo(
     () => filterCompareFacilityRows(compareData?.facility ?? [], showOnlyDifferences, compareScenario),
     [compareData?.facility, compareScenario, showOnlyDifferences],
+  );
+  const facilityPinnedBottomRow = useMemo(
+    () => buildCompareFacilityPinnedTotal(facilityRows),
+    [facilityRows],
   );
 
   const detailRows = useMemo(
@@ -378,10 +488,10 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
 
   const hasCompareData = Boolean(compareData && versionAId && versionBId);
 
-  const totalHoursDelta = useMemo(() => {
-    if (!compareData) return null;
-    return compareData.facility.reduce((s, r) => s + (r.hoursDelta ?? 0), 0);
-  }, [compareData]);
+  const totalHoursDelta = useMemo(
+    () => compareTabPlannedHoursDelta(subTab, compareData, compareScenario),
+    [compareData, compareScenario, subTab],
+  );
 
   const catalogLabelA = useMemo(
     () => resolveCatalogShortLabel(workspaceVersions.find((v) => v.id === versionAId), physicalVolumeTypes),
@@ -465,28 +575,12 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
                 </Typography>
               </Box>
             )}
-            {totalHoursDelta != null && (
-              <Box
-                data-testid="compare-version-differences"
-                sx={{
-                  backgroundColor: '#EBF5FB',
-                  border: '1px solid #AED6F1',
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                }}
-              >
-                <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
-                  Различия версий: {totalHoursDelta.toFixed(2)} ч
-                </Typography>
-              </Box>
-            )}
             <FormControlLabel
               control={
                 <Checkbox
                   checked={showOnlyDifferences}
                   disabled={!hasCompareData}
-                  onChange={(e) => setShowOnlyDifferences(e.target.checked)}
+                  onChange={(e) => setShowDiffRaw(e.target.checked ? '1' : '0')}
                   size="small"
                 />
               }
@@ -499,79 +593,43 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
                 labelId="compare-scenario-label"
                 label="Сценарий"
                 value={compareScenario}
-                onChange={(event) => setCompareScenario(event.target.value as CompareScenario)}
+                onChange={(event) =>
+                  setCompareScenario(event.target.value as CompareScenario)
+                }
               >
                 <MenuItem value="base">Базовый</MenuItem>
                 <MenuItem value="optimistic">Оптимистичный</MenuItem>
                 <MenuItem value="pessimistic">Пессимистичный</MenuItem>
               </Select>
             </FormControl>
-          </Stack>
-
-          <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-            {(['table', 'chart'] as CompareViewMode[]).map((mode) => (
-              <Button
-                key={mode}
-                size="small"
-                variant={viewMode === mode ? 'contained' : 'outlined'}
-                onClick={() => setViewMode(mode)}
-                sx={{ textTransform: 'none' }}
+            {totalHoursDelta != null && (
+              <Box
+                data-testid="compare-version-differences"
+                sx={{
+                  backgroundColor: '#EBF5FB',
+                  border: '1px solid #AED6F1',
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 1,
+                }}
               >
-                {mode === 'table' ? 'Таблица' : 'График'}
-              </Button>
-            ))}
-            {viewMode === 'table' && (
-              <>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={!hasCompareData || exporting}
-                  onClick={() => void handleExportAllExcel()}
-                  startIcon={<FileDownloadIcon />}
-                  sx={{ textTransform: 'none' }}
-                >
-                  Экспорт всех excel
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  disabled={!hasCompareData || !activeGridReady || exporting}
-                  onClick={() => void handleExportVisibleExcel()}
-                  startIcon={<FileDownloadIcon />}
-                  sx={{ textTransform: 'none' }}
-                >
-                  Экспорт выделенных excel
-                </Button>
-              </>
-            )}
-            <Button
-              size="small"
-              variant="outlined"
-              disabled={!hasCompareData || exportingPdf}
-              onClick={() => void handleExportPdf()}
-              startIcon={<PictureAsPdfIcon />}
-              sx={{ textTransform: 'none' }}
-            >
-              Экспорт PDF
-            </Button>
-            {viewMode === 'table' && subTab === 'compare-detail' && (
-              <Button
-                size="small"
-                variant="outlined"
-                disabled={!hasCompareData || exporting}
-                onClick={() => void handleExportSummaryTable()}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Сводная таблица
-              </Button>
+                <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
+                  Различия версий: {formatGridNumber(totalHoursDelta, 2)} ч
+                </Typography>
+              </Box>
             )}
           </Stack>
 
-          <Stack
-            direction="row"
-            alignItems="center"
-            sx={{ mb: 1, gap: 1, width: '100%' }}
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              mb: 2,
+              gap: 2,
+              flexWrap: 'wrap',
+              width: '100%',
+            }}
           >
             <Tabs
               value={subTab}
@@ -579,38 +637,66 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
               variant="scrollable"
               scrollButtons="auto"
               allowScrollButtonsMobile
-              sx={{ ...projectsPageSubTabsSx, mb: 0, flex: 1, minWidth: 0 }}
+              sx={{ ...projectsPageSubTabsSx, mb: 0, width: 'auto', flex: '0 1 auto' }}
             >
               <Tab label="Итого" value="compare-total" />
               <Tab label="По объектам" value="compare-facility" />
               <Tab label="Детально" value="compare-detail" />
             </Tabs>
-            <Tooltip title="Свернуть шапку">
-              <IconButton
-                size="small"
-                aria-label="Свернуть шапку"
-                data-testid="project-header-toggle"
-                onClick={() => setChromeExpanded(false)}
-                sx={{
-                  border: '1px solid #D5D8DC',
-                  bgcolor: '#F8F9FA',
-                  borderRadius: 1,
-                  py: 0.25,
-                  px: 1.5,
-                  flexShrink: 0,
-                  '&:hover': { bgcolor: '#EEF2F5' },
-                }}
-              >
-                <ExpandMoreIcon
-                  sx={{
-                    transform: 'rotate(180deg)',
-                    transition: 'transform 0.2s ease',
-                    color: '#5D6D7E',
-                  }}
+            <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }} alignItems="center">
+              <ExportActionButton
+                kind="excel"
+                disabled={!hasCompareData}
+                loading={exporting}
+                onClick={() => void handleExportAllExcel()}
+              />
+              <ExportActionButton
+                kind="excelSelected"
+                disabled={!hasCompareData || !activeGridReady}
+                loading={exporting}
+                onClick={() => void handleExportVisibleExcel()}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!hasCompareData}
+                loading={exportingPdf}
+                onClick={() => void handleExportPdf()}
+              />
+              {subTab === 'compare-detail' && (
+                <ExportActionButton
+                  kind="excelSummary"
+                  disabled={!hasCompareData}
+                  loading={exporting}
+                  onClick={() => void handleExportSummaryTable()}
                 />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+              )}
+              <Tooltip title="Свернуть шапку">
+                <IconButton
+                  size="small"
+                  aria-label="Свернуть шапку"
+                  data-testid="project-header-toggle"
+                  onClick={() => setChromeExpanded(false)}
+                  sx={{
+                    border: '1px solid #D5D8DC',
+                    bgcolor: '#F8F9FA',
+                    borderRadius: 1,
+                    py: 0.25,
+                    px: 1.5,
+                    flexShrink: 0,
+                    '&:hover': { bgcolor: '#EEF2F5' },
+                  }}
+                >
+                  <ExpandMoreIcon
+                    sx={{
+                      transform: 'rotate(180deg)',
+                      transition: 'transform 0.2s ease',
+                      color: '#5D6D7E',
+                    }}
+                  />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+          </Box>
 
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
         </>
@@ -656,78 +742,73 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
       )}
 
       <Box sx={{ flex: 1, minHeight: 360, display: 'flex', flexDirection: 'row', gap: 2 }}>
-        {viewMode === 'table' && (
-          <Box sx={{ flex: 1, minHeight: 360, height: '100%', width: '100%', minWidth: 0 }}>
-            {subTab === 'compare-total' && (
-              <Box
-                sx={{
-                  height: '100%',
-                  '& .forecast-summary-total-row': {
-                    backgroundColor: 'rgba(41, 128, 185, 0.12) !important',
-                    fontWeight: 600,
-                  },
-                }}
-              >
-                <DataTable<CompareTreeRow>
-                  key={`compare-summary-${showOnlyDifferences}-${summaryRows.length}`}
-                  rowData={summaryRows}
-                  columnDefs={summaryColumns}
-                  objectName="VersionComparison"
-                  gridId="compare-summary"
-                  loading={loading}
-                  height="100%"
-                  treeData
-                  getDataPath={(row) => row.hierarchy}
-                  autoGroupColumnDef={summaryAutoGroupColumnDef}
-                  showColumnSettings
-                  getRowIdValue={compareSummaryRowId}
-                  getRowClass={summaryGetRowClass}
-                  onGridApiReady={handleGridApiReady}
-                />
-              </Box>
-            )}
-
-            {subTab === 'compare-facility' && (
-              <DataTable<VersionCompareFacilityRow>
-                key={`compare-facility-${showOnlyDifferences}-${facilityRows.length}`}
-                rowData={facilityRows}
-                columnDefs={facilityColumns}
+        <Box sx={{ flex: 1, minHeight: 360, height: '100%', width: '100%', minWidth: 0 }}>
+          {subTab === 'compare-total' && (
+            <Box
+              sx={{
+                height: '100%',
+                '& .forecast-summary-total-row': {
+                  backgroundColor: 'rgba(41, 128, 185, 0.12) !important',
+                  fontWeight: 600,
+                },
+              }}
+            >
+              <DataTable<CompareTreeRow>
+                key={`compare-summary-${showOnlyDifferences}-${summaryRows.length}`}
+                rowData={summaryRows}
+                columnDefs={summaryColumns}
                 objectName="VersionComparison"
-                gridId="compare-facility"
+                gridId="compare-summary"
+                projectId={projectId}
                 loading={loading}
                 height="100%"
+                treeData
+                getDataPath={(row) => row.hierarchy}
+                autoGroupColumnDef={summaryAutoGroupColumnDef}
                 showColumnSettings
-                getRowIdValue={(row) => `${row.facilityCode}|${row.facilityName}`}
+                getRowIdValue={compareSummaryRowId}
+                getRowClass={summaryGetRowClass}
                 onGridApiReady={handleGridApiReady}
               />
-            )}
+            </Box>
+          )}
 
-            {subTab === 'compare-detail' && (
-              <DataTable<VersionCompareDetailRow>
-                key={`compare-detail-${showOnlyDifferences}-${detailRows.length}`}
-                rowData={detailRows}
-                columnDefs={detailColumns}
-                objectName="VersionComparison"
-                gridId="compare-detail"
-                loading={loading}
-                height="100%"
-                enableRowGrouping
-                showColumnSettings
-                getRowIdValue={(row) =>
-                  `${row.facilityCode}|${row.pvCode}|${row.workId}`
-                }
-                onGridApiReady={handleGridApiReady}
-              />
-            )}
-          </Box>
-        )}
-        {viewMode === 'chart' && subTab === 'compare-total' && (
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Suspense fallback={<PanelBusyBar open delayMs={0} />}>
-              <CompareChartView chart={chartData} height={400} />
-            </Suspense>
-          </Box>
-        )}
+          {subTab === 'compare-facility' && (
+            <DataTable<VersionCompareFacilityRow>
+              key={`compare-facility-${showOnlyDifferences}-${facilityRows.length}`}
+              rowData={facilityRows}
+              columnDefs={facilityColumns}
+              objectName="VersionComparison"
+              gridId="compare-facility"
+              projectId={projectId}
+              loading={loading}
+              height="100%"
+              showColumnSettings
+              pinnedBottomRowData={facilityPinnedBottomRow}
+              getRowIdValue={(row) => `${row.facilityCode}|${row.facilityName}`}
+              onGridApiReady={handleGridApiReady}
+            />
+          )}
+
+          {subTab === 'compare-detail' && (
+            <DataTable<VersionCompareDetailRow>
+              key={`compare-detail-${showOnlyDifferences}-${detailRows.length}`}
+              rowData={detailRows}
+              columnDefs={detailColumns}
+              objectName="VersionComparison"
+              gridId="compare-detail"
+              projectId={projectId}
+              loading={loading || detailLoading}
+              height="100%"
+              enableRowGrouping
+              showColumnSettings
+              getRowIdValue={(row) =>
+                `${row.facilityCode}|${row.pvCode}|${row.workId}`
+              }
+              onGridApiReady={handleGridApiReady}
+            />
+          )}
+        </Box>
       </Box>
 
       <ProjectVersionPickerDialog

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton, ACTION_LABELS } from './helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = process.env.E2E_SAMPLES_DIR ?? path.resolve(__dirname, '../../.src');
@@ -24,19 +24,19 @@ async function openProjectWorkspace(page: import('@playwright/test').Page, proje
 
 async function importViaDataImportDialog(
   page: import('@playwright/test').Page,
-  openButtonName: RegExp | string,
+  openButtonName: string,
   filePath: string,
   importUrlPart: string,
   successPattern: RegExp,
   timeoutMs = 180_000,
 ) {
-  await expect(page.getByRole('button', { name: openButtonName })).toBeEnabled({ timeout: 30_000 });
-  await page.getByRole('button', { name: openButtonName }).click({ force: true });
+  await expect(page.getByRole('button', { name: openButtonName, exact: true })).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('button', { name: openButtonName, exact: true }).click({ force: true });
   const dialog = page.getByTestId('data-import-dialog');
   await expect(dialog).toBeVisible({ timeout: 15_000 });
 
   const fileChooserPromise = page.waitForEvent('filechooser');
-  await dialog.getByRole('button', { name: 'Выбрать файл' }).click();
+  await dialog.getByRole('button', { name: ACTION_LABELS.selectFile, exact: true }).click();
   const fileChooser = await fileChooserPromise;
   await fileChooser.setFiles(filePath);
 
@@ -73,11 +73,11 @@ test.describe('Project data import (.src samples)', () => {
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
     await expect(page.getByRole('button', { name: /Версия \(план\)/ })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Импорт ФО' })).toBeEnabled({ timeout: 20_000 });
+    await expect(actionButton(page, 'importPhysicalVolumes')).toBeEnabled({ timeout: 20_000 });
 
     await importViaDataImportDialog(
       page,
-      'Импорт ФО',
+      ACTION_LABELS.importPhysicalVolumes,
       SAMPLE_FILES.physicalVolumes,
       '/import/physical-volumes',
       /Импортировано записей:\s*[1-9]/,
@@ -90,11 +90,11 @@ test.describe('Project data import (.src samples)', () => {
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();
     await expect(page.getByRole('button', { name: /Версия \(план\)/ })).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole('button', { name: 'Импорт оборуд.' })).toBeEnabled({ timeout: 20_000 });
+    await expect(actionButton(page, 'importEquipment')).toBeEnabled({ timeout: 20_000 });
 
     await importViaDataImportDialog(
       page,
-      'Импорт оборуд.',
+      ACTION_LABELS.importEquipment,
       SAMPLE_FILES.equipment,
       '/import/equipment',
       /Импортировано записей:\s*[1-9]/,
@@ -107,9 +107,9 @@ test.describe('Project data import (.src samples)', () => {
     test.setTimeout(120_000);
     await openProjectWorkspace(page);
     await page.getByRole('tab', { name: 'Оценка факта' }).click();
-    await expect(page.getByRole('button', { name: 'Импорт труд.' })).toBeEnabled({ timeout: 20_000 });
+    await expect(actionButton(page, 'importLabor')).toBeEnabled({ timeout: 20_000 });
 
-    await page.getByRole('button', { name: 'Импорт труд.' }).click({ force: true });
+    await actionButton(page, 'importLabor').click({ force: true });
     const dialog = page.getByTestId('data-import-dialog');
     await expect(dialog).toBeVisible();
 
@@ -121,7 +121,7 @@ test.describe('Project data import (.src samples)', () => {
     );
 
     const fileChooserPromise = page.waitForEvent('filechooser');
-    await dialog.getByRole('button', { name: 'Выбрать файл' }).click();
+    await dialog.getByRole('button', { name: ACTION_LABELS.selectFile, exact: true }).click();
     await (await fileChooserPromise).setFiles(SAMPLE_FILES.labor);
     await previewResponse;
 

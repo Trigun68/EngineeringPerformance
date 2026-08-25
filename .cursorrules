@@ -48,6 +48,7 @@ Api (Controllers, Auth) → Application (DTOs, Interfaces, CQRS handlers) → Do
 | Physical volume import | EP code normalization (trim, dash variants, zero-padding); regex patterns for catalog codes. |
 | Excel validation | Extension `.xlsx`, MIME check, PK zip magic bytes, max 50 MB (`ExcelUploadValidator`). |
 | Access matrix | 3 roles (Administrator, Manager, Observer) + per-object levels 0/1/2; enforce on API **and** hide UI controls. |
+| Export filenames | Russian template `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext`; SoT `ExportFileNameBuilder` + `Content-Disposition`. |
 
 ---
 
@@ -154,3 +155,8 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 
 4. **Глубокое копирование (Deep Copy):**
    Метод копирования версии проекта (`CopyProjectVersion`) ОБЯЗАН рекурсивно копировать ВСЕ связанные сущности: PPV, LI, итерации и **Equipment**. Исправить GAP legacy-кода, где Equipment не копировался.
+
+5. **Единый формат имён файлов экспорта:**
+   Excel/PDF/CSV: `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext`.
+   C#: `ExportFileNameBuilder` + `IExportFileNameService`; имя задаёт `Content-Disposition`.
+   Клиент не подменяет английским fallback. См. `.cursor/rules/export-file-naming.mdc`.

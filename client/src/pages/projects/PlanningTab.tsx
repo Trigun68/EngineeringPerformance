@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import TableViewIcon from '@mui/icons-material/TableView';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import { ExportActionButton } from '../../components/export/ExportActionButton';
 import {
   Alert,
   Box,
@@ -202,22 +201,14 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
       <WorkingOverlay open={loading} delayMs={1000} />
       {versionId && (
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<TableViewIcon />}
+          <ExportActionButton
+            kind="excel"
             onClick={() => void exportForecastExcel(projectId, versionId)}
-          >
-            Excel
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            startIcon={<PictureAsPdfIcon />}
+          />
+          <ExportActionButton
+            kind="pdf"
             onClick={() => void exportForecastPdf(projectId, versionId)}
-          >
-            PDF
-          </Button>
+          />
         </Stack>
       )}
       {normFallbackWarnings.length > 0 && (

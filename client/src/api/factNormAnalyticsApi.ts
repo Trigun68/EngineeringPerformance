@@ -243,8 +243,6 @@ export async function exportFactNormAnalysis(
   }
   const { blob, filename } = await downloadBlob(
     `/analytics/fact-norm-analysis/export?${params.toString()}`,
-    undefined,
-    format === 'csv' ? 'fact-norm-analysis.csv' : 'fact-norm-analysis.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }

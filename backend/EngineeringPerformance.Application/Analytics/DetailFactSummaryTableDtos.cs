@@ -29,7 +29,10 @@ public sealed record DetailFactSummaryRowDto(
     string RowLabel,
     IReadOnlyList<DetailFactSummaryCellDto> Cells,
     /// <summary>Сумма факт. трудоёмкости по блокам (ФО не входит).</summary>
-    decimal FactLaborHoursTotal);
+    decimal FactLaborHoursTotal,
+    decimal OptimisticLaborHoursTotal = 0,
+    decimal BaseLaborHoursTotal = 0,
+    decimal PessimisticLaborHoursTotal = 0);
 
 
 /// <summary>Сводная таблица факта по объектам и корневым группам IIC.</summary>

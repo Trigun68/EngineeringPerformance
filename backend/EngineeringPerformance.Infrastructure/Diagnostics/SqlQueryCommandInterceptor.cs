@@ -16,7 +16,10 @@ public sealed class SqlProfilingOptions
     public bool Enabled { get; set; } = true;
 
     /// <summary>Не писать в БД команды короче порога (мс). 0 = писать все.</summary>
-    public double MinDurationMsToPersist { get; set; }
+    public double MinDurationMsToPersist { get; set; } = 50;
+
+    /// <summary>Таймаут INSERT метрик. Не должен конкурировать с пользовательским SQL.</summary>
+    public int PersistCommandTimeoutSeconds { get; set; } = 8;
 
     public int RetentionDays { get; set; } = 14;
 

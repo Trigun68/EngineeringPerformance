@@ -7,20 +7,24 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 
 /// <summary>
 /// Сравнение двух версий: итого (IIC), по объектам, детально.
+/// Один полный расчёт на пару версий кладётся в кэш поколения проекта (ISS-018).
 /// </summary>
 public sealed class ProjectCompareService : IProjectCompareService
 {
     private readonly ProjectsPageRawDataLoader _rawLoader;
     private readonly IPerformanceCalculationEngine _calculationEngine;
+    private readonly IProjectAnalyticsCache _cache;
     private readonly AppDbContext _db;
 
     public ProjectCompareService(
         ProjectsPageRawDataLoader rawLoader,
         IPerformanceCalculationEngine calculationEngine,
+        IProjectAnalyticsCache cache,
         AppDbContext db)
     {
         _rawLoader = rawLoader;
         _calculationEngine = calculationEngine;
+        _cache = cache;
         _db = db;
     }
 
@@ -30,6 +34,11 @@ public sealed class ProjectCompareService : IProjectCompareService
         int versionBId,
         CancellationToken cancellationToken = default)
     {
+        var cacheKey = CompareCacheKey(versionAId, versionBId);
+        var cached = await _cache.GetAsync<VersionCompareResultDto>(projectId, cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
+
         var bundleA = await _rawLoader.LoadAsync(projectId, versionAId, cancellationToken);
         var bundleB = await _rawLoader.LoadAsync(projectId, versionBId, cancellationToken);
         var perfA = ProjectsPageGridBuilder.BuildPerformance(bundleA, _calculationEngine);
@@ -46,7 +55,9 @@ public sealed class ProjectCompareService : IProjectCompareService
             bundleB,
             _calculationEngine);
 
-        return new VersionCompareResultDto(grids.Summary, grids.Facility, grids.Detail);
+        var result = new VersionCompareResultDto(grids.Summary, grids.Facility, grids.Detail);
+        await _cache.SetAsync(projectId, cacheKey, result, CancellationToken.None);
+        return result;
     }
 
     public async Task<CompareChartResultDto> GetChartAsync(
@@ -67,38 +78,15 @@ public sealed class ProjectCompareService : IProjectCompareService
         versionNames.TryGetValue(versionAId, out var nameA);
         versionNames.TryGetValue(versionBId, out var nameB);
 
-        if (string.Equals(level, "facility", StringComparison.OrdinalIgnoreCase))
-        {
-            var points = compare.Facility
-                .Select(f => new CompareChartPointDto(
-                    f.FacilityName,
-                    null,
-                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.FactLaborHoursA : f.ZScoreA,
-                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.FactLaborHoursB : f.ZScoreB,
-                    metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? f.HoursDelta : f.ZDelta))
-                .OrderByDescending(p => Math.Abs(p.Delta ?? 0m))
-                .Take(Math.Clamp(top, 1, 100))
-                .ToList();
-
-            return new CompareChartResultDto("facility", metric, nameA ?? "A", nameB ?? "B", points);
-        }
-
-        var iicPoints = compare.Summary
-            .Where(r => r.WorkDirectionId >= 0 && !r.IsTotal)
-            .Select(r => new CompareChartPointDto(
-                r.Name,
-                r.WorkDirectionId,
-                metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? r.PlannedLaborHoursA : r.FactZScoreA,
-                metric.Equals("hours", StringComparison.OrdinalIgnoreCase) ? r.PlannedLaborHoursB : r.FactZScoreB,
-                metric.Equals("hours", StringComparison.OrdinalIgnoreCase)
-                    ? (r.PlannedLaborHoursA.HasValue && r.PlannedLaborHoursB.HasValue
-                        ? r.PlannedLaborHoursB - r.PlannedLaborHoursA
-                        : null)
-                    : r.FactZDelta))
-            .OrderByDescending(p => Math.Abs(p.Delta ?? 0m))
-            .Take(Math.Clamp(top, 1, 100))
-            .ToList();
-
-        return new CompareChartResultDto("iic", metric, nameA ?? "A", nameB ?? "B", iicPoints);
+        return CompareChartBuilder.FromCompare(
+            compare,
+            nameA ?? "A",
+            nameB ?? "B",
+            level,
+            metric,
+            top);
     }
+
+    internal static string CompareCacheKey(int versionAId, int versionBId) =>
+        $"compare:{versionAId}:{versionBId}";
 }

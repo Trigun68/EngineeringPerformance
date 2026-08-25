@@ -1,94 +1,35 @@
 using EngineeringPerformance.Application.Analytics;
-using EngineeringPerformance.Application.LaborIntensity;
-using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
-using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 /// <summary>CPU-сборка 9 гридов из уже загруженного bundle (без доп. SQL).</summary>
 public static class ProjectsPageGridBuilder
 {
-    private static (decimal? baseH, decimal? optH, decimal? pesH) CalcForecastHours(
-        IPerformanceCalculationEngine engine,
-        decimal vol,
-        decimal effectiveVol,
-        int workDirectionId,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        decimal? productivity,
-        decimal? stdDev,
-        PlanningZParameters z)
+    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeLivePpvHours(
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine? engine = null)
     {
-        if (normsByDirection.TryGetValue(workDirectionId, out var snap))
-            return engine.ComputeForecastHours(snap.NormFormula, snap.DeviationFormula, vol, effectiveVol, z);
-        return engine.ComputeForecastHours(vol, productivity, stdDev, z);
+        _ = engine;
+        return StoredPlanHours.ByPpvId(bundle);
     }
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
-        ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine engine)
-    {
-        var lines = bundle.PhysicalVolumes
-            .Where(pv => pv.GetIsAssessment() == true)
-            .Select(pv => new LaborIntensityCalculator.PpvLine(
-                pv.Id,
-                pv.GetClassifierId(),
-                pv.FacilityCode,
-                pv.Quantity,
-                pv.GetCoefficient(),
-                IsAssessment: true))
-            .ToList();
-
-        if (lines.Count == 0)
-            return new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>();
-
-        return engine.ComputePpvForecastHours(
-            bundle.PlanningScenario,
-            lines,
-            bundle.NormsByDirection,
-            bundle.PlanningZByDirection);
-    }
+        ProjectsPageVersionBundle bundle) =>
+        StoredPlanHours.ByPpvId(bundle);
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
-        ProjectsPageVersionBundle bundle,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IPerformanceCalculationEngine engine)
-    {
-        var lines = bundle.PhysicalVolumes
-            .Where(pv => pv.GetIsAssessment() == true)
-            .Select(pv => new LaborIntensityCalculator.PpvLine(
-                pv.Id,
-                pv.GetClassifierId(),
-                pv.FacilityCode,
-                pv.Quantity,
-                pv.GetCoefficient(),
-                IsAssessment: true))
-            .ToList();
-
-        var equipmentVolumes = bundle.Equipment
-            .Where(e => e.Equipment?.IsAssessment == true && e.Equipment.ClassifierId.HasValue)
-            .Select(e => (e.Equipment!.ClassifierId!.Value, e.QuantityInIicGroupUnits()));
-
-        return engine.AggregateForecastHoursByDirection(
-            lines,
-            ppvHoursById,
-            equipmentVolumes,
-            bundle.NormsByDirection,
-            bundle.PlanningZByDirection);
-    }
+        ProjectsPageVersionBundle bundle) =>
+        StoredPlanHours.ByDirection(bundle);
 
     private static List<ProjectsPageForecastSummaryRowDto> BuildForecastSummary(
         IReadOnlyList<PerformanceRowDto> performance,
-        ProjectsPageVersionBundle bundle,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IPerformanceCalculationEngine engine)
+        ProjectsPageVersionBundle bundle)
     {
         var classifierMap = bundle.ClassifierMap;
-        var planningZByDirection = bundle.PlanningZByDirection;
-        var normsByDirection = bundle.NormsByDirection;
-        var hoursByDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById, engine);
+        var hoursByDirection = AggregateForecastHoursByDirection(bundle);
         string FormatDirectionName(PerformanceRowDto row)
         {
             if (row.WorkDirectionId < 0 || !classifierMap.TryGetValue(row.WorkDirectionId, out var dir))
@@ -106,17 +47,10 @@ public static class ProjectsPageGridBuilder
 
         var result = new List<ProjectsPageForecastSummaryRowDto>();
 
-        (decimal? baseH, decimal? optH, decimal? pesH) CalcHoursFromRow(PerformanceRowDto row)
-        {
-            if (hoursByDirection.TryGetValue(row.WorkDirectionId, out var aggregated))
-                return aggregated;
-
-            var vol = row.FactPhysicalVolume ?? 0m;
-            if (vol <= 0 || !row.NormProductivity.HasValue)
-                return (null, null, null);
-            var z = engine.ResolvePlanningZ(planningZByDirection, row.WorkDirectionId);
-            return CalcForecastHours(engine, vol, vol, row.WorkDirectionId, normsByDirection, row.NormProductivity, row.NormStdDev, z);
-        }
+        (decimal? baseH, decimal? optH, decimal? pesH) CalcHoursFromRow(PerformanceRowDto row) =>
+            hoursByDirection.TryGetValue(row.WorkDirectionId, out var aggregated)
+                ? aggregated
+                : (null, null, null);
 
         (decimal baseH, decimal optH, decimal pesH) BuildSubtree(
             PerformanceRowDto row,
@@ -206,7 +140,7 @@ public static class ProjectsPageGridBuilder
         }
 
         var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
-        var grand = SumAllForecastScenarioHours(bundle, performance, ppvHoursById, engine);
+        var grand = SumAllForecastScenarioHours(bundle);
         if (grand.Base > 0 || grand.Opt > 0 || grand.Pes > 0 || rootTotals.Count > 0)
         {
             var grandFo = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
@@ -261,16 +195,15 @@ public static class ProjectsPageGridBuilder
         row.OptimisticHours ?? 0m);
 
     /// <summary>
-    /// Плановые часы для UI: live N(V)×Z по ФО и оборудованию (тот же путь, что Forecast «ИТОГО»).
-    /// Сохранённые LaborIntensity* в БД не читаются.
+    /// Плановые часы для UI: сохранённые LaborIntensity* ФО и оборудования.
     /// </summary>
     public static IReadOnlyList<PerformanceRowDto> AttachLivePlanHours(
         IReadOnlyList<PerformanceRowDto> performance,
         ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine? engine = null)
     {
-        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
-        var byDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById, engine);
+        _ = engine;
+        var byDirection = AggregateForecastHoursByDirection(bundle);
 
         return performance
             .Select(row =>
@@ -416,7 +349,55 @@ public static class ProjectsPageGridBuilder
 
     public static IReadOnlyList<PerformanceRowDto> BuildPerformance(
         ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine engine) =>
+        BuildPerformanceFromLabor(
+            bundle,
+            engine,
+            bundle.LaborIntensities
+                .Select(li => new LaborIntensityCalculationLine(li.WorkDirectionId, li.PlannedHours))
+                .ToList());
+
+    /// <summary>
+    /// Z и производительность плана: сохранённые часы выбранного варианта (по умолчанию базовый)
+    /// через тот же <see cref="IPerformanceCalculationEngine.CalculatePerformance"/>.
+    /// </summary>
+    public static IReadOnlyList<PerformanceRowDto> BuildPlanPerformance(
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine engine,
+        PlanHourKind kind = PlanHourKind.Base)
+    {
+        var hoursByDirection = ComputeLivePlanHoursByDirection(bundle);
+        var labor = hoursByDirection
+            .Select(kv => new LaborIntensityCalculationLine(
+                kv.Key,
+                SelectPlanHours(kv.Value, kind) ?? 0m))
+            .Where(l => l.PlannedHours > 0)
+            .ToList();
+        return BuildPerformanceFromLabor(bundle, engine, labor);
+    }
+
+    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeLivePlanHoursByDirection(
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine? engine = null)
+    {
+        _ = engine;
+        return AggregateForecastHoursByDirection(bundle);
+    }
+
+    public static decimal? SelectPlanHours(
+        (decimal? Base, decimal? Optimistic, decimal? Pessimistic) hours,
+        PlanHourKind kind) =>
+        kind switch
+        {
+            PlanHourKind.Optimistic => hours.Optimistic,
+            PlanHourKind.Pessimistic => hours.Pessimistic,
+            _ => hours.Base,
+        };
+
+    private static IReadOnlyList<PerformanceRowDto> BuildPerformanceFromLabor(
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine engine,
+        IReadOnlyList<LaborIntensityCalculationLine> labor)
     {
         var directionById = bundle.WorkDirections.ToDictionary(d => d.Id);
         var input = new PerformanceCalculationInput(
@@ -444,9 +425,7 @@ public static class ProjectsPageGridBuilder
                     e.Quantity,
                     e.Equipment?.Coefficient ?? 1m))
                 .ToList(),
-            LaborIntensities: bundle.LaborIntensities
-                .Select(li => new LaborIntensityCalculationLine(li.WorkDirectionId, li.PlannedHours))
-                .ToList(),
+            LaborIntensities: labor,
             NormsByDirection: bundle.NormsByDirection);
 
         var rows = engine.CalculatePerformance(input);
@@ -510,8 +489,8 @@ public static class ProjectsPageGridBuilder
         var calculated = engine.CalculateFactAssessment(input);
         var (detailInternal, facilityInternal) = FactAssessmentEngineMapper.FromResult(calculated);
 
-        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
-        var liveFacility = BuildForecastFacility(bundle, performance, ppvHoursById, engine);
+        var ppvHoursById = ComputePpvForecastHours(bundle);
+        var liveFacility = BuildForecastFacility(bundle, ppvHoursById);
         var planByFacility = liveFacility
             .GroupBy(f => f.FacilityCode)
             .ToDictionary(
@@ -591,7 +570,7 @@ public static class ProjectsPageGridBuilder
                 ?? eq?.Equipment?.Coefficient
                 ?? 1m;
 
-            // План. часы — live N(V)×Z, как Forecast «Детально» (включая оборудование).
+            // План. часы — сохранённые LaborIntensity* (ФО и оборудование).
             decimal? baseH = null, optH = null, pesH = null;
             if (!d.IsEquipment && pv is not null && pv.GetIsAssessment() == true)
             {
@@ -600,18 +579,7 @@ public static class ProjectsPageGridBuilder
             }
             else if (d.IsEquipment && eq is not null && eq.Equipment?.IsAssessment == true)
             {
-                var eqDir = eq.Equipment.ClassifierId;
-                if (eqDir is int eqDirId && normByDirection.TryGetValue(eqDirId, out var eqNorm)
-                    && eqNorm.NormProductivity is decimal eqProd)
-                {
-                    var vol = eq.QuantityInIicGroupUnits();
-                    if (vol != 0)
-                    {
-                        var z = engine.ResolvePlanningZ(bundle.PlanningZByDirection, eqDirId);
-                        (baseH, optH, pesH) = CalcForecastHours(
-                            engine, vol, vol, eqDirId, bundle.NormsByDirection, eqProd, eqNorm.NormStdDev, z);
-                    }
-                }
+                (baseH, optH, pesH) = StoredPlanHours.ForEquipment(eq);
             }
 
             detail.Add(new ProjectsPageDetailRowDto(
@@ -661,13 +629,14 @@ public static class ProjectsPageGridBuilder
     public static ProjectsPageForecastGridsDto BuildForecastGrids(
         ProjectsPageVersionBundle bundle,
         IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine? engine = null)
     {
-        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
-        var summary = BuildForecastSummary(performance, bundle, ppvHoursById, engine);
-        var facility = BuildForecastFacility(bundle, performance, ppvHoursById, engine);
-        var detail = BuildForecastDetail(bundle, performance, ppvHoursById, engine);
-        var grand = SumAllForecastScenarioHours(bundle, performance, ppvHoursById, engine);
+        _ = engine;
+        var ppvHoursById = ComputePpvForecastHours(bundle);
+        var summary = BuildForecastSummary(performance, bundle);
+        var facility = BuildForecastFacility(bundle, ppvHoursById);
+        var detail = BuildForecastDetail(bundle, performance, ppvHoursById);
+        var grand = SumAllForecastScenarioHours(bundle);
 
         return new ProjectsPageForecastGridsDto(
             summary,
@@ -677,16 +646,10 @@ public static class ProjectsPageGridBuilder
     }
 
     private static (decimal Base, decimal Opt, decimal Pes) SumAllForecastScenarioHours(
-        ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IPerformanceCalculationEngine engine)
+        ProjectsPageVersionBundle bundle)
     {
-        var normByDirection = performance
-            .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
-            .ToDictionary(r => r.WorkDirectionId);
-
         decimal baseSum = 0m, optSum = 0m, pesSum = 0m;
+        var ppvHoursById = ComputePpvForecastHours(bundle);
 
         foreach (var pv in bundle.PhysicalVolumes.Where(pv => pv.GetIsAssessment() == true))
         {
@@ -699,17 +662,10 @@ public static class ProjectsPageGridBuilder
 
         foreach (var eq in bundle.Equipment.Where(e => e.Equipment?.IsAssessment == true))
         {
-            var dirId = eq.Equipment?.ClassifierId;
-            if (dirId is not int id || !normByDirection.TryGetValue(id, out var norm))
-                continue;
-
-            var vol = eq.QuantityInIicGroupUnits();
-            var z = engine.ResolvePlanningZ(bundle.PlanningZByDirection, id);
-            var (b, o, p) = CalcForecastHours(
-                engine, vol, vol, id, bundle.NormsByDirection, norm.NormProductivity, norm.NormStdDev, z);
-            baseSum += b ?? 0m;
-            optSum += o ?? 0m;
-            pesSum += p ?? 0m;
+            var hours = StoredPlanHours.ForEquipment(eq);
+            baseSum += hours.Base ?? 0m;
+            optSum += hours.Optimistic ?? 0m;
+            pesSum += hours.Pessimistic ?? 0m;
         }
 
         return (Math.Round(baseSum, 2), Math.Round(optSum, 2), Math.Round(pesSum, 2));
@@ -717,14 +673,8 @@ public static class ProjectsPageGridBuilder
 
     private static List<ProjectsPageFacilityRowDto> BuildForecastFacility(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IPerformanceCalculationEngine engine)
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById)
     {
-        var normByDirection = performance
-            .Where(r => r.WorkDirectionId >= 0 && r.NormProductivity.HasValue)
-            .ToDictionary(r => r.WorkDirectionId);
-
         var rows = new Dictionary<(string Code, string Name), (decimal Base, decimal Opt, decimal Pes)>();
 
         foreach (var pv in bundle.PhysicalVolumes.Where(pv => pv.GetIsAssessment() == true))
@@ -745,16 +695,10 @@ public static class ProjectsPageGridBuilder
         foreach (var eq in bundle.Equipment.Where(e => e.Equipment?.IsAssessment == true))
         {
             var key = (Code: eq.FacilityCode ?? string.Empty, Name: eq.FacilityName ?? string.Empty);
-            var dirId = eq.Equipment?.ClassifierId;
-            if (dirId is not int id || !normByDirection.TryGetValue(id, out var norm))
-                continue;
-
-            var vol = eq.QuantityInIicGroupUnits();
-            var z = engine.ResolvePlanningZ(bundle.PlanningZByDirection, id);
-            var (b, o, p) = CalcForecastHours(engine, vol, vol, id, bundle.NormsByDirection, norm.NormProductivity, norm.NormStdDev, z);
-            var basePart = b ?? 0m;
-            var optPart = o ?? 0m;
-            var pesPart = p ?? 0m;
+            var hours = StoredPlanHours.ForEquipment(eq);
+            var basePart = hours.Base ?? 0m;
+            var optPart = hours.Optimistic ?? 0m;
+            var pesPart = hours.Pessimistic ?? 0m;
 
             if (rows.TryGetValue(key, out var prev))
                 rows[key] = (prev.Base + basePart, prev.Opt + optPart, prev.Pes + pesPart);
@@ -780,8 +724,7 @@ public static class ProjectsPageGridBuilder
     private static List<ProjectsPageDetailRowDto> BuildForecastDetail(
         ProjectsPageVersionBundle bundle,
         IReadOnlyList<PerformanceRowDto> performance,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IPerformanceCalculationEngine engine)
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById)
     {
         var normLookup = performance
             .Where(r => r.NormProductivity.HasValue)
@@ -828,14 +771,9 @@ public static class ProjectsPageGridBuilder
             var dirId = eq.Equipment?.ClassifierId;
             normLookup.TryGetValue(dirId ?? -1, out var norm);
             var isAssessment = eq.Equipment?.IsAssessment == true;
-            var vol = eq.QuantityInIicGroupUnits();
             decimal? baseH = null, optH = null, pesH = null;
-            if (isAssessment && norm?.NormProductivity is decimal p && vol != 0)
-            {
-                var dirKey = dirId ?? -1;
-                var z = engine.ResolvePlanningZ(bundle.PlanningZByDirection, dirKey);
-                (baseH, optH, pesH) = CalcForecastHours(engine, vol, vol, dirId ?? -1, bundle.NormsByDirection, p, norm.NormStdDev, z);
-            }
+            if (isAssessment)
+                (baseH, optH, pesH) = StoredPlanHours.ForEquipment(eq);
 
             var normId = dirId is int did && bundle.NormIdByDirection.TryGetValue(did, out var nid) ? nid : (int?)null;
             var iicGroupName = dirId is int cid && bundle.ClassifierMap.TryGetValue(cid, out var cl)
@@ -956,6 +894,12 @@ public static class ProjectsPageGridBuilder
 
         var hoursA = ResolveScenarioHoursByDirection(bundleA, performanceA, engine);
         var hoursB = ResolveScenarioHoursByDirection(bundleB, performanceB, engine);
+        var planZBaseA = PlanZByDirection(bundleA, engine, PlanHourKind.Base);
+        var planZOptA = PlanZByDirection(bundleA, engine, PlanHourKind.Optimistic);
+        var planZPesA = PlanZByDirection(bundleA, engine, PlanHourKind.Pessimistic);
+        var planZBaseB = PlanZByDirection(bundleB, engine, PlanHourKind.Base);
+        var planZOptB = PlanZByDirection(bundleB, engine, PlanHourKind.Optimistic);
+        var planZPesB = PlanZByDirection(bundleB, engine, PlanHourKind.Pessimistic);
 
         var allIds = dictA.Keys.Union(dictB.Keys).ToList();
         var summaryBase = new List<VersionCompareRowDto>(allIds.Count);
@@ -972,11 +916,15 @@ public static class ProjectsPageGridBuilder
                 b,
                 plannedHoursA,
                 plannedHoursB,
-                engine.ResolvePlanningZ(bundleA.PlanningZByDirection, id).ZBase,
-                engine.ResolvePlanningZ(bundleB.PlanningZByDirection, id).ZBase));
+                planZBaseA.GetValueOrDefault(id),
+                planZBaseB.GetValueOrDefault(id),
+                planZOptA.GetValueOrDefault(id),
+                planZOptB.GetValueOrDefault(id),
+                planZPesA.GetValueOrDefault(id),
+                planZPesB.GetValueOrDefault(id)));
         }
 
-        return AppendCompareTotals(summaryBase, dictA, dictB);
+        return AppendCompareTotals(summaryBase, dictA, dictB, bundleA, bundleB, engine);
     }
 
     public static ProjectsPageCompareGridsDto BuildCompareGrids(
@@ -1001,6 +949,9 @@ public static class ProjectsPageGridBuilder
                 FactLaborHours = f.LaborHours,
                 ZScore = f.ZScore,
                 Interpretation = f.Interpretation,
+                PlannedLaborHoursBase = f.BaseHours,
+                PlannedLaborHoursOptimistic = f.OptimisticHours,
+                PlannedLaborHoursPessimistic = f.PessimisticHours,
             }).ToList(),
             detailA);
         var facilityB = EnrichFacilityFromDetail(
@@ -1011,6 +962,9 @@ public static class ProjectsPageGridBuilder
                 FactLaborHours = f.LaborHours,
                 ZScore = f.ZScore,
                 Interpretation = f.Interpretation,
+                PlannedLaborHoursBase = f.BaseHours,
+                PlannedLaborHoursOptimistic = f.OptimisticHours,
+                PlannedLaborHoursPessimistic = f.PessimisticHours,
             }).ToList(),
             detailB);
 
@@ -1022,11 +976,16 @@ public static class ProjectsPageGridBuilder
 
     /// <summary>
     /// Добавляет корневые «Итого: …» и «ИТОГО» в summary сравнения с ФО по ЕИ (A и B отдельно).
+    /// План на «Итого:» — own+потомки; «ИТОГО» плана — SumAllForecastScenarioHours (как прогноз).
+    /// Факт на итогах — сумма own FactLaborHours (как AppendPerformanceTotals).
     /// </summary>
     public static IReadOnlyList<VersionCompareRowDto> AppendCompareTotals(
         IReadOnlyList<VersionCompareRowDto> rows,
         IReadOnlyDictionary<int, PerformanceRowDto> performanceA,
-        IReadOnlyDictionary<int, PerformanceRowDto> performanceB)
+        IReadOnlyDictionary<int, PerformanceRowDto> performanceB,
+        ProjectsPageVersionBundle bundleA,
+        ProjectsPageVersionBundle bundleB,
+        IPerformanceCalculationEngine engine)
     {
         var source = rows.Where(r => !r.IsTotal).ToList();
         var byId = source.GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
@@ -1044,17 +1003,19 @@ public static class ProjectsPageGridBuilder
 
         var result = new List<VersionCompareRowDto>();
 
-        void BuildSubtree(VersionCompareRowDto row)
+        CompareHoursRollup BuildSubtree(VersionCompareRowDto row)
         {
             result.Add(row);
             var children = childrenByParent[row.WorkDirectionId]
                 .Where(c => byId.ContainsKey(c.WorkDirectionId))
                 .ToList();
+            var own = OwnCompareHours(row);
             if (children.Count == 0)
-                return;
+                return own;
 
+            var acc = own;
             foreach (var child in children)
-                BuildSubtree(child);
+                acc = AddCompareHours(acc, BuildSubtree(child));
 
             performanceA.TryGetValue(row.WorkDirectionId, out var perfA);
             performanceB.TryGetValue(row.WorkDirectionId, out var perfB);
@@ -1065,21 +1026,23 @@ public static class ProjectsPageGridBuilder
                 ? null
                 : PhysicalVolumeByUnitAggregator.FormatFromPerformance(CollectSubtree(perfB, childrenPerfB));
 
-            var planned = SumLeafPlannedHours(CollectCompareSubtree(row.WorkDirectionId, byId, childrenByParent));
             result.Add(new VersionCompareRowDto(
                 row.WorkDirectionId,
                 row.ParentId,
                 $"Итого: {row.Name}",
                 FactPhysicalVolumeDisplayA: foA,
                 FactPhysicalVolumeDisplayB: foB,
-                PlannedLaborHoursA: planned.BaseA,
-                PlannedLaborHoursB: planned.BaseB,
-                PlannedLaborHoursOptimisticA: planned.OptA,
-                PlannedLaborHoursOptimisticB: planned.OptB,
-                PlannedLaborHoursPessimisticA: planned.PesA,
-                PlannedLaborHoursPessimisticB: planned.PesB,
+                PlannedLaborHoursA: NullIfNonPositive(acc.BaseA),
+                PlannedLaborHoursB: NullIfNonPositive(acc.BaseB),
+                PlannedLaborHoursOptimisticA: NullIfNonPositive(acc.OptA),
+                PlannedLaborHoursOptimisticB: NullIfNonPositive(acc.OptB),
+                PlannedLaborHoursPessimisticA: NullIfNonPositive(acc.PesA),
+                PlannedLaborHoursPessimisticB: NullIfNonPositive(acc.PesB),
+                FactLaborHoursA: NullIfNonPositive(acc.FactA),
+                FactLaborHoursB: NullIfNonPositive(acc.FactB),
                 IsTotal: true,
                 Level: row.Level));
+            return acc;
         }
 
         foreach (var root in roots)
@@ -1097,19 +1060,25 @@ public static class ProjectsPageGridBuilder
                 performanceA.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
             var grandFoB = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
                 performanceB.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
-            var grandPlanned = SumLeafPlannedHours(source.Where(r => r.WorkDirectionId >= 0));
+            var allocated = source.Where(r => r.WorkDirectionId >= 0).ToList();
+            var grandFactA = allocated.Sum(r => r.FactLaborHoursA ?? 0m);
+            var grandFactB = allocated.Sum(r => r.FactLaborHoursB ?? 0m);
+            var grandPlanA = SumAllForecastScenarioHours(bundleA);
+            var grandPlanB = SumAllForecastScenarioHours(bundleB);
             result.Add(new VersionCompareRowDto(
                 int.MinValue,
                 null,
                 "ИТОГО",
                 FactPhysicalVolumeDisplayA: grandFoA,
                 FactPhysicalVolumeDisplayB: grandFoB,
-                PlannedLaborHoursA: grandPlanned.BaseA,
-                PlannedLaborHoursB: grandPlanned.BaseB,
-                PlannedLaborHoursOptimisticA: grandPlanned.OptA,
-                PlannedLaborHoursOptimisticB: grandPlanned.OptB,
-                PlannedLaborHoursPessimisticA: grandPlanned.PesA,
-                PlannedLaborHoursPessimisticB: grandPlanned.PesB,
+                PlannedLaborHoursA: NullIfNonPositive(grandPlanA.Base),
+                PlannedLaborHoursB: NullIfNonPositive(grandPlanB.Base),
+                PlannedLaborHoursOptimisticA: NullIfNonPositive(grandPlanA.Opt),
+                PlannedLaborHoursOptimisticB: NullIfNonPositive(grandPlanB.Opt),
+                PlannedLaborHoursPessimisticA: NullIfNonPositive(grandPlanA.Pes),
+                PlannedLaborHoursPessimisticB: NullIfNonPositive(grandPlanB.Pes),
+                FactLaborHoursA: NullIfNonPositive(grandFactA),
+                FactLaborHoursB: NullIfNonPositive(grandFactB),
                 IsTotal: true,
                 Level: -1));
         }
@@ -1117,89 +1086,59 @@ public static class ProjectsPageGridBuilder
         return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();
     }
 
-    private readonly record struct PlannedHoursPair(
-        decimal? BaseA, decimal? OptA, decimal? PesA,
-        decimal? BaseB, decimal? OptB, decimal? PesB);
+    private readonly record struct CompareHoursRollup(
+        decimal FactA, decimal FactB,
+        decimal PesA, decimal BaseA, decimal OptA,
+        decimal PesB, decimal BaseB, decimal OptB);
 
-    private static IEnumerable<VersionCompareRowDto> CollectCompareSubtree(
-        int rootId,
-        IReadOnlyDictionary<int, VersionCompareRowDto> byId,
-        ILookup<int, VersionCompareRowDto> childrenByParent)
-    {
-        if (!byId.TryGetValue(rootId, out var root))
-            yield break;
-        yield return root;
-        foreach (var child in childrenByParent[rootId])
-        {
-            foreach (var nested in CollectCompareSubtree(child.WorkDirectionId, byId, childrenByParent))
-                yield return nested;
-        }
-    }
+    private static CompareHoursRollup OwnCompareHours(VersionCompareRowDto row) => new(
+        row.FactLaborHoursA ?? 0m,
+        row.FactLaborHoursB ?? 0m,
+        row.PlannedLaborHoursPessimisticA ?? 0m,
+        row.PlannedLaborHoursA ?? 0m,
+        row.PlannedLaborHoursOptimisticA ?? 0m,
+        row.PlannedLaborHoursPessimisticB ?? 0m,
+        row.PlannedLaborHoursB ?? 0m,
+        row.PlannedLaborHoursOptimisticB ?? 0m);
 
-    private static PlannedHoursPair SumLeafPlannedHours(IEnumerable<VersionCompareRowDto> rows)
-    {
-        var list = rows.Where(r => !r.IsTotal).ToList();
-        var parentIds = list.Where(r => r.ParentId.HasValue).Select(r => r.ParentId!.Value).ToHashSet();
-        var leaves = list.Where(r => !parentIds.Contains(r.WorkDirectionId)).ToList();
+    private static CompareHoursRollup AddCompareHours(CompareHoursRollup a, CompareHoursRollup b) => new(
+        a.FactA + b.FactA,
+        a.FactB + b.FactB,
+        a.PesA + b.PesA,
+        a.BaseA + b.BaseA,
+        a.OptA + b.OptA,
+        a.PesB + b.PesB,
+        a.BaseB + b.BaseB,
+        a.OptB + b.OptB);
 
-        static decimal? Pos(decimal value) => value > 0m ? Math.Round(value, 2) : null;
-
-        return new PlannedHoursPair(
-            Pos(leaves.Sum(r => r.PlannedLaborHoursA ?? 0m)),
-            Pos(leaves.Sum(r => r.PlannedLaborHoursOptimisticA ?? 0m)),
-            Pos(leaves.Sum(r => r.PlannedLaborHoursPessimisticA ?? 0m)),
-            Pos(leaves.Sum(r => r.PlannedLaborHoursB ?? 0m)),
-            Pos(leaves.Sum(r => r.PlannedLaborHoursOptimisticB ?? 0m)),
-            Pos(leaves.Sum(r => r.PlannedLaborHoursPessimisticB ?? 0m)));
-    }
+    private static Dictionary<int, decimal?> PlanZByDirection(
+        ProjectsPageVersionBundle bundle,
+        IPerformanceCalculationEngine engine,
+        PlanHourKind kind) =>
+        BuildPlanPerformance(bundle, engine, kind)
+            .Where(r => !r.IsTotal)
+            .GroupBy(r => r.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First().ZScore);
 
     /// <summary>
-    /// Live N(V)×Z по направлениям (ФО + оборудование), тот же путь что Forecast «ИТОГО».
+    /// Сохранённые часы по направлениям (ФО + оборудование). Без live N(V).
     /// </summary>
     public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ResolveLivePlanHoursByDirection(
         ProjectsPageVersionBundle bundle,
         IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine engine) =>
-        ResolveScenarioHoursByDirection(bundle, performance, engine);
+        IPerformanceCalculationEngine? engine = null)
+    {
+        _ = performance;
+        return ComputeLivePlanHoursByDirection(bundle, engine);
+    }
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ResolveScenarioHoursByDirection(
         ProjectsPageVersionBundle bundle,
         IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine? engine = null)
     {
-        var ppvHoursById = ComputePpvForecastHours(bundle, engine);
-        var hoursByDirection = AggregateForecastHoursByDirection(bundle, ppvHoursById, engine);
-        var result = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>();
-
-        foreach (var row in performance.Where(r => !r.IsTotal))
-        {
-            if (hoursByDirection.TryGetValue(row.WorkDirectionId, out var aggregated)
-                && (aggregated.Base.HasValue || aggregated.Optimistic.HasValue || aggregated.Pessimistic.HasValue))
-            {
-                result[row.WorkDirectionId] = aggregated;
-                continue;
-            }
-
-            var vol = row.FactPhysicalVolume ?? 0m;
-            if (vol <= 0 || !row.NormProductivity.HasValue)
-            {
-                result[row.WorkDirectionId] = (null, null, null);
-                continue;
-            }
-
-            var z = engine.ResolvePlanningZ(bundle.PlanningZByDirection, row.WorkDirectionId);
-            result[row.WorkDirectionId] = CalcForecastHours(
-                engine,
-                vol,
-                vol,
-                row.WorkDirectionId,
-                bundle.NormsByDirection,
-                row.NormProductivity,
-                row.NormStdDev,
-                z);
-        }
-
-        return result;
+        _ = performance;
+        return ComputeLivePlanHoursByDirection(bundle, engine);
     }
 
     private static VersionCompareRowDto MapCompareSummaryRow(
@@ -1207,8 +1146,12 @@ public static class ProjectsPageGridBuilder
         PerformanceRowDto? b,
         (decimal? Base, decimal? Optimistic, decimal? Pessimistic) plannedHoursA,
         (decimal? Base, decimal? Optimistic, decimal? Pessimistic) plannedHoursB,
-        decimal planZA,
-        decimal planZB)
+        decimal? planZA,
+        decimal? planZB,
+        decimal? planZOptA,
+        decimal? planZOptB,
+        decimal? planZPesA,
+        decimal? planZPesB)
     {
         var row = a ?? b!;
         var factZA = a?.ZScore;
@@ -1219,6 +1162,10 @@ public static class ProjectsPageGridBuilder
         decimal? planZDelta = planZAValue.HasValue && planZBValue.HasValue
             ? planZBValue - planZAValue
             : null;
+        decimal? planZOptAValue = a is null ? null : planZOptA;
+        decimal? planZOptBValue = b is null ? null : planZOptB;
+        decimal? planZPesAValue = a is null ? null : planZPesA;
+        decimal? planZPesBValue = b is null ? null : planZPesB;
 
         static decimal? PlannedProductivity(decimal? hours, decimal? volume) =>
             hours.HasValue && volume is > 0 ? hours.Value / volume.Value : null;
@@ -1256,6 +1203,10 @@ public static class ProjectsPageGridBuilder
             PlanZScoreA: planZAValue,
             PlanZScoreB: planZBValue,
             PlanZDelta: planZDelta,
+            PlanZScoreOptimisticA: planZOptAValue,
+            PlanZScoreOptimisticB: planZOptBValue,
+            PlanZScorePessimisticA: planZPesAValue,
+            PlanZScorePessimisticB: planZPesBValue,
             IsTotal: false,
             Level: row.Level);
     }
@@ -1270,10 +1221,7 @@ public static class ProjectsPageGridBuilder
                 g => g.Key,
                 g => (
                     Name: g.First().FacilityName,
-                    Volume: g.Sum(d => d.Quantity),
-                    Base: g.Sum(d => d.PlannedLaborHoursBase ?? 0m),
-                    Opt: g.Sum(d => d.PlannedLaborHoursOptimistic ?? 0m),
-                    Pes: g.Sum(d => d.PlannedLaborHoursPessimistic ?? 0m)));
+                    Volume: g.Sum(d => d.Quantity)));
 
         var result = facility
             .Select(f =>
@@ -1286,10 +1234,10 @@ public static class ProjectsPageGridBuilder
                     FactLaborHours = f.FactLaborHours,
                     ZScore = f.ZScore,
                     Interpretation = f.Interpretation,
-                    FactPhysicalVolume = agg.Volume > 0 ? agg.Volume : null,
-                    PlannedLaborHoursBase = agg.Base > 0 ? Math.Round(agg.Base, 2) : null,
-                    PlannedLaborHoursOptimistic = agg.Opt > 0 ? Math.Round(agg.Opt, 2) : null,
-                    PlannedLaborHoursPessimistic = agg.Pes > 0 ? Math.Round(agg.Pes, 2) : null,
+                    FactPhysicalVolume = agg.Volume > 0 ? agg.Volume : f.FactPhysicalVolume,
+                    PlannedLaborHoursBase = f.PlannedLaborHoursBase,
+                    PlannedLaborHoursOptimistic = f.PlannedLaborHoursOptimistic,
+                    PlannedLaborHoursPessimistic = f.PlannedLaborHoursPessimistic,
                 };
             })
             .ToList();
@@ -1304,9 +1252,6 @@ public static class ProjectsPageGridBuilder
                 Code = code,
                 Name = agg.Name,
                 FactPhysicalVolume = agg.Volume > 0 ? agg.Volume : null,
-                PlannedLaborHoursBase = agg.Base > 0 ? Math.Round(agg.Base, 2) : null,
-                PlannedLaborHoursOptimistic = agg.Opt > 0 ? Math.Round(agg.Opt, 2) : null,
-                PlannedLaborHoursPessimistic = agg.Pes > 0 ? Math.Round(agg.Pes, 2) : null,
             });
         }
 

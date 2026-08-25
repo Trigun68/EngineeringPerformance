@@ -128,11 +128,11 @@ public sealed class ExportServiceTests
 
     private sealed class StubForecastDetailSummaryTableContext : IForecastDetailSummaryTableContext
     {
-        public Task<(string ProjectCode, string VersionName, IReadOnlyList<IicDirectionNodeDto> Directions)> LoadAsync(
+        public Task<(string ProjectCode, string ProjectName, string VersionName, IReadOnlyList<IicDirectionNodeDto> Directions)> LoadAsync(
             int projectId,
             int versionId,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<(string, string, IReadOnlyList<IicDirectionNodeDto>)>(
-                ("P-01", "Plan v1", Array.Empty<IicDirectionNodeDto>()));
+            Task.FromResult<(string, string, string, IReadOnlyList<IicDirectionNodeDto>)>(
+                ("P-01", "Проект 1", "Plan v1", Array.Empty<IicDirectionNodeDto>()));
     }
 }

@@ -106,6 +106,8 @@ public sealed class TestProjectScope : IAsyncDisposable
             DELETE FROM dbo.ProjectAnalysisVersions WHERE ProjectId = @id;
             DELETE FROM dbo.ProjectPhysicalVolumes WHERE ProjectId = @id;
             DELETE FROM dbo.ProjectEquipments WHERE ProjectId = @id;
+            UPDATE dbo.Equipments SET ParentId = NULL WHERE ProjectId = @id;
+            DELETE FROM dbo.Equipments WHERE ProjectId = @id;
             DELETE FROM dbo.ProjectLaborIntensities WHERE ProjectId = @id;
             DELETE FROM dbo.ProjectPermissions WHERE ProjectId = @id;
             DELETE FROM dbo.ProjectCharacteristicSelections WHERE ProjectId = @id;

@@ -1,4 +1,5 @@
 import { test, expect, type Route } from '@playwright/test';
+import { ACTION_LABELS } from '../../src/constants/actionLabels';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +26,7 @@ const mockUser = {
 };
 
 const xlsxMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const expectedFilename = 'Project_1_v1.xlsx';
+const expectedFilename = 'отчет_версия_-_P1_Проект_(v1).xlsx';
 
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({
@@ -72,7 +73,7 @@ test.describe('ProjectsPage export', () => {
     const downloadPromise = page.waitForEvent('download');
 
     await page.goto('/projects/1/grids?versionId=1');
-    await page.getByRole('button', { name: 'Экспорт Excel' }).click();
+    await page.getByRole('button', { name: ACTION_LABELS.exportExcel, exact: true }).click();
 
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe(expectedFilename);
@@ -87,7 +88,7 @@ test.describe('ProjectsPage export', () => {
     );
 
     await page.goto('/projects/1/grids?versionId=1');
-    await page.getByRole('button', { name: 'Экспорт PDF' }).click();
+    await page.getByRole('button', { name: ACTION_LABELS.exportPdf, exact: true }).click();
 
     await expect(page.getByText('Нет прав на экспорт данных проекта.')).toBeVisible();
   });

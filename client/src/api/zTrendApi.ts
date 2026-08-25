@@ -1,7 +1,7 @@
 import apiClient from '../services/apiClient';
 
 export type ZTrendFlag = 'ok' | 'sigma_zero' | 'no_norm' | 'clipped';
-export type ZTrendWeightMode = 'basisHours' | 'uniform';
+export type ZTrendWeightMode = 'basisHours';
 
 export interface ZTrendContribution {
   projectId: number;
@@ -164,7 +164,7 @@ export async function fetchZTrendFilters(signal?: AbortSignal): Promise<ZTrendFi
       code: String(g.code ?? g.Code ?? ''),
       name: String(g.name ?? g.Name ?? ''),
     })),
-    weightModes: (data.weightModes ?? data.WeightModes ?? ['basisHours', 'uniform']) as string[],
+    weightModes: (data.weightModes ?? data.WeightModes ?? ['basisHours']) as string[],
   };
 }
 

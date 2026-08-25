@@ -23,6 +23,9 @@ BUDGET_PAGE_DATA_WARM="${BUDGET_PAGE_DATA_WARM:-4000}"
 BUDGET_REPORT_COLD="${BUDGET_REPORT_COLD:-10000}"
 BUDGET_REPORT_WARM="${BUDGET_REPORT_WARM:-2000}"
 BUDGET_EXPORT="${BUDGET_EXPORT:-15000}"
+BUDGET_COMPARE_COLD="${BUDGET_COMPARE_COLD:-60000}"
+BUDGET_COMPARE_WARM="${BUDGET_COMPARE_WARM:-8000}"
+BUDGET_COMPARE_CHART="${BUDGET_COMPARE_CHART:-5000}"
 
 # Объём распакованного ответа page-data (МБ). Гриды «Детально» упакованы колоночно (ISS-019):
 # распаковка формата вернула бы ~48 МБ, поэтому регрессия видна по размеру, а не по времени.
@@ -142,6 +145,22 @@ print(data[0]['id'] if data else '')
       "$BUDGET_REPORT_COLD" "$BUDGET_REPORT_WARM"
     time_curl "analysis-export" \
       "${API}/projects/${project_id}/versions/${version_id}/export/analysis.xlsx" "$BUDGET_EXPORT"
+    version_b_id=$(curl -s "${CURL_AUTH[@]}" "${API}/projects/${project_id}/versions" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data[1]['id'] if len(data) > 1 else '')
+" 2>/dev/null || true)
+    if [[ -n "$version_b_id" ]]; then
+      time_curl_cached "compare" \
+        "${API}/projects/${project_id}/compare?versionA=${version_id}&versionB=${version_b_id}" \
+        "$BUDGET_COMPARE_COLD" "$BUDGET_COMPARE_WARM"
+      time_curl "compare-chart" \
+        "${API}/projects/${project_id}/compare/chart?versionA=${version_id}&versionB=${version_b_id}&level=iic&metric=zScore&top=20" \
+        "$BUDGET_COMPARE_CHART"
+      time_curl "compare-detail" \
+        "${API}/projects/${project_id}/compare/detail?versionA=${version_id}&versionB=${version_b_id}" \
+        "$BUDGET_COMPARE_WARM"
+    fi
   fi
 fi
 

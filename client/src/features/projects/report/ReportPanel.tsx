@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Stack, Typography } from '@mui/material';
+import { Alert, Box, Stack, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import { Activity, Moon, Sun } from 'lucide-react';
 import {
   exportPerformanceReportPdf,
@@ -13,7 +15,9 @@ import {
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import { usePermission } from '../../../hooks/usePermission';
+import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
@@ -33,7 +37,8 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dark, setDark] = useState(false);
+  const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
+  const dark = darkRaw === '1';
 
   const load = useCallback(async () => {
     if (!canRead || !projectId) return;
@@ -82,34 +87,27 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
       <PanelBusyBar open={loading} />
 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-        <Button
-          size="small"
-          variant="outlined"
+        <ToolbarActionButton
           startIcon={<RefreshIcon />}
           onClick={() => void load()}
           disabled={loading}
         >
-          Обновить
-        </Button>
-        <Button
-          size="small"
-          variant="contained"
-          startIcon={<PictureAsPdfIcon />}
+          {ACTION_LABELS.refresh}
+        </ToolbarActionButton>
+        <ExportActionButton
+          kind="pdf"
+          loading={exporting}
           onClick={() => void handlePdf()}
           disabled={exporting || !report}
           data-testid="performance-report-pdf"
-        >
-          Экспорт PDF
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
+        />
+        <ToolbarActionButton
           startIcon={dark ? <LightModeIcon /> : <DarkModeIcon />}
-          onClick={() => setDark((v) => !v)}
+          onClick={() => setDarkRaw(dark ? '0' : '1')}
           data-testid="performance-report-theme"
         >
           {dark ? 'Светлая' : 'Тёмная'}
-        </Button>
+        </ToolbarActionButton>
       </Stack>
 
       {error ? (
@@ -191,7 +189,7 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
                 <ReportCardTitle className="text-base md:text-lg">Направление</ReportCardTitle>
               </ReportCardHeader>
               <ReportCardContent>
-                <DirectionsTable rows={report.directions} />
+                <DirectionsTable projectId={projectId} rows={report.directions} />
               </ReportCardContent>
             </ReportCard>
           </div>

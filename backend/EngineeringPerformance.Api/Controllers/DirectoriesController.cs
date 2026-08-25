@@ -39,10 +39,11 @@ public sealed class DirectoriesController : ControllerBase
     public IActionResult ExportExcelPost(string resource, [FromBody] DirectoryExportRequest request)
     {
         var bytes = _directoryExport.ExportToExcel(request);
-        var safeName = SanitizeFileName(request.TabName);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        var filename = $"{safeName}_{timestamp}.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.DirectoryView(resource));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{resource}/export.xlsx")]
@@ -60,7 +61,11 @@ public sealed class DirectoriesController : ControllerBase
         };
 
         var bytes = ReferenceExcelExporter.Export(resource, columns, items.Cast<object>());
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"{resource}.xlsx");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.DirectoryView(resource));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{resource}")]
@@ -179,16 +184,5 @@ public sealed class DirectoriesController : ControllerBase
     {
         var ok = await _directories.DeleteAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
-    }
-
-    private static string SanitizeFileName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return "Справочник";
-
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
-        cleaned = cleaned[..Math.Min(cleaned.Length, 128)];
-        return string.IsNullOrEmpty(cleaned) ? "Справочник" : cleaned;
     }
 }

@@ -6,6 +6,7 @@ using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Analytics.FactNorm;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Dictionaries;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Domain.Entities;
@@ -525,7 +526,11 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
                     .AppendLine();
             }
 
-            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", "fact-norm-analysis.csv");
+            return (Encoding.UTF8.GetBytes(sb.ToString()), "text/csv",
+                ExportFileNameBuilder.Build(
+                    ExportFileNameBuilder.Modules.Analytics,
+                    "csv",
+                    ExportFileNameBuilder.Views.FactNorm));
         }
 
         using var workbook = new XLWorkbook();
@@ -557,7 +562,10 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         workbook.SaveAs(stream);
         return (stream.ToArray(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "fact-norm-analysis.xlsx");
+            ExportFileNameBuilder.Build(
+                ExportFileNameBuilder.Modules.Analytics,
+                "xlsx",
+                ExportFileNameBuilder.Views.FactNorm));
     }
 
     private void ValidatePeriod(FactNormAnalysisRequest request)

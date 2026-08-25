@@ -5,21 +5,25 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 
 /// <summary>
 /// Единая точка загрузки 9 гридов: 3 SQL-батча на версию + CPU-сборка через Task.WhenAll.
+/// Холодный encoded-blob — один inflight на ключ (summary и detail ждут один Task).
 /// </summary>
 public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
 {
-    private readonly ProjectsPageRawDataLoader _loader;
+    private readonly IProjectsPageRawDataLoader _loader;
     private readonly IPerformanceCalculationEngine _calculationEngine;
     private readonly IProjectAnalyticsCache _cache;
+    private readonly IPageDataBuildCoalescer _coalescer;
 
     public ProjectsPageDataFetcher(
-        ProjectsPageRawDataLoader loader,
+        IProjectsPageRawDataLoader loader,
         IPerformanceCalculationEngine calculationEngine,
-        IProjectAnalyticsCache cache)
+        IProjectAnalyticsCache cache,
+        IPageDataBuildCoalescer coalescer)
     {
         _loader = loader;
         _calculationEngine = calculationEngine;
         _cache = cache;
+        _coalescer = coalescer;
     }
 
     public async Task<ProjectsPageDataEncodedDto> GetEncodedPageDataAsync(
@@ -60,12 +64,22 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
         if (cached is not null)
             return cached;
 
-        var encoded = ProjectsPageDataEncodedDto.From(
-            await GetProjectsPageDataAsync(projectId, versionId, compareVersionId, cancellationToken));
+        return await _coalescer.RunAsync(
+            cacheKey,
+            async () =>
+            {
+                var hit = await _cache.GetAsync<ProjectsPageDataEncodedDto>(
+                    projectId, cacheKey, CancellationToken.None);
+                if (hit is not null)
+                    return hit;
 
-        // CancellationToken.None: клиент мог уйти, но 6 МБ encoded всё равно пишем для вкладки «Детально».
-        await _cache.SetAsync(projectId, cacheKey, encoded, CancellationToken.None);
-        return encoded;
+                var encoded = ProjectsPageDataEncodedDto.From(
+                    await GetProjectsPageDataAsync(projectId, versionId, compareVersionId, CancellationToken.None));
+
+                await _cache.SetAsync(projectId, cacheKey, encoded, CancellationToken.None);
+                return encoded;
+            },
+            cancellationToken);
     }
 
     public async Task<ProjectsPageDataDto> GetProjectsPageDataAsync(

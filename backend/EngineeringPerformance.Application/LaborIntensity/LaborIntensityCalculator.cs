@@ -22,6 +22,13 @@ public static class LaborIntensityCalculator
 
     public sealed record RecalcResult(int PpvId, decimal? Base, decimal? Pessimistic, decimal? Optimistic);
 
+    /// <summary>Строка оборудования для persist: часы считаются поштучно, без группировки сценария.</summary>
+    public sealed record EquipmentLine(
+        int Id,
+        int? ClassifierId,
+        decimal VolumeInIicUnits,
+        bool IsAssessment);
+
     public static IReadOnlyList<RecalcResult> Recalculate(
         PlanningScenario scenario,
         IReadOnlyList<PpvLine> lines,

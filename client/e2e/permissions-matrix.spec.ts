@@ -33,6 +33,10 @@ test.describe('Permissions matrix', () => {
     await page.goto('/settings/access-rights');
     await page.waitForSelector('[data-testid="permission-matrix-grid"] .ag-root', { timeout: 15_000 });
 
+    await expect(
+      page.getByTestId('app-nav-list').getByRole('link', { name: 'Настройки', exact: true }),
+    ).toHaveClass(/active/);
+
     // Нижние строки виртуализированы — прокручиваем viewport грида.
     await page.locator('[data-testid="permission-matrix-grid"] .ag-body-viewport').evaluate((el) => {
       el.scrollTop = el.scrollHeight;

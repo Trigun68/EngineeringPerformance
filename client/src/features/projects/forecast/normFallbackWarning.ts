@@ -63,7 +63,7 @@ export function collectMissingClassifierWarnings(rows: AssessmentDetailWarningRo
 
   const volLabel = Number.isInteger(volume) ? String(volume) : volume.toFixed(3).replace(/\.?0+$/, '');
   return [
-    `${count} позиц. с «Оценка = да» без классификатора ИИС (объём ${volLabel}). Позиции с «Оценка = нет» не учитываются.`,
+    `${count} позиц. с «Оценка = да» без классификатора IIC (объём ${volLabel}). Позиции с «Оценка = нет» не учитываются.`,
   ];
 }
 

@@ -58,7 +58,9 @@ public sealed record ProjectVersionDirectionDto(
 /// <summary>Запись трудоёмкости проекта, привязанная к конкретному направлению IIC.</summary>
 public sealed record ProjectVersionDirectionLaborDto(
     string DocumentationCode,
-    decimal PlannedHours);
+    decimal PlannedHours,
+    decimal ActualHours = 0m,
+    string? Brand = null);
 
 /// <summary>Ненулевая позиция физ. объёма проекта в составе направления IIC.</summary>
 public sealed record ProjectVersionPhysicalVolumeDto(

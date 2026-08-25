@@ -1,7 +1,8 @@
 # Алгоритм прогнозирования трудозатрат
 
-Дата обновления: 2026-06-08  
-Реализация: `FormulaTemplates`, `INormCalculator`, `IDeviationCalculator`, `ForecastCalculation.ComputeForecastHours`, `LaborIntensityCalculator`, `ProjectsPageGridBuilder`
+**Дата обновления:** 2026-08-24  
+Реализация: `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `ForecastHoursAggregator`, `ProjectsPageGridBuilder.BuildPlanPerformance`  
+Архитектура: [_doc/architecture/hours-and-z-ssot.md](../../_doc/architecture/hours-and-z-ssot.md)
 
 ---
 
@@ -9,17 +10,21 @@
 
 Норма производительности задаётся формулой `N(V)` (8 типов в `FormulaTemplates.cs`). По умолчанию после миграции — линейная: `N(V) = max(0, a − b·V)`, где `a = Performance`, `b = 0`.
 
-Отклонение для прогнозной трудоёмкости — мультипликативное: `σ = StandardDeviation / Performance` (хранится в `DeviationCoefficientsJson`).
+Отклонение — мультипликативное: `σ = StandardDeviation / Performance` (хранится в `DeviationCoefficientsJson`).
 
 ### Прогнозная трудоёмкость (LI)
 
 ```
-LI = N(V) · (1 + σ · z) · V_eff
+LI(z) = N · (1 + σ · z) · V_eff
 ```
 
-где `z` — `ZBase` / `ZOptimistic` / `ZPessimistic` из `ProjectVersionPlanningParameters`.
+`N` берётся по сценарию версии (см. ниже). `z` — `ZBase` / `ZOptimistic` / `ZPessimistic` из `ProjectVersionPlanningParameters` (входы в часы, не колонка оценки).
 
-`Estimate` и legacy `Performance`/`StandardDeviation` сохраняются для Z-score факт-оценки (log-модель); прогноз LI использует параметрическую модель независимо.
+Только строки ФО с оценкой «Да». Оборудование: `N(V_eq)×z` без группировки сценария.
+
+`Estimate` и legacy `Performance`/`StandardDeviation` — для log-модели Z-оценки; прогноз LI использует параметрическую модель.
+
+Линейная формула `ФО × (Performance + Z × StdDev)` на web-пути не применяется.
 
 ---
 
@@ -27,11 +32,11 @@ LI = N(V) · (1 + σ · z) · V_eff
 
 | Сценарий | Алгоритм |
 |---|---|
-| `ByEachValue` | LI per-row по `N(V_i)`, `V_i` |
-| `ByProjectIicGroup` | `V_g = ΣV_i`, `N(V_g)`, распределение `LI_g · (V_i/V_g)` |
-| `ByObjectIicGroup` | то же, группировка `(FacilityCode, IicGroupId)` |
+| `ByEachValue` | `N_i = N(V_i)` на строке |
+| `ByProjectIicGroup` | `V_g = ΣV_i` по группе IIC на проект, `N_g = N(V_g)`, доля `V_i/V_g` |
+| `ByObjectIicGroup` | то же внутри объекта (`FacilityCode`) |
 
-Результаты сохраняются в `ProjectPhysicalVolumes.LaborIntensityBase/Pessimistic/Optimistic`. Пересчёт: `POST .../versions/{id}/recalculate`.
+Пересчёт в БД: `POST .../versions/{id}/recalculate` (и те же триггеры: импорт, CRUD ФО/оборудования, смена Z/сценария, нормы ИИС). Гриды читают сохранённые `LaborIntensity*`.
 
 ---
 
@@ -39,45 +44,23 @@ LI = N(V) · (1 + σ · z) · V_eff
 
 | Источник | Описание |
 |---|---|
-| `ProjectPhysicalVolumes` | Фактические физические объёмы версии проекта (`IsAssessment = true`) |
-| `AnalysisVersionSnapshots` | Снимок норм на дату создания версии проекта (уникален по `(VersionId, WorkDirectionId)`) |
-| `IicWorkDirectionNorm.Performance` | Нормативная производительность (ч/ед) |
-| `IicWorkDirectionNorm.StandardDeviation` | Стандартное отклонение производительности |
-| `ProjectVersionPlanningParameters` | Z-сценарии по `(VersionId, IicWorkDirectionId)`: `ZBase`, `ZOptimistic`, `ZPessimistic` |
-
----
-
-## Формулы (листовые направления ИИС, оценка «Да»)
-
-Единая структура для всех трёх сценариев; различается только Z из параметров планирования:
-
-### Базовый сценарий
-```
-Базовый = ФактФО × (Performance + ZBase × StdDev)
-```
-
-### Оптимистичный сценарий
-```
-Оптимистичный = ФактФО × max(0, Performance + ZOptimistic × StdDev)
-```
-
-### Пессимистичный сценарий
-```
-Пессимистичный = ФактФО × (Performance + ZPessimistic × StdDev)
-```
-
-Значения по умолчанию (seed): `ZPessimistic = 0.5`, `ZBase = 0`, `ZOptimistic = −0.5`.
+| `ProjectPhysicalVolumes` | ФО версии + `LaborIntensity*`; GET суммирует колонки, только `IsAssessment = true` |
+| `ProjectEquipments` | Оборудование версии + `LaborIntensity*` (без группировки сценария) |
+| `AnalysisVersionSnapshots` | Снимок норм на дату версии (persist) |
+| `ProjectVersionPlanningParameters` | Z-параметры по группе IIC (persist) |
+| `ProjectLaborIntensity.PlannedHours` | Часы **факта**; не fallback плана |
 
 ---
 
 ## Правила расчёта
 
-- Z берётся из `ProjectVersionPlanningParameters` для каждой дисциплины IIC; при отсутствии записи — значения по умолчанию (`PlanningZParameters.Default`).
-- Если у направления нет нормы (`Performance = null` или `= 0`) — используются фактические трудозатраты (`ProjectLaborIntensities.PlannedHours`) как запасное значение; все три сценария совпадают.
-- Если `StdDev = 0` или отсутствует — все три сценария равны `ФактФО × Performance` (или fallback на LI).
-- Для нелистовых узлов часы каждого сценария = сумма часов дочерних листьев.
-- `ФактФО` агрегируется снизу вверх по дереву направлений ИИС с учётом коэффициентов.
-- Применяется на вкладках «Итого», «По объектам», «Детально» в web (`ForecastPanel`, `PlanningTab`).
+- Z-параметры планирования — входы в `LI(z)`, не штамп колонки Z.
+- Оценка «Нет» не входит в `V_g` и не получает LI.
+- При отсутствии сохранённых часов на листе дерева отчёта прогноза — 0 (без live N(V) и без PLI).
+- Для нелистовых узлов часы = сумма листьев (уже сохранённых по сценарию на persist).
+- Z-оценка плана: `CalculatePerformance` от сохранённых часов выбранного варианта; свёртка `Σ(Z×часы)/Σ(часы)`.
+- Применяется на вкладках «Итого», «По объектам», «Детально» (`ForecastPanel`, `PlanningTab`), сравнении, отчёте, аналитике Plan/Forecast.
+- Табличный экспорт PDF/Excel: [forecast-export.md](forecast-export.md).
 
 ---
 
@@ -85,7 +68,8 @@ LI = N(V) · (1 + σ · z) · V_eff
 
 | Дата | Версия | Изменение |
 |---|---|---|
-| до 2026-05-06 | — | Лог-нормальное пространство: `base = ФО × exp(Estimate)`, сценарии через `exp(Estimate ± 0.5 × StdDev)` |
-| 2026-05-06 | — | Линейный алгоритм: `base = ФО × Performance`, `opt/pes = ФО × (Performance ∓ 0.5 × StdDev)` |
-| **2026-06-08** | **текущий** | **Параметрические нормы:** LI = N(V)·(1+σ·z)·V_eff; сценарии планирования; сохранённые LI на PPV |
-| 2026-06-08 | — | Единая формула Z per discipline: все сценарии `ФО × (Performance + Z × StdDev)`, Z из `ProjectVersionPlanningParameters` |
+| до 2026-05-06 | — | Лог-нормальное пространство: `base = ФО × exp(Estimate)` |
+| 2026-05-06 | — | Линейный алгоритм: `ФО × (Performance + Z × StdDev)` |
+| 2026-06-08 | — | Параметрические нормы: `LI = N(V)·(1+σ·z)·V_eff`; сценарии планирования |
+| **2026-08-24** | **текущий** | Часы плана: persist ФО+оборудование, GET только из БД; Z плана = `CalculatePerformance(stored)`; факт = `PlannedHours` |
+| 2026-08-23 | — | Live N(V)×сценарий на вкладках (снято 2026-08-24) |

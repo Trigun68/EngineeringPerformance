@@ -34,7 +34,7 @@ public sealed class ImportIterationMetadataTests
         var filePath = BuildEquipmentWorkbook();
         try
         {
-            var service = CreateService(factory);
+            var service = CreateService(factory, out var recalc);
 
             await using var upload = File.OpenRead(filePath);
             var result = await service.ImportProjectDataAsync(
@@ -57,6 +57,10 @@ public sealed class ImportIterationMetadataTests
                 "Оборудование 2026.xlsx",
                 "в итерации должно остаться имя загруженного файла, а не временный путь");
             iteration.SourceFileHash.Should().HaveLength(64, "SHA-256 в hex");
+
+            recalc.Verify(
+                x => x.RecalculateVersionAsync(projectId, versionId, It.IsAny<CancellationToken>()),
+                Times.Once);
         }
         finally
         {
@@ -65,7 +69,9 @@ public sealed class ImportIterationMetadataTests
         }
     }
 
-    private static ProjectExcelDataImportService CreateService(IDbContextFactory<AppDbContext> factory)
+    private static ProjectExcelDataImportService CreateService(
+        IDbContextFactory<AppDbContext> factory,
+        out Mock<IAnalysisVersionRecalculationOrchestrator> recalc)
     {
         var currentUser = new Mock<ICurrentUserService>();
         currentUser.SetupGet(x => x.UserId).Returns(CurrentUserId);
@@ -84,6 +90,11 @@ public sealed class ImportIterationMetadataTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(true);
 
+        recalc = new Mock<IAnalysisVersionRecalculationOrchestrator>();
+        recalc.Setup(x => x.RecalculateVersionAsync(
+                It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
         return new ProjectExcelDataImportService(
             factory,
             NullLogger<ProjectExcelDataImportService>.Instance,
@@ -91,7 +102,8 @@ public sealed class ImportIterationMetadataTests
             permissions.Object,
             visibility.Object,
             new Mock<IDictionaryService>().Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+            new Mock<IProjectAnalyticsCache>().Object,
+            recalc.Object);
     }
 
     private static async Task<(int ProjectId, int VersionId)> SeedProjectAsync(IDbContextFactory<AppDbContext> factory)

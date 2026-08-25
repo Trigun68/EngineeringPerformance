@@ -14,7 +14,8 @@ public sealed class ProjectAnalyticsCache(IDistributedCache cache, ILogger<Proje
     : IProjectAnalyticsCache
 {
     private const string GlobalGenerationKey = "analytics:gen:all";
-    private static readonly TimeSpan EntryLifetime = TimeSpan.FromMinutes(10);
+    // Свежесть даёт generation (invalidate после persist). Короткий TTL устраивал холодный stampede.
+    private static readonly TimeSpan EntryLifetime = TimeSpan.FromHours(12);
     private static readonly TimeSpan GenerationLifetime = TimeSpan.FromDays(30);
 
     private static readonly JsonSerializerOptions JsonOptions = new()

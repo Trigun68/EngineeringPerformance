@@ -1,12 +1,13 @@
 # Бизнес-логика Engineering Performance
 
-**Дата ревизии:** 2026-07-14  
-**Версия документа:** 1.1  
+**Дата ревизии:** 2026-08-23  
+**Версия документа:** 1.2  
 **Статус:** актуально **только для web-стека** (`backend/`, `client/`). WPF вне scope разработки.
 
 **Политика:** см. [План развития: только Web](../plans/web-only-development-plan.md).
 
 **Связанные документы:**
+- [Единый SoT часов и Z](./hours-and-z-ssot.md)
 - [Алгоритм прогнозирования](../../docs/features/forecast-algorithm.md)
 - [Аналитика производительности](../../docs/features/performance-analytics.md)
 - [Сравнение версий](../../docs/features/version-comparison.md)
@@ -84,7 +85,7 @@ Project
 | **Infrastructure** | `backend/EngineeringPerformance.Infrastructure/` | EF, импорт/экспорт (Export/), аналитика |
 | **Frontend** | `client/src/` | React UI, AG Grid, отчёты |
 
-Интеграция внешних модулей (Bearer JWT, readiness, OpenAPI): [docs/api/external-integration.md](../../docs/api/external-integration.md).
+Интеграция внешних модулей (Bearer JWT, JSON-ingest, OpenAPI): [docs/api/README.md](../../docs/api/README.md).
 
 Desktop (`EngineeringPerformance.App/`) **не рассматривается** при проектировании и приёмке. См. [wpf-reference-archive.md](./wpf-reference-archive.md).
 
@@ -194,72 +195,63 @@ flowchart LR
 | `AnalysisVersionSnapshot` | Нормы N(V), σ на дату версии |
 | `ProjectVersionPlanningParameter` | Z pessimistic / base / optimistic по IIC |
 | `PlanningScenario` | Алгоритм группировки при пересчёте LI |
-| `ProjectLaborIntensity` | **Fallback** при отсутствии нормы |
+| `ProjectLaborIntensity` | Вход **факта** (`PlannedHours`). Не fallback плана на web-пути при наличии снимка нормы |
 
-**Важно:** Plan-версии по бизнес-правилу **не содержат** импортированных PLI (ISS-004). Fallback на `PlannedHours` срабатывает только если норма отсутствует.
+**Важно:** Plan-версии по бизнес-правилу **не содержат** импортированных PLI (ISS-004). На web-пути при наличии формулы снимка `ComputeForecastHours(NormFormula)` **без** отката на `PlannedHours`. Scalar — только если формулы нет.
 
 ### 5.2. Формулы прогнозной трудоёмкости
 
-#### Актуальная web-модель (параметрическая)
+Актуальная web-модель — только параметрическая (`LaborIntensityCalculator` + `ForecastHoursAggregator`). Сценарий версии задаёт, **откуда берётся N**, не какую из трёх колонок показать.
 
 ```
 N(V) = NormCalculator(NormFormula, volume)     // 8 типов формул
 σ    = DeviationCoefficientsJson                 // default: StdDev / Performance
 
-LI(z) = N(V) × (1 + σ × z) × V_eff
+LI(z) = N · (1 + σ × z) × V_eff
 ```
 
-где `z ∈ {ZBase, ZOptimistic, ZPessimistic}`, `V_eff = Quantity × Coefficient`.
+где `z ∈ {ZBase, ZOptimistic, ZPessimistic}`, `V_eff = Quantity × Coefficient`.  
+Только строки PPV с оценкой «Да». Оборудование — per-item `N(V_eq)×z`, без сценария группировки.
 
-Значения Z по умолчанию: pessimistic = 0.5, base = 0, optimistic = −0.5.
+Значения Z по умолчанию: pessimistic = 0.5, base = 0, optimistic = −0.5. Это **входы в часы**, не колонка Z-оценки.
 
-#### Устаревшая scalar-модель (только внутри web, подлежит удалению)
-
-```
-Базовый      = V × (Performance + ZBase × StdDev)
-Оптимистичный = V × max(0, Performance + ZOptimistic × StdDev)
-Пессимистичный = V × (Performance + ZPessimistic × StdDev)
-```
-
-Используется в `ProjectForecastService.CalcLeafHours` до fallback. **Целевое состояние:** везде `LaborIntensityCalculator` + N(V).
+Линейная запись `ФО × (Performance + Z × StdDev)` на web-пути **запрещена**.
 
 ### 5.3. Сценарии планирования (`PlanningScenario`)
 
 | Сценарий | Алгоритм | Реализация |
 |----------|----------|------------|
-| `ByEachValue` | LI per строка PPV: N(V_i) для каждой позиции | `LaborIntensityCalculator.RecalculateByEachValue` |
-| `ByProjectIicGroup` | V_g = ΣV_i по направлению ИИС → N(V_g) → распределение LI_g × (V_i/V_g) | `RecalculateByGroup(groupByFacility: false)` |
-| `ByObjectIicGroup` | То же, группировка (FacilityCode, IicGroupId) | `RecalculateByGroup(groupByFacility: true)` |
+| `ByEachValue` | `N_i = N(V_i)` на каждой строке оценки | `LaborIntensityCalculator.RecalculateByEachValue` |
+| `ByProjectIicGroup` | `V_g = ΣV_i` по группе IIC на проект → `N_g = N(V_g)` → доля `V_i/V_g` | `RecalculateByGroup(groupByFacility: false)` |
+| `ByObjectIicGroup` | То же внутри объекта (`FacilityCode`) | `RecalculateByGroup(groupByFacility: true)` |
 
-Результат записывается в `ProjectPhysicalVolume.LaborIntensityBase / Pessimistic / Optimistic`.
-
-Пересчёт: `POST /api/projects/{id}/versions/{vid}/recalculate`.
+Строка с оценкой «Нет» не входит в `V_g`. Пересчёт в БД: `POST /api/projects/{id}/versions/{vid}/recalculate` пишет `LaborIntensity*` на ФО **и** оборудование и сбрасывает кэш проекта. Первый GET `page-data` заполняет Redis. Все неархивные версии: `scripts/recalculate-all-labor.sh`. Гриды, отчёт и сравнение **читают сохранённые колонки**; live `N(V)` на GET запрещён.
 
 ### 5.4. Поток расчёта прогноза (web)
 
 ```
-1. Выбор версии Direction = Plan
+1. Выбор версии Direction = Plan / Forecast
 2. GET /api/projects/{id}/versions/{vid}/page-data
-   └─ ProjectsPageRawDataLoader: PPV, PEQ, snapshots, Z-params, PlanningScenario
+   └─ кэш page-data-encoded-v2 (поколение + TTL 12 ч), иначе один LoadAsync
+      (пул EP-Analytics, singleflight summary+detail): PPV, PEQ (с LaborIntensity*), snapshots
 3. ProjectsPageGridBuilder.BuildForecastGrids()
-   ├─ LaborIntensityCalculator.Recalculate(PlanningScenario, PPV, norms, Z)
-   ├─ AggregateForecastHoursByDirection (PPV + equipment)
-   └─ 3 грида: Summary (дерево ИИС), Facility, Detail
-4. UI: ForecastPanel / PlanningTab
+   ├─ StoredPlanHours (сумма колонок ФО + оборудование)
+   └─ 3 грида: Summary, Facility, Detail
+4. Z плана: BuildPlanPerformance → CalculatePerformance(stored hours)
+5. UI: ForecastPanel / PlanningTab
 ```
+
+Сессия (refresh, preferences) идёт в пул **EP-Interactive** и не ждёт Open() аналитики.
+
+Persist (не GET): импорт/CRUD ФО и оборудования, смена сценария/Z, нормы ИИС, кнопка пересчёта → `RecalculateVersionAsync` → движок → БД → invalidate. Warm кэша на запросе persist **нет**.
 
 ### 5.5. Поток отчёта планирования
 
 ```
-1. IProjectForecastService.GenerateForecastAsync(projectId, versionId)
-2. volumeByDirection = assessment PPV + equipment по ClassifierId
-3. hoursByDirection = Σ PlannedHours по WorkDirectionId (fallback)
-4. BuildIicPlannedVolumeTree():
-   ├─ Агрегация объёмов снизу вверх по дереву IIC
-   ├─ Листья: CalcLeafHours → scalar или fallback
-   └─ Родители: сумма часов дочерних листьев
-5. BuildScenarios() → Оптимистичный / Базовый / Пессимистичный
-6. (опционально) PUT forecast/planned-volumes
+1. PerformanceReportService.BuildPlanBlock: BuildPlanPerformance (сохранённые часы, Base)
+2. Часы KPI = Forecast GrandTotals.BaseHours (SUM колонок БД)
+3. Z KPI = ComputeWeightedZFromPerformanceRows(planPerformance)
+4. IProjectForecastService.GenerateForecastAsync: суммы stored часов по направлениям; без live N(V) на листьях
 ```
 
 ### 5.6. Редактирование плановых объёмов
@@ -290,7 +282,7 @@ LI(z) = N(V) × (1 + σ × z) × V_eff
 
 | # | Проблема | Статус (2026-07-14) |
 |---|----------|---------------------|
-| P-1 | Два алгоритма: grid vs forecast report | **Частично** — `LaborIntensityCalculator.Recalculate` + `AggregatedLaborIntensitiesService`; точное место объединения уточняется |
+| P-1 | Два алгоритма: grid vs forecast report | **Закрыто (2026-08-24)** — persist + stored hours; см. hours-and-z-ssot.md |
 | P-2 | Deep copy без PlanningScenario / LI-полей | **Закрыто** |
 | P-3 | Scalar fallback / мёртвый additive API | **Закрыто** — `ComputeForecastScenarioHours` не найден в кодовой базе |
 | P-4 | Plan без нормы/PLI → нулевые часы | **Частично** — UI warning (`normFallbackWarning`) |
@@ -314,10 +306,14 @@ LI(z) = N(V) × (1 + σ × z) × V_eff
 ```
 factProductivity = factHours / factVolume
 factEstimate = ln(factProductivity)
-zScore = (aggregatedFactEstimate - normEstimate) / normStdDev
+zScore = (ln(hours / volume) − Estimate) / σ
 ```
 
-Для родительских узлов: взвешенное среднее `factEstimate` по часам поддерева.
+Свёртка родителей и KPI — всегда `Σ(Z × hours) / Σ(hours)` (`ComputeWeightedZ`). Не среднее арифметическое, не штамп `ZBase`.
+
+Для родительских узлов: взвешенное среднее по часам поддерева (тот же примитив движка).
+
+План и факт используют **одну** формулу; различаются только источник часов (сохранённые `LaborIntensity*` vs `PlannedHours`). См. [hours-and-z-ssot.md](./hours-and-z-ssot.md).
 
 ### 6.3. Детальная оценка (DocSet-связка)
 
@@ -552,8 +548,8 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Выход расчёта | Справочники / данные | Формула / правило |
 |---------------|----------------------|-------------------|
-| Прогноз LI (гриды, ForecastPanel) | PPV assessment + norm snapshot + Z + PlanningScenario | `N(V)·(1+σz)·V_eff` |
-| Прогноз LI (отчёт планирования)* | PPV + norm snapshot + Z | scalar `V×(P+Z×σ)` — **подлежит унификации (P-1)** |
+| Прогноз LI (гриды, ForecastPanel) | PPV/оборудование assessment, колонки `LaborIntensity*` | SUM сохранённых `N(V)·(1+σz)·V_eff` |
+| Прогноз LI (отчёт планирования) | те же колонки `LaborIntensity*` | SUM по направлениям, без live N(V) |
 | Fact Z-score (итого) | PPV + PLI PlannedHours + norm snapshot | log(productivity), взвешенная агрегация |
 | Fact hours (детально) | PLI по DocSet + PPV DocumentSet | `setHours × (vol/setVol)` |
 | Fallback часов | Нет нормы | `Σ PlannedHours` по WorkDirectionId |

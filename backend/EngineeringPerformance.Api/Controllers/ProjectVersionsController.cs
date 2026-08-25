@@ -3,7 +3,6 @@ using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
-using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,20 +16,20 @@ public sealed class ProjectVersionsController : ControllerBase
 {
     private readonly IProjectVersionService _versions;
     private readonly IProjectVersionPlanningParameterService _planningParameters;
-    private readonly ILaborIntensityRecalculationService _recalculation;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly IAggregatedLaborIntensitiesService _aggregation;
     private readonly IProjectVersionReadinessService _readiness;
 
     public ProjectVersionsController(
         IProjectVersionService versions,
         IProjectVersionPlanningParameterService planningParameters,
-        ILaborIntensityRecalculationService recalculation,
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
         IAggregatedLaborIntensitiesService aggregation,
         IProjectVersionReadinessService readiness)
     {
         _versions = versions;
         _planningParameters = planningParameters;
-        _recalculation = recalculation;
+        _recalcOrchestrator = recalcOrchestrator;
         _aggregation = aggregation;
         _readiness = readiness;
     }
@@ -191,7 +190,7 @@ public sealed class ProjectVersionsController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var updated = await _recalculation.RecalculateAsync(projectId, versionId, cancellationToken);
+        var updated = await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
         return Ok(new { updatedRows = updated });
     }
 

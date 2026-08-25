@@ -4,6 +4,7 @@ import type {
   VersionCompareRow,
 } from '../../../api/analyticsApi';
 import {
+  getComparePlanZScore,
   getComparePlannedLaborHours,
   type CompareScenario,
 } from './compareColumns';
@@ -35,9 +36,13 @@ function planLaborHoursIdentical(row: VersionCompareRow): boolean {
  * Итого: FactZ + PlanZ + любая из трёх пар плановых часов (песс./баз./опт.).
  * Паритет docs/features/version-comparison.md.
  */
-export function hasSummaryDifference(row: VersionCompareRow): boolean {
+export function hasSummaryDifference(
+  row: VersionCompareRow,
+  scenario: CompareScenario = 'base',
+): boolean {
   const factZIdentical = round4(row.factZScoreA) === round4(row.factZScoreB);
-  const planZIdentical = round4(row.planZScoreA) === round4(row.planZScoreB);
+  const planZIdentical = round4(getComparePlanZScore(row, scenario, 'A'))
+    === round4(getComparePlanZScore(row, scenario, 'B'));
   return !(factZIdentical && planZIdentical && planLaborHoursIdentical(row));
 }
 
@@ -80,7 +85,7 @@ export function filterCompareSummaryRows(
 
   for (const row of rows) {
     if (row.isTotal) continue;
-    if (hasSummaryDifference(row)) {
+    if (hasSummaryDifference(row, _scenario)) {
       visible.add(row.workDirectionId);
     }
   }

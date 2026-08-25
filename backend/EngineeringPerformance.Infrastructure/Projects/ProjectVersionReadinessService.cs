@@ -51,7 +51,7 @@ public sealed class ProjectVersionReadinessService(AppDbContext context) : IProj
             issues.Add(new ProjectVersionReadinessIssueDto(
                 "missing_planning_parameters",
                 "warning",
-                "Нет параметров планирования (Z по направлениям ИИС)."));
+                "Нет параметров планирования (Z по направлениям IIC)."));
         }
 
         if (physicalVolumesCount == 0)
@@ -83,7 +83,7 @@ public sealed class ProjectVersionReadinessService(AppDbContext context) : IProj
             issues.Add(new ProjectVersionReadinessIssueDto(
                 "missing_norm_snapshots",
                 "warning",
-                "Нет снимка норм ИИС (AnalysisVersionSnapshots)."));
+                "Нет снимка норм IIC (AnalysisVersionSnapshots)."));
         }
 
         return new ProjectVersionReadinessDto(

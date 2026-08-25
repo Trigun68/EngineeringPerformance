@@ -22,11 +22,11 @@ Modal `export/forecast.pdf` делегирует в visual `forecast-summary/pdf
 | `.../export/forecast-summary/pdf` | Прогноз Итого | Сценарии + top IIC |
 | `.../export/forecast-facility/pdf` | Прогноз По объектам | Bar по объектам |
 | `.../export/forecast-detail/pdf` | Прогноз Детально | Top-20 PV |
-| `.../export/fact-summary/pdf` | Факт Итого | Z-bar + KPI + шкала; таблица: ФО, факт.часы, **План.Труд.Песс./Баз./Оптим.**, Z |
+| `.../export/fact-summary/pdf` | Факт Итого | Z-bar + KPI + шкала; таблица: ФО, факт.часы, **План.Труд.Оптим./Баз./Песс.**, Z |
 | `.../export/fact-facility/pdf` | Факт По объектам | Column hours; те же три план. колонки после факт. часов |
 | `.../export/fact-detail/pdf` | Факт Детально | Top \|Z\|; те же три план. колонки после факт. часов |
 | `.../export/analysis.pdf` | Анализ версии | Делегирует fact-summary |
-| `.../compare/export.pdf` | Сравнение | Waterfall Δ Z + KPI; таблицы: **шесть** план. часов (песс./баз./опт. × A/B) |
+| `.../compare/export.pdf` | Сравнение | Waterfall Δ Z + KPI; таблицы: **шесть** план. часов (опт./баз./песс. × A/B) |
 | `/api/analytics/trends/export.pdf` | Тренды | Line + column + area |
 | `/api/projects/{id}/export/combined.pdf` | Отчёты | 4 key charts + шкала |
 

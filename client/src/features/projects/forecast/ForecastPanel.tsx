@@ -8,9 +8,11 @@ import {
   Tabs,
   Typography,
 } from '@mui/material';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import DeleteIcon from '@mui/icons-material/Delete';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import type { ImportDataType } from '../../../api/importApi';
 import { deleteEquipment, deletePhysicalVolume, createEquipment, createPhysicalVolume, fetchEquipmentById, fetchPhysicalVolumeById } from '../../../api/projectDataApi';
 import {
@@ -20,10 +22,11 @@ import {
   exportForecastDetailSummaryTable,
   exportForecastFacilityExcel,
   exportForecastFacilityPdf,
+  exportForecastSummaryExcel,
+  exportForecastSummaryPdf,
   fetchProjectsPageData,
   fetchProjectsPageDetails,
 } from '../../../api/projectsPageApi';
-import { exportForecastSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { DataTable, type ContextMenuItem } from '../../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
@@ -36,7 +39,7 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { useConfirmation } from '../../../hooks/useConfirmation';
 import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
 import {
   LAST_PROJECT_PREF_KEY,
@@ -132,7 +135,10 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
   const [planningOpen, setPlanningOpen] = useState(false);
   const detailGridApiRef = useRef<GridApi | null>(null);
   const [detailGridReady, setDetailGridReady] = useState(false);
-  const detailRequestedKeyRef = useRef<string | null>(null);
+  const planVersionIdRef = useRef<number | null>(null);
+  const pageDataLoadGenRef = useRef(0);
+  const pageDataAbortRef = useRef<AbortController | null>(null);
+  planVersionIdRef.current = planVersionId;
   const [exporting, setExporting] = useState(false);
   const [importDialogType, setImportDialogType] = useState<ImportDialogType>(null);
   const [deleteDialogType, setDeleteDialogType] = useState<DeleteDialogType>(null);
@@ -195,17 +201,35 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
 
   const loadPageData = useCallback(async () => {
     if (!planVersionId || !canRead) return;
-    detailRequestedKeyRef.current = null;
+    const requestedVersionId = planVersionId;
+    const loadGen = ++pageDataLoadGenRef.current;
+    pageDataAbortRef.current?.abort();
+    const controller = new AbortController();
+    pageDataAbortRef.current = controller;
+    setPageData((prev) =>
+      prev ? { ...prev, forecast: { ...prev.forecast, detail: [] } } : prev,
+    );
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchProjectsPageData(projectId, planVersionId);
-      setPageData(data);
+      const data = await fetchProjectsPageData(projectId, requestedVersionId, undefined, controller.signal);
+      if (loadGen !== pageDataLoadGenRef.current || requestedVersionId !== planVersionIdRef.current) {
+        return;
+      }
+      setPageData((prev) => {
+        if (prev != null && prev.forecast.detail.length > 0 && data.forecast.detail.length === 0) {
+          return { ...data, forecast: { ...data.forecast, detail: prev.forecast.detail } };
+        }
+        return data;
+      });
     } catch (err) {
+      if (isRequestCanceled(err) || loadGen !== pageDataLoadGenRef.current) return;
       setError(getApiErrorMessage(err, 'Не удалось загрузить данные прогнозирования.'));
       setPageData(null);
     } finally {
-      setLoading(false);
+      if (loadGen === pageDataLoadGenRef.current) {
+        setLoading(false);
+      }
     }
   }, [canRead, planVersionId, projectId]);
 
@@ -213,20 +237,28 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
     void loadPageData();
   }, [loadPageData]);
 
+  const forecastDetailLength = pageData?.forecast.detail.length ?? 0;
+  const hasPageData = pageData != null;
+
+  // Детально догружается отдельно. Не завязывать эффект на объект pageData и не
+  // глушить fetch в cleanup — иначе prefs версии плана оставляют грид пустым.
   useEffect(() => {
-    if (subTab !== 'forecast-detail' || !planVersionId || !canRead || !pageData) {
+    if (subTab !== 'forecast-detail' || !planVersionId || !canRead || !hasPageData) {
       return;
     }
-    const key = `${projectId}:${planVersionId}`;
-    if (pageData.forecast.detail.length > 0 || detailRequestedKeyRef.current === key) {
+    if (forecastDetailLength > 0) {
       return;
     }
-    detailRequestedKeyRef.current = key;
-    let cancelled = false;
+    const requestedVersionId = planVersionId;
+    const loadGen = pageDataLoadGenRef.current;
+    const controller = new AbortController();
     setDetailLoading(true);
-    void fetchProjectsPageDetails(projectId, planVersionId)
+    void fetchProjectsPageDetails(projectId, requestedVersionId, undefined, controller.signal)
       .then((details) => {
-        if (cancelled) {
+        if (requestedVersionId !== planVersionIdRef.current) {
+          return;
+        }
+        if (loadGen !== pageDataLoadGenRef.current) {
           return;
         }
         setPageData((prev) =>
@@ -234,21 +266,23 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
         );
       })
       .catch((err) => {
-        if (!cancelled) {
-          detailRequestedKeyRef.current = null;
-          setError(getApiErrorMessage(err, 'Не удалось загрузить детальные данные прогнозирования.'));
+        if (isRequestCanceled(err) || requestedVersionId !== planVersionIdRef.current) {
+          return;
         }
+        setError(getApiErrorMessage(err, 'Не удалось загрузить детальные данные прогнозирования.'));
       })
       .finally(() => {
-        if (!cancelled) {
+        if (requestedVersionId === planVersionIdRef.current && loadGen === pageDataLoadGenRef.current) {
           setDetailLoading(false);
         }
       });
     return () => {
-      cancelled = true;
+      if (planVersionIdRef.current !== requestedVersionId) {
+        controller.abort();
+      }
       setDetailLoading(false);
     };
-  }, [subTab, planVersionId, canRead, pageData, projectId]);
+  }, [subTab, planVersionId, canRead, hasPageData, forecastDetailLength, projectId]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     setUserPlanVersionId(version.id);
@@ -256,6 +290,23 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
       [LAST_PROJECT_PREF_KEY]: String(projectId),
       [planVersionPrefKey(projectId)]: String(version.id),
     });
+  };
+
+  const handleExportSummary = async (type: 'excel' | 'pdf') => {
+    if (!planVersionId) return;
+    setExporting(true);
+    setError(null);
+    try {
+      if (type === 'excel') {
+        await exportForecastSummaryExcel(projectId, planVersionId);
+      } else {
+        await exportForecastSummaryPdf(projectId, planVersionId);
+      }
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleExportFacility = async (type: 'excel' | 'pdf') => {
@@ -459,7 +510,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
         },
       });
       items.push({
-        name: 'Редактировать норму EAC',
+        name: 'Редактировать норму IIC',
         disabled: (row) => !canEditNorms || !row?.normId || !row.classifierId,
         action: (row) => {
           if (!canEditNorms || !row?.normId || !row.classifierId) return;
@@ -647,44 +698,36 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
         )}
         {canImport && (
           <>
-            <Button
-              variant="outlined"
-              size="small"
+            <ToolbarActionButton
               disabled={!planVersionId || loading}
               onClick={() => setImportDialogType('physical-volumes')}
-              startIcon={<FileDownloadIcon />}
+              startIcon={<UploadFileIcon />}
             >
-              Импорт ФО
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.importPhysicalVolumes}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={!planVersionId || loading}
               onClick={() => setDeleteDialogType('physical-volumes')}
               startIcon={<DeleteIcon />}
               color="error"
             >
-              Удалить ФО
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.deletePhysicalVolumes}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={!planVersionId || loading}
               onClick={() => setImportDialogType('equipment')}
-              startIcon={<FileDownloadIcon />}
+              startIcon={<UploadFileIcon />}
             >
-              Импорт оборуд.
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
+              {ACTION_LABELS.importEquipment}
+            </ToolbarActionButton>
+            <ToolbarActionButton
               disabled={!planVersionId || loading}
               onClick={() => setDeleteDialogType('equipment')}
               startIcon={<DeleteIcon />}
               color="error"
             >
-              Удалить оборуд.
-            </Button>
+              {ACTION_LABELS.deleteEquipment}
+            </ToolbarActionButton>
           </>
         )}
       </Stack>
@@ -720,92 +763,67 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
               >
                 📊 Прогноз
               </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
-                onClick={async () => {
-                  if (!planVersionId) return;
-                  setExporting(true);
-                  try {
-                    await exportForecastSummaryPdf(projectId, planVersionId);
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
+              <ExportActionButton
+                kind="excel"
+                disabled={!planVersionId}
+                loading={exporting}
+                onClick={() => void handleExportSummary('excel')}
+                data-testid="forecast-summary-export-excel"
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!planVersionId}
+                loading={exporting}
+                onClick={() => void handleExportSummary('pdf')}
+                data-testid="forecast-summary-export-pdf"
+              />
             </>
           )}
           {subTab === 'forecast-facility' && (
             <>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
+              <ExportActionButton
+                kind="excel"
+                disabled={!planVersionId}
+                loading={exporting}
                 onClick={() => void handleExportFacility('excel')}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт Excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
+                data-testid="forecast-facility-export-excel"
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!planVersionId}
+                loading={exporting}
                 onClick={() => void handleExportFacility('pdf')}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
+                data-testid="forecast-facility-export-pdf"
+              />
             </>
           )}
           {subTab === 'forecast-detail' && (
             <>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
+              <ExportActionButton
+                kind="excel"
+                disabled={!planVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetail('excel')}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт всех excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || !detailGridReady || exporting}
+              />
+              <ExportActionButton
+                kind="excelSelected"
+                disabled={!planVersionId || !detailGridReady}
+                loading={exporting}
                 onClick={() => void handleExportDetailVisibleExcel()}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт выделенных excel
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!planVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetail('pdf')}
-                startIcon={<PictureAsPdfIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Экспорт PDF
-              </Button>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled={!planVersionId || exporting}
+                data-testid="forecast-detail-export-pdf"
+              />
+              <ExportActionButton
+                kind="excelSummary"
+                disabled={!planVersionId}
+                loading={exporting}
                 onClick={() => void handleExportDetailSummaryTable()}
-                startIcon={<FileDownloadIcon />}
-                sx={{ textTransform: 'none' }}
-              >
-                Сводная таблица
-              </Button>
+              />
             </>
           )}
         </Stack>
@@ -833,6 +851,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
               columnDefs={summaryColumns}
               objectName="Planning"
               gridId="forecast-summary"
+              projectId={projectId}
               loading={loading}
               height="100%"
               treeData
@@ -859,6 +878,7 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
               columnDefs={facilityColumns}
               objectName="Planning"
               gridId="forecast-facility"
+              projectId={projectId}
               loading={loading}
               height="100%"
               pinnedBottomRowData={facilityPinnedBottomRow}
@@ -873,7 +893,8 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
             columnDefs={detailColumns}
             objectName="Planning"
             gridId="forecast_details_columns"
-            loading={loading}
+            projectId={projectId}
+            loading={loading || detailLoading}
             height="100%"
             enableRowGrouping
             showColumnSettings

@@ -2,13 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Alert,
   Box,
-  Button,
   Chip,
   Stack,
   Typography,
 } from '@mui/material';
 import type { ColDef } from 'ag-grid-community';
 import { DataTable } from '../../../components/DataTable/DataTable';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import type { ContextMenuItem } from '../../../components/DataTable/DataTable';
 import {
   exportFactNormAnalysis,
@@ -22,6 +24,7 @@ import {
   type Verdict,
 } from '../../../api/factNormAnalyticsApi';
 import { usePermission } from '../../../hooks/usePermission';
+import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { AccuracyBadge } from './AccuracyBadge';
 import { CreateNormFromSuggestionDialog } from './CreateNormFromSuggestionDialog';
 import { FactVsNormChart } from './FactVsNormChart';
@@ -41,6 +44,8 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
   InsufficientData: 'default',
 };
 
+const FACT_NORM_PROJECTS_PREF_KEY = 'analytics.factNorm.projectIds.v1';
+
 interface Props {
   dateFrom: string;
   dateTo: string;
@@ -50,6 +55,7 @@ interface Props {
 export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Props) {
   const { canEdit: canEditNorms } = usePermission('IicWorkDirectionNorms');
   const [projectIds, setProjectIds] = useState<number[] | null>(null);
+  const [prefsReady, setPrefsReady] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +68,41 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
 
   useEffect(() => {
     void fetchReferenceFormulas().then(setFormulas).catch(() => setFormulas([]));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getUserPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        const raw = prefs[FACT_NORM_PROJECTS_PREF_KEY];
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as unknown;
+            if (parsed === null) {
+              setProjectIds(null);
+            } else if (Array.isArray(parsed)) {
+              setProjectIds(
+                parsed.filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+              );
+            }
+          } catch {
+            // defaults: all projects
+          }
+        }
+        setPrefsReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPrefsReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const applyProjectIds = useCallback((ids: number[] | null) => {
+    setProjectIds(ids);
+    void putUserPreferences({ [FACT_NORM_PROJECTS_PREF_KEY]: JSON.stringify(ids) });
   }, []);
 
   const runAnalysis = useCallback(async () => {
@@ -94,9 +135,10 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
   }, [dateFrom, dateTo, projectIds]);
 
   useEffect(() => {
+    if (!prefsReady) return;
     void runAnalysis();
     return () => abortRef.current?.abort();
-  }, [runAnalysis]);
+  }, [runAnalysis, prefsReady]);
 
   const accuracy: Accuracy | null = result?.accuracy ?? null;
   const projectLabel =
@@ -123,20 +165,17 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
             data-testid="fact-norm-short-period"
           />
         ) : null}
-        <Button
-          size="small"
-          variant="outlined"
+        <ToolbarActionButton
           onClick={() => setPickerOpen(true)}
           data-testid="fact-norm-project-scope"
         >
           {projectLabel}
-        </Button>
-        <Button size="small" variant="outlined" onClick={() => void runAnalysis()} disabled={loading}>
-          Обновить
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
+        </ToolbarActionButton>
+        <ToolbarActionButton onClick={() => void runAnalysis()} disabled={loading}>
+          {ACTION_LABELS.refresh}
+        </ToolbarActionButton>
+        <ExportActionButton
+          kind="excel"
           disabled={!result || loading}
           onClick={() =>
             void exportFactNormAnalysis(
@@ -145,9 +184,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
             )
           }
           data-testid="fact-norm-export"
-        >
-          Экспорт
-        </Button>
+        />
       </Stack>,
     );
     return () => onToolbarExtras(null);
@@ -313,7 +350,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         open={pickerOpen}
         selectedIds={projectIds}
         onClose={() => setPickerOpen(false)}
-        onApply={setProjectIds}
+        onApply={applyProjectIds}
       />
 
       <CreateNormFromSuggestionDialog

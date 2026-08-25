@@ -59,6 +59,12 @@ public interface IPerformanceCalculationEngine
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
 
+    /// <summary>Часы прогноза по id строки оборудования (без группировки сценария ФО).</summary>
+    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
+
     /// <summary>Средневзвешенный Z по корневым строкам производительности.</summary>
     decimal? ComputeWeightedZFromPerformanceRows(
         IReadOnlyList<PerformanceRowDto> performanceRows,

@@ -47,7 +47,7 @@ public sealed class ZTrendEngineTests
     }
 
     [Fact]
-    public void WeightedSameDay_Uniform_SimpleAverage()
+    public void WeightedSameDay_IgnoresUniform_AlwaysHoursWeighted()
     {
         var day = new DateTime(2026, 1, 10);
         var points = new List<ZTrendRawPoint>
@@ -58,7 +58,7 @@ public sealed class ZTrendEngineTests
 
         var agg = _engine.AggregateSameDay(points, "uniform");
         agg.Should().HaveCount(1);
-        agg[0].ZScore.Should().Be(1m);
+        agg[0].ZScore.Should().Be(0.5m);
     }
 
     [Fact]

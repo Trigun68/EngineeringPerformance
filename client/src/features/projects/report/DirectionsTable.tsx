@@ -1,14 +1,46 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { PerformanceReportMergedDirectionRow } from '../../../api/performanceReportApi';
+import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
+import { reportCollapsedPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { fmt, fmtSigned, interpretationColor } from './reportFormat';
 
 type Props = {
+  projectId: number;
   rows: PerformanceReportMergedDirectionRow[];
 };
 
-export function DirectionsTable({ rows }: Props) {
+function parseCollapsed(raw: string | undefined): Set<number> {
+  if (!raw) return new Set();
+  try {
+    const ids = JSON.parse(raw) as unknown;
+    if (!Array.isArray(ids)) return new Set();
+    return new Set(
+      ids.filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+export function DirectionsTable({ projectId, rows }: Props) {
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    setCollapsed(new Set());
+    void getUserPreferences()
+      .then((prefs) => {
+        if (cancelled) return;
+        setCollapsed(parseCollapsed(prefs[reportCollapsedPrefKey(projectId)]));
+      })
+      .catch(() => {
+        // оставляем пустой набор
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const childrenByParent = useMemo(() => {
     const map = new Map<number | null, PerformanceReportMergedDirectionRow[]>();
@@ -40,6 +72,9 @@ export function DirectionsTable({ rows }: Props) {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      void putUserPreferences({
+        [reportCollapsedPrefKey(projectId)]: JSON.stringify([...next]),
+      });
       return next;
     });
   };

@@ -2,9 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { LAST_ROUTE_PREF_KEY } from '../../hooks/usePersistLastRoute';
 import {
   LAST_PROJECT_PREF_KEY,
+  compareScenarioPrefKey,
+  compareShowDiffPrefKey,
+  compareVersionAPrefKey,
+  compareVersionBPrefKey,
+  compareViewModePrefKey,
   parsePrefId,
   planVersionPrefKey,
   readHeaderExpanded,
+  reportCollapsedPrefKey,
+  reportDarkPrefKey,
   resolvePreferredPath,
   writeHeaderExpanded,
 } from '../projectWorkspacePrefs';
@@ -20,6 +27,16 @@ describe('projectWorkspacePrefs', () => {
 
   it('planVersionPrefKey is scoped by project', () => {
     expect(planVersionPrefKey(7)).toBe('projects.7.planVersionId');
+  });
+
+  it('compare and report pref keys are scoped by project', () => {
+    expect(compareVersionAPrefKey(4)).toBe('projects.4.compareVersionAId');
+    expect(compareVersionBPrefKey(4)).toBe('projects.4.compareVersionBId');
+    expect(compareViewModePrefKey(4)).toBe('projects.4.compareViewMode');
+    expect(compareShowDiffPrefKey(4)).toBe('projects.4.compareShowDiff');
+    expect(compareScenarioPrefKey(4)).toBe('projects.4.compareScenario');
+    expect(reportDarkPrefKey(4)).toBe('projects.4.report.dark');
+    expect(reportCollapsedPrefKey(4)).toBe('projects.4.report.collapsed');
   });
 
   it('resolvePreferredPath prefers last project workspace over bare /projects', () => {

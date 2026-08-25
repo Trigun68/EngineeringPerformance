@@ -3,7 +3,6 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'rea
 import {
   Alert,
   Box,
-  Button,
   FormControl,
   InputLabel,
   MenuItem,
@@ -15,7 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { ColDef } from 'ag-grid-community';
-import { isAxiosError } from 'axios';
+import { ExportActionButton } from '../../components/export/ExportActionButton';
 import { getApiErrorMessage } from '../../services/apiError';
 import { fetchProjectVersions, type ProjectVersion } from '../../api/projectVersionsApi';
 import {
@@ -166,11 +165,7 @@ export function ProjectsPage() {
           await exportProjectsPageExcel(projectId, versionId, compareVersionId);
         }
       } catch (err) {
-        if (isAxiosError(err)) {
-          setExportError(getApiErrorMessage(err, 'Не удалось скачать файл экспорта.'));
-        } else {
-          setExportError('Не удалось скачать файл экспорта.');
-        }
+        setExportError(getApiErrorMessage(err, 'Не удалось скачать файл экспорта.'));
       } finally {
         setExporting(null);
       }
@@ -327,22 +322,18 @@ export function ProjectsPage() {
         </FormControl>
 
         <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: 'auto' }}>
-          <Button
-            variant="outlined"
-            size="small"
-            disabled={!versionId || exporting !== null}
+          <ExportActionButton
+            kind="pdf"
+            disabled={!versionId}
+            loading={exporting !== null}
             onClick={() => void handleExport('pdf')}
-          >
-            {exporting === 'pdf' ? 'Экспорт PDF…' : 'Экспорт PDF'}
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            disabled={!versionId || exporting !== null}
+          />
+          <ExportActionButton
+            kind="excel"
+            disabled={!versionId}
+            loading={exporting !== null}
             onClick={() => void handleExport('excel')}
-          >
-            {exporting === 'excel' ? 'Экспорт Excel…' : 'Экспорт Excel'}
-          </Button>
+          />
         </Stack>
       </Stack>
 

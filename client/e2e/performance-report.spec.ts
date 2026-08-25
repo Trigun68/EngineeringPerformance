@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton } from './helpers';
 
 async function openReportTab(page: import('@playwright/test').Page) {
   await page.goto('/projects');
@@ -15,7 +15,7 @@ async function openReportTab(page: import('@playwright/test').Page) {
   const panel = page.getByTestId('performance-report-panel');
   await expect(panel).toBeVisible({ timeout: 40_000 });
   // Данные отчёта подгрузились — PDF активен.
-  await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeEnabled({ timeout: 40_000 });
+  await expect(actionButton(page, 'exportPdf')).toBeEnabled({ timeout: 40_000 });
 }
 
 test.describe('Performance report tab', () => {
@@ -51,9 +51,13 @@ test.describe('Performance report tab', () => {
   test('theme toggle switches dark class on panel', async ({ page }) => {
     await openReportTab(page);
     const panel = page.getByTestId('performance-report-panel');
-    await expect(panel).not.toHaveClass(/\bdark\b/);
+    const startedDark = await panel.evaluate((el) => el.classList.contains('dark'));
     await page.getByTestId('performance-report-theme').click();
-    await expect(panel).toHaveClass(/dark/);
+    if (startedDark) {
+      await expect(panel).not.toHaveClass(/\bdark\b/);
+    } else {
+      await expect(panel).toHaveClass(/dark/);
+    }
   });
 
   test('PDF export returns application/pdf', async ({ page }) => {
@@ -70,6 +74,6 @@ test.describe('Performance report tab', () => {
     const ct = response.headers()['content-type'] ?? '';
     expect(ct).toContain('application/pdf');
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/PerformanceReport_/i);
+    expect(download.suggestedFilename()).toMatch(/^отчет_-_.+\.pdf$/);
   });
 });

@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Projects;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -17,17 +18,20 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
     private readonly ICurrentUserService _currentUser;
     private readonly IProjectVisibilityService _visibility;
     private readonly IFactAssessmentPipeline _pipeline;
+    private readonly IPerformanceCalculationEngine _engine;
 
     public GroupAnalyticsService(
         AppDbContext db,
         ICurrentUserService currentUser,
         IProjectVisibilityService visibility,
-        IFactAssessmentPipeline pipeline)
+        IFactAssessmentPipeline pipeline,
+        IPerformanceCalculationEngine engine)
     {
         _db = db;
         _currentUser = currentUser;
         _visibility = visibility;
         _pipeline = pipeline;
+        _engine = engine;
     }
 
     public async Task<GroupAnalysisResultDto> GetGroupAnalysisAsync(int projectId, CancellationToken cancellationToken = default)
@@ -45,7 +49,7 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
         var (criterion, groupValue, peers) = await ResolvePeerProjectsAsync(anchor, cancellationToken);
 
         var rows = new List<GroupAnalysisProjectRowDto>();
-        var aggregator = new WeightedZAggregator();
+        var samples = new List<(decimal? ZScore, decimal? Weight)>();
 
         foreach (var project in peers.OrderBy(p => p.Code).ThenBy(p => p.Name))
         {
@@ -89,10 +93,10 @@ public sealed class GroupAnalyticsService : IGroupAnalyticsService
                 z,
                 interpretation));
 
-            aggregator.Add(z, hours);
+            samples.Add((z, hours));
         }
 
-        var aggregateZ = aggregator.Result();
+        var aggregateZ = _engine.ComputeWeightedZ(samples);
 
         return new GroupAnalysisResultDto(
             GroupCriterion: criterion,

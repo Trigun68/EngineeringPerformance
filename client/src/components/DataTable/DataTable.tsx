@@ -54,6 +54,8 @@ export interface DataTableProps<T> {
   columnDefs: ColDef<T>[];
   objectName: string;
   gridId?: string;
+  /** Scope column layout/filters per project; falls back to global gridId keys. */
+  projectId?: number;
   contextMenuItems?: ContextMenuItem<T>[];
   onRowDoubleClicked?: (row: T) => void;
   onRowClicked?: (row: T) => void;
@@ -95,6 +97,7 @@ export function DataTable<T extends object>({
   columnDefs,
   objectName,
   gridId,
+  projectId,
   contextMenuItems = [],
   onRowDoubleClicked,
   onRowClicked,
@@ -128,6 +131,10 @@ export function DataTable<T extends object>({
   const lastLayoutRef = useRef<ColumnState[] | null>(null);
   const { canRead, hasLevel } = usePermission(objectName);
 
+  useEffect(() => {
+    filterAppliedRef.current = false;
+  }, [gridId, projectId]);
+
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
   const [allColumnLabels, setAllColumnLabels] = useState<Record<string, string>>({});
@@ -152,16 +159,16 @@ export function DataTable<T extends object>({
     if (!api) return lastLayoutRef.current;
     const layout = api.getColumnState();
     lastLayoutRef.current = layout;
-    if (gridId) setCachedGridLayout(gridId, layout);
+    if (gridId) setCachedGridLayout(gridId, layout, projectId);
     return layout;
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const persistLayoutNow = useCallback(async () => {
     if (!gridId || !gridInitializedRef.current) return;
     const layout = captureLayoutFromApi() ?? lastLayoutRef.current;
     if (!layout || layout.length === 0) return;
-    await persistGridLayout(gridId, layout);
-  }, [captureLayoutFromApi, gridId]);
+    await persistGridLayout(gridId, layout, { projectId });
+  }, [captureLayoutFromApi, gridId, projectId]);
 
   const scheduleLayoutSave = useCallback(() => {
     if (!gridId || !gridInitializedRef.current) return;
@@ -182,24 +189,24 @@ export function DataTable<T extends object>({
       const filter = api.getFilterModel() as Record<string, unknown>;
       const sanitized = sanitizeFilterModel(filter);
       void putUserPreferences({
-        [filterPrefKey(gridId)]: JSON.stringify(sanitized ?? {}),
+        [filterPrefKey(gridId, projectId)]: JSON.stringify(sanitized ?? {}),
       });
     }, FILTER_DEBOUNCE_MS);
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const applySavedLayout = useCallback(async (api: GridApi<T>) => {
     if (!gridId) return;
-    const state = await loadGridLayout(gridId);
+    const state = await loadGridLayout(gridId, projectId);
     if (!state || state.length === 0) return;
     lastLayoutRef.current = state;
     api.applyColumnState({ state, applyOrder: true });
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const applySavedFilters = useCallback(async (api: GridApi<T>) => {
     if (!gridId || filterAppliedRef.current) return;
     try {
       const prefs = await getUserPreferences();
-      const raw = prefs[filterPrefKey(gridId)];
+      const raw = prefs[filterPrefKey(gridId, projectId)] ?? (projectId != null ? prefs[filterPrefKey(gridId)] : undefined);
       if (!raw) return;
       const model = JSON.parse(raw) as Record<string, unknown>;
       if (Object.keys(model).length > 0) {
@@ -209,7 +216,7 @@ export function DataTable<T extends object>({
     } catch {
       // ignore
     }
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const syncColumnVisibilityState = useCallback((api: GridApi<T>) => {
     const labels: Record<string, string> = {};
@@ -288,9 +295,9 @@ export function DataTable<T extends object>({
       filterTimerRef.current = null;
     }
     if (gridId && lastLayoutRef.current && lastLayoutRef.current.length > 0) {
-      void persistGridLayout(gridId, lastLayoutRef.current);
+      void persistGridLayout(gridId, lastLayoutRef.current, { projectId });
     }
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const getContextMenuItems = useCallback(
     (params: GetContextMenuItemsParams<T>): (string | MenuItemDef)[] => {

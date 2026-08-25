@@ -82,12 +82,7 @@ public static class DependencyInjection
             ?? new Application.Analytics.FactNorm.AnalyticsOptions();
         analyticsOptions.Validate();
         services.AddSingleton<Diagnostics.SqlQueryCommandInterceptor>();
-        services.AddDbContextFactory<AppDbContext>((sp, options) =>
-        {
-            options.UseSqlServer(connectionString, sql =>
-                sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null));
-            options.AddInterceptors(sp.GetRequiredService<Diagnostics.SqlQueryCommandInterceptor>());
-        });
+        ConfigureSqlLanes(services, connectionString);
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
         services.AddHttpContextAccessor();
@@ -110,6 +105,7 @@ public static class DependencyInjection
 
         services.AddScoped<IProjectExportService, ProjectExportService>();
         services.AddScoped<IDirectoryExportService, DirectoryExportService>();
+        services.AddScoped<IExportFileNameService, ExportFileNameService>();
         services.AddScoped<IForecastDetailSummaryTableContext, ForecastDetailSummaryTableContext>();
         services.AddScoped<IProjectsCatalogExportService, ProjectsCatalogExportService>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
@@ -143,7 +139,11 @@ public static class DependencyInjection
         services.AddScoped<IProjectForecastService, ProjectForecastService>();
         services.AddScoped<IForecastPlannedVolumePersistenceService, ForecastPlannedVolumePersistenceService>();
         services.AddScoped<ProjectVersionGridDataLoader>();
+        services.AddSingleton<AnalyticsSqlGate>();
+        services.AddSingleton<IPageDataBuildCoalescer, PageDataBuildCoalescer>();
         services.AddScoped<ProjectsPageRawDataLoader>();
+        services.AddScoped<IProjectsPageRawDataLoader>(sp =>
+            sp.GetRequiredService<ProjectsPageRawDataLoader>());
         services.AddScoped<IProjectsPageDataFetcher, ProjectsPageDataFetcher>();
         services.AddScoped<IProjectCompareService, ProjectCompareService>();
         services.AddScoped<IFactAssessmentPipeline, FactAssessmentPipeline>();
@@ -162,6 +162,7 @@ public static class DependencyInjection
         services.AddScoped<ITrendAnalyticsService, TrendAnalyticsService>();
         services.AddScoped<IZTrendEngine, ZTrendEngine>();
         services.AddScoped<IZTrendAnalyticsService, ZTrendAnalyticsService>();
+        services.AddScoped<IProductivityTrendAnalyticsService, ProductivityTrendAnalyticsService>();
         services.AddScoped<IGroupAnalyticsService, GroupAnalyticsService>();
         services.AddScoped<IAnalyticsExportService, AnalyticsExportService>();
         services.AddScoped<IChartImageRenderer, ScottPlotChartRenderer>();
@@ -262,5 +263,39 @@ public static class DependencyInjection
         services.AddAuthorization();
 
         return services;
+    }
+
+    private static void ConfigureSqlLanes(IServiceCollection services, string? connectionString)
+    {
+        services.AddDbContextFactory<AppDbContext>((sp, options) =>
+        {
+            var interactive = string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : SqlConnectionStringLane.ForInteractive(connectionString);
+            options.UseSqlServer(interactive, sql =>
+            {
+                sql.CommandTimeout(30);
+                sql.ExecutionStrategy(dependencies =>
+                    new SqlLaneRetryingExecutionStrategy(dependencies, 3, TimeSpan.FromSeconds(2)));
+            });
+            options.AddInterceptors(sp.GetRequiredService<Diagnostics.SqlQueryCommandInterceptor>());
+        });
+
+        services.AddSingleton<IAnalyticsDbContextFactory>(sp =>
+        {
+            var interceptor = sp.GetRequiredService<Diagnostics.SqlQueryCommandInterceptor>();
+            var builder = new DbContextOptionsBuilder<AppDbContext>();
+            var analytics = string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : SqlConnectionStringLane.ForAnalytics(connectionString);
+            builder.UseSqlServer(analytics, sql =>
+            {
+                sql.CommandTimeout(60);
+                sql.ExecutionStrategy(dependencies =>
+                    new SqlLaneRetryingExecutionStrategy(dependencies, 3, TimeSpan.FromSeconds(2)));
+            });
+            builder.AddInterceptors(interceptor);
+            return new AnalyticsDbContextFactory(builder.Options);
+        });
     }
 }

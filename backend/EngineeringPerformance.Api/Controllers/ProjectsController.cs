@@ -31,6 +31,7 @@ public sealed class ProjectsController : ControllerBase
     private readonly IProjectsCatalogExportService _catalogExportService;
     private readonly IVisualReportService _visualReports;
     private readonly AppDbContext _context;
+    private readonly IExportFileNameService _fileNames;
 
     public ProjectsController(
         GetProjectsQueryHandler getProjects,
@@ -43,7 +44,8 @@ public sealed class ProjectsController : ControllerBase
         IProjectExportService exportService,
         IProjectsCatalogExportService catalogExportService,
         IVisualReportService visualReports,
-        AppDbContext context)
+        AppDbContext context,
+        IExportFileNameService fileNames)
     {
         _getProjects = getProjects;
         _getProjectById = getProjectById;
@@ -56,6 +58,7 @@ public sealed class ProjectsController : ControllerBase
         _catalogExportService = catalogExportService;
         _visualReports = visualReports;
         _context = context;
+        _fileNames = fileNames;
     }
 
     [HttpGet]
@@ -123,7 +126,11 @@ public sealed class ProjectsController : ControllerBase
     public async Task<IActionResult> ExportAllExcel(CancellationToken cancellationToken)
     {
         var bytes = await _catalogExportService.ExportAllToExcelAsync(cancellationToken);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "projects.xlsx");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Projects,
+            "xlsx",
+            ExportFileNameBuilder.Views.Catalog);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/pdf")]
@@ -132,7 +139,11 @@ public sealed class ProjectsController : ControllerBase
     public async Task<IActionResult> ExportAllPdf(CancellationToken cancellationToken)
     {
         var bytes = await _catalogExportService.ExportAllToPdfAsync(cancellationToken);
-        return File(bytes, "application/pdf", "projects.pdf");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Projects,
+            "pdf",
+            ExportFileNameBuilder.Views.Catalog);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("{id:int}/export/excel")]
@@ -146,7 +157,14 @@ public sealed class ProjectsController : ControllerBase
             return NotFound("No analysis version found for project.");
 
         var bytes = await _exportService.ExportToExcelAsync(id, versionId.Value, cancellationToken: cancellationToken);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"project-{id}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            id,
+            versionId.Value,
+            ExportFileNameBuilder.Modules.Report,
+            "xlsx",
+            ExportFileNameBuilder.Views.Version,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{id:int}/export/pdf")]
@@ -160,7 +178,14 @@ public sealed class ProjectsController : ControllerBase
             return NotFound("No analysis version found for project.");
 
         var bytes = await _exportService.ExportToPdfAsync(id, versionId.Value, cancellationToken: cancellationToken);
-        return File(bytes, "application/pdf", $"project-{id}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            id,
+            versionId.Value,
+            ExportFileNameBuilder.Modules.Report,
+            "pdf",
+            ExportFileNameBuilder.Views.Version,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("{id:int}/export/combined.pdf")]
@@ -204,7 +229,14 @@ public sealed class ProjectsController : ControllerBase
             formulaId,
             includeAppendix,
             cancellationToken);
-        return File(bytes, "application/pdf", $"Combined_{id}.pdf");
+        var fileName = await _fileNames.ForVersionsAsync(
+            id,
+            [planVersionId, factVersionId],
+            ExportFileNameBuilder.Modules.Report,
+            "pdf",
+            ExportFileNameBuilder.Views.Combined,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpPost("import/excel")]

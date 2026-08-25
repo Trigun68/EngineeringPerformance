@@ -1,16 +1,87 @@
 import { describe, expect, it } from 'vitest';
-import type { Column, GridApi, IRowNode } from 'ag-grid-community';
+import {
+  buildCanonicalExportFileName,
+  combineExportVersions,
+  directoryExportView,
+  EXPORT_FILE_NAME_MAX,
+  ExportModules,
+  ExportQualifiers,
+  ExportViews,
+} from '../exportFileName';
 import { buildExportFileName, collectGridExportData } from '../directoryExport';
+import type { Column, GridApi, IRowNode } from 'ag-grid-community';
+
+describe('buildCanonicalExportFileName', () => {
+  it('builds the Russian project template', () => {
+    expect(
+      buildCanonicalExportFileName({
+        module: ExportModules.forecast,
+        view: ExportViews.summary,
+        projectCode: '25-310',
+        projectName: 'Реконструкция НС',
+        versionLabel: 'Основная',
+        extension: 'xlsx',
+      }),
+    ).toBe('прогноз_итого_-_25-310_Реконструкция_НС_(Основная).xlsx');
+  });
+
+  it('joins two versions for compare', () => {
+    const versions = combineExportVersions('Основная', 'Факт 2025', 'Основная');
+    expect(
+      buildCanonicalExportFileName({
+        module: ExportModules.compare,
+        view: ExportViews.summary,
+        projectCode: 'P1',
+        projectName: 'Проект',
+        versionLabel: versions,
+        extension: 'pdf',
+      }),
+    ).toBe('сравнение_итого_-_P1_Проект_(Основная_Факт_2025).pdf');
+  });
+
+  it('omits project block for directories', () => {
+    expect(
+      buildCanonicalExportFileName({
+        module: ExportModules.directory,
+        view: directoryExportView('iic-work-directions'),
+      }),
+    ).toBe('справочник_группы_IIC.xlsx');
+  });
+
+  it('truncates long names to the max length', () => {
+    const fileName = buildCanonicalExportFileName({
+      module: ExportModules.report,
+      projectCode: '25-310',
+      projectName: 'А'.repeat(250),
+      versionLabel: 'Основная',
+      extension: 'pdf',
+    });
+    expect(fileName.length).toBeLessThanOrEqual(EXPORT_FILE_NAME_MAX);
+    expect(fileName.startsWith('отчет_-_25-310_')).toBe(true);
+    expect(fileName.endsWith('_(Основная).pdf')).toBe(true);
+  });
+});
 
 describe('buildExportFileName', () => {
   it('sanitizes invalid characters in tab name', () => {
-    const name = buildExportFileName('KFO/BER');
-    expect(name).toMatch(/^KFO_BER_\d{8}_\d{6}\.xlsx$/);
+    expect(buildExportFileName('KFO/BER')).toBe('справочник_KFO_BER.xlsx');
   });
 
-  it('uses fallback when tab name is empty after sanitize', () => {
-    const name = buildExportFileName('???');
-    expect(name).toMatch(/^Справочник_\d{8}_\d{6}\.xlsx$/);
+  it('uses catalog fallback when tab name is empty after sanitize', () => {
+    expect(buildExportFileName('???')).toBe('справочник_каталог.xlsx');
+  });
+
+  it('adds visible qualifier after view', () => {
+    expect(
+      buildCanonicalExportFileName({
+        module: ExportModules.forecast,
+        view: ExportViews.detail,
+        qualifier: ExportQualifiers.visible,
+        projectCode: 'P1',
+        projectName: 'Проект',
+        versionLabel: 'v2',
+      }),
+    ).toBe('прогноз_детально_выделенные_-_P1_Проект_(v2).xlsx');
   });
 });
 
@@ -123,7 +194,6 @@ describe('collectGridExportData', () => {
         const id = col.getColId();
         if (node.group) {
           if (id === 'baseHours') return (node as { aggData?: Record<string, unknown> }).aggData?.baseHours;
-          // group column empty on footer (как часто в AG Grid)
           if (node.footer) return null;
           return node.key;
         }

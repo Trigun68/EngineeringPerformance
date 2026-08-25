@@ -25,8 +25,7 @@
   `Suspense` стоит вокруг `<Outlet />` в `AppLayout` (и во вторичных каркасах `AdminLayout` /
   `SettingsLayout`), а не вокруг всего роутера — сайдбар и шапка не снимаются, пока грузится чанк.
 - Каркасы `AdminLayout` / `SettingsLayout` импортируются сразу (как `ReferencesLayout`).
-- Ленивые графики: `CompareChartView` (вкладка «Сравнение» → режим диаграммы),
-  `NormBandChart` (модалка редактирования нормы). Highcharts не грузится, пока график не нужен.
+- Ленивые графики: `NormBandChart` (модалка редактирования нормы). Highcharts не грузится, пока график не нужен. Вкладка «Сравнение версий» всегда таблица.
 - `manualChunks` в `vite.config.ts`: `highcharts`, `aggrid`, `mui` — отдельные кэшируемые чанки.
 
 Проверка после сборки: в `dist/index.html` должны быть `modulepreload` только на `mui` и `aggrid`;
@@ -77,7 +76,7 @@ encoded-гриды, строки приходят отдельным `GET page-d
 
 | Что кэшируется | Ключ | TTL |
 |----------------|------|-----|
-| Полный упакованный `page-data` (HTTP режет detail) | `page-data-encoded-v2:v{versionId}:c{compareVersionId}` | 10 мин |
+| Полный упакованный `page-data` (HTTP режет detail) | `page-data-encoded-v2:v{versionId}:c{compareVersionId}` | 12 ч (свежесть — generation) |
 | `GET /projects/{id}/performance-report` | `report:p{planVersionId}:f{factVersionId}` | 10 мин |
 | `GET /dictionaries/all` | `dictionaries:all:v3` + HTTP `ETag` / 304 | 30 мин |
 

@@ -1,5 +1,4 @@
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
-import { buildExportFileName } from '../utils/directoryExport';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
 import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
 
 export interface PerformanceRow {
@@ -65,6 +64,14 @@ export interface ProjectVersionDirection {
   interpretation: string | null;
   physicalVolumes?: ProjectVersionPhysicalVolumeItem[];
   equipmentVolumes?: ProjectVersionPhysicalVolumeItem[];
+  directionLaborIntensities?: ProjectVersionDirectionLaborRow[];
+}
+
+export interface ProjectVersionDirectionLaborRow {
+  documentationCode: string;
+  plannedHours: number;
+  actualHours: number;
+  brand?: string | null;
 }
 
 export interface ProjectVersionLaborRow {
@@ -81,6 +88,7 @@ export interface ProjectVersionAnalysisSummary {
   weightedZScorePercentile: string;
   weightedZScoreInterpretation: string | null;
   unallocatedLaborHours: number | null;
+  physicalVolumeTotalsByUnit?: { unitName: string; totalVolume: number }[];
 }
 
 export async function fetchPerformance(
@@ -295,6 +303,10 @@ export interface VersionCompareRow {
   planZScoreA?: number | null;
   planZScoreB?: number | null;
   planZDelta?: number | null;
+  planZScoreOptimisticA?: number | null;
+  planZScoreOptimisticB?: number | null;
+  planZScorePessimisticA?: number | null;
+  planZScorePessimisticB?: number | null;
   isTotal?: boolean;
   level?: number;
 }
@@ -386,12 +398,14 @@ export async function fetchVersionCompare(
   projectId: number,
   versionA: number,
   versionB: number,
+  signal?: AbortSignal,
 ): Promise<VersionCompareResult> {
   const { data } = await apiClient.get<Omit<VersionCompareResult, 'detail'> & { detail: EncodedGrid }>(
     `/projects/${projectId}/compare`,
     {
       params: { versionA, versionB },
       timeout: 300_000,
+      signal,
     },
   );
   return {
@@ -404,10 +418,12 @@ export async function fetchVersionCompareDetail(
   projectId: number,
   versionA: number,
   versionB: number,
+  signal?: AbortSignal,
 ): Promise<VersionCompareDetailRow[]> {
   const { data } = await apiClient.get<EncodedGrid>(`/projects/${projectId}/compare/detail`, {
     params: { versionA, versionB },
     timeout: 300_000,
+    signal,
   });
   return decodeEncodedGrid<VersionCompareDetailRow>(data);
 }
@@ -420,16 +436,17 @@ export async function exportCompareExcelVisible(
   tabName: string,
   headers: string[],
   rows: string[][],
+  versionA: number,
+  versionB: number,
+  visibleOnly = false,
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     `/projects/${projectId}/compare/export/${section}/excel-visible`,
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
+    'download',
+    { versionA, versionB, visibleOnly },
   );
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  triggerBrowserDownload(blob, buildExportFileName(tabName || `Compare_${section}_${projectId}`));
+  triggerBrowserDownload(blob, filename);
 }
 
 export async function exportCompareDetailExcel(
@@ -440,7 +457,6 @@ export async function exportCompareDetailExcel(
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/compare/export/detail/excel`,
     { versionA, versionB },
-    `CompareDetail_${projectId}_${versionA}_${versionB}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -453,7 +469,6 @@ export async function exportCompareDetailSummaryTable(
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/compare/export/detail/summary-table`,
     { versionA, versionB },
-    `CompareDetailSummary_${projectId}_${versionA}_${versionB}.xlsx`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -589,8 +604,6 @@ export async function fetchGroupTrend(projectId: number): Promise<GroupTrendInfo
 export async function exportAnalysisExcel(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/analysis.xlsx`,
-    undefined,
-    'analysis.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -598,8 +611,6 @@ export async function exportAnalysisExcel(projectId: number, versionId: number):
 export async function exportAnalysisPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/analysis.pdf`,
-    undefined,
-    'analysis.pdf',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -607,8 +618,6 @@ export async function exportAnalysisPdf(projectId: number, versionId: number): P
 export async function exportForecastExcel(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast.xlsx`,
-    undefined,
-    'forecast.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -616,8 +625,6 @@ export async function exportForecastExcel(projectId: number, versionId: number):
 export async function exportForecastPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast.pdf`,
-    undefined,
-    'forecast.pdf',
   );
   triggerBrowserDownload(blob, filename);
 }

@@ -143,6 +143,26 @@ public sealed class PlanningScenarioLearningCurveTests
     }
 
     [Fact]
+    public void AssessmentFalse_ExcludedFromGroupVolumeAndResults()
+    {
+        var snap = WrightSnap();
+        var norms = new Dictionary<int, NormCalculationSnapshot> { [DirId] = snap };
+        var z = new Dictionary<int, PlanningZParameters>();
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines =
+        [
+            new(1, DirId, "OBJ-A", 2m, 1m, true),
+            new(2, DirId, "OBJ-B", 8m, 1m, false),
+            new(3, DirId, "OBJ-A", 4m, 1m, true),
+        ];
+
+        var results = LaborIntensityCalculator.Recalculate(
+            PlanningScenario.ByProjectIicGroup, lines, norms, z, Calculator);
+
+        results.Select(r => r.PpvId).Should().BeEquivalentTo([1, 3]);
+        results.Sum(r => r.Base ?? 0).Should().BeApproximately(ForecastHours(6m, snap), 0.02m);
+    }
+
+    [Fact]
     public void Wright_WithZ_AppliesZAtGroupLevel_ForByProjectIicGroup()
     {
         var snap = WrightSnap(sigma: 0.1m);

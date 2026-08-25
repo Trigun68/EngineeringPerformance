@@ -13,6 +13,9 @@ public sealed class ProjectEquipmentConfiguration : IEntityTypeConfiguration<Pro
 
         builder.Property(e => e.Quantity).HasPrecision(18, 4);
         builder.Property(e => e.QuantityInWork).HasPrecision(18, 4);
+        builder.Property(e => e.LaborIntensityBase).HasPrecision(18, 4);
+        builder.Property(e => e.LaborIntensityPessimistic).HasPrecision(18, 4);
+        builder.Property(e => e.LaborIntensityOptimistic).HasPrecision(18, 4);
         builder.Property(e => e.PositionNumber).HasMaxLength(50);
         builder.Property(e => e.FacilityCode).HasMaxLength(100);
         builder.Property(e => e.DocumentSet).HasMaxLength(100);

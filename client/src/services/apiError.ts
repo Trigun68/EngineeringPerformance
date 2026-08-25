@@ -32,6 +32,13 @@ function formatFieldErrors(errors: Record<string, string[]>): string | null {
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
+export function isRequestCanceled(error: unknown): boolean {
+  return (
+    (error as { name?: string })?.name === 'CanceledError'
+    || (error as { code?: string })?.code === 'ERR_CANCELED'
+  );
+}
+
 /** Извлекает человекочитаемое сообщение из ProblemDetails (RFC 7807) или axios-ошибки. */
 export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка.'): string {
   if (error instanceof ApiContractError) {
@@ -83,6 +90,9 @@ export function getApiErrorMessage(error: unknown, fallback = 'Произошл�
   }
   if (response?.status === 429) {
     return 'Слишком много запросов. Повторите позже.';
+  }
+  if (response?.status === 503) {
+    return 'База данных временно недоступна. Повторите позже.';
   }
 
   return fallback;

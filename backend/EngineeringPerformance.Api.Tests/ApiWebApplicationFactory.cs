@@ -47,6 +47,7 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<IDbContextFactory<AppDbContext>>();
+            services.RemoveAll<IAnalyticsDbContextFactory>();
             services.RemoveAll<AppDbContext>();
             services.RemoveAll<Microsoft.Extensions.Caching.Distributed.IDistributedCache>();
             services.AddDistributedMemoryCache();
@@ -61,6 +62,8 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Engineering
                 });
                 options.AddInterceptors(sp.GetRequiredService<SqlQueryCommandInterceptor>());
             });
+            services.AddSingleton<IAnalyticsDbContextFactory>(sp =>
+                new DelegatingAnalyticsDbContextFactory(sp.GetRequiredService<IDbContextFactory<AppDbContext>>()));
             services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
         });
     }

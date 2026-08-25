@@ -36,6 +36,9 @@ public sealed class DetailFactSummaryTableBuilderTests
         // weighted Z: (-0.5*40 + 0.5*20) / 60 = -10/60
         r0.ZScore.Should().BeApproximately(-0.1667m, 0.001m);
         table.Rows[0].FactLaborHoursTotal.Should().Be(60m);
+        table.Rows[0].OptimisticLaborHoursTotal.Should().Be(60m);
+        table.Rows[0].BaseLaborHoursTotal.Should().Be(75m);
+        table.Rows[0].PessimisticLaborHoursTotal.Should().Be(90m);
 
         var r1 = table.Rows[1].Cells[0];
         r1.PhysicalVolume.Should().Be(3m);

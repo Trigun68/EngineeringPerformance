@@ -86,4 +86,38 @@ public static class ForecastHoursAggregator
             kv => kv.Key,
             kv => ((decimal?)kv.Value.Base, (decimal?)kv.Value.Optimistic, (decimal?)kv.Value.Pessimistic));
     }
+
+    /// <summary>
+    /// Часы оборудования по id строки: N(V_eq)×z на позицию, без группировки сценария ФО.
+    /// </summary>
+    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentHours(
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
+        IDeviationCalculator calculator)
+    {
+        var result = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>(lines.Count);
+        foreach (var line in lines)
+        {
+            if (!line.IsAssessment
+                || line.ClassifierId is not int dirId
+                || line.VolumeInIicUnits <= 0
+                || !normsByDirection.TryGetValue(dirId, out var snap))
+            {
+                result[line.Id] = (null, null, null);
+                continue;
+            }
+
+            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId);
+            result[line.Id] = ForecastCalculation.ComputeForecastHours(
+                snap.NormFormula,
+                snap.DeviationFormula,
+                line.VolumeInIicUnits,
+                line.VolumeInIicUnits,
+                z,
+                calculator);
+        }
+
+        return result;
+    }
 }

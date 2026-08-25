@@ -37,8 +37,15 @@ function summaryBase(overrides: Partial<VersionCompareRow> = {}): VersionCompare
 }
 
 describe('compareFilters', () => {
-  it('hasSummaryDifference hides when FactZ, PlanZ and all three plan-hour pairs match', () => {
-    expect(hasSummaryDifference(summaryBase())).toBe(false);
+  it('hasSummaryDifference uses plan Z of the selected scenario', () => {
+    const row = summaryBase({
+      planZScoreA: 0.1,
+      planZScoreB: 0.1,
+      planZScoreOptimisticA: 0.2,
+      planZScoreOptimisticB: 0.5,
+    });
+    expect(hasSummaryDifference(row, 'base')).toBe(false);
+    expect(hasSummaryDifference(row, 'optimistic')).toBe(true);
   });
 
   it('hasSummaryDifference shows when optimistic hours differ even if base matches', () => {

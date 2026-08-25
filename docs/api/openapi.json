@@ -812,24 +812,7 @@
         "operationId": "Dictionaries_GetAll",
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/DictionariesAllDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DictionariesAllDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DictionariesAllDto"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       }
@@ -1424,6 +1407,204 @@
         "responses": {
           "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/analytics/fact-norm-analysis": {
+      "post": {
+        "tags": [
+          "FactNormAnalytics"
+        ],
+        "operationId": "FactNormAnalytics_Analyze",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactNormAnalysisRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactNormAnalysisRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactNormAnalysisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactNormAnalysisResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactNormAnalysisResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FactNormAnalysisResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/reference-formulas": {
+      "get": {
+        "tags": [
+          "FactNormAnalytics"
+        ],
+        "operationId": "FactNormAnalytics_ListReferenceFormulas",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceFormulaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceFormulaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReferenceFormulaDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/fact-norm-analysis/export": {
+      "get": {
+        "tags": [
+          "FactNormAnalytics"
+        ],
+        "operationId": "FactNormAnalytics_Export",
+        "parameters": [
+          {
+            "name": "periodStart",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "periodEnd",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "projectIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "name": "workDirectionIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "xlsx"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/analytics/norms/from-suggestion": {
+      "post": {
+        "tags": [
+          "FactNormAnalytics"
+        ],
+        "operationId": "FactNormAnalytics_CreateFromSuggestion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNormFromSuggestionRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNormFromSuggestionRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNormFromSuggestionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IicNormDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IicNormDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IicNormDto"
+                }
+              }
+            }
           }
         }
       }
@@ -2569,6 +2750,407 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/list": {
+      "post": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_List",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormFilterDto"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormFilterDto"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormFilterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDtoPagedResultDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDtoPagedResultDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDtoPagedResultDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/{normId}": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_GetDetails",
+        "parameters": [
+          {
+            "name": "normId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormDetailsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormDetailsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormDetailsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/health-check": {
+      "post": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_HealthCheck",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormHealthCheckRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormHealthCheckRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormHealthCheckRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthSummaryDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthSummaryDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthSummaryDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/health-report": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_ExportHealthReport",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "xlsx"
+            }
+          },
+          {
+            "name": "groupIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/timeline": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_Timeline",
+        "parameters": [
+          {
+            "name": "includeHistorical",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "includeFuture",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponseDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponseDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimelineResponseDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/filters": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_Filters",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormRegistryFiltersMetaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormRegistryFiltersMetaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormRegistryFiltersMetaDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/{normId}/usage": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_Usage",
+        "parameters": [
+          {
+            "name": "normId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormUsageStatsDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormUsageStatsDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormUsageStatsDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/{normId}/archive": {
+      "post": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_Archive",
+        "parameters": [
+          {
+            "name": "normId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NormListItemDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/norm-registry/export": {
+      "get": {
+        "tags": [
+          "NormRegistry"
+        ],
+        "operationId": "NormRegistry_Export",
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "xlsx"
+            }
+          },
+          {
+            "name": "groupIds",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int32"
+              }
+            }
+          },
+          {
+            "name": "statuses",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "formulaTypes",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "onlyWithIssues",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
           }
         }
       }
@@ -4208,6 +4790,218 @@
         }
       }
     },
+    "/api/projects/{projectId}/versions/{versionId}/ingest/physical-volumes": {
+      "post": {
+        "tags": [
+          "ProjectDataIngest"
+        ],
+        "summary": "Пакет физ. объёмов по шифру ЕП или Id номенклатуры.",
+        "operationId": "ProjectDataIngest_IngestPhysicalVolumes",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhysicalVolumeIngestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhysicalVolumeIngestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PhysicalVolumeIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/ingest/equipment": {
+      "post": {
+        "tags": [
+          "ProjectDataIngest"
+        ],
+        "summary": "Пакет оборудования по имени каталога или equipmentId.",
+        "operationId": "ProjectDataIngest_IngestEquipment",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentIngestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentIngestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/EquipmentIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/ingest/labor-intensities": {
+      "post": {
+        "tags": [
+          "ProjectDataIngest"
+        ],
+        "summary": "Пакет трудоёмкости по DocumentTypeName.",
+        "operationId": "ProjectDataIngest_IngestLabor",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/ingest/labor-intensities/preview": {
+      "post": {
+        "tags": [
+          "ProjectDataIngest"
+        ],
+        "summary": "Предпросмотр: типы документов, которых нет в справочнике.",
+        "operationId": "ProjectDataIngest_PreviewLabor",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestPreviewRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestPreviewRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaborIntensityIngestPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/projects/{projectId}/compare": {
       "get": {
         "tags": [
@@ -4247,17 +5041,74 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionCompareResultDto"
+                  "$ref": "#/components/schemas/VersionCompareResultEncodedDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionCompareResultDto"
+                  "$ref": "#/components/schemas/VersionCompareResultEncodedDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/VersionCompareResultDto"
+                  "$ref": "#/components/schemas/VersionCompareResultEncodedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/compare/detail": {
+      "get": {
+        "tags": [
+          "ProjectLevelAnalytics"
+        ],
+        "operationId": "ProjectLevelAnalytics_CompareDetail",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionA",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionB",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EncodedGridDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EncodedGridDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EncodedGridDto"
                 }
               }
             }
@@ -4435,6 +5286,30 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "versionA",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionB",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "visibleOnly",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": false
             }
           }
         ],
@@ -5232,7 +6107,8 @@
         "tags": [
           "ProjectsPage"
         ],
-        "summary": "Batch-данные для 9 гридов ProjectsPage (прогноз / факт / сравнение).",
+        "summary": "Batch-данные для гридов ProjectsPage без строк «Детально».",
+        "description": "Гриды «Детально» — M:EngineeringPerformance.Api.Controllers.ProjectsPageController.GetPageDataDetails(System.Int32,System.Int32,System.Nullable{System.Int32},System.Threading.CancellationToken); формат EngineeringPerformance.Application.Analytics.EncodedGridDto.",
         "operationId": "ProjectsPage_GetPageData",
         "parameters": [
           {
@@ -5268,17 +6144,76 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectsPageDataDto"
+                  "$ref": "#/components/schemas/ProjectsPageDataEncodedDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectsPageDataDto"
+                  "$ref": "#/components/schemas/ProjectsPageDataEncodedDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectsPageDataDto"
+                  "$ref": "#/components/schemas/ProjectsPageDataEncodedDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/page-data/detail": {
+      "get": {
+        "tags": [
+          "ProjectsPage"
+        ],
+        "summary": "Упакованные гриды «Детально» (прогноз / факт / сравнение) из того же кэша, что page-data.",
+        "operationId": "ProjectsPage_GetPageDataDetails",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "compareVersionId",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsPageDetailsEncodedDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsPageDetailsEncodedDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectsPageDetailsEncodedDto"
                 }
               }
             }
@@ -5374,6 +6309,39 @@
           "ProjectsPage"
         ],
         "operationId": "ProjectsPage_ExportForecastFacilityExcel",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/export/forecast-summary/excel": {
+      "get": {
+        "tags": [
+          "ProjectsPage"
+        ],
+        "operationId": "ProjectsPage_ExportForecastSummaryExcel",
         "parameters": [
           {
             "name": "projectId",
@@ -5592,6 +6560,39 @@
           "ProjectsPage"
         ],
         "operationId": "ProjectsPage_ExportForecastDetailSummaryTable",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "versionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/versions/{versionId}/export/fact-summary/excel": {
+      "get": {
+        "tags": [
+          "ProjectsPage"
+        ],
+        "operationId": "ProjectsPage_ExportFactSummaryExcel",
         "parameters": [
           {
             "name": "projectId",
@@ -7051,6 +8052,136 @@
         }
       }
     },
+    "/api/analytics/trends/z-score": {
+      "post": {
+        "tags": [
+          "TrendsAnalytics"
+        ],
+        "summary": "Трендовый анализ средневзвешенного Z (план/факт, сегментация по нормам).",
+        "operationId": "TrendsAnalytics_GetZTrends",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZTrendRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZTrendRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZTrendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/trends/z-score/filters": {
+      "get": {
+        "tags": [
+          "TrendsAnalytics"
+        ],
+        "operationId": "TrendsAnalytics_GetZTrendFilters",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendFiltersDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendFiltersDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZTrendFiltersDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/analytics/trends/productivity": {
+      "post": {
+        "tags": [
+          "TrendsAnalytics"
+        ],
+        "summary": "Тренд производительности нормы: часы N(V*) через ComputeForecastHours, без сравнения коэффициентов a/b.",
+        "operationId": "TrendsAnalytics_GetProductivityTrend",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductivityTrendRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductivityTrendRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductivityTrendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductivityTrendResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductivityTrendResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductivityTrendResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/analytics/trends/export.pdf": {
       "get": {
         "tags": [
@@ -7804,6 +8935,28 @@
         },
         "additionalProperties": false
       },
+      "AccuracyDto": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataPointsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periodLengthDays": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hint": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "AdminChangePasswordRequest": {
         "type": "object",
         "properties": {
@@ -7984,6 +9137,40 @@
         },
         "additionalProperties": false
       },
+      "ChartPointDto": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          },
+          "projectId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "projectCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectName": {
+            "type": "string",
+            "nullable": true
+          },
+          "versionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "versionName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "CompareChartPointDto": {
         "type": "object",
         "properties": {
@@ -8097,6 +9284,42 @@
           },
           "targetDirection": {
             "$ref": "#/components/schemas/AnalysisDirection"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateNormFromSuggestionRequest": {
+        "type": "object",
+        "properties": {
+          "suggestionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "formulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true
+          },
+          "meanPerformance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "stdDeviation": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -8260,115 +9483,6 @@
         "type": "integer",
         "format": "int32"
       },
-      "DictionariesAllDto": {
-        "type": "object",
-        "properties": {
-          "physicalVolumeTypes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "physicalVolumes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "physicalVolumesKfo": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "physicalVolumesBer": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "equipments": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "laborIntensities": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "iicWorkDirections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "iicWorkDirectionNorms": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "unitsOfMeasurement": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          },
-          "projectCharacteristics": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DictionaryItemDto"
-            },
-            "nullable": true
-          }
-        },
-        "additionalProperties": false,
-        "description": "Справочники страницы «Справочники» + регистр норм ИИС (кэшируется на фронте).\r\nPhysicalVolumes — объединение KFO+BER (обратная совместимость); для FK БЭР→КФО\r\nиспользуйте PhysicalVolumesKfo (ID в таблицах не пересекаются по смыслу, но совпадают численно)."
-      },
-      "DictionaryItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "name": {
-            "type": "string",
-            "nullable": true
-          },
-          "code": {
-            "type": "string",
-            "nullable": true
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "parentId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "unitId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          }
-        },
-        "additionalProperties": false
-      },
       "DirectoryEntryDto": {
         "type": "object",
         "properties": {
@@ -8403,7 +9517,7 @@
           },
           "properties": {
             "type": "object",
-            "additionalProperties": { },
+            "additionalProperties": {},
             "nullable": true
           },
           "recalculatedVersionCount": {
@@ -8466,7 +9580,7 @@
           },
           "properties": {
             "type": "object",
-            "additionalProperties": { },
+            "additionalProperties": {},
             "nullable": true
           },
           "children": {
@@ -8497,7 +9611,7 @@
           },
           "properties": {
             "type": "object",
-            "additionalProperties": { },
+            "additionalProperties": {},
             "nullable": true
           }
         },
@@ -8512,6 +9626,152 @@
           }
         },
         "additionalProperties": false
+      },
+      "EncodedGridDto": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Имена полей в camelCase, порядок совпадает с порядком ячеек в строке.",
+            "nullable": true
+          },
+          "strings": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Словари значений для колонок, где интернирование выгодно. Ячейка такой колонки — индекс\r\nв массиве (или null). Колонки, которых здесь нет, везут значение как есть.",
+            "nullable": true
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {}
+            },
+            "description": "Строки грида: массив ячеек в порядке EngineeringPerformance.Application.Analytics.EncodedGridDto.Columns.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Колоночное представление грида для передачи по сети (ISS-019).\r\nГриды «Детально» — это десятки тысяч строк из ~36 полей, где имена ключей JSON занимают\r\nбольше места, чем данные, а строковые значения берутся из справочников в полторы тысячи\r\nзначений. Формат убирает и то, и другое: имена полей едут один раз в EngineeringPerformance.Application.Analytics.EncodedGridDto.Columns,\r\nповторяющиеся строки — один раз в EngineeringPerformance.Application.Analytics.EncodedGridDto.Strings, а в ячейке остаётся индекс.\r\nПреобразование обратимое и не знает бизнес-смысла полей: клиент восстанавливает те же строки."
+      },
+      "EquipmentIngestItem": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "catalogName": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitName": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "equipmentId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "quantityInWork": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "positionNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityName": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "diagramNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "shortName": {
+            "type": "string",
+            "nullable": true
+          },
+          "typeMark": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullEquipmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "supplyStandard": {
+            "type": "string",
+            "nullable": true
+          },
+          "olReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Строка оборудования: каталог проекта по имени+единице или `equipmentId`."
+      },
+      "EquipmentIngestRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EquipmentIngestItem"
+            },
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowEmptyReplace": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Пакет JSON оборудования версии."
       },
       "ErrorDistributionItemDto": {
         "type": "object",
@@ -8534,6 +9794,69 @@
         ],
         "type": "integer",
         "format": "int32"
+      },
+      "FactNormAnalysisRequest": {
+        "type": "object",
+        "properties": {
+          "periodStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "projectIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "workDirectionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "FactNormAnalysisResponse": {
+        "type": "object",
+        "properties": {
+          "accuracy": {
+            "$ref": "#/components/schemas/AccuracyDto"
+          },
+          "comparisons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormComparisonDto"
+            },
+            "nullable": true
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormSuggestionDto"
+            },
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "fromCache": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "ForecastCalculationOptionsDto": {
         "type": "object",
@@ -8705,7 +10028,10 @@
           5,
           6,
           7,
-          8
+          8,
+          9,
+          10,
+          11
         ],
         "type": "integer",
         "format": "int32"
@@ -8819,6 +10145,31 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MetricsTimeSeriesPointDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "HealthSummaryDto": {
+        "type": "object",
+        "properties": {
+          "errorCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "warningCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "infoCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormHealthIssueDto"
             },
             "nullable": true
           }
@@ -9007,6 +10358,75 @@
         },
         "additionalProperties": false
       },
+      "LaborIntensityIngestItem": {
+        "type": "object",
+        "properties": {
+          "documentTypeName": {
+            "type": "string",
+            "nullable": true
+          },
+          "plannedHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "actualHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Строка трудоёмкости: тип документа как в Excel (не колонка «направление»)."
+      },
+      "LaborIntensityIngestPreviewRequest": {
+        "type": "object",
+        "properties": {
+          "documentTypeNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Предпросмотр трудоёмкости без файла."
+      },
+      "LaborIntensityIngestRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LaborIntensityIngestItem"
+            },
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowEmptyReplace": {
+            "type": "boolean"
+          },
+          "addMissingLaborToCatalog": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Пакет JSON трудоёмкости версии."
+      },
       "LogViewerResultDto": {
         "type": "object",
         "properties": {
@@ -9083,6 +10503,270 @@
         },
         "additionalProperties": false
       },
+      "MonthlyVersionCountDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "nullable": true
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormChangeAuditDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "action": {
+            "type": "string",
+            "nullable": true
+          },
+          "changedBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "oldValue": {
+            "type": "string",
+            "nullable": true
+          },
+          "newValue": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormComparisonDto": {
+        "type": "object",
+        "properties": {
+          "normId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workDirectionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentFormula": {
+            "type": "string",
+            "nullable": true
+          },
+          "proposedFormula": {
+            "type": "string",
+            "nullable": true
+          },
+          "deltaMean": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaSigma": {
+            "type": "number",
+            "format": "double"
+          },
+          "currentR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "proposedR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "verdict": {
+            "type": "string",
+            "nullable": true
+          },
+          "requiresAttention": {
+            "type": "boolean"
+          },
+          "insufficientData": {
+            "type": "boolean"
+          },
+          "sigmaZero": {
+            "type": "boolean"
+          },
+          "suggestionId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "chartPoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChartPointDto"
+            },
+            "nullable": true
+          },
+          "proposedParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true
+          },
+          "warning": {
+            "type": "string",
+            "nullable": true
+          },
+          "normMeanPerformance": {
+            "type": "number",
+            "format": "double"
+          },
+          "factMeanPerformance": {
+            "type": "number",
+            "format": "double"
+          },
+          "factStdDeviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "normStdDeviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "currentParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormDetailsDto": {
+        "type": "object",
+        "properties": {
+          "norm": {
+            "$ref": "#/components/schemas/NormListItemDto"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/NormUsageStatsDto"
+          },
+          "previousNormId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "nextNormId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "auditHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormChangeAuditDto"
+            },
+            "nullable": true
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormHealthIssueDto"
+            },
+            "nullable": true
+          },
+          "unitName": {
+            "type": "string",
+            "nullable": true
+          },
+          "coefficientsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "deviationCoefficientsJson": {
+            "type": "string",
+            "nullable": true
+          },
+          "deviationModelType": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormFilterDto": {
+        "type": "object",
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "formulaTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "onlyWithIssues": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "search": {
+            "type": "string",
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sortBy": {
+            "type": "string",
+            "nullable": true
+          },
+          "sortDesc": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "NormFormulaDto": {
         "type": "object",
         "properties": {
@@ -9126,6 +10810,164 @@
         },
         "additionalProperties": false
       },
+      "NormHealthCheckRequest": {
+        "type": "object",
+        "properties": {
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormHealthIssueDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ruleCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "severity": {
+            "type": "string",
+            "nullable": true
+          },
+          "normIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "groupId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "message": {
+            "type": "string",
+            "nullable": true
+          },
+          "details": {
+            "nullable": true
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "recommendation": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "groupCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "formulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "formulaDisplay": {
+            "type": "string",
+            "nullable": true
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true
+          },
+          "meanPerformance": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "stdDeviation": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "totalVersions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "issueCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxIssueSeverity": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormListItemDtoPagedResultDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormListItemDto"
+            },
+            "nullable": true
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "NormPreviewRequest": {
         "type": "object",
         "properties": {
@@ -9138,6 +10980,177 @@
           "points": {
             "type": "integer",
             "format": "int32",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormRegistryFiltersMetaDto": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormRegistryGroupOptionDto"
+            },
+            "nullable": true
+          },
+          "formulaTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormRegistryGroupOptionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "unitName": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "normId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "workDirectionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "suggestionType": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "proposedFormulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "proposedParameters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number",
+              "format": "double"
+            },
+            "nullable": true
+          },
+          "proposedStdDeviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "proposedMeanPerformance": {
+            "type": "number",
+            "format": "double"
+          },
+          "currentR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "proposedR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "deltaR2": {
+            "type": "number",
+            "format": "double"
+          },
+          "confidence": {
+            "type": "string",
+            "nullable": true
+          },
+          "dataPointsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "periodStart": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NormUsageStatsDto": {
+        "type": "object",
+        "properties": {
+          "totalVersions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "planVersions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "factVersions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "primaryVersions": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "firstVersionDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastVersionDate": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "monthlyHistogram": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MonthlyVersionCountDto"
+            },
             "nullable": true
           }
         },
@@ -9285,7 +11298,8 @@
             "nullable": true
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Строка направления одной версии (сырой блок plan/fact)."
       },
       "PerformanceReportDto": {
         "type": "object",
@@ -9311,6 +11325,17 @@
           },
           "insights": {
             "$ref": "#/components/schemas/PerformanceReportInsightsDto"
+          },
+          "directions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PerformanceReportMergedDirectionRowDto"
+            },
+            "nullable": true
+          },
+          "normSourcesUsed": {
+            "type": "integer",
+            "format": "int32"
           }
         },
         "additionalProperties": false,
@@ -9388,9 +11413,109 @@
           "influenceScore": {
             "type": "number",
             "format": "double"
+          },
+          "physicalVolume": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
           }
         },
         "additionalProperties": false
+      },
+      "PerformanceReportMergedDirectionRowDto": {
+        "type": "object",
+        "properties": {
+          "workDirectionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "parentId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "unitName": {
+            "type": "string",
+            "nullable": true
+          },
+          "physicalVolume": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planLaborHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "factLaborHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planSubtreeHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "factSubtreeHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planProductivity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "factProductivity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "normProductivity": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "normStdDev": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planZScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "factZScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planInterpretation": {
+            "type": "string",
+            "nullable": true
+          },
+          "factInterpretation": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Merged-строка дерева «Направление»: объём факт←план, dual труд/произв/Z."
       },
       "PerformanceReportProjectDto": {
         "type": "object",
@@ -9519,6 +11644,10 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "normSnapshotKey": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -9604,6 +11733,21 @@
           },
           "factPhysicalVolumeDisplay": {
             "type": "string",
+            "nullable": true
+          },
+          "pessimisticHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "baseHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "optimisticHours": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -9735,6 +11879,91 @@
         },
         "additionalProperties": false
       },
+      "PhysicalVolumeIngestItem": {
+        "type": "object",
+        "properties": {
+          "quantity": {
+            "type": "number",
+            "format": "double"
+          },
+          "epCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "physicalVolumeId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "facilityCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityName": {
+            "type": "string",
+            "nullable": true
+          },
+          "workId": {
+            "type": "string",
+            "nullable": true
+          },
+          "workName": {
+            "type": "string",
+            "nullable": true
+          },
+          "bindingType": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "workComment": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Строка ФО: номенклатура по `epCode` (как Excel) или по внутреннему Id."
+      },
+      "PhysicalVolumeIngestRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhysicalVolumeIngestItem"
+            },
+            "nullable": true
+          },
+          "mode": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "allowEmptyReplace": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Пакет JSON для физ. объёмов версии. Excel-канал не затрагивает."
+      },
       "PhysicalVolumeTotalByUnitDto": {
         "type": "object",
         "properties": {
@@ -9791,6 +12020,359 @@
         },
         "additionalProperties": false,
         "description": "Z-параметры сценариев прогноза по группе IIC (пессимист./базовый/оптимист.)."
+      },
+      "ProductivityTrendCounterfactualDto": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "projectCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "volume": {
+            "type": "number",
+            "format": "double"
+          },
+          "hoursOld": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursNew": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "deltaHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendGroupDto": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "vStar": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vStarSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendSegmentDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendLegendDto": {
+        "type": "object",
+        "properties": {
+          "formulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hoursAtVStar": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursPerUnit": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "index": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "normId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "formulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "flag": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendRequest": {
+        "type": "object",
+        "properties": {
+          "periodStart": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "workDirectionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "projectIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "volumeMode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Тренд производительности нормы: N(V*) через существующий ComputeForecastHours движка,\r\nбез новых методов движка и без сравнения коэффициентов a/b разных FormulaType."
+      },
+      "ProductivityTrendResponse": {
+        "type": "object",
+        "properties": {
+          "volumeMode": {
+            "type": "string",
+            "nullable": true
+          },
+          "overall": {
+            "$ref": "#/components/schemas/ProductivityTrendGroupDto"
+          },
+          "byGroup": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendGroupDto"
+            },
+            "nullable": true
+          },
+          "legend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendLegendDto"
+            },
+            "nullable": true
+          },
+          "transitions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendTransitionDto"
+            },
+            "nullable": true
+          },
+          "counterfactuals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendCounterfactualDto"
+            },
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendSegmentDto": {
+        "type": "object",
+        "properties": {
+          "normId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "normName": {
+            "type": "string",
+            "nullable": true
+          },
+          "formulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "segmentKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProductivityTrendPointDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProductivityTrendTransitionDto": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "oldNormId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "newNormId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "oldFormulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "newFormulaType": {
+            "type": "string",
+            "nullable": true
+          },
+          "vStarOld": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "vStarNew": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursOldP10": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursNewP10": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursOldMedian": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursNewMedian": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursOldP90": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "hoursNewP90": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "standardEffectHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "mixEffectHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "weightHours": {
+            "type": "number",
+            "format": "double"
+          },
+          "verdict": {
+            "type": "string",
+            "nullable": true
+          },
+          "curvesCross": {
+            "type": "boolean"
+          },
+          "logVolumeLtOne": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "ProjectCharacteristicOptionDto": {
         "type": "object",
@@ -9970,6 +12552,62 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "positionNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityName": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "diagramNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "shortName": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogName": {
+            "type": "string",
+            "nullable": true
+          },
+          "typeMark": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullEquipmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "supplyStandard": {
+            "type": "string",
+            "nullable": true
+          },
+          "olReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10013,6 +12651,62 @@
           "quantityInWork": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "positionNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "facilityName": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "diagramNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "shortName": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogName": {
+            "type": "string",
+            "nullable": true
+          },
+          "typeMark": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "fullEquipmentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "supplyStandard": {
+            "type": "string",
+            "nullable": true
+          },
+          "olReference": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -10126,6 +12820,23 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "documentationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "workDirectionId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10170,6 +12881,18 @@
           "actualHours": {
             "type": "number",
             "format": "double"
+          },
+          "documentationCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10264,6 +12987,42 @@
             "type": "number",
             "format": "double",
             "nullable": true
+          },
+          "bindingType": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "workId": {
+            "type": "string",
+            "nullable": true
+          },
+          "workComment": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogName": {
+            "type": "string",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -10319,6 +13078,34 @@
           "laborHoursPerUnit": {
             "type": "number",
             "format": "double",
+            "nullable": true
+          },
+          "bindingType": {
+            "type": "string",
+            "nullable": true
+          },
+          "documentSet": {
+            "type": "string",
+            "nullable": true
+          },
+          "catalogId": {
+            "type": "string",
+            "nullable": true
+          },
+          "tag": {
+            "type": "string",
+            "nullable": true
+          },
+          "workId": {
+            "type": "string",
+            "nullable": true
+          },
+          "workComment": {
+            "type": "string",
+            "nullable": true
+          },
+          "estimationBasis": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -10493,6 +13280,21 @@
             "items": {
               "$ref": "#/components/schemas/ProjectVersionDirectionLaborDto"
             },
+            "nullable": true
+          },
+          "pessimisticHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "baseHours": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "optimisticHours": {
+            "type": "number",
+            "format": "double",
             "nullable": true
           }
         },
@@ -10810,7 +13612,7 @@
         },
         "additionalProperties": false
       },
-      "ProjectsPageCompareGridsDto": {
+      "ProjectsPageCompareGridsEncodedDto": {
         "type": "object",
         "properties": {
           "summary": {
@@ -10828,193 +13630,42 @@
             "nullable": true
           },
           "detail": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VersionCompareDetailRowDto"
-            },
-            "nullable": true
+            "$ref": "#/components/schemas/EncodedGridDto"
           }
         },
         "additionalProperties": false
       },
-      "ProjectsPageDataDto": {
+      "ProjectsPageDataEncodedDto": {
         "type": "object",
         "properties": {
           "forecast": {
-            "$ref": "#/components/schemas/ProjectsPageForecastGridsDto"
+            "$ref": "#/components/schemas/ProjectsPageForecastGridsEncodedDto"
           },
           "fact": {
-            "$ref": "#/components/schemas/ProjectsPageFactGridsDto"
+            "$ref": "#/components/schemas/ProjectsPageFactGridsEncodedDto"
           },
           "compare": {
-            "$ref": "#/components/schemas/ProjectsPageCompareGridsDto"
+            "$ref": "#/components/schemas/ProjectsPageCompareGridsEncodedDto"
           }
         },
         "additionalProperties": false,
-        "description": "Объединённый ответ для 9 гридов ProjectsPage (один HTTP вместо 11+ round-trips)."
+        "description": "Сетевой вид ответа page-data: гриды «Детально» едут в упакованном виде (ISS-019).\r\nОстальные гриды — десятки строк, паковать нечего. Внутренний EngineeringPerformance.Application.Analytics.ProjectsPageDataDto\r\nне меняется: на нём построены экспорты в Excel/PDF."
       },
-      "ProjectsPageDetailRowDto": {
+      "ProjectsPageDetailsEncodedDto": {
         "type": "object",
         "properties": {
-          "rowId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
+          "forecastDetail": {
+            "$ref": "#/components/schemas/EncodedGridDto"
           },
-          "facilityCode": {
-            "type": "string",
-            "nullable": true
+          "factDetail": {
+            "$ref": "#/components/schemas/EncodedGridDto"
           },
-          "facilityName": {
-            "type": "string",
-            "nullable": true
-          },
-          "documentSet": {
-            "type": "string",
-            "nullable": true
-          },
-          "catalogCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "catalogName": {
-            "type": "string",
-            "nullable": true
-          },
-          "workId": {
-            "type": "string",
-            "nullable": true
-          },
-          "workName": {
-            "type": "string",
-            "nullable": true
-          },
-          "iicGroupName": {
-            "type": "string",
-            "nullable": true
-          },
-          "iicUnitName": {
-            "type": "string",
-            "nullable": true
-          },
-          "quantity": {
-            "type": "number",
-            "format": "double"
-          },
-          "baseHours": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "optimisticHours": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "pessimisticHours": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factLaborHours": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factProductivity": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "zScore": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "interpretation": {
-            "type": "string",
-            "nullable": true
-          },
-          "isEquipment": {
-            "type": "boolean"
-          },
-          "bindingType": {
-            "type": "string",
-            "nullable": true
-          },
-          "catalogId": {
-            "type": "string",
-            "nullable": true
-          },
-          "tag": {
-            "type": "string",
-            "nullable": true
-          },
-          "itemName": {
-            "type": "string",
-            "nullable": true
-          },
-          "workComment": {
-            "type": "string",
-            "nullable": true
-          },
-          "estimationBasis": {
-            "type": "string",
-            "nullable": true
-          },
-          "pvCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "pvName": {
-            "type": "string",
-            "nullable": true
-          },
-          "isAssessment": {
-            "type": "string",
-            "nullable": true
-          },
-          "coefficient": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "normProductivity": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "normStdDev": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "classifierId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "normId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "catalogVolumeId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "catalogEquipmentId": {
-            "type": "integer",
-            "format": "int32",
-            "nullable": true
-          },
-          "catalogResource": {
-            "type": "string",
-            "nullable": true
+          "compareDetail": {
+            "$ref": "#/components/schemas/EncodedGridDto"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Только гриды «Детально» — догружаются при открытии вкладки."
       },
       "ProjectsPageFacilityRowDto": {
         "type": "object",
@@ -11059,7 +13710,7 @@
         },
         "additionalProperties": false
       },
-      "ProjectsPageFactGridsDto": {
+      "ProjectsPageFactGridsEncodedDto": {
         "type": "object",
         "properties": {
           "performance": {
@@ -11077,16 +13728,12 @@
             "nullable": true
           },
           "detail": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectsPageDetailRowDto"
-            },
-            "nullable": true
+            "$ref": "#/components/schemas/EncodedGridDto"
           }
         },
         "additionalProperties": false
       },
-      "ProjectsPageForecastGridsDto": {
+      "ProjectsPageForecastGridsEncodedDto": {
         "type": "object",
         "properties": {
           "summary": {
@@ -11104,11 +13751,7 @@
             "nullable": true
           },
           "detail": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ProjectsPageDetailRowDto"
-            },
-            "nullable": true
+            "$ref": "#/components/schemas/EncodedGridDto"
           },
           "grandTotals": {
             "$ref": "#/components/schemas/ForecastScenarioTotalsDto"
@@ -11202,6 +13845,35 @@
             "nullable": true
           },
           "value": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ReferenceFormulaDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "displayName": {
+            "type": "string",
+            "nullable": true
+          },
+          "formula": {
+            "type": "string",
+            "nullable": true
+          },
+          "paramNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "description": {
             "type": "string",
             "nullable": true
           }
@@ -11722,6 +14394,86 @@
         },
         "additionalProperties": false
       },
+      "TimelineBarDto": {
+        "type": "object",
+        "properties": {
+          "normId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "label": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "hasIssue": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimelineGroupDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "TimelineResponseDto": {
+        "type": "object",
+        "properties": {
+          "bars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineBarDto"
+            },
+            "nullable": true
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineGroupDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
       "TopDisciplineDto": {
         "type": "object",
         "properties": {
@@ -12201,218 +14953,6 @@
         },
         "additionalProperties": false
       },
-      "VersionCompareDetailRowDto": {
-        "type": "object",
-        "properties": {
-          "facilityCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "facilityName": {
-            "type": "string",
-            "nullable": true
-          },
-          "documentSet": {
-            "type": "string",
-            "nullable": true
-          },
-          "pvCode": {
-            "type": "string",
-            "nullable": true
-          },
-          "pvName": {
-            "type": "string",
-            "nullable": true
-          },
-          "workId": {
-            "type": "string",
-            "nullable": true
-          },
-          "workName": {
-            "type": "string",
-            "nullable": true
-          },
-          "quantityA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "quantityB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "quantityDelta": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursOptimisticA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursOptimisticB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursPessimisticA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedLaborHoursPessimisticB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factLaborHoursA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factLaborHoursB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "hoursDelta": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityOptimisticA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityOptimisticB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityPessimisticA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "plannedProductivityPessimisticB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factProductivityA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "factProductivityB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "productivityDelta": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "zScoreA": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "zScoreB": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "zDelta": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "iicGroupName": {
-            "type": "string",
-            "nullable": true
-          },
-          "iicUnitName": {
-            "type": "string",
-            "nullable": true
-          },
-          "presence": {
-            "type": "string",
-            "nullable": true
-          },
-          "bindingType": {
-            "type": "string",
-            "nullable": true
-          },
-          "catalogId": {
-            "type": "string",
-            "nullable": true
-          },
-          "tag": {
-            "type": "string",
-            "nullable": true
-          },
-          "itemName": {
-            "type": "string",
-            "nullable": true
-          },
-          "workComment": {
-            "type": "string",
-            "nullable": true
-          },
-          "estimationBasis": {
-            "type": "string",
-            "nullable": true
-          },
-          "isAssessment": {
-            "type": "string",
-            "nullable": true
-          },
-          "coefficient": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "normProductivity": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "normStdDev": {
-            "type": "number",
-            "format": "double",
-            "nullable": true
-          },
-          "isEquipment": {
-            "type": "boolean"
-          }
-        },
-        "additionalProperties": false
-      },
       "VersionCompareFacilityRowDto": {
         "type": "object",
         "properties": {
@@ -12545,7 +15085,7 @@
         },
         "additionalProperties": false
       },
-      "VersionCompareResultDto": {
+      "VersionCompareResultEncodedDto": {
         "type": "object",
         "properties": {
           "summary": {
@@ -12563,14 +15103,11 @@
             "nullable": true
           },
           "detail": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/VersionCompareDetailRowDto"
-            },
-            "nullable": true
+            "$ref": "#/components/schemas/EncodedGridDto"
           }
         },
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Сетевой вид GET /compare: detail упакован (колоночный JSON)."
       },
       "VersionCompareRowDto": {
         "type": "object",
@@ -12724,6 +15261,26 @@
             "format": "double",
             "nullable": true
           },
+          "planZScoreOptimisticA": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planZScoreOptimisticB": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planZScorePessimisticA": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "planZScorePessimisticB": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
           "isTotal": {
             "type": "boolean"
           },
@@ -12762,6 +15319,335 @@
         ],
         "type": "integer",
         "format": "int32"
+      },
+      "ZTrendContributionDto": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "projectCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectName": {
+            "type": "string",
+            "nullable": true
+          },
+          "versionId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "versionName": {
+            "type": "string",
+            "nullable": true
+          },
+          "zScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendFilterGroupDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendFilterProjectDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendFiltersDto": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendFilterProjectDto"
+            },
+            "nullable": true
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendFilterGroupDto"
+            },
+            "nullable": true
+          },
+          "weightModes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendGroupDto": {
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "plan": {
+            "$ref": "#/components/schemas/ZTrendSeriesDto"
+          },
+          "fact": {
+            "$ref": "#/components/schemas/ZTrendSeriesDto"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendLegendDto": {
+        "type": "object",
+        "properties": {
+          "normId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "normName": {
+            "type": "string",
+            "nullable": true
+          },
+          "groupId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "groupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "segmentKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendPointDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "zScore": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "weight": {
+            "type": "number",
+            "format": "double"
+          },
+          "projectCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "normId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "flag": {
+            "type": "string",
+            "nullable": true
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendContributionDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendRequest": {
+        "type": "object",
+        "properties": {
+          "periodStart": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "workDirectionIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "projectIds": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "nullable": true
+          },
+          "weightMode": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendResponse": {
+        "type": "object",
+        "properties": {
+          "overall": {
+            "$ref": "#/components/schemas/ZTrendGroupDto"
+          },
+          "byGroup": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendGroupDto"
+            },
+            "nullable": true
+          },
+          "legend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendLegendDto"
+            },
+            "nullable": true
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendSegmentDto": {
+        "type": "object",
+        "properties": {
+          "normId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "normName": {
+            "type": "string",
+            "nullable": true
+          },
+          "normGroupId": {
+            "type": "integer",
+            "format": "int32",
+            "nullable": true
+          },
+          "normGroupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "color": {
+            "type": "string",
+            "nullable": true
+          },
+          "segmentKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "effectiveFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectiveTo": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendPointDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "ZTrendSeriesDto": {
+        "type": "object",
+        "properties": {
+          "seriesType": {
+            "type": "string",
+            "nullable": true
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZTrendSegmentDto"
+            },
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {
@@ -12775,7 +15661,7 @@
   },
   "security": [
     {
-      "Bearer": [ ]
+      "Bearer": []
     }
   ],
   "tags": [
@@ -12790,6 +15676,10 @@
     {
       "name": "IicNorms",
       "description": "Алиас API норм ИИС для каскада КФО в справочнике физобъёмов."
+    },
+    {
+      "name": "ProjectDataIngest",
+      "description": "JSON-пакет данных версии (дубль Excel-импорта). Маршруты `…/import/*` не меняются."
     }
   ]
 }

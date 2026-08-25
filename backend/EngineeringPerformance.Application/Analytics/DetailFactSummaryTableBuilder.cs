@@ -149,19 +149,25 @@ public static class DetailFactSummaryTableBuilder
         foreach (var fac in facilities)
         {
             var cells = new List<DetailFactSummaryCellDto>();
-            decimal factLaborTotal = 0m;
+            decimal factLaborTotal = 0m, optLaborTotal = 0m, baseLaborTotal = 0m, pesLaborTotal = 0m;
             foreach (var colKey in columnKeys)
             {
                 if (aggregates.TryGetValue((fac, colKey), out var agg))
                 {
                     var z = agg.Z.Result(4, MidpointRounding.AwayFromZero);
                     var factHours = Math.Round(agg.Fact, 0, MidpointRounding.AwayFromZero);
+                    var optHours = Math.Round(agg.Opt, 0, MidpointRounding.AwayFromZero);
+                    var baseHoursRounded = Math.Round(agg.Base, 0, MidpointRounding.AwayFromZero);
+                    var pesHours = Math.Round(agg.Pes, 0, MidpointRounding.AwayFromZero);
                     factLaborTotal += factHours;
+                    optLaborTotal += optHours;
+                    baseLaborTotal += baseHoursRounded;
+                    pesLaborTotal += pesHours;
                     cells.Add(new DetailFactSummaryCellDto(
                         Math.Round(agg.Vol, 0, MidpointRounding.AwayFromZero),
-                        Math.Round(agg.Pes, 0, MidpointRounding.AwayFromZero),
-                        Math.Round(agg.Base, 0, MidpointRounding.AwayFromZero),
-                        Math.Round(agg.Opt, 0, MidpointRounding.AwayFromZero),
+                        pesHours,
+                        baseHoursRounded,
+                        optHours,
                         factHours,
                         z));
                 }
@@ -176,7 +182,7 @@ public static class DetailFactSummaryTableBuilder
                     : $"{fac.Code} — {fac.Name}";
 
             resultRows.Add(new DetailFactSummaryRowDto(
-                fac.Code, fac.Name, label, cells, factLaborTotal));
+                fac.Code, fac.Name, label, cells, factLaborTotal, optLaborTotal, baseLaborTotal, pesLaborTotal));
         }
 
         return new DetailFactSummaryTableDto(projectCode, versionName, columns, resultRows);

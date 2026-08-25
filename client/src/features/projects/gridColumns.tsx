@@ -5,12 +5,18 @@ import type { ProjectsPageDetailRow, ProjectsPageFacilityRow, ProjectsPageForeca
 import { formatGridNumber } from '../../utils/formatGridNumber';
 import { interpretationCellStyle } from '../../utils/interpretationStyle';
 export {
+  compareTabPlannedHoursDelta,
   createCompareDetailColumns,
   createCompareFacilityColumns,
   createCompareSharedMetricColumns,
   createCompareSummaryColumns,
+  getComparePlanZScore,
   getComparePlannedLaborHours,
   getComparePlannedProductivity,
+  plannedLaborHoursDelta,
+  summaryTotalPlannedLaborHoursDelta,
+  sumPlannedLaborHoursDelta,
+  type CompareHoursDeltaTab,
   type CompareScenario,
 } from './compare/compareColumns';
 
@@ -33,10 +39,10 @@ function factPlanHourColumns<T extends { pessimisticHours?: number | null; baseH
   extras?: Partial<ColDef<T>>,
 ): ColDef<T>[] {
   const num2 = (v: unknown) => formatGridNumber(v, 2);
-  const defs: Array<{ field: 'pessimisticHours' | 'baseHours' | 'optimisticHours'; headerName: string }> = [
-    { field: 'pessimisticHours', headerName: 'План.Труд.Песс.' },
-    { field: 'baseHours', headerName: 'План.Труд.Баз.' },
+  const defs: Array<{ field: 'optimisticHours' | 'baseHours' | 'pessimisticHours'; headerName: string }> = [
     { field: 'optimisticHours', headerName: 'План.Труд.Оптим.' },
+    { field: 'baseHours', headerName: 'План.Труд.Баз.' },
+    { field: 'pessimisticHours', headerName: 'План.Труд.Песс.' },
   ];
   return defs.map(({ field, headerName }) => ({
     ...extras,
@@ -72,6 +78,11 @@ function physicalVolumeValueGetter<T extends object>(
 export function createForecastSummaryColumns(): ColDef<ProjectsPageForecastSummaryRow>[] {
   return [
     {
+      field: 'code',
+      headerName: 'Шифр',
+      width: 90,
+    },
+    {
       colId: 'factPhysicalVolume',
       headerName: 'Факт ФО',
       width: 160,
@@ -88,17 +99,17 @@ export function createForecastSummaryColumns(): ColDef<ProjectsPageForecastSumma
       valueFormatter: (p) => num0(p.value),
     },
     {
-      field: 'baseHours',
-      headerName: 'Базовый',
-      width: 120,
-      cellStyle: { textAlign: 'right', backgroundColor: '#e8f5e9' },
-      valueFormatter: (p) => num0(p.value),
-    },
-    {
       field: 'optimisticHours',
       headerName: 'Оптимистический',
       width: 150,
       cellStyle: { textAlign: 'right', backgroundColor: '#e3f2fd' },
+      valueFormatter: (p) => num0(p.value),
+    },
+    {
+      field: 'baseHours',
+      headerName: 'Базовый',
+      width: 120,
+      cellStyle: { textAlign: 'right', backgroundColor: '#e8f5e9' },
       valueFormatter: (p) => num0(p.value),
     },
     {
@@ -116,18 +127,18 @@ export function createForecastFacilityColumns(): ColDef<ProjectsPageFacilityRow>
     { field: 'facilityCode', headerName: 'Шифр объекта', minWidth: 120 },
     { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 200, flex: 1 },
     {
-      field: 'baseHours',
-      headerName: 'Базовый',
-      width: 120,
-      cellStyle: { textAlign: 'right', backgroundColor: '#e8f5e9' },
-      valueFormatter: (p) => num0(p.value ?? p.data?.laborHours),
-    },
-    {
       field: 'optimisticHours',
       headerName: 'Оптимистический',
       width: 130,
       cellStyle: { textAlign: 'right', backgroundColor: '#e3f2fd' },
       valueFormatter: (p) => num0(p.value),
+    },
+    {
+      field: 'baseHours',
+      headerName: 'Базовый',
+      width: 120,
+      cellStyle: { textAlign: 'right', backgroundColor: '#e8f5e9' },
+      valueFormatter: (p) => num0(p.value ?? p.data?.laborHours),
     },
     {
       field: 'pessimisticHours',
@@ -214,8 +225,8 @@ export function createForecastDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
       allowedAggFuncs: ['sumNullable'],
       aggFunc: 'sumNullable',
     },
-    hourScenarioCol('baseHours', 'Базовый', '#e8f5e9'),
     hourScenarioCol('optimisticHours', 'Оптимистический', '#e3f2fd'),
+    hourScenarioCol('baseHours', 'Базовый', '#e8f5e9'),
     hourScenarioCol('pessimisticHours', 'Пессимистический', '#ffebee'),
   ];
 }
@@ -265,15 +276,15 @@ export function createDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
       valueFormatter: (p) => num0(p.value),
     },
     {
-      field: 'baseHours',
-      headerName: 'Базовый, ч',
+      field: 'optimisticHours',
+      headerName: 'Оптимист., ч',
       width: 110,
       ...rightAlign,
       valueFormatter: (p) => num0(p.value),
     },
     {
-      field: 'optimisticHours',
-      headerName: 'Оптимист., ч',
+      field: 'baseHours',
+      headerName: 'Базовый, ч',
       width: 110,
       ...rightAlign,
       valueFormatter: (p) => num0(p.value),
@@ -405,13 +416,40 @@ export function createFactDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
   return [
     { field: 'facilityCode', headerName: 'Шифр объекта', minWidth: 100, ...groupable },
     { field: 'facilityName', headerName: 'Наименование объекта', minWidth: 140, ...groupable },
+    { field: 'bindingType', headerName: 'Тип привязки', width: 110, ...groupable },
     { field: 'documentSet', headerName: 'Комплект документов', minWidth: 130, ...groupable },
-    { field: 'pvCode', headerName: 'Код ФО', width: 90, ...groupable },
-    { field: 'pvName', headerName: 'Наименование ФО', minWidth: 140, ...groupable },
+    { field: 'catalogId', headerName: 'ID по каталогу', width: 110, ...groupable },
+    { field: 'tag', headerName: 'TAG', width: 90, ...groupable },
     { field: 'workId', headerName: 'ID работы', width: 100, ...groupable },
-    { field: 'workName', headerName: 'Наименование работы', minWidth: 140, ...groupable },
+    { field: 'itemName', headerName: 'Наименование', minWidth: 140, ...groupable },
+    { field: 'workComment', headerName: 'Комментарий', minWidth: 120, ...groupable },
+    { field: 'estimationBasis', headerName: 'Описательная часть', minWidth: 140, ...groupable },
+    { field: 'pvCode', headerName: 'Код', width: 90, ...groupable },
+    { field: 'pvName', headerName: 'Наименование ФО', minWidth: 140, ...groupable },
+    { field: 'isAssessment', headerName: 'Оценка', width: 80, ...groupable },
+    {
+      field: 'coefficient',
+      headerName: 'Коэфф.',
+      width: 90,
+      ...rightGroupable,
+      valueFormatter: (p) => num2(p.value),
+    },
     { field: 'iicGroupName', headerName: 'Группа ФО IIC', minWidth: 200, flex: 1, ...groupable },
     { field: 'iicUnitName', headerName: 'Ед. изм.', width: 90, ...groupable },
+    {
+      field: 'normProductivity',
+      headerName: 'Производит.',
+      width: 110,
+      ...rightGroupable,
+      valueFormatter: (p) => num4(p.value),
+    },
+    {
+      field: 'normStdDev',
+      headerName: 'СО',
+      width: 90,
+      ...rightGroupable,
+      valueFormatter: (p) => num2(p.value),
+    },
     {
       field: 'quantity',
       headerName: 'Кол-во',

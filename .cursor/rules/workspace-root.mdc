@@ -8,6 +8,21 @@ alwaysApply: true
 Исходники могут переезжать. Docker (контейнеры `ep-*`, том `engineeringperformance_mssql_data`,
 сеть `tech-lab24-edge`) живёт отдельно и **не** переезжает вместе с git-деревом.
 
+## Пометка (2026-08-19): ждём открытие из новой папки
+
+Пользователь закрывает Cursor, перемещает дерево, Docker **не** трогает.
+Из новой локации **просто напишет в чат** — это и есть сигнал, не ждать отдельной команды
+«привяжи compose».
+
+На первое сообщение из нового корня сразу:
+
+1. Сверить `pwd` / workspace path — это уже новый каталог.
+2. `docker compose up -d` **без** `--build` и **без** `down`/`-v`.
+3. Проверить: проект `engineeringperformance`, том `engineeringperformance_mssql_data` тот же,
+   `working_dir` у `ep-backend` = новый корень, `/api/health` = 200.
+4. Если `ep-frontend` пересоздался — `refresh-edge-upstreams.sh`.
+5. Кратко отчитаться. Старый путь `/home/antony/project/EngineeringPerformance` больше не использовать.
+
 ## Запрещено
 
 - Хардкодить `/home/antony/project/EngineeringPerformance` в правилах, скриптах репо и командах.

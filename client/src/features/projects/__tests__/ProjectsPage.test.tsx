@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import gridFixture from '../../../../tests/fixtures/grid-data.json';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
 import { createForecastSummaryColumns } from '../gridColumns';
 import { ProjectsPage } from '../ProjectsPage';
 
@@ -115,11 +116,42 @@ describe('ProjectsPage grids', () => {
     expect(cols.find((c) => c.colId === 'factPhysicalVolume' || c.field === 'factPhysicalVolume')).toBeDefined();
     expect(cols.find((c) => c.field === 'baseHours')).toBeDefined();
     expect(cols.find((c) => c.field === 'normUnitName')).toBeUndefined();
+    const fields = cols.map((c) => c.field ?? c.colId);
+    expect(fields).toEqual([
+      'code',
+      'factPhysicalVolume',
+      'normProductivity',
+      'optimisticHours',
+      'baseHours',
+      'pessimisticHours',
+    ]);
     // Колонки должны быть растягиваемыми: width без maxWidth.
     for (const col of cols) {
       expect(col.maxWidth, `${String(col.field ?? col.colId)} must not cap resize`).toBeUndefined();
       expect(col.width ?? col.minWidth, `${String(col.field ?? col.colId)} needs initial width`).toBeTruthy();
     }
+  });
+
+  it('orders forecast facility and detail plan hours opt then base then pes', async () => {
+    const { createForecastFacilityColumns, createForecastDetailColumns, createDetailColumns } =
+      await import('../gridColumns');
+    const hourFields = (cols: { field?: string }[]) =>
+      cols.map((c) => c.field).filter((f) => f === 'optimisticHours' || f === 'baseHours' || f === 'pessimisticHours');
+    expect(hourFields(createForecastFacilityColumns())).toEqual([
+      'optimisticHours',
+      'baseHours',
+      'pessimisticHours',
+    ]);
+    expect(hourFields(createForecastDetailColumns())).toEqual([
+      'optimisticHours',
+      'baseHours',
+      'pessimisticHours',
+    ]);
+    expect(hourFields(createDetailColumns())).toEqual([
+      'optimisticHours',
+      'baseHours',
+      'pessimisticHours',
+    ]);
   });
 
   it('places plan labor hour columns immediately after fact hours', async () => {
@@ -129,9 +161,9 @@ describe('ProjectsPage grids', () => {
     const assertAfterFact = (cols: { field?: string }[], factField: string) => {
       const factIdx = cols.findIndex((c) => c.field === factField);
       expect(factIdx).toBeGreaterThanOrEqual(0);
-      expect(cols[factIdx + 1]?.field).toBe('pessimisticHours');
+      expect(cols[factIdx + 1]?.field).toBe('optimisticHours');
       expect(cols[factIdx + 2]?.field).toBe('baseHours');
-      expect(cols[factIdx + 3]?.field).toBe('optimisticHours');
+      expect(cols[factIdx + 3]?.field).toBe('pessimisticHours');
     };
 
     assertAfterFact(createFactPerformanceColumns(), 'factLaborHours');
@@ -139,10 +171,12 @@ describe('ProjectsPage grids', () => {
     assertAfterFact(createFactDetailColumns(), 'factLaborHours');
 
     const detail = createFactDetailColumns();
-    expect(detail.find((c) => c.field === 'pessimisticHours')?.headerName).toBe('План.Труд.Песс.');
-    expect(detail.find((c) => c.field === 'baseHours')?.headerName).toBe('План.Труд.Баз.');
     expect(detail.find((c) => c.field === 'optimisticHours')?.headerName).toBe('План.Труд.Оптим.');
+    expect(detail.find((c) => c.field === 'baseHours')?.headerName).toBe('План.Труд.Баз.');
+    expect(detail.find((c) => c.field === 'pessimisticHours')?.headerName).toBe('План.Труд.Песс.');
     expect(detail.find((c) => c.field === 'pessimisticHours')?.aggFunc).toBe('sumNullable');
+    expect(detail.find((c) => c.field === 'bindingType')?.headerName).toBe('Тип привязки');
+    expect(detail.find((c) => c.field === 'tag')?.headerName).toBe('TAG');
   });
 
   it('places six compare plan labor columns immediately after physical volume', async () => {
@@ -153,20 +187,20 @@ describe('ProjectsPage grids', () => {
     } = await import('../gridColumns');
 
     const expectedFields = [
-      'plannedLaborHoursPessimisticA',
-      'plannedLaborHoursA',
       'plannedLaborHoursOptimisticA',
-      'plannedLaborHoursPessimisticB',
-      'plannedLaborHoursB',
+      'plannedLaborHoursA',
+      'plannedLaborHoursPessimisticA',
       'plannedLaborHoursOptimisticB',
+      'plannedLaborHoursB',
+      'plannedLaborHoursPessimisticB',
     ];
     const expectedHeaders = [
-      'План.Труд. (Песс. v. А)',
-      'План.Труд. (Баз. v. А)',
       'План.Труд. (Опт. v. А)',
-      'План.Труд. (Песс. v. Б)',
-      'План.Труд. (Баз. v. Б)',
+      'План.Труд. (Баз. v. А)',
+      'План.Труд. (Песс. v. А)',
       'План.Труд. (Опт. v. Б)',
+      'План.Труд. (Баз. v. Б)',
+      'План.Труд. (Песс. v. Б)',
     ];
 
     const assertAfterFo = (cols: { field?: string; headerName?: string }[]) => {
@@ -193,8 +227,8 @@ describe('ProjectsPage grids', () => {
       expect(screen.getByTestId('data-table')).toBeInTheDocument();
     });
 
-    const excelButton = screen.getByRole('button', { name: 'Экспорт Excel' });
-    const pdfButton = screen.getByRole('button', { name: 'Экспорт PDF' });
+    const excelButton = screen.getByRole('button', { name: ACTION_LABELS.exportExcel });
+    const pdfButton = screen.getByRole('button', { name: ACTION_LABELS.exportPdf });
     expect(excelButton).toBeInTheDocument();
     expect(pdfButton).toBeInTheDocument();
 
@@ -236,8 +270,8 @@ describe('ProjectsPage grids', () => {
 
     const names = items.map((i) => i.name);
     expect(names).not.toContain('Редактировать');
-    expect(names).not.toContain('Импорт Excel');
+    expect(names).not.toContain(ACTION_LABELS.importExcel);
     expect(names).not.toContain('Удалить');
-    expect(names).toContain('Экспорт Excel');
+    expect(names).toContain(ACTION_LABELS.exportExcel);
   });
 });

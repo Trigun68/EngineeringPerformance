@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,10 +9,12 @@ namespace EngineeringPerformance.Infrastructure.Projects;
 
 public sealed class ProjectVersionPlanningParameterService(
     AppDbContext context,
-    IAnalysisVersionRecalculationOrchestrator recalcOrchestrator) : IProjectVersionPlanningParameterService
+    IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+    ProjectsPageRawDataLoader rawLoader) : IProjectVersionPlanningParameterService
 {
     private readonly AppDbContext _context = context;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator = recalcOrchestrator;
+    private readonly ProjectsPageRawDataLoader _rawLoader = rawLoader;
 
     public async Task<IReadOnlyList<ProjectVersionPlanningParameterDto>> ListAsync(
         int projectId,
@@ -50,7 +53,7 @@ public sealed class ProjectVersionPlanningParameterService(
                 0m))
             .ToListAsync(cancellationToken);
 
-        var weights = await LoadLaborHoursWeightsAsync(versionId, cancellationToken);
+        var weights = await LoadLaborHoursWeightsAsync(projectId, versionId, cancellationToken);
         if (weights.Count == 0)
             return rows;
 
@@ -146,43 +149,16 @@ public sealed class ProjectVersionPlanningParameterService(
     }
 
     /// <summary>
-    /// Веса = сумма уже посчитанной LaborIntensityBase по классификатору направления (КФО/БЭР).
+    /// Веса диалога = сохранённые базовые часы плана по направлению.
     /// </summary>
     private async Task<Dictionary<int, decimal>> LoadLaborHoursWeightsAsync(
+        int projectId,
         int versionId,
         CancellationToken cancellationToken)
     {
-        var kfoWeights = await _context.ProjectPhysicalVolumes.AsNoTracking()
-            .Where(pv => pv.ProjectAnalysisVersionId == versionId && pv.PhysicalVolumeKfoId != null)
-            .Join(
-                _context.PhysicalVolumesKfo.AsNoTracking(),
-                pv => pv.PhysicalVolumeKfoId,
-                k => k.Id,
-                (pv, k) => new { k.ClassifierId, Hours = pv.LaborIntensityBase ?? 0m })
-            .Where(x => x.ClassifierId != null)
-            .GroupBy(x => x.ClassifierId!.Value)
-            .Select(g => new { DirectionId = g.Key, Hours = g.Sum(x => x.Hours) })
-            .ToListAsync(cancellationToken);
-
-        var berWeights = await _context.ProjectPhysicalVolumes.AsNoTracking()
-            .Where(pv => pv.ProjectAnalysisVersionId == versionId && pv.PhysicalVolumeBerId != null)
-            .Join(
-                _context.PhysicalVolumesBer.AsNoTracking(),
-                pv => pv.PhysicalVolumeBerId,
-                b => b.Id,
-                (pv, b) => new { b.ClassifierId, Hours = pv.LaborIntensityBase ?? 0m })
-            .Where(x => x.ClassifierId != null)
-            .GroupBy(x => x.ClassifierId!.Value)
-            .Select(g => new { DirectionId = g.Key, Hours = g.Sum(x => x.Hours) })
-            .ToListAsync(cancellationToken);
-
-        var map = new Dictionary<int, decimal>();
-        foreach (var row in kfoWeights.Concat(berWeights))
-        {
-            map[row.DirectionId] = map.GetValueOrDefault(row.DirectionId) + row.Hours;
-        }
-
-        return map;
+        var bundle = await _rawLoader.LoadAsync(projectId, versionId, cancellationToken);
+        var hours = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle);
+        return hours.ToDictionary(kv => kv.Key, kv => kv.Value.Base ?? 0m);
     }
 
     private async Task EnsureVersionExistsAsync(int projectId, int versionId, CancellationToken cancellationToken)

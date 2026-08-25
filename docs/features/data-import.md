@@ -1,7 +1,7 @@
 # Data Import
 
-**Status:** ✅ Implemented
-**Date:** 2026-04-15
+**Status:** ✅ Implemented (Excel). JSON-пакет: [`docs/api/ingest-physical-volumes.md`](../api/ingest-physical-volumes.md) и соседние файлы.
+**Date:** 2026-04-15 (Excel). Раскладка колонок трудоёмкости ниже может отставать от кода — актуальная схема в `docs/api/ingest-labor.md`.
 
 ## Description
 

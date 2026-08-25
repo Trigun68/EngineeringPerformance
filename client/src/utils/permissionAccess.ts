@@ -53,7 +53,7 @@ export const MAIN_NAV_ITEMS: readonly MainNavItemConfig[] = [
   { path: '/projects', label: 'Проекты', objectName: 'Projects' },
   { path: '/analytics', label: 'Аналитика', objectName: 'GroupTrend' },
   { path: '/references', label: 'Справочники', objectName: 'References' },
-  { path: '/settings/users', label: 'Настройки', objectName: 'SettingsPage' },
+  { path: '/settings', label: 'Настройки', objectName: 'SettingsPage' },
   { path: '/help', label: 'Справка', objectName: 'HelpPage' },
 ] as const;
 

@@ -8,14 +8,13 @@ public sealed class ZTrendRequestValidator : AbstractValidator<ZTrendRequest>
     private static readonly HashSet<string> AllowedWeightModes = new(StringComparer.OrdinalIgnoreCase)
     {
         "basisHours",
-        "uniform",
     };
 
     public ZTrendRequestValidator()
     {
         RuleFor(x => x.WeightMode)
             .Must(m => string.IsNullOrWhiteSpace(m) || AllowedWeightModes.Contains(m))
-            .WithMessage("WeightMode must be basisHours or uniform.");
+            .WithMessage("WeightMode must be basisHours.");
 
         RuleFor(x => x)
             .Must(x => !x.PeriodStart.HasValue || !x.PeriodEnd.HasValue || x.PeriodStart.Value < x.PeriodEnd.Value)

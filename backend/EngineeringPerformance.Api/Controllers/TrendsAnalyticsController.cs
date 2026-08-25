@@ -15,16 +15,22 @@ public sealed class TrendsAnalyticsController : ControllerBase
 {
     private readonly ITrendAnalyticsService _trends;
     private readonly IZTrendAnalyticsService _zTrends;
+    private readonly IProductivityTrendAnalyticsService _productivityTrends;
     private readonly IVisualReportService _visualReports;
+    private readonly IExportFileNameService _fileNames;
 
     public TrendsAnalyticsController(
         ITrendAnalyticsService trends,
         IZTrendAnalyticsService zTrends,
-        IVisualReportService visualReports)
+        IProductivityTrendAnalyticsService productivityTrends,
+        IVisualReportService visualReports,
+        IExportFileNameService fileNames)
     {
         _trends = trends;
         _zTrends = zTrends;
+        _productivityTrends = productivityTrends;
         _visualReports = visualReports;
+        _fileNames = fileNames;
     }
 
     [HttpGet("formulas")]
@@ -70,6 +76,21 @@ public sealed class TrendsAnalyticsController : ControllerBase
     public Task<ZTrendFiltersDto> GetZTrendFilters(CancellationToken cancellationToken) =>
         _zTrends.GetFiltersAsync(cancellationToken);
 
+    /// <summary>
+    /// Тренд производительности нормы: часы N(V*) через ComputeForecastHours, без сравнения коэффициентов a/b.
+    /// </summary>
+    [HttpPost("productivity")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ProductivityTrendResponse>> GetProductivityTrend(
+        [FromBody] ProductivityTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _productivityTrends.GetProductivityTrendAsync(
+            request ?? new ProductivityTrendRequest(),
+            cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("export.pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
@@ -82,6 +103,12 @@ public sealed class TrendsAnalyticsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var bytes = await _visualReports.ExportTrendsPdfAsync(projectId, dateFrom, dateTo, formulaId, cancellationToken);
-        return File(bytes, "application/pdf", $"Trends_{projectId}.pdf");
+        var fileName = await _fileNames.ForProjectAsync(
+            projectId,
+            ExportFileNameBuilder.Modules.Analytics,
+            "pdf",
+            ExportFileNameBuilder.Views.Trends,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 }

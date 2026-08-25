@@ -29,11 +29,12 @@ When a community skill suggests Tailwind / TanStack Router / Postgres / Next.js 
 1. Layers: `Api → Application → Domain → Infrastructure`. No business math in controllers or import services.
 2. Calculations only in `PerformanceCalculationEngine` (`IPerformanceCalculationEngine`) — see `.cursor/rules/performance-calculation-engine-ssot.mdc`.
 3. IIC group labels always `код — наименование (ед.)` via `FormatCodeNameWithResolvedUnit` / `formatIisNorm` — see `.cursor/rules/iic-group-naming.mdc`.
-4. DTOs are `record` types in Application; never return EF entities from API.
-5. Primary constructors, `Async` suffix, `CancellationToken` last.
-6. Permissions: `[HasPermission(PermissionType.X, AccessLevel.Read|Edit)]`.
-7. EF: parameterized queries only; `.AsNoTracking()` for UI grid reads; one `DbContext` per request.
-8. Version copy must deep-clone PPV, LI, Equipment, iterations.
+4. Export filenames: Russian `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext` via `ExportFileNameBuilder` / `IExportFileNameService`; client reads `Content-Disposition` — see `.cursor/rules/export-file-naming.mdc`.
+5. DTOs are `record` types in Application; never return EF entities from API.
+6. Primary constructors, `Async` suffix, `CancellationToken` last.
+7. Permissions: `[HasPermission(PermissionType.X, AccessLevel.Read|Edit)]`.
+8. EF: parameterized queries only; `.AsNoTracking()` for UI grid reads; one `DbContext` per request.
+9. Version copy must deep-clone PPV, LI, Equipment, iterations.
 
 ## Frontend
 
@@ -43,6 +44,8 @@ When a community skill suggests Tailwind / TanStack Router / Postgres / Next.js 
 4. Permissions: `usePermission(objectName)` — names match WPF `AccessControlConstants`.
 5. API clients normalize PascalCase from backend; `withCredentials: true`.
 6. UI language: Russian for user-facing strings; code identifiers English.
+7. Export/import captions: only `ACTION_LABELS` + `ExportActionButton` / `ToolbarActionButton` (see `.cursor/rules/ui-action-labels.mdc`).
+7. Export/import captions: only `ACTION_LABELS` + `ExportActionButton` / `ToolbarActionButton` (see `.cursor/rules/ui-action-labels.mdc`).
 
 ## Language policy
 

@@ -25,8 +25,8 @@ public sealed class PerformanceReportService(
         int? factVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        // v2: live N(V)×Z для плана, allocated ActualHours для факта (не кэшировать старый Z).
-        var cacheKey = $"report:v2:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
+        // v3: план = BuildPlanPerformance (сценарий версии); факт = PLI.PlannedHours.
+        var cacheKey = $"report:v3:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
         var cached = await cache.GetAsync<PerformanceReportDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -226,28 +226,22 @@ public sealed class PerformanceReportService(
             .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
         var bundle = await GetBundleAsync(projectId, versionId, bundleCache, cancellationToken);
-        var performance = await performanceService.GetPerformanceDataAsync(
-            projectId, versionId, LaborHoursKind.Planned);
-        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance, calculationEngine);
-        var liveHours = ProjectsPageGridBuilder.ResolveLivePlanHoursByDirection(
-            bundle, performance, calculationEngine);
+        var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance, calculationEngine);
 
         var labor = await context.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
 
-        var directions = ApplyLivePlanHoursToDirections(
-            MapDirectionRows(performance),
-            liveHours,
-            bundle.PlanningZByDirection,
-            calculationEngine);
-
-        var weightedZ = WeightedZFromDirectionRoots(directions);
+        var directions = MapDirectionRows(planPerformance);
+        var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
+            planPerformance,
+            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
         var totalHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
         var unallocated = FactLaborHoursTotals.UnallocatedPlannedHours(labor);
         var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
-            performance,
+            planPerformance,
             totalHours ?? 0m,
             unallocated,
             weightedZ);
@@ -265,14 +259,14 @@ public sealed class PerformanceReportService(
             .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
         var performance = await performanceService.GetPerformanceDataAsync(
-            projectId, versionId, LaborHoursKind.Actual);
+            projectId, versionId, LaborHoursKind.Planned);
         var labor = await context.ProjectLaborIntensities
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
 
-        var totalHours = FactLaborHoursTotals.FromAllocatedActualHours(labor);
-        var unallocated = FactLaborHoursTotals.UnallocatedActualHours(labor);
+        var totalHours = FactLaborHoursTotals.FromAllocatedPlannedHours(labor);
+        var unallocated = FactLaborHoursTotals.UnallocatedPlannedHours(labor);
         var weightedZ = totalHours is > 0
             ? calculationEngine.ComputeWeightedZFromPerformanceRows(
                 performance,
@@ -326,89 +320,6 @@ public sealed class PerformanceReportService(
                 Interpretation: r.Interpretation?.ToRussian()))
             .ToList();
 
-    /// <summary>
-    /// План в отчёте: часы = live N(V)×Z (как Forecast ИТОГО), Z листа = ZBase, родитель = Σ(Z×часы).
-    /// </summary>
-    public static IReadOnlyList<PerformanceReportDirectionRowDto> ApplyLivePlanHoursToDirections(
-        IReadOnlyList<PerformanceReportDirectionRowDto> directions,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> liveHours,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZ,
-        IPerformanceCalculationEngine engine)
-    {
-        static decimal? Pos(decimal? value) =>
-            value is > 0 ? Math.Round(value.Value, 2) : null;
-
-        var stamped = directions.Select(d =>
-        {
-            liveHours.TryGetValue(d.WorkDirectionId, out var hours);
-            var baseH = Pos(hours.Base);
-            var zParams = engine.ResolvePlanningZ(planningZ, d.WorkDirectionId);
-            decimal? zScore = baseH is > 0 ? zParams.ZBase : null;
-            decimal? productivity = d.FactPhysicalVolume is > 0 && baseH is > 0
-                ? Math.Round(baseH.Value / d.FactPhysicalVolume.Value, 4)
-                : null;
-            return d with
-            {
-                FactLaborHours = baseH,
-                FactProductivity = productivity,
-                ZScore = zScore,
-                Interpretation = ToInterpretationRu(zScore),
-                SubtreeHours = baseH,
-            };
-        }).ToList();
-
-        var byId = stamped.ToDictionary(d => d.WorkDirectionId);
-        var children = stamped.Where(d => d.ParentId.HasValue).ToLookup(d => d.ParentId!.Value);
-
-        foreach (var node in stamped.OrderByDescending(d => d.Level).ThenBy(d => d.WorkDirectionId))
-        {
-            var kids = children[node.WorkDirectionId]
-                .Select(k => byId[k.WorkDirectionId])
-                .ToList();
-            var current = byId[node.WorkDirectionId];
-            var own = current.FactLaborHours ?? 0m;
-            var childHours = kids.Sum(k => k.SubtreeHours ?? 0m);
-            var subtree = own + childHours;
-            decimal? subtreeHours = subtree > 0 ? Math.Round(subtree, 2) : null;
-
-            decimal? zScore = current.ZScore;
-            if (kids.Count > 0)
-            {
-                var samples = kids.Select(k => (k.ZScore, k.SubtreeHours)).ToList();
-                if (own > 0)
-                {
-                    samples.Add((
-                        engine.ResolvePlanningZ(planningZ, node.WorkDirectionId).ZBase,
-                        own));
-                }
-
-                zScore = engine.ComputeWeightedZ(
-                    samples,
-                    decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-            }
-
-            byId[node.WorkDirectionId] = current with
-            {
-                SubtreeHours = subtreeHours,
-                ZScore = zScore,
-                Interpretation = ToInterpretationRu(zScore),
-            };
-        }
-
-        return stamped.Select(d => byId[d.WorkDirectionId]).ToList();
-    }
-
-    private decimal? WeightedZFromDirectionRoots(IReadOnlyList<PerformanceReportDirectionRowDto> directions) =>
-        calculationEngine.ComputeWeightedZ(
-            directions.Where(d => d.ParentId is null).Select(d => (d.ZScore, d.SubtreeHours)),
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-
-    private static string? ToInterpretationRu(decimal? z)
-    {
-        var ru = PerformanceInterpretationMapper.FromZScore(z)?.ToRussian();
-        return string.IsNullOrEmpty(ru) ? null : ru;
-    }
-
     private async Task<Dictionary<int, string?>> LoadSnapshotKeysAsync(
         IReadOnlyList<int> versionIds,
         CancellationToken cancellationToken)
@@ -442,12 +353,12 @@ public sealed class PerformanceReportService(
                 .AsNoTracking()
                 .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == version.Id)
                 .ToListAsync(cancellationToken);
-            var allocated = FactLaborHoursTotals.FromAllocatedActualHours(labor);
+            var allocated = FactLaborHoursTotals.FromAllocatedPlannedHours(labor);
             decimal? weightedZ = null;
             if (allocated is > 0)
             {
                 var performance = await performanceService.GetPerformanceDataAsync(
-                    projectId, version.Id, LaborHoursKind.Actual);
+                    projectId, version.Id, LaborHoursKind.Planned);
                 weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
                     performance,
                     decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
@@ -464,17 +375,9 @@ public sealed class PerformanceReportService(
         }
 
         var bundle = await GetBundleAsync(projectId, version.Id, bundleCache, cancellationToken);
-        var planPerformance = await performanceService.GetPerformanceDataAsync(
-            projectId, version.Id, LaborHoursKind.Planned);
+        var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(
             bundle, planPerformance, calculationEngine);
-        var liveHours = ProjectsPageGridBuilder.ResolveLivePlanHoursByDirection(
-            bundle, planPerformance, calculationEngine);
-        var planDirections = ApplyLivePlanHoursToDirections(
-            MapDirectionRows(planPerformance),
-            liveHours,
-            bundle.PlanningZByDirection,
-            calculationEngine);
         var planHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
 
         return new PerformanceReportVersionHistoryPointDto(
@@ -482,7 +385,9 @@ public sealed class PerformanceReportService(
             VersionName: version.VersionName,
             CreatedAt: version.CreatedAt,
             Direction: version.Direction,
-            WeightedZScore: WeightedZFromDirectionRoots(planDirections),
+            WeightedZScore: calculationEngine.ComputeWeightedZFromPerformanceRows(
+                planPerformance,
+                decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces),
             TotalLaborHours: planHours,
             NormSnapshotKey: normSnapshotKey);
     }

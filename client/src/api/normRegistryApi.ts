@@ -322,15 +322,11 @@ export async function exportNormRegistry(
   if (filter.onlyWithIssues != null) params.set('onlyWithIssues', String(filter.onlyWithIssues));
   if (filter.search) params.set('search', filter.search);
 
-  const blob = await downloadBlob(`/analytics/norm-registry/export?${params.toString()}`, undefined, `norm-registry.${format}`);
-  triggerBrowserDownload(blob.blob, blob.filename || `norm-registry.${format}`);
+  const blob = await downloadBlob(`/analytics/norm-registry/export?${params.toString()}`);
+  triggerBrowserDownload(blob.blob, blob.filename);
 }
 
 export async function exportNormHealthReport(format: 'xlsx' | 'csv'): Promise<void> {
-  const blob = await downloadBlob(
-    `/analytics/norm-registry/health-report?format=${format}`,
-    undefined,
-    `norm-health.${format}`,
-  );
-  triggerBrowserDownload(blob.blob, blob.filename || `norm-health.${format}`);
+  const blob = await downloadBlob(`/analytics/norm-registry/health-report?format=${format}`);
+  triggerBrowserDownload(blob.blob, blob.filename);
 }

@@ -39,7 +39,7 @@ describe('permissionAccess', () => {
     expect(isMainNavItemVisible(byPath['/projects'], observerPermissions, 'Engineer')).toBe(true);
     expect(isMainNavItemVisible(byPath['/analytics'], observerPermissions, 'Engineer')).toBe(false);
     expect(isMainNavItemVisible(byPath['/references'], observerPermissions, 'Engineer')).toBe(true);
-    expect(isMainNavItemVisible(byPath['/settings/users'], observerPermissions, 'Engineer')).toBe(false);
+    expect(isMainNavItemVisible(byPath['/settings'], observerPermissions, 'Engineer')).toBe(false);
   });
 
   it('shows settings when Users permission exists', () => {

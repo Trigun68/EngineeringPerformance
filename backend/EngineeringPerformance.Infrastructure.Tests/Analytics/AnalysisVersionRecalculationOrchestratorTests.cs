@@ -6,6 +6,7 @@ using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 namespace EngineeringPerformance.Infrastructure.Tests.Analytics;
@@ -31,10 +32,7 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
-            context,
-            recalculation.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+        var orchestrator = CreateOrchestrator(context, recalculation.Object);
 
         var count = await orchestrator.AfterNormChangedAsync(
             workDirectionId: 1,
@@ -87,10 +85,7 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
-            context,
-            recalculation.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+        var orchestrator = CreateOrchestrator(context, recalculation.Object);
 
         var count = await orchestrator.AfterNormChangedAsync(
             workDirectionId: 1,
@@ -149,10 +144,7 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
 
-        var orchestrator = new AnalysisVersionRecalculationOrchestrator(
-            context,
-            recalculation.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+        var orchestrator = CreateOrchestrator(context, recalculation.Object);
 
         var count = await orchestrator.AfterCatalogAssessmentOrCoefficientChangedAsync(
             "physical-volumes-kfo",
@@ -171,24 +163,75 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
     }
 
     [Fact]
-    public async Task RecalculateVersionAsync_DelegatesToLaborIntensityService()
+    public async Task RecalculateVersionAsync_InvalidatesPageDataCache_WithoutWarm()
     {
         await using var context = CreateContext();
         var recalculation = new Mock<ILaborIntensityRecalculationService>();
         recalculation
             .Setup(x => x.RecalculateAsync(5, 50, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(1);
+            .ReturnsAsync(7);
+
+        var cache = new Mock<IProjectAnalyticsCache>();
+        cache.Setup(x => x.InvalidateProjectAsync(5, It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         var orchestrator = new AnalysisVersionRecalculationOrchestrator(
             context,
             recalculation.Object,
-            new Mock<IProjectAnalyticsCache>().Object);
+            cache.Object,
+            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance);
+
         var count = await orchestrator.RecalculateVersionAsync(5, 50);
 
-        count.Should().Be(1);
+        count.Should().Be(7);
+        cache.Verify(x => x.InvalidateProjectAsync(5, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RecalculateAllVersionsAsync_IncludesArchivedWhenRequested()
+    {
+        await using var context = CreateContext();
+        SeedProject(context, projectId: 1);
+        SeedProject(context, projectId: 2);
+        context.ProjectAnalysisVersions.AddRange(
+            Version(1, 40, DateTime.UtcNow, archived: false),
+            Version(1, 41, DateTime.UtcNow, archived: true),
+            Version(2, 42, DateTime.UtcNow, archived: false));
+        await context.SaveChangesAsync();
+
+        var recalculation = new Mock<ILaborIntensityRecalculationService>();
+        recalculation
+            .Setup(x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        var cache = new Mock<IProjectAnalyticsCache>();
+        var orchestrator = CreateOrchestrator(context, recalculation.Object, cache.Object);
+
+        var all = await orchestrator.RecalculateAllVersionsAsync(includeArchived: true);
+        all.Should().Be(3);
         recalculation.Verify(
-            x => x.RecalculateAsync(5, 50, It.IsAny<CancellationToken>()),
-            Times.Once);
+            x => x.RecalculateAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.Exactly(3));
+
+        recalculation.Invocations.Clear();
+        var activeOnly = await orchestrator.RecalculateAllVersionsAsync(includeArchived: false);
+        activeOnly.Should().Be(2);
+        recalculation.Verify(
+            x => x.RecalculateAsync(1, 41, It.IsAny<CancellationToken>()),
+            Times.Never);
+        cache.Verify(
+            x => x.InvalidateProjectAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            Times.AtLeast(5));
+    }
+
+    private static AnalysisVersionRecalculationOrchestrator CreateOrchestrator(
+        AppDbContext context,
+        ILaborIntensityRecalculationService recalculation,
+        IProjectAnalyticsCache? cache = null)
+    {
+        return new AnalysisVersionRecalculationOrchestrator(
+            context,
+            recalculation,
+            cache ?? new Mock<IProjectAnalyticsCache>().Object,
+            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance);
     }
 
     private static AppDbContext CreateContext()

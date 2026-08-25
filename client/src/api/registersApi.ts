@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
 import { parseApiContract } from '../services/apiContract';
-import { buildExportFileName } from '../utils/directoryExport';
 import type { DeviationFormulaDto, NormFormulaDto } from '../types/norms';
 
 export type { DeviationFormulaDto, NormFormulaDto };
@@ -129,24 +128,16 @@ export async function exportIicNormsExcelFromGrid(
   headers: string[],
   rows: string[][],
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     '/registers/iic-work-direction-norms/export',
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
   );
-
-  const filename = buildExportFileName(tabName);
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
   triggerBrowserDownload(blob, filename);
 }
 
 export async function exportIicNormsExcel(): Promise<void> {
   const { blob, filename } = await downloadBlob(
     '/registers/iic-work-direction-norms/export.xlsx',
-    undefined,
-    'iic-work-direction-norms.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }

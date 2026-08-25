@@ -10,13 +10,13 @@ namespace EngineeringPerformance.Infrastructure.Diagnostics;
 
 public sealed class SqlProfilingPersistence : ISqlProfilingPersistence
 {
-    private readonly IDbContextFactory<AppDbContext> _dbFactory;
+    private readonly IAnalyticsDbContextFactory _dbFactory;
     private readonly SqlProfilingOptions _options;
     private readonly ILogger<SqlProfilingPersistence> _logger;
     private DateTime _lastCleanupUtc = DateTime.MinValue;
 
     public SqlProfilingPersistence(
-        IDbContextFactory<AppDbContext> dbFactory,
+        IAnalyticsDbContextFactory dbFactory,
         IOptions<SqlProfilingOptions> options,
         ILogger<SqlProfilingPersistence> logger)
     {
@@ -37,15 +37,26 @@ public sealed class SqlProfilingPersistence : ISqlProfilingPersistence
         if (!_options.Enabled || commands.Count == 0)
             return;
 
-        // Не профилируем собственную запись метрик.
-        var previous = SqlProfilingScope.Current;
-        if (previous is not null)
-            previous.SuppressPersistence = true;
+        var threshold = _options.MinDurationMsToPersist;
+        var filtered = threshold <= 0
+            ? commands
+            : commands.Where(c => c.DurationMs >= threshold).ToList();
+        if (filtered.Count == 0)
+            return;
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var persistTimeout = Math.Clamp(_options.PersistCommandTimeoutSeconds, 1, 30);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(persistTimeout));
+        var persistToken = timeoutCts.Token;
+
+        var persistScope = SqlProfilingScope.Begin("sql-profiling-persist", null, correlationId, null);
+        persistScope.SuppressPersistence = true;
 
         try
         {
-            await using var context = await _dbFactory.CreateDbContextAsync(cancellationToken);
-            var rows = commands.Select(c => new SqlQueryMetric
+            await using var context = await _dbFactory.CreateDbContextAsync(persistToken);
+            context.Database.SetCommandTimeout(persistTimeout);
+            var rows = filtered.Select(c => new SqlQueryMetric
             {
                 TimestampUtc = c.TimestampUtc,
                 Endpoint = Truncate(endpoint, 512) ?? "unknown",
@@ -64,18 +75,24 @@ public sealed class SqlProfilingPersistence : ISqlProfilingPersistence
             }).ToList();
 
             context.SqlQueryMetrics.AddRange(rows);
-            await context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(persistToken);
 
-            await MaybeCleanupAsync(context, cancellationToken);
+            await MaybeCleanupAsync(context, persistToken);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "SQL profiling persist timed out after {Timeout}s ({Count} commands)",
+                persistTimeout,
+                filtered.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to persist SQL profiling metrics ({Count} commands)", commands.Count);
+            _logger.LogWarning(ex, "Failed to persist SQL profiling metrics ({Count} commands)", filtered.Count);
         }
         finally
         {
-            if (previous is not null)
-                previous.SuppressPersistence = false;
+            SqlProfilingScope.End();
         }
     }
 

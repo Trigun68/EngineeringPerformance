@@ -5,8 +5,6 @@ export type ComparePdfSection = 'summary' | 'facility' | 'detail' | 'full';
 export async function exportForecastSummaryPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast-summary/pdf`,
-    {},
-    `ForecastSummary_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -14,8 +12,6 @@ export async function exportForecastSummaryPdf(projectId: number, versionId: num
 export async function exportFactSummaryPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-summary/pdf`,
-    {},
-    `FactSummary_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -23,8 +19,6 @@ export async function exportFactSummaryPdf(projectId: number, versionId: number)
 export async function exportFactFacilityPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-facility/pdf`,
-    {},
-    `FactFacility_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -32,8 +26,6 @@ export async function exportFactFacilityPdf(projectId: number, versionId: number
 export async function exportFactDetailPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-detail/pdf`,
-    {},
-    `FactDetail_${projectId}_v${versionId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -57,7 +49,6 @@ export async function exportComparePdf(
       showOnlyDifferences: options?.showOnlyDifferences ?? false,
       top: options?.top ?? 20,
     },
-    `Compare_${projectId}_${versionA}_${versionB}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -74,7 +65,6 @@ export async function exportTrendsPdf(
       dateTo: options?.dateTo,
       formulaId: options?.formulaId,
     },
-    `Trends_${projectId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -100,7 +90,6 @@ export async function exportCombinedProjectPdf(
       formulaId: options.formulaId,
       includeAppendix: options.includeAppendix ?? false,
     },
-    `Combined_${projectId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }

@@ -13,7 +13,7 @@ test.describe('BER physical volumes - classifier lookup', () => {
     await page.getByRole('button', { name: 'Добавить' }).click();
     await expect(page.getByText('Новая запись')).toBeVisible();
 
-    // SoT: formLabel BER = «Классификатор (группы физ. объёмов / нормы ИИС)»
+    // SoT: formLabel BER = «Классификатор (группы физ. объёмов / нормы IIC)»
     await expect(page.getByText(/Классификатор \(группы/i).first()).toBeVisible();
     // Старое FIX-03 имя поля удалено; связь КФО остаётся как «Связанная номенклатура КФО».
     await expect(page.getByText(/Номенклатура физ\.объёмов КФО/i)).toHaveCount(0);

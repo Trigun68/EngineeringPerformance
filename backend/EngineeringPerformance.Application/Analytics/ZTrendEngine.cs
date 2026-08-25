@@ -43,10 +43,9 @@ public sealed class ZTrendEngine : IZTrendEngine
         IReadOnlyList<ZTrendRawPoint> points,
         string weightMode)
     {
+        _ = weightMode; // API-совместимость: всегда взвешивание по часам.
         if (points.Count == 0)
             return [];
-
-        var uniform = string.Equals(weightMode, "uniform", StringComparison.OrdinalIgnoreCase);
 
         return points
             .GroupBy(p => (p.Date.Date, p.SegmentKey, p.Flag))
@@ -62,61 +61,45 @@ public sealed class ZTrendEngine : IZTrendEngine
                     {
                         Date = g.Key.Item1,
                         ProjectCount = projectCount,
-                        Weight = uniform ? list.Count : list.Sum(x => x.Weight),
-                        Contributions = list
-                            .GroupBy(x => (x.ProjectId, x.VersionId))
-                            .Select(cg =>
-                            {
-                                var p = cg.First();
-                                return new ZTrendContributionDto(
-                                    p.ProjectId,
-                                    p.ProjectCode,
-                                    p.ProjectName,
-                                    p.VersionId,
-                                    p.VersionName,
-                                    p.ZScore.HasValue ? (double)p.ZScore.Value : null,
-                                    (double)(uniform ? 1m : (p.Weight <= 0 ? 1m : p.Weight)));
-                            })
-                            .ToList(),
+                        Weight = list.Sum(x => x.Weight),
+                        Contributions = ToContributions(list),
                     };
                 }
 
-                // Режим «uniform» — равные веса; при нулевых часах откат к среднему арифметическому.
                 var aggregator = new WeightedZAggregator();
                 foreach (var point in linePoints)
-                    aggregator.Add(point.ZScore, uniform ? 1m : point.Weight);
-
-                var zWeighted = aggregator.Result(2, arithmeticFallback: true) ?? 0m;
-                var weightSum = aggregator.WeightSum > 0 ? aggregator.WeightSum : aggregator.SampleCount;
+                    aggregator.Add(point.ZScore, point.Weight);
 
                 var sample = linePoints[0];
-                var contributions = list
-                    .GroupBy(x => (x.ProjectId, x.VersionId))
-                    .Select(cg =>
-                    {
-                        var p = cg.First();
-                        return new ZTrendContributionDto(
-                            p.ProjectId,
-                            p.ProjectCode,
-                            p.ProjectName,
-                            p.VersionId,
-                            p.VersionName,
-                            p.ZScore.HasValue ? (double)p.ZScore.Value : null,
-                            (double)(uniform ? 1m : (p.Weight <= 0 ? 1m : p.Weight)));
-                    })
-                    .ToList();
                 return sample with
                 {
                     Date = g.Key.Item1,
-                    ZScore = zWeighted,
-                    Weight = weightSum,
+                    ZScore = aggregator.Result(2),
+                    Weight = aggregator.WeightSum,
                     ProjectCount = projectCount,
-                    Contributions = contributions,
+                    Contributions = ToContributions(list),
                 };
             })
             .OrderBy(p => p.Date)
             .ToList();
     }
+
+    private static List<ZTrendContributionDto> ToContributions(IReadOnlyList<ZTrendRawPoint> list) =>
+        list
+            .GroupBy(x => (x.ProjectId, x.VersionId))
+            .Select(cg =>
+            {
+                var p = cg.First();
+                return new ZTrendContributionDto(
+                    p.ProjectId,
+                    p.ProjectCode,
+                    p.ProjectName,
+                    p.VersionId,
+                    p.VersionName,
+                    p.ZScore.HasValue ? (double)p.ZScore.Value : null,
+                    (double)p.Weight);
+            })
+            .ToList();
 
     public ZTrendSeriesDto BuildSeries(
         IReadOnlyList<ZTrendRawPoint> points,

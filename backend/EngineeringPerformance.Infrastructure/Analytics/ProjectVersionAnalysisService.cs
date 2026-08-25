@@ -234,7 +234,9 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
         return list
             .Select(li => new ProjectVersionDirectionLaborDto(
                 DocumentationCode: li.DocumentationCode,
-                PlannedHours: li.PlannedHours))
+                PlannedHours: li.PlannedHours,
+                ActualHours: li.ActualHours,
+                Brand: li.Brand))
             .ToList();
     }
 }

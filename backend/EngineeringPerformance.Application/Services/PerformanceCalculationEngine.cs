@@ -424,6 +424,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         ForecastHoursAggregator.AggregateByDirection(
             lines, ppvHoursById, equipmentVolumes, normsByDirection, planningZByDirection, _deviationCalculator);
 
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.ComputeEquipmentHours(
+            lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
     public decimal? ComputeWeightedZFromPerformanceRows(
         IReadOnlyList<PerformanceRowDto> performanceRows,
         int decimalPlaces = 2) =>

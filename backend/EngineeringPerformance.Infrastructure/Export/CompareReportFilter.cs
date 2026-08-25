@@ -63,7 +63,10 @@ public static class CompareReportFilter
     private static bool HasSummaryDifference(VersionCompareRowDto row)
     {
         var factZIdentical = Round4(row.FactZScoreA) == Round4(row.FactZScoreB);
-        var planZIdentical = Round4(row.PlanZScoreA) == Round4(row.PlanZScoreB);
+        var planZIdentical =
+            Round4(row.PlanZScoreA) == Round4(row.PlanZScoreB)
+            && Round4(row.PlanZScoreOptimisticA) == Round4(row.PlanZScoreOptimisticB)
+            && Round4(row.PlanZScorePessimisticA) == Round4(row.PlanZScorePessimisticB);
         var planLaborIdentical =
             Round2(row.PlannedLaborHoursA) == Round2(row.PlannedLaborHoursB)
             && Round2(row.PlannedLaborHoursOptimisticA) == Round2(row.PlannedLaborHoursOptimisticB)

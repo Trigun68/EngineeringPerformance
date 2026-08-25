@@ -2,11 +2,16 @@
 
 **Type:** Data Entity (inherits from `DataTableRecord`)
 **Location:** `EngineeringPerformance.Infrastructure/Data/Entities/ProjectLaborIntensity.cs`
-**Last Updated:** 2026-04-15
+**Last Updated:** 2026-08-23
 
 ## Purpose
 
-Represents project-specific labor intensity data — planned and actual labor hours associated with work directions within a project and analysis version.
+Represents project-specific labor intensity data — planned labor hours associated with work directions within a project and analysis version.
+
+`PlannedHours` — единственный источник часов **факта** для Z и KPI (`CalculatePerformance`, отчёт, аналитика).  
+`ActualHours` хранится (ввод/импорт), на web-оценке **не используется**.
+
+Архитектура: [_doc/architecture/hours-and-z-ssot.md](../../../_doc/architecture/hours-and-z-ssot.md).
 
 ## Properties
 

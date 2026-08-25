@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
   Grid,
   Paper,
@@ -14,26 +13,27 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import {
-  exportForecastExcel,
-  exportForecastPdf,
-  fetchForecastAssessmentVolumes,
-  type ProjectVersionPhysicalVolume,
-} from '../../../api/analyticsApi';
+  exportForecastSummaryExcel,
+  exportForecastSummaryPdf,
+} from '../../../api/projectsPageApi';
+import { fetchForecastAssessmentVolumes, type ProjectVersionPhysicalVolume } from '../../../api/analyticsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
 import { formatGridNumber } from '../../../utils/formatGridNumber';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
+import { REPORT_COLUMN_HEADER_FONT_SIZE } from '../utils/projectModalTitle';
+import { ReportHeaderCell } from '../utils/ReportHeaderCell';
 import type { ProjectsPageForecastSummaryRow } from '../types';
+import { sumVolumeTotals, volumesForDirection } from './forecastReportSubtree';
 
 export interface ForecastReportViewProps {
   projectId: number;
   versionId: number;
-  projectName: string;
-  projectCode: string;
-  versionLabel: string;
   summaryRows: ProjectsPageForecastSummaryRow[];
 }
 
@@ -86,22 +86,27 @@ function ReportHeaderRow() {
         gridTemplateColumns: GRID_COLUMNS,
         gap: 1,
         bgcolor: '#2C3E50',
-        color: '#94A3B8',
+        color: '#FFFFFF',
         px: 2,
-        py: 1,
+        py: 1.5,
         borderRadius: 1,
         mb: 0.5,
-        fontSize: 11,
+        fontSize: REPORT_COLUMN_HEADER_FONT_SIZE,
         fontWeight: 600,
+        alignItems: 'end',
       }}
     >
-      <Box>Шифр</Box>
-      <Box>Направление</Box>
-      <Box sx={{ textAlign: 'right' }}>Факт ФО</Box>
-      <Box sx={{ textAlign: 'right' }}>Норм. произв.</Box>
-      <Box sx={{ textAlign: 'right' }}>Базовый, ч</Box>
-      <Box sx={{ textAlign: 'right', color: '#27AE60' }}>Оптимист., ч</Box>
-      <Box sx={{ textAlign: 'right', color: '#E74C3C' }}>Пессимист., ч</Box>
+      <ReportHeaderCell>Шифр</ReportHeaderCell>
+      <ReportHeaderCell>Направление</ReportHeaderCell>
+      <ReportHeaderCell align="right">Факт ФО</ReportHeaderCell>
+      <ReportHeaderCell align="right">Норм. произв.</ReportHeaderCell>
+      <ReportHeaderCell align="right" sx={{ color: '#27AE60' }}>
+        Оптимист., ч
+      </ReportHeaderCell>
+      <ReportHeaderCell align="right">Базовый, ч</ReportHeaderCell>
+      <ReportHeaderCell align="right" sx={{ color: '#E74C3C' }}>
+        Пессимист., ч
+      </ReportHeaderCell>
     </Box>
   );
 }
@@ -135,7 +140,7 @@ function ReportDataRow({
         gap: 1,
         alignItems: 'center',
         px: 2,
-        py: dark ? 1 : 1.25,
+        py: 1.25,
         ml: `${level * 24}px`,
         bgcolor: dark ? '#1E3A5F' : '#FFFFFF',
         color: dark ? '#FFFFFF' : '#2C3E50',
@@ -157,10 +162,10 @@ function ReportDataRow({
             : num2(factFo)}
       </Box>
       <Box sx={{ textAlign: 'right' }}>{dark ? '—' : num4(normProd)}</Box>
-      <Box sx={{ textAlign: 'right', fontWeight: 600 }}>{num1(baseH)}</Box>
       <Box sx={{ textAlign: 'right', fontWeight: 600, color: dark ? '#A9DFBF' : '#27AE60' }}>
         {num1(optH)}
       </Box>
+      <Box sx={{ textAlign: 'right', fontWeight: 600 }}>{num1(baseH)}</Box>
       <Box sx={{ textAlign: 'right', fontWeight: 600, color: dark ? '#F1948A' : '#E74C3C' }}>
         {num1(pesH)}
       </Box>
@@ -171,9 +176,6 @@ function ReportDataRow({
 export function ForecastReportView({
   projectId,
   versionId,
-  projectName,
-  projectCode,
-  versionLabel,
   summaryRows,
 }: ForecastReportViewProps) {
   const getById = useDictionaryStore((s) => s.getById);
@@ -220,9 +222,12 @@ export function ForecastReportView({
 
   const handleExport = async (type: 'excel' | 'pdf') => {
     setExporting(true);
+    setError(null);
     try {
-      if (type === 'excel') await exportForecastExcel(projectId, versionId);
-      else await exportForecastPdf(projectId, versionId);
+      if (type === 'excel') await exportForecastSummaryExcel(projectId, versionId);
+      else await exportForecastSummaryPdf(projectId, versionId);
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт прогноза.'));
     } finally {
       setExporting(false);
     }
@@ -254,36 +259,25 @@ export function ForecastReportView({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="center" sx={{ mb: 2, flexShrink: 0 }}>
-        <Box>
-          <Typography variant="body2" color="text.secondary">
-            {projectCode} — {projectName} ({versionLabel})
-          </Typography>
-        </Box>
+      <Stack direction="row" spacing={1} justifyContent="flex-end" alignItems="center" sx={{ mb: 2, flexShrink: 0 }}>
         <Stack direction="row" spacing={1}>
-          <Button
-            size="small"
-            variant="contained"
-            sx={{ bgcolor: '#27AE60', '&:hover': { bgcolor: '#229954' } }}
-            startIcon={<FileDownloadIcon />}
-            disabled={exporting}
+          <ExportActionButton
+            kind="excel"
+            loading={exporting}
             onClick={() => void handleExport('excel')}
-          >
-            Excel
-          </Button>
-          <Button
-            size="small"
-            variant="contained"
-            sx={{ bgcolor: '#E74C3C', '&:hover': { bgcolor: '#C0392B' } }}
-            startIcon={<PictureAsPdfIcon />}
-            disabled={exporting}
+          />
+          <ExportActionButton
+            kind="pdf"
+            loading={exporting}
             onClick={() => void handleExport('pdf')}
+          />
+          <ToolbarActionButton
+            startIcon={<RefreshIcon />}
+            onClick={() => void loadVolumes()}
+            disabled={loading}
           >
-            PDF
-          </Button>
-          <Button size="small" variant="outlined" onClick={() => void loadVolumes()} disabled={loading}>
-            Обновить
-          </Button>
+            {ACTION_LABELS.refresh}
+          </ToolbarActionButton>
         </Stack>
       </Stack>
 
@@ -312,11 +306,17 @@ export function ForecastReportView({
 
           {cardRows.map((row) => {
             const { code, name } = resolveDirectionMeta(row);
-            const pv = pvByDirection[String(row.workDirectionId)] ?? [];
-            const eq = eqByDirection[String(row.workDirectionId)] ?? [];
+            const pv = volumesForDirection(pvByDirection, row.workDirectionId);
+            const eq = volumesForDirection(eqByDirection, row.workDirectionId);
+            const volumeRowCount = pv.length + eq.length;
+            const factFo =
+              volumeRowCount > 0
+                ? sumVolumeTotals(pv) + sumVolumeTotals(eq)
+                : row.factPhysicalVolume;
             return (
               <Paper
                 key={`${row.workDirectionId}-${name}`}
+                data-testid={`forecast-report-card-${row.workDirectionId}`}
                 variant="outlined"
                 sx={{
                   mb: 1.5,
@@ -328,7 +328,7 @@ export function ForecastReportView({
                 <ReportDataRow
                   code={code}
                   name={name}
-                  factFo={row.factPhysicalVolumeDisplay ?? row.factPhysicalVolume}
+                  factFo={factFo}
                   normProd={row.normProductivity}
                   baseH={row.baseHours}
                   optH={row.optimisticHours}

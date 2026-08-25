@@ -1,10 +1,12 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Services;
+using EngineeringPerformance.Domain.Enums;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 /// <summary>
-/// Единая точка оценки факта через registry стратегий (UI-агностично к формуле).
+/// Единая точка оценки: факт — PLI.PlannedHours; план/прогноз — live N(V)×сценарий.
+/// Z всегда через CalculatePerformance / ComputeWeightedZFromPerformanceRows.
 /// </summary>
 public sealed class FactAssessmentPipeline : IFactAssessmentPipeline
 {
@@ -36,11 +38,17 @@ public sealed class FactAssessmentPipeline : IFactAssessmentPipeline
             throw new InvalidOperationException("Неизвестная формула оценки.");
 
         var bundle = await _rawLoader.LoadAsync(request.ProjectId, request.VersionId, cancellationToken);
-        var performance = ProjectsPageGridBuilder.BuildPerformance(bundle, _calculationEngine);
-        _ = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _calculationEngine);
+        var isPlan = bundle.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast;
+        var performance = isPlan
+            ? ProjectsPageGridBuilder.BuildPlanPerformance(bundle, _calculationEngine)
+            : ProjectsPageGridBuilder.BuildPerformance(bundle, _calculationEngine);
 
-        // SoT часов = сумма PlannedHours PLI (как ProjectVersionAnalysisService / PDF анализа).
-        var totalHours = FactLaborHoursTotals.FromLaborIntensities(bundle.LaborIntensities);
+        if (!isPlan)
+            _ = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _calculationEngine);
+
+        decimal? totalHours = isPlan
+            ? SumRootSubtreeHours(performance)
+            : FactLaborHoursTotals.FromLaborIntensities(bundle.LaborIntensities);
         var weightedZ = _calculationEngine.ComputeWeightedZFromPerformanceRows(
             performance,
             decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
@@ -49,5 +57,13 @@ public sealed class FactAssessmentPipeline : IFactAssessmentPipeline
             request.FormulaId,
             performance,
             new AssessmentSummaryDto(totalHours, weightedZ));
+    }
+
+    private static decimal? SumRootSubtreeHours(IReadOnlyList<PerformanceRowDto> performance)
+    {
+        var total = performance
+            .Where(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.ParentId is null)
+            .Sum(r => r.SubtreeHours ?? 0m);
+        return total > 0 ? Math.Round(total, 2) : null;
     }
 }

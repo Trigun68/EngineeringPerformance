@@ -115,8 +115,6 @@ export async function fetchPerformanceReport(projectId: number): Promise<Perform
 export async function exportPerformanceReportPdf(projectId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/performance-report/export.pdf`,
-    {},
-    `PerformanceReport_${projectId}.pdf`,
   );
   triggerBrowserDownload(blob, filename);
 }

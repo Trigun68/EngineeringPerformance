@@ -66,7 +66,7 @@ export function ForecastDetailNormDialog({
   return (
     <IicNormHistoryDialog
       open={open}
-      title="Редактировать норму EES"
+      title="Редактировать норму IIC"
       groupLabel={groupLabel}
       unitLabel={unitLabel}
       workDirectionId={workDirectionId}

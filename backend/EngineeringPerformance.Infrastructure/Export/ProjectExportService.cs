@@ -62,28 +62,28 @@ public sealed class ProjectExportService : IProjectExportService
                     col.Spacing(12);
                     col.Item().Element(c => RenderTableSection(c, "Прогноз — итого", new[]
                     {
-                        "Направление", "План. объём", "База ч", "Опт.", "Пессим.",
+                        "Направление", "План. объём", "Опт.", "База ч", "Пессим.",
                     }, data.Forecast.Summary.Select(r => new[]
                     {
                         r.DisplayName,
                         r.FactPhysicalVolume?.ToString("N2") ?? "—",
-                        r.BaseHours?.ToString("N2") ?? "—",
                         r.OptimisticHours?.ToString("N2") ?? "—",
+                        r.BaseHours?.ToString("N2") ?? "—",
                         r.PessimisticHours?.ToString("N2") ?? "—",
                     })));
 
                     col.Item().Element(c => RenderTableSection(c, "Факт — итого", new[]
                     {
-                        "Направление", "ФО", "Часы", "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+                        "Направление", "ФО", "Часы", "План.Труд.Оптим.", "План.Труд.Баз.", "План.Труд.Песс.",
                         "Z", "Интерпретация",
                     }, data.Fact.Performance.Select(r => new[]
                     {
                         r.WorkDirectionName,
                         r.FactPhysicalVolume?.ToString("N2") ?? "—",
                         r.FactLaborHours?.ToString("N2") ?? "—",
-                        r.PessimisticHours?.ToString("N2") ?? "—",
-                        r.BaseHours?.ToString("N2") ?? "—",
                         r.OptimisticHours?.ToString("N2") ?? "—",
+                        r.BaseHours?.ToString("N2") ?? "—",
+                        r.PessimisticHours?.ToString("N2") ?? "—",
                         r.ZScore?.ToString("N4") ?? "—",
                         r.Interpretation?.ToRussian() ?? "—",
                     })));
@@ -160,67 +160,37 @@ public sealed class ProjectExportService : IProjectExportService
         return stream.ToArray();
     }
 
+    public async Task<byte[]> ExportForecastSummaryExcelAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default)
+    {
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Прогноз трудозатрат", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(ForecastTableDocumentBuilder.BuildSummary(data.Forecast.Summary, title), headerLines));
+    }
+
+    public async Task<byte[]> ExportForecastSummaryPdfAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default)
+    {
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Прогноз трудозатрат", cancellationToken);
+        return ForecastTableRenderers.ToPdf(
+            WithBanner(ForecastTableDocumentBuilder.BuildSummary(data.Forecast.Summary, title), headerLines));
+    }
+
     public async Task<byte[]> ExportForecastFacilityExcelAsync(
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default)
     {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
-
-        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("По объектам");
-        sheet.Cell(1, 1).Value = $"Прогноз трудозатрат по объектам: {projectCode} ({versionName})";
-        sheet.Cell(1, 1).Style.Font.Bold = true;
-        sheet.Cell(1, 1).Style.Font.FontSize = 13;
-        sheet.Range(1, 1, 1, 5).Merge();
-
-        var headers = new[] { "Шифр объекта", "Наименование объекта", "Базовый", "Оптимистический", "Пессимистический" };
-        for (var c = 0; c < headers.Length; c++)
-        {
-            sheet.Cell(2, c + 1).Value = headers[c];
-            sheet.Cell(2, c + 1).Style.Font.Bold = true;
-            sheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
-            sheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
-        }
-
-        var row = 3;
-        decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
-        foreach (var item in data.Forecast.Facility)
-        {
-            var baseH = item.BaseHours ?? item.LaborHours;
-            sheet.Cell(row, 1).Value = item.FacilityCode;
-            sheet.Cell(row, 2).Value = item.FacilityName;
-            if (baseH.HasValue) sheet.Cell(row, 3).Value = Math.Round(baseH.Value, 0);
-            if (item.OptimisticHours.HasValue) sheet.Cell(row, 4).Value = Math.Round(item.OptimisticHours.Value, 0);
-            if (item.PessimisticHours.HasValue) sheet.Cell(row, 5).Value = Math.Round(item.PessimisticHours.Value, 0);
-            if (row % 2 == 1)
-                sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
-            totalBase += baseH ?? 0m;
-            totalOpt += item.OptimisticHours ?? 0m;
-            totalPes += item.PessimisticHours ?? 0m;
-            row++;
-        }
-
-        sheet.Cell(row, 1).Value = "ИТОГО";
-        sheet.Cell(row, 3).Value = Math.Round(totalBase, 0);
-        sheet.Cell(row, 4).Value = Math.Round(totalOpt, 0);
-        sheet.Cell(row, 5).Value = Math.Round(totalPes, 0);
-        sheet.Row(row).Style.Font.Bold = true;
-        sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
-        sheet.Row(row).Style.Font.FontColor = XLColor.White;
-
-        sheet.Column(1).Width = 12;
-        sheet.Column(2).Width = 55;
-        sheet.Column(3).Width = 14;
-        sheet.Column(4).Width = 14;
-        sheet.Column(5).Width = 14;
-        sheet.SheetView.FreezeRows(2);
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Прогноз трудозатрат по объектам", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(ForecastTableDocumentBuilder.BuildFacility(data.Forecast.Facility, title), headerLines));
     }
 
     public async Task<byte[]> ExportForecastFacilityPdfAsync(
@@ -228,24 +198,10 @@ public sealed class ProjectExportService : IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default)
     {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
-
-        var document = Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(30);
-                page.DefaultTextStyle(x => x.FontSize(9));
-                page.Header().Column(col =>
-                {
-                    col.Item().Text($"Прогноз по объектам: {projectCode} ({versionName})").SemiBold().FontSize(13);
-                });
-                page.Content().Element(c => RenderFacilityForecastTable(c, data.Forecast.Facility));
-            });
-        });
-        return document.GeneratePdf();
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Прогноз трудозатрат по объектам", cancellationToken);
+        return ForecastTableRenderers.ToPdf(
+            WithBanner(ForecastTableDocumentBuilder.BuildFacility(data.Forecast.Facility, title), headerLines));
     }
 
     public async Task<byte[]> ExportForecastDetailExcelAsync(
@@ -253,23 +209,10 @@ public sealed class ProjectExportService : IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default)
     {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
-
-        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("Детально");
-        sheet.Cell(1, 1).Value = $"Детализация прогноза: {projectCode} ({versionName})";
-        sheet.Cell(1, 1).Style.Font.Bold = true;
-        sheet.Cell(1, 1).Style.Font.FontSize = 13;
-        sheet.Range(1, 1, 1, 22).Merge();
-
-        WriteDetailSheet(sheet, data.Forecast.Detail, includeForecastHours: true, headerRow: 2);
-        sheet.SheetView.FreezeRows(2);
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Детализация прогноза", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(ForecastTableDocumentBuilder.BuildDetail(data.Forecast.Detail, title), headerLines));
     }
 
     public async Task<byte[]> ExportForecastDetailPdfAsync(
@@ -277,24 +220,24 @@ public sealed class ProjectExportService : IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default)
     {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (data, title, headerLines) = await LoadForecastTableAsync(
+            projectId, versionId, "Детализация прогноза", cancellationToken);
+        return ForecastTableRenderers.ToPdf(
+            WithBanner(ForecastTableDocumentBuilder.BuildDetail(data.Forecast.Detail, title), headerLines));
+    }
 
-        var document = Document.Create(container =>
-        {
-            container.Page(page =>
-            {
-                page.Size(PageSizes.A4.Landscape());
-                page.Margin(30);
-                page.DefaultTextStyle(x => x.FontSize(8));
-                page.Header().Column(col =>
-                {
-                    col.Item().Text($"Детализация прогноза: {projectCode} ({versionName})").SemiBold().FontSize(13);
-                });
-                page.Content().Element(c => RenderDetailForecastTable(c, data.Forecast.Detail));
-            });
-        });
-        return document.GeneratePdf();
+    private static ForecastTableDocument WithBanner(ForecastTableDocument document, IReadOnlyList<string> headerLines) =>
+        document with { HeaderLines = headerLines };
+
+    private async Task<(ProjectsPageDataDto Data, string Title, IReadOnlyList<string> HeaderLines)> LoadForecastTableAsync(
+        int projectId,
+        int versionId,
+        string caption,
+        CancellationToken cancellationToken)
+    {
+        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
+        var (projectCode, projectName, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        return (data, $"{caption}: {projectCode} ({versionName})", TabularReportBanner.Lines(projectCode, projectName, versionName));
     }
 
     public async Task<byte[]> ExportForecastDetailSummaryTableAsync(
@@ -303,7 +246,7 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken = default)
     {
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
 
         var assessed = data.Forecast.Detail
             .Where(r => string.Equals(r.IsAssessment, "Да", StringComparison.Ordinal))
@@ -362,123 +305,61 @@ public sealed class ProjectExportService : IProjectExportService
             $"Сводная детализация сравнения версий {versionAId} / {versionBId}");
     }
 
+    public async Task<byte[]> ExportFactSummaryExcelAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        await RenderFactSummaryAsync(projectId, versionId, excel: true, cancellationToken);
+
+    public async Task<byte[]> ExportFactSummaryPdfAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        await RenderFactSummaryAsync(projectId, versionId, excel: false, cancellationToken);
+
     public async Task<byte[]> ExportFactFacilityExcelAsync(
         int projectId,
         int versionId,
-        CancellationToken cancellationToken = default)
-    {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        CancellationToken cancellationToken = default) =>
+        await RenderFactFacilityAsync(projectId, versionId, excel: true, cancellationToken);
 
-        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("По объектам");
-        sheet.Cell(1, 1).Value = $"Оценка факта по объектам: {projectCode} ({versionName})";
-        sheet.Cell(1, 1).Style.Font.Bold = true;
-        sheet.Cell(1, 1).Style.Font.FontSize = 13;
-        sheet.Range(1, 1, 1, 8).Merge();
-
-        var headers = new[]
-        {
-            "Шифр объекта", "Наименование объекта", "Факт.трудоёмк., ч",
-            "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
-            "Z-оценка", "Интерпретация",
-        };
-        for (var c = 0; c < headers.Length; c++)
-        {
-            sheet.Cell(2, c + 1).Value = headers[c];
-            sheet.Cell(2, c + 1).Style.Font.Bold = true;
-            sheet.Cell(2, c + 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
-            sheet.Cell(2, c + 1).Style.Font.FontColor = XLColor.White;
-        }
-
-        var row = 3;
-        decimal totalHours = 0m;
-        decimal totalPes = 0m;
-        decimal totalBase = 0m;
-        decimal totalOpt = 0m;
-        foreach (var item in data.Fact.Facility)
-        {
-            sheet.Cell(row, 1).Value = item.FacilityCode;
-            sheet.Cell(row, 2).Value = item.FacilityName;
-            if (item.LaborHours.HasValue)
-            {
-                sheet.Cell(row, 3).Value = Math.Round(item.LaborHours.Value, 2);
-                totalHours += item.LaborHours.Value;
-            }
-
-            if (item.PessimisticHours.HasValue)
-            {
-                sheet.Cell(row, 4).Value = Math.Round(item.PessimisticHours.Value, 2);
-                totalPes += item.PessimisticHours.Value;
-            }
-
-            if (item.BaseHours.HasValue)
-            {
-                sheet.Cell(row, 5).Value = Math.Round(item.BaseHours.Value, 2);
-                totalBase += item.BaseHours.Value;
-            }
-
-            if (item.OptimisticHours.HasValue)
-            {
-                sheet.Cell(row, 6).Value = Math.Round(item.OptimisticHours.Value, 2);
-                totalOpt += item.OptimisticHours.Value;
-            }
-
-            if (item.ZScore.HasValue)
-                sheet.Cell(row, 7).Value = item.ZScore.Value;
-            sheet.Cell(row, 8).Value = item.Interpretation ?? string.Empty;
-            if (row % 2 == 1)
-                sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#F8FAFC");
-            row++;
-        }
-
-        sheet.Cell(row, 1).Value = "ИТОГО";
-        sheet.Cell(row, 3).Value = Math.Round(totalHours, 2);
-        sheet.Cell(row, 4).Value = Math.Round(totalPes, 2);
-        sheet.Cell(row, 5).Value = Math.Round(totalBase, 2);
-        sheet.Cell(row, 6).Value = Math.Round(totalOpt, 2);
-        sheet.Row(row).Style.Font.Bold = true;
-        sheet.Row(row).Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
-        sheet.Row(row).Style.Font.FontColor = XLColor.White;
-
-        sheet.Column(1).Width = 12;
-        sheet.Column(2).Width = 55;
-        sheet.Column(3).Width = 16;
-        sheet.Column(4).Width = 16;
-        sheet.Column(5).Width = 16;
-        sheet.Column(6).Width = 16;
-        sheet.Column(7).Width = 12;
-        sheet.Column(8).Width = 22;
-        sheet.SheetView.FreezeRows(2);
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
-    }
+    public async Task<byte[]> ExportFactFacilityPdfAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        await RenderFactFacilityAsync(projectId, versionId, excel: false, cancellationToken);
 
     public async Task<byte[]> ExportFactDetailExcelAsync(
         int projectId,
         int versionId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        await RenderFactDetailAsync(projectId, versionId, excel: true, cancellationToken);
+
+    public async Task<byte[]> ExportFactDetailPdfAsync(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken = default) =>
+        await RenderFactDetailAsync(projectId, versionId, excel: false, cancellationToken);
+
+    private async Task<byte[]> RenderFactSummaryAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
     {
-        var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Оценка факта", cancellationToken);
+        var document = WithBanner(FactTableDocumentBuilder.BuildSummary(data.Fact.Performance, title), headerLines);
+        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
+    }
 
-        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("Детально");
-        sheet.Cell(1, 1).Value = $"Детализация оценки факта: {projectCode} ({versionName})";
-        sheet.Cell(1, 1).Style.Font.Bold = true;
-        sheet.Cell(1, 1).Style.Font.FontSize = 13;
-        sheet.Range(1, 1, 1, 22).Merge();
+    private async Task<byte[]> RenderFactFacilityAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
+    {
+        var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Оценка факта по объектам", cancellationToken);
+        var document = WithBanner(FactTableDocumentBuilder.BuildFacility(data.Fact.Facility, title), headerLines);
+        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
+    }
 
-        WriteFactDetailSheet(sheet, data.Fact.Detail, headerRow: 2);
-        sheet.SheetView.FreezeRows(2);
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
+    private async Task<byte[]> RenderFactDetailAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
+    {
+        var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Детализация оценки факта", cancellationToken);
+        var document = WithBanner(FactTableDocumentBuilder.BuildDetail(data.Fact.Detail, title), headerLines);
+        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
     }
 
     public async Task<byte[]> ExportFactDetailSummaryTableAsync(
@@ -487,7 +368,7 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken = default)
     {
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
 
         var inputRows = data.Fact.Detail
             .Where(r => string.Equals(r.IsAssessment, "Да", StringComparison.Ordinal))
@@ -522,10 +403,13 @@ public sealed class ProjectExportService : IProjectExportService
         var ws = workbook.Worksheets.Add("Сводная");
 
         const int colsPerBlock = 6;
-        var colCount = Math.Max(1, 1 + table.Columns.Count * colsPerBlock + 1);
+        const int laborTotalSpan = 4;
+        var colCount = Math.Max(1, 1 + table.Columns.Count * colsPerBlock + laborTotalSpan);
         ws.Cell(1, 1).Value = $"Сводная таблица факта: {table.ProjectCode} ({table.VersionName})";
         ws.Cell(1, 1).Style.Font.Bold = true;
         ws.Cell(1, 1).Style.Font.FontSize = 13;
+        ws.Cell(1, 1).Style.Font.FontColor = XLColor.White;
+        ws.Cell(1, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
         ws.Range(1, 1, 1, colCount).Merge();
 
         ws.Cell(2, 1).Value = "Объект";
@@ -550,39 +434,50 @@ public sealed class ProjectExportService : IProjectExportService
         }
 
         var laborTotalCol = blockCol;
-        ws.Cell(2, laborTotalCol).Value = "Итого факт Тр.";
-        ws.Range(2, laborTotalCol, 3, laborTotalCol).Merge();
-        var laborHeader = ws.Range(2, laborTotalCol, 3, laborTotalCol);
+        ws.Cell(2, laborTotalCol).Value = "Итого";
+        ws.Range(2, laborTotalCol, 2, laborTotalCol + laborTotalSpan - 1).Merge();
+        var laborHeader = ws.Range(2, laborTotalCol, 2, laborTotalCol + laborTotalSpan - 1);
         laborHeader.Style.Font.Bold = true;
-        laborHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+        laborHeader.Style.Fill.BackgroundColor = XLColor.FromHtml("#2C3E50");
         laborHeader.Style.Font.FontColor = XLColor.White;
         laborHeader.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-        laborHeader.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
 
-        ws.Cell(3, 1).Style.Fill.BackgroundColor = XLColor.FromHtml("#34495E");
+        const string headerFill = "#34495E";
+        ws.Cell(3, 1).Style.Fill.BackgroundColor = XLColor.FromHtml(headerFill);
         blockCol = 2;
         foreach (var _ in table.Columns)
         {
             var labels = new[]
             {
-                ("ФО", "#34495E", XLColor.White),
-                ("План.Труд.Песс.", "#ffebee", XLColor.FromHtml("#2C3E50")),
-                ("План.Труд.Баз.", "#e8f5e9", XLColor.FromHtml("#2C3E50")),
-                ("План.Труд.Оптим.", "#e3f2fd", XLColor.FromHtml("#2C3E50")),
-                ("Факт Тр.", "#34495E", XLColor.White),
-                ("Z", "#34495E", XLColor.White),
+                "ФО",
+                "План.Труд.Оптим.",
+                "План.Труд.Баз.",
+                "План.Труд.Песс.",
+                "Факт Тр.",
+                "Z",
             };
             for (var i = 0; i < labels.Length; i++)
             {
                 var cell = ws.Cell(3, blockCol + i);
-                cell.Value = labels[i].Item1;
+                cell.Value = labels[i];
                 cell.Style.Font.Bold = true;
-                cell.Style.Fill.BackgroundColor = XLColor.FromHtml(labels[i].Item2);
-                cell.Style.Font.FontColor = labels[i].Item3;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml(headerFill);
+                cell.Style.Font.FontColor = XLColor.White;
                 cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             }
 
             blockCol += colsPerBlock;
+        }
+
+        var totalLabels = new[] { "Оптим.", "Баз.", "Песс.", "Факт" };
+        for (var i = 0; i < totalLabels.Length; i++)
+        {
+            var cell = ws.Cell(3, laborTotalCol + i);
+            cell.Value = totalLabels[i];
+            cell.Style.Font.Bold = true;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml(headerFill);
+            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
 
         var rowIdx = 4;
@@ -592,7 +487,7 @@ public sealed class ProjectExportService : IProjectExportService
         var totalBase = new decimal[columnCount];
         var totalOpt = new decimal[columnCount];
         var totalFact = new decimal[columnCount];
-        decimal grandFactLabor = 0m;
+        decimal grandFactLabor = 0m, grandOptLabor = 0m, grandBaseLabor = 0m, grandPesLabor = 0m;
 
         foreach (var dataRow in table.Rows)
         {
@@ -608,9 +503,12 @@ public sealed class ProjectExportService : IProjectExportService
                 totalFact[i] += cell.FactHours;
 
                 WriteSummaryNumber(ws, rowIdx, cellCol, cell.PhysicalVolume);
-                WriteSummaryNumber(ws, rowIdx, cellCol + 1, cell.PessimisticHours);
+                WriteSummaryNumber(ws, rowIdx, cellCol + 1, cell.OptimisticHours);
+                PaintScenario(ws, rowIdx, cellCol + 1, "#e3f2fd");
                 WriteSummaryNumber(ws, rowIdx, cellCol + 2, cell.BaseHours);
-                WriteSummaryNumber(ws, rowIdx, cellCol + 3, cell.OptimisticHours);
+                PaintScenario(ws, rowIdx, cellCol + 2, "#e8f5e9");
+                WriteSummaryNumber(ws, rowIdx, cellCol + 3, cell.PessimisticHours);
+                PaintScenario(ws, rowIdx, cellCol + 3, "#ffebee");
                 WriteSummaryNumber(ws, rowIdx, cellCol + 4, cell.FactHours);
                 if (cell.ZScore.HasValue)
                 {
@@ -622,7 +520,13 @@ public sealed class ProjectExportService : IProjectExportService
                 cellCol += colsPerBlock;
             }
 
-            WriteSummaryNumber(ws, rowIdx, laborTotalCol, dataRow.FactLaborHoursTotal);
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, dataRow.OptimisticLaborHoursTotal);
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 1, dataRow.BaseLaborHoursTotal);
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 2, dataRow.PessimisticLaborHoursTotal);
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 3, dataRow.FactLaborHoursTotal);
+            grandOptLabor += dataRow.OptimisticLaborHoursTotal;
+            grandBaseLabor += dataRow.BaseLaborHoursTotal;
+            grandPesLabor += dataRow.PessimisticLaborHoursTotal;
             grandFactLabor += dataRow.FactLaborHoursTotal;
 
             if (rowIdx % 2 == 0)
@@ -641,14 +545,17 @@ public sealed class ProjectExportService : IProjectExportService
             for (var i = 0; i < columnCount; i++)
             {
                 WriteSummaryNumber(ws, rowIdx, totalCol, Math.Round(totalVolumes[i], 0, MidpointRounding.AwayFromZero));
-                WriteSummaryNumber(ws, rowIdx, totalCol + 1, Math.Round(totalPes[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 1, Math.Round(totalOpt[i], 0, MidpointRounding.AwayFromZero));
                 WriteSummaryNumber(ws, rowIdx, totalCol + 2, Math.Round(totalBase[i], 0, MidpointRounding.AwayFromZero));
-                WriteSummaryNumber(ws, rowIdx, totalCol + 3, Math.Round(totalOpt[i], 0, MidpointRounding.AwayFromZero));
+                WriteSummaryNumber(ws, rowIdx, totalCol + 3, Math.Round(totalPes[i], 0, MidpointRounding.AwayFromZero));
                 WriteSummaryNumber(ws, rowIdx, totalCol + 4, Math.Round(totalFact[i], 0, MidpointRounding.AwayFromZero));
                 totalCol += colsPerBlock;
             }
 
-            WriteSummaryNumber(ws, rowIdx, laborTotalCol, Math.Round(grandFactLabor, 0, MidpointRounding.AwayFromZero));
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol, Math.Round(grandOptLabor, 0, MidpointRounding.AwayFromZero));
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 1, Math.Round(grandBaseLabor, 0, MidpointRounding.AwayFromZero));
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 2, Math.Round(grandPesLabor, 0, MidpointRounding.AwayFromZero));
+            WriteSummaryNumber(ws, rowIdx, laborTotalCol + 3, Math.Round(grandFactLabor, 0, MidpointRounding.AwayFromZero));
             rowIdx++;
         }
 
@@ -664,6 +571,13 @@ public sealed class ProjectExportService : IProjectExportService
 
         ws.SheetView.FreezeRows(3);
         return workbook;
+    }
+
+    private static void PaintScenario(IXLWorksheet ws, int row, int col, string hex)
+    {
+        if (ws.Cell(row, col).IsEmpty())
+            return;
+        ws.Cell(row, col).Style.Fill.BackgroundColor = XLColor.FromHtml(hex);
     }
 
     private const string SummaryIntegerNumberFormat = "#,##0";
@@ -688,7 +602,7 @@ public sealed class ProjectExportService : IProjectExportService
             "ID по каталогу", "TAG", "ID работы", "Наименование", "Комментарий",
             "Описательная часть", "Код", "Наименование ФО", "Оценка", "Коэфф.",
             "Группа ФО IIC", "Ед. изм.", "Производит.", "СО", "Кол-во",
-            "Факт ч", "План.Труд.Песс.", "План.Труд.Баз.", "План.Труд.Оптим.",
+            "Факт ч", "План.Труд.Оптим.", "План.Труд.Баз.", "План.Труд.Песс.",
             "Факт произв.", "Z", "Интерпретация",
         };
 
@@ -740,9 +654,9 @@ public sealed class ProjectExportService : IProjectExportService
             Set(row.NormStdDev);
             Set(row.Quantity);
             Set(row.FactLaborHours);
-            Set(row.PessimisticHours);
-            Set(row.BaseHours);
             Set(row.OptimisticHours);
+            Set(row.BaseHours);
+            Set(row.PessimisticHours);
             Set(row.FactProductivity);
             Set(row.ZScore);
             Set(row.Interpretation);
@@ -905,8 +819,8 @@ public sealed class ProjectExportService : IProjectExportService
         {
             "Шифр объекта", "Наименование объекта", "Группа ФО IIC", "Код позиции", "Наименование позиции",
             "ID работы", "Наименование работы", "ФО A", "ФО B",
-            "План.Труд. (Песс. v. А)", "План.Труд. (Баз. v. А)", "План.Труд. (Опт. v. А)",
-            "План.Труд. (Песс. v. Б)", "План.Труд. (Баз. v. Б)", "План.Труд. (Опт. v. Б)",
+            "План.Труд. (Опт. v. А)", "План.Труд. (Баз. v. А)", "План.Труд. (Песс. v. А)",
+            "План.Труд. (Опт. v. Б)", "План.Труд. (Баз. v. Б)", "План.Труд. (Песс. v. Б)",
             "Факт. труд A", "Факт. труд B", "План. произв. A", "План. произв. B",
             "Факт. произв. A", "Факт. произв. B", "Z A", "Z B", "Наличие",
         };
@@ -938,12 +852,12 @@ public sealed class ProjectExportService : IProjectExportService
             sheet.Cell(rowNumber, 7).Value = row.WorkName;
             WriteNullableNumber(sheet, rowNumber, 8, row.PhysicalVolumeA);
             WriteNullableNumber(sheet, rowNumber, 9, row.PhysicalVolumeB);
-            WriteNullableNumber(sheet, rowNumber, 10, row.PlannedLaborHoursPessimisticA);
+            WriteNullableNumber(sheet, rowNumber, 10, row.PlannedLaborHoursOptimisticA);
             WriteNullableNumber(sheet, rowNumber, 11, row.PlannedLaborHoursA);
-            WriteNullableNumber(sheet, rowNumber, 12, row.PlannedLaborHoursOptimisticA);
-            WriteNullableNumber(sheet, rowNumber, 13, row.PlannedLaborHoursPessimisticB);
+            WriteNullableNumber(sheet, rowNumber, 12, row.PlannedLaborHoursPessimisticA);
+            WriteNullableNumber(sheet, rowNumber, 13, row.PlannedLaborHoursOptimisticB);
             WriteNullableNumber(sheet, rowNumber, 14, row.PlannedLaborHoursB);
-            WriteNullableNumber(sheet, rowNumber, 15, row.PlannedLaborHoursOptimisticB);
+            WriteNullableNumber(sheet, rowNumber, 15, row.PlannedLaborHoursPessimisticB);
             WriteNullableNumber(sheet, rowNumber, 16, row.FactLaborHoursA);
             WriteNullableNumber(sheet, rowNumber, 17, row.FactLaborHoursB);
             WriteNullableNumber(sheet, rowNumber, 18, row.PlannedProductivityA);
@@ -988,16 +902,16 @@ public sealed class ProjectExportService : IProjectExportService
         var sheet = workbook.Worksheets.Add("Forecast");
         sheet.Cell(1, 1).Value = "Направление";
         sheet.Cell(1, 2).Value = "План. объём";
-        sheet.Cell(1, 3).Value = "База ч";
-        sheet.Cell(1, 4).Value = "Опт.";
+        sheet.Cell(1, 3).Value = "Опт.";
+        sheet.Cell(1, 4).Value = "База ч";
         sheet.Cell(1, 5).Value = "Пессим.";
         var row = 2;
         foreach (var item in data.Forecast.Summary)
         {
             sheet.Cell(row, 1).Value = item.DisplayName;
             sheet.Cell(row, 2).Value = item.FactPhysicalVolume;
-            sheet.Cell(row, 3).Value = item.BaseHours;
-            sheet.Cell(row, 4).Value = item.OptimisticHours;
+            sheet.Cell(row, 3).Value = item.OptimisticHours;
+            sheet.Cell(row, 4).Value = item.BaseHours;
             sheet.Cell(row, 5).Value = item.PessimisticHours;
             row++;
         }
@@ -1009,9 +923,9 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Cell(1, 1).Value = "Направление";
         sheet.Cell(1, 2).Value = "ФО";
         sheet.Cell(1, 3).Value = "Часы";
-        sheet.Cell(1, 4).Value = "План.Труд.Песс.";
+        sheet.Cell(1, 4).Value = "План.Труд.Оптим.";
         sheet.Cell(1, 5).Value = "План.Труд.Баз.";
-        sheet.Cell(1, 6).Value = "План.Труд.Оптим.";
+        sheet.Cell(1, 6).Value = "План.Труд.Песс.";
         sheet.Cell(1, 7).Value = "Z";
         var row = 2;
         foreach (var item in data.Fact.Performance)
@@ -1019,9 +933,9 @@ public sealed class ProjectExportService : IProjectExportService
             sheet.Cell(row, 1).Value = item.WorkDirectionName;
             sheet.Cell(row, 2).Value = item.FactPhysicalVolume;
             sheet.Cell(row, 3).Value = item.FactLaborHours;
-            sheet.Cell(row, 4).Value = item.PessimisticHours;
+            sheet.Cell(row, 4).Value = item.OptimisticHours;
             sheet.Cell(row, 5).Value = item.BaseHours;
-            sheet.Cell(row, 6).Value = item.OptimisticHours;
+            sheet.Cell(row, 6).Value = item.PessimisticHours;
             sheet.Cell(row, 7).Value = item.ZScore;
             row++;
         }
@@ -1039,7 +953,7 @@ public sealed class ProjectExportService : IProjectExportService
             "ID по каталогу", "TAG", "ID работы", "Наименование", "Комментарий",
             "Описательная часть", "Код", "Наименование ФО", "Оценка", "Коэфф.",
             "Группа ФО IIC", "Ед. изм.", "Производит.", "СО", "Кол-во",
-            "Базовый", "Оптимистический", "Пессимистический",
+            "Оптимистический", "Базовый", "Пессимистический",
         };
 
         if (!includeForecastHours)
@@ -1094,8 +1008,8 @@ public sealed class ProjectExportService : IProjectExportService
             Set(row.Quantity);
             if (includeForecastHours)
             {
-                Set(row.BaseHours);
                 Set(row.OptimisticHours);
+                Set(row.BaseHours);
                 Set(row.PessimisticHours);
             }
             else
@@ -1112,111 +1026,6 @@ public sealed class ProjectExportService : IProjectExportService
         sheet.Column(2).Width = 28;
         for (var c = 3; c <= headers.Length; c++)
             sheet.Column(c).Width = 14;
-    }
-
-    private static void RenderFacilityForecastTable(
-        IContainer container,
-        IReadOnlyList<ProjectsPageFacilityRowDto> rows)
-    {
-        container.Column(col =>
-        {
-            col.Item().Text("Прогноз по объектам").SemiBold().FontSize(11);
-            col.Item().Table(table =>
-            {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(5);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                });
-
-                var headers = new[] { "Шифр объекта", "Наименование объекта", "Базовый", "Оптимистический", "Пессимистический" };
-                table.Header(header =>
-                {
-                    foreach (var h in headers)
-                        header.Cell().Background(Colors.Grey.Lighten2).Padding(4).Text(h).SemiBold();
-                });
-
-                decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
-                foreach (var f in rows)
-                {
-                    var baseH = f.BaseHours ?? f.LaborHours;
-                    totalBase += baseH ?? 0m;
-                    totalOpt += f.OptimisticHours ?? 0m;
-                    totalPes += f.PessimisticHours ?? 0m;
-                    table.Cell().Padding(3).Text(f.FacilityCode);
-                    table.Cell().Padding(3).Text(f.FacilityName);
-                    table.Cell().Padding(3).AlignRight().Text(baseH?.ToString("N0") ?? "—");
-                    table.Cell().Padding(3).AlignRight().Text(f.OptimisticHours?.ToString("N0") ?? "—");
-                    table.Cell().Padding(3).AlignRight().Text(f.PessimisticHours?.ToString("N0") ?? "—");
-                }
-
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text("ИТОГО").SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(4).Text(string.Empty);
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(4).AlignRight().Text(totalBase.ToString("N0")).SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(4).AlignRight().Text(totalOpt.ToString("N0")).SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(4).AlignRight().Text(totalPes.ToString("N0")).SemiBold();
-            });
-        });
-    }
-
-    private static void RenderDetailForecastTable(
-        IContainer container,
-        IReadOnlyList<ProjectsPageDetailRowDto> rows)
-    {
-        container.Column(col =>
-        {
-            col.Item().Text("Детализация прогноза").SemiBold().FontSize(11);
-            col.Item().Table(table =>
-            {
-                table.ColumnsDefinition(columns =>
-                {
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(2);
-                    columns.RelativeColumn(2);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                    columns.RelativeColumn(1);
-                });
-
-                var headers = new[]
-                {
-                    "Шифр объекта", "Наименование объекта", "Наименование ФО",
-                    "Кол-во", "Базовый", "Оптимистический", "Пессимистический",
-                };
-                table.Header(header =>
-                {
-                    foreach (var h in headers)
-                        header.Cell().Background(Colors.Grey.Lighten2).Padding(3).Text(h).SemiBold();
-                });
-
-                decimal totalBase = 0m, totalOpt = 0m, totalPes = 0m;
-                foreach (var row in rows)
-                {
-                    totalBase += row.BaseHours ?? 0m;
-                    totalOpt += row.OptimisticHours ?? 0m;
-                    totalPes += row.PessimisticHours ?? 0m;
-                    table.Cell().Padding(2).Text(row.FacilityCode);
-                    table.Cell().Padding(2).Text(row.FacilityName);
-                    table.Cell().Padding(2).Text(row.PvName);
-                    table.Cell().Padding(2).AlignRight().Text(row.Quantity.ToString("N2"));
-                    table.Cell().Padding(2).AlignRight().Text(row.BaseHours?.ToString("N0") ?? "—");
-                    table.Cell().Padding(2).AlignRight().Text(row.OptimisticHours?.ToString("N0") ?? "—");
-                    table.Cell().Padding(2).AlignRight().Text(row.PessimisticHours?.ToString("N0") ?? "—");
-                }
-
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).Text("ИТОГО").SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).Text(string.Empty);
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).Text(string.Empty);
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).Text(string.Empty);
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).AlignRight().Text(totalBase.ToString("N0")).SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).AlignRight().Text(totalOpt.ToString("N0")).SemiBold();
-                table.Cell().Background(Colors.Blue.Lighten4).Padding(3).AlignRight().Text(totalPes.ToString("N0")).SemiBold();
-            });
-        });
     }
 
     private static void RenderTableSection(

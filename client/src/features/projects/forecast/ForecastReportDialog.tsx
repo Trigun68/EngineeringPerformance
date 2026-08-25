@@ -1,5 +1,6 @@
 import { Dialog, DialogContent, DialogTitle, IconButton, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import { formatProjectModalTitle } from '../utils/projectModalTitle';
 import { ForecastReportView } from './ForecastReportView';
 import type { ProjectsPageForecastSummaryRow } from '../types';
 
@@ -24,6 +25,12 @@ export function ForecastReportDialog({
   summaryRows,
   onClose,
 }: ForecastReportDialogProps) {
+  const title = formatProjectModalTitle('Прогноз трудозатрат', {
+    code: projectCode,
+    name: projectName,
+    version: versionLabel,
+  });
+
   return (
     <Dialog
       open={open}
@@ -33,9 +40,9 @@ export function ForecastReportDialog({
       data-testid="forecast-report-dialog"
       PaperProps={{ sx: { height: '90vh' } }}
     >
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
-        <Typography variant="h6" component="span">
-          Прогноз трудозатрат
+      <DialogTitle sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', pr: 1 }}>
+        <Typography variant="h6" component="span" sx={{ flex: 1, pr: 1, whiteSpace: 'normal' }}>
+          {title}
         </Typography>
         <IconButton aria-label="Закрыть" onClick={onClose} size="small">
           <CloseIcon />
@@ -46,9 +53,6 @@ export function ForecastReportDialog({
           <ForecastReportView
             projectId={projectId}
             versionId={versionId}
-            projectName={projectName}
-            projectCode={projectCode}
-            versionLabel={versionLabel}
             summaryRows={summaryRows}
           />
         )}

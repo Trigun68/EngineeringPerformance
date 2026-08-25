@@ -1,4 +1,5 @@
-import { Box, Checkbox, Divider, FormControlLabel, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Box, Checkbox, Divider, FormControlLabel, IconButton, Stack, Tooltip } from '@mui/material';
+import { ExportActionButton } from '../../components/export/ExportActionButton';
 
 const ICON = (name: string) => `/assets/icons/${name}`;
 
@@ -89,16 +90,7 @@ export function DirectoryToolbar({
       )}
       {showExcel && (
         <Box sx={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-          <Tooltip title="Выгрузить в Excel">
-            <IconButton size="small" onClick={onExport} sx={{ borderRadius: 1, px: 1 }} aria-label="Выгрузить в Excel">
-              <Stack direction="row" alignItems="center" spacing={0.5}>
-                <Box component="img" src={ICON('icons8-save-96.png')} alt="" sx={{ width: 20, height: 20 }} />
-                <Typography variant="body2" sx={{ fontSize: 13 }}>
-                  Выгрузить в Excel
-                </Typography>
-              </Stack>
-            </IconButton>
-          </Tooltip>
+          <ExportActionButton kind="excel" onClick={onExport} />
         </Box>
       )}
     </Stack>

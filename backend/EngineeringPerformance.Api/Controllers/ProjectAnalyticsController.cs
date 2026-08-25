@@ -1,5 +1,6 @@
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,19 +18,22 @@ public sealed class ProjectAnalyticsController : ControllerBase
     private readonly IProjectForecastService _forecast;
     private readonly IForecastPlannedVolumePersistenceService _plannedVolumePersistence;
     private readonly IAnalyticsExportService _export;
+    private readonly IExportFileNameService _fileNames;
 
     public ProjectAnalyticsController(
         IPerformanceService performance,
         IProjectVersionAnalysisService analysis,
         IProjectForecastService forecast,
         IForecastPlannedVolumePersistenceService plannedVolumePersistence,
-        IAnalyticsExportService export)
+        IAnalyticsExportService export,
+        IExportFileNameService fileNames)
     {
         _performance = performance;
         _analysis = analysis;
         _forecast = forecast;
         _plannedVolumePersistence = plannedVolumePersistence;
         _export = export;
+        _fileNames = fileNames;
     }
 
     [HttpGet("performance")]
@@ -127,10 +131,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportAnalysisExcelAsync(projectId, versionId, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"analysis-{projectId}-{versionId}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Fact,
+            "xlsx",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/analysis.pdf")]
@@ -141,7 +149,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportAnalysisPdfAsync(projectId, versionId, cancellationToken);
-        return File(bytes, "application/pdf", $"analysis-{projectId}-{versionId}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Fact,
+            "pdf",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("export/forecast.xlsx")]
@@ -152,10 +167,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportForecastExcelAsync(projectId, versionId, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"forecast-{projectId}-{versionId}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Forecast,
+            "xlsx",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/forecast.pdf")]
@@ -166,7 +185,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportForecastPdfAsync(projectId, versionId, cancellationToken);
-        return File(bytes, "application/pdf", $"forecast-{projectId}-{versionId}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Forecast,
+            "pdf",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     private static ForecastCalculationOptionsDto BuildCalculationOptions(

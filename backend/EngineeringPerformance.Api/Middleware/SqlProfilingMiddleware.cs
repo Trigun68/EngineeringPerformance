@@ -52,8 +52,10 @@ public sealed class SqlProfilingMiddleware
             sw.Stop();
             var endpoint = ResolveEndpoint(context);
             var commands = scope.Snapshot();
+            // Снимаем HTTP-scope до persist: INSERT метрик идёт в собственном scope
+            // с коротким timeout и не конкурирует с пользовательским SQL (30 с).
+            scope.SuppressPersistence = true;
             SqlProfilingScope.End();
-
             if (commands.Count > 0)
             {
                 _ = persistence.PersistAsync(

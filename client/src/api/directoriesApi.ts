@@ -1,5 +1,4 @@
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
-import { buildExportFileName } from '../utils/directoryExport';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
 
 export interface DirectoryEntry {
   id: number;
@@ -208,20 +207,14 @@ export async function exportDirectoryExcel(
   headers: string[],
   rows: string[][],
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     `/directories/${resource}/export`,
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
   );
-
-  const filename = buildExportFileName(tabName);
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
   triggerBrowserDownload(blob, filename);
 }
 
 export async function exportDirectoryExcelLegacy(resource: string): Promise<void> {
-  const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`, undefined, `${resource}.xlsx`);
+  const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`);
   triggerBrowserDownload(blob, filename);
 }

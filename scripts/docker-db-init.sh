@@ -39,6 +39,7 @@ SCHEMA_FILES=(
   schema/110_HotPathIndexes.sql
   schema/111_SqlMetricsWave2Indexes.sql
   schema/112_NormSuggestionsAndAudit.sql
+  schema/113_EquipmentLaborIntensity.sql
 )
 
 DATA_FILES=(
@@ -141,6 +142,7 @@ if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Use
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/110_HotPathIndexes.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/111_SqlMetricsWave2Indexes.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/112_NormSuggestionsAndAudit.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/113_EquipmentLaborIntensity.sql
   echo ">>> Re-applying seed data scripts (idempotent)..."
   for file in "${DATA_FILES[@]}"; do
     # Не воскрешать CI demo-проекты на существующей рабочей БД после ручного удаления.

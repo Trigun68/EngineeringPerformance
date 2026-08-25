@@ -1,4 +1,9 @@
 import type { Column, GridApi, IRowNode } from 'ag-grid-community';
+import {
+  buildCanonicalExportFileName,
+  directoryExportView,
+  ExportModules,
+} from './exportFileName';
 
 function formatCellValue(value: unknown): string {
   if (value == null) return '';
@@ -109,11 +114,11 @@ export function collectGridExportData(
   return { headers, rows };
 }
 
+/** Имя файла справочника: {модуль}_{вкладка}.xlsx без timestamp. */
 export function buildExportFileName(tabName: string): string {
-  const now = new Date();
-  const pad = (n: number) => n.toString().padStart(2, '0');
-  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  const safe = tabName.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'Справочник';
-  const cleaned = safe.replace(/^_+$/, 'Справочник');
-  return `${cleaned}_${stamp}.xlsx`;
+  return buildCanonicalExportFileName({
+    module: ExportModules.directory,
+    view: directoryExportView(tabName),
+    extension: 'xlsx',
+  });
 }

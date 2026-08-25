@@ -1,4 +1,11 @@
 import { expect, type Page } from '@playwright/test';
+import { ACTION_LABELS, type ActionLabelKey } from '../src/constants/actionLabels';
+
+export { ACTION_LABELS };
+
+export function actionButton(page: Page, key: ActionLabelKey) {
+  return page.getByRole('button', { name: ACTION_LABELS[key], exact: true });
+}
 
 export const ADMIN_USER = { username: 'admin', password: 'admin' };
 export const OBSERVER_USER = { username: 'observer', password: 'observer' };
@@ -100,6 +107,9 @@ export async function resetProjectWorkspaceTabs(page: Page, projectId: number): 
           [`projects.${id}.forecastSubTab`]: 'forecast-total',
           [`projects.${id}.factSubTab`]: 'fact-total',
           [`projects.${id}.compareSubTab`]: 'compare-total',
+          [`projects.${id}.compareShowDiff`]: '0',
+          [`projects.${id}.compareViewMode`]: 'table',
+          [`projects.${id}.report.dark`]: '0',
         },
       }),
     });
