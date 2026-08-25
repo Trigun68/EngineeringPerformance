@@ -1,6 +1,6 @@
 using EngineeringPerformance.Domain.Entities;
 
-namespace EngineeringPerformance.Infrastructure.Analytics;
+namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Единица измерения для норм и отчётов: из справочника групп ИИС (поле ед. изм. у предков),
@@ -66,11 +66,17 @@ public static class IicWorkDirectionDisplayUnit
     public static string FormatCodeNameWithResolvedUnit(
         IicWorkDirection direction,
         IReadOnlyDictionary<int, IicWorkDirection> byId)
+        => FormatCodeNameWithUnit(direction.Code, direction.Name, ResolveUnitName(direction, byId));
+
+    /// <summary>
+    /// Примитивный вариант формата «код — имя (ед.)» для слоёв, где сущность недоступна (DTO-проекции).
+    /// Единственный SoT строки формата — не дублировать склейку в вызывающем коде.
+    /// </summary>
+    public static string FormatCodeNameWithUnit(string? code, string? name, string? unitName)
     {
-        var baseName = string.IsNullOrWhiteSpace(direction.Code)
-            ? direction.Name
-            : $"{direction.Code.Trim()} — {direction.Name}".Trim();
-        var unitName = ResolveUnitName(direction, byId);
+        var baseName = string.IsNullOrWhiteSpace(code)
+            ? name ?? string.Empty
+            : $"{code.Trim()} — {name}".Trim();
         return string.IsNullOrWhiteSpace(unitName) ? baseName : $"{baseName} ({unitName})";
     }
 

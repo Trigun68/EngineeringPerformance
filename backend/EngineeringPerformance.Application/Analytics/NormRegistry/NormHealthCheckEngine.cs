@@ -29,9 +29,7 @@ public static class NormHealthCheckEngine
         {
             var groupName = groupNorms[0].GroupName;
             var groupCode = groupNorms[0].GroupCode;
-            var groupLabel = string.IsNullOrWhiteSpace(groupCode)
-                ? groupName
-                : $"{groupCode} — {groupName}";
+            var groupLabel = IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(groupCode, groupName, unitName: null);
 
             if (options.NoActiveNorm.Enabled)
                 CheckNoActiveNorm(groupId, groupLabel, groupNorms, today, options.NoActiveNorm.Severity, detectedAt, issues);

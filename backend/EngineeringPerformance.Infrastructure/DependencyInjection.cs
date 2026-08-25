@@ -91,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAccountLockoutService, AccountLockoutService>();
         services.AddScoped<IMfaService, MfaService>();
+        services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
@@ -125,6 +126,7 @@ public static class DependencyInjection
         services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();
         services.AddSingleton<INormCalculator, NormCalculator>();
         services.AddSingleton<IDeviationCalculator, DeviationCalculator>();
+        services.AddSingleton<INormPreviewService, NormPreviewService>();
         services.AddSingleton<IPerformanceCalculationEngine, PerformanceCalculationEngine>();
         services.AddScoped<IProjectVisibilityService, ProjectVisibilityService>();
         services.AddScoped<IProjectCharacteristicSelectionService, ProjectCharacteristicSelectionService>();

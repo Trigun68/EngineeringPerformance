@@ -11,7 +11,8 @@ namespace EngineeringPerformance.Application.LaborIntensity;
 /// </summary>
 public static class ForecastHoursAggregator
 {
-    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvHours(
+    // Методы internal: агрегация доступна только через IPerformanceCalculationEngine.
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvHours(
         PlanningScenario scenario,
         IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
@@ -33,7 +34,7 @@ public static class ForecastHoursAggregator
             r => (r.Base, r.Optimistic, r.Pessimistic));
     }
 
-    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateByDirection(
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateByDirection(
         IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
         IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
         IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
@@ -90,7 +91,7 @@ public static class ForecastHoursAggregator
     /// <summary>
     /// Часы оборудования по id строки: N(V_eq)×z на позицию, без группировки сценария ФО.
     /// </summary>
-    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentHours(
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentHours(
         IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,

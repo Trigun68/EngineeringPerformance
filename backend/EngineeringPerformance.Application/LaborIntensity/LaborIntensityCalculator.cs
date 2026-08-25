@@ -29,7 +29,9 @@ public static class LaborIntensityCalculator
         decimal VolumeInIicUnits,
         bool IsAssessment);
 
-    public static IReadOnlyList<RecalcResult> Recalculate(
+    // Метод internal: расчёт доступен только через IPerformanceCalculationEngine,
+    // наружу остаются публичные DTO-строки (PpvLine/EquipmentLine/RecalcResult).
+    internal static IReadOnlyList<RecalcResult> Recalculate(
         PlanningScenario scenario,
         IReadOnlyList<PpvLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,

@@ -10,13 +10,11 @@ namespace EngineeringPerformance.Api.Controllers;
 [Authorize]
 public sealed class NormsController : ControllerBase
 {
-    private readonly INormCalculator _normCalculator;
-    private readonly IDeviationCalculator _deviationCalculator;
+    private readonly INormPreviewService _normPreviewService;
 
-    public NormsController(INormCalculator normCalculator, IDeviationCalculator deviationCalculator)
+    public NormsController(INormPreviewService normPreviewService)
     {
-        _normCalculator = normCalculator;
-        _deviationCalculator = deviationCalculator;
+        _normPreviewService = normPreviewService;
     }
 
     [HttpGet("formula-templates")]
@@ -42,32 +40,6 @@ public sealed class NormsController : ControllerBase
     }
 
     [HttpPost("norms/preview")]
-    public ActionResult<object> Preview([FromBody] NormPreviewRequest request)
-    {
-        var normFormula = NormDtoMapper.ToEntity(request.NormFormula);
-        var deviationFormula = NormDtoMapper.ToEntity(request.DeviationFormula);
-
-        if (normFormula.Type == 0)
-            normFormula.Type = FormulaType.Linear;
-        if (normFormula.MaxVolume <= 0)
-            normFormula.MaxVolume = 999_999m;
-        if (deviationFormula.ModelType == 0)
-            deviationFormula.ModelType = DeviationModelType.Multiplicative;
-
-        var band = _deviationCalculator.GenerateBand(normFormula, deviationFormula, request.Points ?? 100);
-        var curve = _normCalculator.GenerateCurve(normFormula, request.Points ?? 100)
-            .Select(p => new { volume = p.V, n = p.N });
-
-        return Ok(new
-        {
-            curve,
-            band = band.Select(b => new
-            {
-                volume = b.Volume,
-                center = b.Center,
-                upper = b.Upper,
-                lower = b.Lower,
-            }),
-        });
-    }
+    public ActionResult<NormPreviewResult> Preview([FromBody] NormPreviewRequest request) =>
+        Ok(_normPreviewService.Preview(request));
 }

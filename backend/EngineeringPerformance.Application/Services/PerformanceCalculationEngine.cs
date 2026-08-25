@@ -13,6 +13,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 {
     private readonly IDeviationCalculator _deviationCalculator;
 
+    /// <summary>
+    /// Оценка нормы/факта в лог-шкале: Estimate = ln(производительность), при 0 → 0.
+    /// Конвенция хранения норм ИИС — единственный SoT перехода производительность → estimate.
+    /// </summary>
+    public static decimal ProductivityToEstimate(decimal productivity) =>
+        productivity > 0 ? (decimal)Math.Log((double)productivity) : 0m;
+
     public PerformanceCalculationEngine(IDeviationCalculator deviationCalculator)
     {
         _deviationCalculator = deviationCalculator;
@@ -112,7 +119,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                         && norm.NormStdDev is decimal nsd
                         && nsd > 0)
                     {
-                        var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
+                        var factEstimate = ProductivityToEstimate(factProductivity.Value);
                         zScore = Math.Round((factEstimate - ne) / nsd, 4);
                     }
                 }
@@ -266,13 +273,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
     {
         if (classifierId is not int cid || !classifierMap.TryGetValue(cid, out var node))
             return string.Empty;
-        // Согласовано с IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit.
-        var baseName = string.IsNullOrWhiteSpace(node.Code)
-            ? node.Name
-            : $"{node.Code.Trim()} — {node.Name}".Trim();
-        return string.IsNullOrWhiteSpace(node.UnitName)
-            ? baseName
-            : $"{baseName} ({node.UnitName})";
+        return IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(node.Code, node.Name, node.UnitName);
     }
 
     private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
@@ -297,7 +298,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 
         decimal? ownFactEstimate = null;
         if (factProductivity is > 0)
-            ownFactEstimate = (decimal)Math.Log((double)factProductivity.Value);
+            ownFactEstimate = ProductivityToEstimate(factProductivity.Value);
 
         decimal subtreeEstimateHours = ownFactEstimate.HasValue && factHours > 0 ? factHours : 0m;
         decimal subtreeWeightedEstimate = ownFactEstimate.HasValue && factHours > 0

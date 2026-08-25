@@ -123,12 +123,10 @@ public static class DetailFactSummaryTableBuilder
 
             foreach (var unit in units)
             {
-                var rootName = string.IsNullOrWhiteSpace(root.Code)
-                    ? root.Name
-                    : $"{root.Code} — {root.Name}";
-                var title = string.IsNullOrWhiteSpace(unit) || unit == "—"
-                    ? rootName
-                    : $"{rootName} ({unit})";
+                var title = IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(
+                    root.Code,
+                    root.Name,
+                    string.IsNullOrWhiteSpace(unit) || unit == "—" ? null : unit);
 
                 columns.Add(new DetailForecastSummaryColumnDto(root.Id, root.Name, unit, title));
             }

@@ -9,6 +9,7 @@ using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Registers;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
@@ -423,7 +424,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         var write = new IicNormWriteRequest(
             WorkDirectionId: sourceNorm.WorkDirectionId,
             Performance: (decimal)mean,
-            Estimate: mean > 0 ? (decimal)Math.Log(mean) : 0m,
+            Estimate: PerformanceCalculationEngine.ProductivityToEstimate((decimal)mean),
             StandardDeviation: (decimal)sigma,
             UnitId: sourceNorm.UnitId,
             EffectiveFrom: request.EffectiveFrom,

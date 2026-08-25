@@ -18,8 +18,7 @@ namespace EngineeringPerformance.Api.Controllers;
 public sealed class MfaController(
     AppDbContext context,
     IMfaService mfaService,
-    IJwtTokenService jwtTokenService,
-    IRefreshTokenService refreshTokenService,
+    IAuthService authService,
     IAuthAuditService authAuditService,
     AuthCookieHelper authCookieHelper) : ControllerBase
 {
@@ -80,51 +79,22 @@ public sealed class MfaController(
         [FromBody] VerifyRequest request,
         CancellationToken cancellationToken)
     {
-        var userId = jwtTokenService.ValidateMfaSessionToken(request.MfaSessionToken);
-        if (userId is null)
-            return Unauthorized();
-
-        var user = await context.Users
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
-        if (user is null || !mfaService.IsMfaEnabled(user) || !mfaService.VerifyTotp(user, request.Code))
-        {
-            if (user is not null)
-                await WriteVerifyFailureAsync(user, cancellationToken);
-            return Unauthorized();
-        }
-
-        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
-        var expires = jwtTokenService.GetExpiration();
-        var refreshToken = await refreshTokenService.CreateAsync(
-            user.Id,
+        var result = await authService.CompleteMfaLoginAsync(
+            request.MfaSessionToken,
+            request.Code,
             GetRemoteIpAddress(),
             Request.Headers.UserAgent.ToString(),
             cancellationToken);
-        user.LastLoginAt = DateTime.UtcNow;
-        await context.SaveChangesAsync(cancellationToken);
-        var accessToken = jwtTokenService.GenerateToken(user);
-        authCookieHelper.Append(Response, accessToken, expires, refreshToken);
+        if (result is null)
+            return Unauthorized();
 
-        await authAuditService.WriteAsync(
-            AuthEventType.MfaVerifySuccess,
-            success: true,
-            user.Id,
-            user.Username,
-            cancellationToken: cancellationToken);
-        await authAuditService.WriteAsync(
-            AuthEventType.LoginSuccess,
-            success: true,
-            user.Id,
-            user.Username,
-            details: "MFA login completed",
-            cancellationToken: cancellationToken);
+        authCookieHelper.Append(
+            Response,
+            result.Tokens!.AccessToken,
+            result.Tokens.ExpiresAt,
+            result.Tokens.RefreshToken);
 
-        return Ok(new AuthController.LoginResponse(
-            expires,
-            AuthController.MapUser(user, permissions),
-            AccessToken: accessToken,
-            TokenType: "Bearer"));
+        return Ok(AuthController.ToLoginResponse(result));
     }
 
     [HttpPost("disable")]
@@ -195,22 +165,4 @@ public sealed class MfaController(
             cancellationToken: cancellationToken);
 
     private string? GetRemoteIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString();
-
-    private async Task<Dictionary<string, int>> LoadPermissionsAsync(
-        int roleId,
-        string roleName,
-        CancellationToken cancellationToken)
-    {
-        if (PermissionObjectCatalog.IsSuperAdmin(roleName, roleId))
-        {
-            return PermissionObjectCatalog.AllObjectNames
-                .ToDictionary(name => name, _ => (int)AccessLevel.Edit);
-        }
-
-        var rights = await context.AccessRights
-            .AsNoTracking()
-            .Where(r => r.RoleId == roleId)
-            .ToListAsync(cancellationToken);
-        return rights.ToDictionary(r => r.ObjectName, r => (int)r.AccessLevel);
-    }
 }
