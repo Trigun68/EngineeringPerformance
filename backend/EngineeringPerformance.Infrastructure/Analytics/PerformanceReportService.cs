@@ -13,7 +13,6 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 /// </summary>
 public sealed class PerformanceReportService(
     AppDbContext context,
-    IPerformanceService performanceService,
     IPerformanceCalculationEngine calculationEngine,
     IProjectCharacteristicSelectionService characteristics,
     IProjectAnalyticsCache cache,
@@ -55,7 +54,15 @@ public sealed class PerformanceReportService(
         PerformanceReportVersionBlockDto? planBlock = null;
         PerformanceReportVersionBlockDto? factBlock = null;
 
-        var bundleByVersion = new Dictionary<int, ProjectsPageVersionBundle>();
+        // Батч-предзагрузка bundle всех версий истории: без этого каждый блок
+        // (план/факт/точки истории) грузил таблицы версии заново (N+1).
+        var historyVersions = versions
+            .Where(v => v.Direction is AnalysisDirection.Plan or AnalysisDirection.Fact)
+            .ToList();
+        var bundleByVersion = new Dictionary<int, ProjectsPageVersionBundle>(
+            await rawLoader.LoadManyAsync(
+                historyVersions.Select(v => (projectId, v.Id)).ToList(),
+                cancellationToken));
         var snapshotKeyByVersion = await LoadSnapshotKeysAsync(
             versions.Select(v => v.Id).ToList(),
             cancellationToken);
@@ -71,12 +78,11 @@ public sealed class PerformanceReportService(
 
         if (factId is int fid)
         {
-            factBlock = await BuildFactBlockAsync(projectId, fid, cancellationToken);
+            factBlock = await BuildFactBlockAsync(projectId, fid, bundleByVersion, cancellationToken);
         }
 
         var history = new List<PerformanceReportVersionHistoryPointDto>();
-        foreach (var version in versions.Where(v =>
-                     v.Direction is AnalysisDirection.Plan or AnalysisDirection.Fact))
+        foreach (var version in historyVersions)
         {
             snapshotKeyByVersion.TryGetValue(version.Id, out var snapKey);
             history.Add(await BuildHistoryPointAsync(
@@ -229,10 +235,8 @@ public sealed class PerformanceReportService(
         var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance, calculationEngine);
 
-        var labor = await context.ProjectLaborIntensities
-            .AsNoTracking()
-            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-            .ToListAsync(cancellationToken);
+        // Часы уже в bundle — повторный запрос LI не нужен.
+        var labor = bundle.LaborIntensities;
 
         var directions = MapDirectionRows(planPerformance);
         var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
@@ -252,18 +256,17 @@ public sealed class PerformanceReportService(
     private async Task<PerformanceReportVersionBlockDto> BuildFactBlockAsync(
         int projectId,
         int versionId,
+        Dictionary<int, ProjectsPageVersionBundle> bundleCache,
         CancellationToken cancellationToken)
     {
         var version = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .FirstAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
 
-        var performance = await performanceService.GetPerformanceDataAsync(
-            projectId, versionId, LaborHoursKind.Planned, cancellationToken);
-        var labor = await context.ProjectLaborIntensities
-            .AsNoTracking()
-            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-            .ToListAsync(cancellationToken);
+        // Производительность из bundle через движок — без повторной загрузки версии.
+        var bundle = await GetBundleAsync(projectId, versionId, bundleCache, cancellationToken);
+        var performance = ProjectsPageGridBuilder.BuildPerformance(bundle, calculationEngine);
+        var labor = bundle.LaborIntensities;
 
         var totalHours = FactLaborHoursTotals.FromAllocatedPlannedHours(labor);
         var unallocated = FactLaborHoursTotals.UnallocatedPlannedHours(labor);
@@ -349,16 +352,13 @@ public sealed class PerformanceReportService(
     {
         if (version.Direction == AnalysisDirection.Fact)
         {
-            var labor = await context.ProjectLaborIntensities
-                .AsNoTracking()
-                .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == version.Id)
-                .ToListAsync(cancellationToken);
+            var factBundle = await GetBundleAsync(projectId, version.Id, bundleCache, cancellationToken);
+            var labor = factBundle.LaborIntensities;
             var allocated = FactLaborHoursTotals.FromAllocatedPlannedHours(labor);
             decimal? weightedZ = null;
             if (allocated is > 0)
             {
-                var performance = await performanceService.GetPerformanceDataAsync(
-                    projectId, version.Id, LaborHoursKind.Planned, cancellationToken);
+                var performance = ProjectsPageGridBuilder.BuildPerformance(factBundle, calculationEngine);
                 weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
                     performance,
                     decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
