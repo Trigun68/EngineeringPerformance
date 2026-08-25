@@ -18,6 +18,27 @@ public sealed record ChartAreaSeries(string Name, IReadOnlyList<(DateTime X, dou
 
 public sealed record ReportKpiItem(string Label, string Value);
 
+/// <summary>Данные для титульной страницы PDF — рендерится первой в каждом отчёте.</summary>
+public sealed record PdfCoverInfo(
+    PdfReportKind Kind,
+    string ReportTitle,
+    string Project,
+    string VersionLabel,
+    IReadOnlyList<ReportKpiItem> TeaserKpis,
+    IReadOnlyList<string>? ExtraMeta = null);
+
+/// <summary>Тип авто-вывода / callout-блока в PDF.</summary>
+public enum PdfCalloutKind
+{
+    Risk,
+    Attention,
+    Strength,
+    Data,
+}
+
+/// <summary>Краткий авто-вывод (риск/внимание/сильная сторона/данные) — максимум 3 на отчёт.</summary>
+public sealed record PdfCallout(PdfCalloutKind Kind, string Title, string Detail);
+
 public enum CompareReportSection
 {
     Summary,
