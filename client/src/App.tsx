@@ -100,8 +100,8 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {user ? (
-        <Routes>
+      <Routes>
+        {user ? (
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -226,10 +226,10 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
-        </Routes>
-      ) : (
-        <LoginPage />
-      )}
+        ) : (
+          <Route path="*" element={<LoginPage />} />
+        )}
+      </Routes>
     </BrowserRouter>
   );
 }
