@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -6,27 +6,78 @@ import {
   FormControl,
   InputLabel,
   MenuItem,
+  Paper,
   Select,
   Stack,
   TextField,
+  Tooltip as MuiTooltip,
   Typography,
 } from '@mui/material';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useSearchParams } from 'react-router-dom';
 import {
+  fetchTrendDetail,
   fetchTrendFormulas,
   fetchTrends,
   type TrendAnalyticsResult,
+  type TrendDetailRow,
 } from '../../api/analyticsApi';
 import { exportTrendsPdf } from '../../api/visualReportsApi';
 import { fetchProjects } from '../../api/projectsApi';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { getApiErrorMessage } from '../../services/apiError';
 import type { Project } from '../../types/project';
+import { wpColors } from '../../theme/wpColors';
+import { TrendsKpiCards, type TrendsKpiData } from './TrendsKpiCards';
+import { TrendsDetailTable } from './TrendsDetailTable';
 
 const TRENDS_FILTER_KEY = 'analytics.trends.filters.v1';
+
+const FACT_COLOR = wpColors.accent;
+const FORECAST_COLOR = '#94A3B8';
+const DELTA_POS_COLOR = '#27AE60';
+const DELTA_NEG_COLOR = '#E74C3C';
+const EVENT_LINE_COLOR = '#CBD5E1';
+
+declare module 'highcharts' {
+  interface Point {
+    highlight?: (event: Highcharts.PointerEventObject) => void;
+  }
+}
+
+interface TrendChartPoint {
+  x: number;
+  y: number | null;
+  versionId: number;
+  versionName: string;
+}
+
+function toChartPoints(series: TrendAnalyticsResult['series'] | undefined, metric: string): TrendChartPoint[] {
+  const found = series?.find((s) => s.metric === metric);
+  return (
+    found?.points.map((p) => ({
+      x: new Date(p.timestamp).getTime(),
+      y: p.value,
+      versionId: p.versionId,
+      versionName: p.versionName,
+    })) ?? []
+  );
+}
+
+/** Классическая связка синхронизации кроссхейра/тултипа между несколькими независимыми Highcharts-графиками. */
+let highlightPatched = false;
+function ensureHighlightPrototype() {
+  if (highlightPatched) return;
+  highlightPatched = true;
+  Highcharts.Point.prototype.highlight = function highlight(event: Highcharts.PointerEventObject) {
+    this.onMouseOver();
+    this.series.chart.tooltip?.refresh(this);
+    this.series.chart.xAxis[0]?.drawCrosshair(event, this);
+  };
+}
 
 export function TrendsAnalyticsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,11 +86,20 @@ export function TrendsAnalyticsPage() {
   const [formulaId, setFormulaId] = useState('v1-docset-proportional');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [formulas, setFormulas] = useState<{ id: string; displayName: string }[]>([]);
+  const [formulas, setFormulas] = useState<{ id: string; displayName: string; description: string }[]>([]);
   const [data, setData] = useState<TrendAnalyticsResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  const [selectedVersion, setSelectedVersion] = useState<{ id: number; name: string } | null>(null);
+  const [detailRows, setDetailRows] = useState<TrendDetailRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const mainChartRef = useRef<HighchartsReact.RefObject>(null);
+  const deltaChartRef = useRef<HighchartsReact.RefObject>(null);
+  const cumulativeChartRef = useRef<HighchartsReact.RefObject>(null);
 
   useEffect(() => {
     void fetchProjects().then((list) => {
@@ -49,7 +109,7 @@ export function TrendsAnalyticsPage() {
       }
     }).catch(() => setProjects([]));
     void fetchTrendFormulas()
-      .then((list) => setFormulas(list.map((f) => ({ id: f.id, displayName: f.displayName }))))
+      .then((list) => setFormulas(list))
       .catch(() => setFormulas([]));
     void getUserPreferences()
       .then((prefs) => {
@@ -79,6 +139,8 @@ export function TrendsAnalyticsPage() {
     if (!projectId) return;
     setLoading(true);
     setError(null);
+    setSelectedVersion(null);
+    setDetailRows([]);
     try {
       const result = await fetchTrends({
         projectId,
@@ -103,53 +165,238 @@ export function TrendsAnalyticsPage() {
     if (projectId) void loadTrends();
   }, [loadTrends, projectId]);
 
-  const chartOptions = useMemo(() => {
-    const fact = data?.series.find((s) => s.metric === 'factLaborHours');
-    const forecast = data?.series.find((s) => s.metric === 'forecastLaborHours');
-    const delta = data?.series.find((s) => s.metric === 'hoursDelta');
-    const cumulative = data?.series.find((s) => s.metric === 'cumulativeFactHours');
+  const handlePointSelect = useCallback(
+    (versionId: number, versionName: string) => {
+      if (!projectId) return;
+      setSelectedVersion({ id: versionId, name: versionName });
+      setDetailLoading(true);
+      setDetailError(null);
+      void fetchTrendDetail(projectId, versionId, formulaId)
+        .then(setDetailRows)
+        .catch(() => setDetailError('Не удалось загрузить детализацию по версии.'))
+        .finally(() => setDetailLoading(false));
+    },
+    [formulaId, projectId],
+  );
 
-    const toSeries = (metric: string, name: string, type: 'line' | 'column' | 'area' = 'line') => {
-      const series = data?.series.find((s) => s.metric === metric);
-      return {
-        type,
-        name,
-        data: series?.points.map((p) => [new Date(p.timestamp).getTime(), p.value ?? 0]) ?? [],
-      } as Highcharts.SeriesOptionsType;
-    };
+  const selectedFormula = useMemo(
+    () => formulas.find((f) => f.id === formulaId) ?? null,
+    [formulas, formulaId],
+  );
+
+  const factPoints = useMemo(() => toChartPoints(data?.series, 'factLaborHours'), [data]);
+  const forecastPoints = useMemo(() => toChartPoints(data?.series, 'forecastLaborHours'), [data]);
+  const deltaPoints = useMemo(() => toChartPoints(data?.series, 'hoursDelta'), [data]);
+  const cumulativePoints = useMemo(() => toChartPoints(data?.series, 'cumulativeFactHours'), [data]);
+
+  const kpi: TrendsKpiData = useMemo(() => {
+    const lastFact = [...factPoints].reverse().find((p) => p.y != null) ?? null;
+    const matchedForecast = lastFact
+      ? forecastPoints.find((p) => p.versionId === lastFact.versionId) ?? null
+      : null;
+    const deltaAbs =
+      lastFact?.y != null && matchedForecast?.y != null ? lastFact.y - matchedForecast.y : null;
+    const deltaPct =
+      deltaAbs != null && matchedForecast?.y ? (deltaAbs / matchedForecast.y) * 100 : null;
+
+    const validDeltas = deltaPoints.filter((p) => p.y != null);
+    const cumulativeDeltaAbs = validDeltas.length
+      ? validDeltas.reduce((sum, p) => sum + (p.y ?? 0), 0)
+      : null;
+    const forecastTotal = forecastPoints.reduce((sum, p) => sum + (p.y ?? 0), 0);
+    const cumulativeDeltaPct =
+      cumulativeDeltaAbs != null && forecastTotal ? (cumulativeDeltaAbs / forecastTotal) * 100 : null;
 
     return {
-      spline: {
-        title: { text: 'Факт vs Прогноз/План' },
-        xAxis: { type: 'datetime' as const },
-        yAxis: { title: { text: 'Часы' } },
-        series: [
-          toSeries('factLaborHours', 'Факт', 'line'),
-          toSeries('forecastLaborHours', 'Прогноз/План', 'line'),
-        ],
-        credits: { enabled: false },
-      },
-      column: {
-        title: { text: 'Δ Факт − Прогноз' },
-        xAxis: { type: 'datetime' as const },
-        yAxis: { title: { text: 'Δ часы' } },
-        series: [toSeries('hoursDelta', 'Δ', 'column')],
-        credits: { enabled: false },
-      },
-      area: {
-        title: { text: 'S-curve (накопительный факт)' },
-        xAxis: { type: 'datetime' as const },
-        yAxis: { title: { text: 'Накопительно, ч' } },
-        series: [toSeries('cumulativeFactHours', 'Накопительный факт', 'area')],
-        credits: { enabled: false },
-      },
-      meta: { fact: fact?.points.length ?? 0, forecast: forecast?.points.length ?? 0, delta: delta?.points.length ?? 0, cumulative: cumulative?.points.length ?? 0 },
+      lastFactValue: lastFact?.y ?? null,
+      lastFactVersionName: lastFact?.versionName ?? null,
+      lastFactTimestamp: lastFact ? new Date(lastFact.x).toISOString() : null,
+      matchedForecastValue: matchedForecast?.y ?? null,
+      deltaAbs,
+      deltaPct,
+      cumulativeDeltaAbs,
+      cumulativeDeltaPct,
+      versionsCount: factPoints.filter((p) => p.y != null).length,
     };
+  }, [factPoints, forecastPoints, deltaPoints]);
+
+  const eventPlotLines = useMemo<Highcharts.XAxisPlotLinesOptions[]>(() => {
+    const events = data?.events ?? [];
+    return events.map((ev) => ({
+      value: new Date(ev.timestamp).getTime(),
+      color: EVENT_LINE_COLOR,
+      dashStyle: 'Dash',
+      width: 1,
+      zIndex: 3,
+      label: {
+        text: ev.label,
+        rotation: 90,
+        align: 'left',
+        y: 10,
+        x: 4,
+        style: { color: '#94A3B8', fontSize: '10px' },
+      },
+    }));
   }, [data]);
 
+  const mainChartOptions = useMemo<Highcharts.Options>(
+    () => ({
+      chart: { height: 380, style: { fontFamily: 'inherit' } },
+      title: { text: undefined },
+      credits: { enabled: false },
+      xAxis: { type: 'datetime', plotLines: eventPlotLines, crosshair: true },
+      yAxis: { title: { text: 'Часы' }, gridLineColor: '#F1F5F9' },
+      legend: { enabled: true },
+      tooltip: {
+        shared: true,
+        xDateFormat: '%d.%m.%Y',
+        valueDecimals: 0,
+        valueSuffix: ' ч',
+      },
+      plotOptions: {
+        series: {
+          cursor: 'pointer',
+          point: {
+            events: {
+              click() {
+                const p = this as unknown as TrendChartPoint;
+                handlePointSelect(p.versionId, p.versionName);
+              },
+            },
+          },
+        },
+      },
+      series: [
+        {
+          type: 'line',
+          name: 'Факт',
+          color: FACT_COLOR,
+          data: factPoints as unknown as Highcharts.SeriesLineOptions['data'],
+          marker: { enabled: true, radius: 4 },
+        },
+        {
+          type: 'line',
+          name: 'Прогноз / План',
+          color: FORECAST_COLOR,
+          dashStyle: 'ShortDash',
+          data: forecastPoints as unknown as Highcharts.SeriesLineOptions['data'],
+          marker: { enabled: true, radius: 3, symbol: 'diamond' },
+        },
+      ],
+    }),
+    [factPoints, forecastPoints, eventPlotLines, handlePointSelect],
+  );
+
+  const deltaChartOptions = useMemo<Highcharts.Options>(
+    () => ({
+      chart: { height: 220, style: { fontFamily: 'inherit' } },
+      title: { text: 'Δ Факт − Прогноз', style: { fontSize: '13px', color: '#475569' } },
+      credits: { enabled: false },
+      xAxis: { type: 'datetime', plotLines: eventPlotLines, crosshair: true },
+      yAxis: { title: { text: 'Δ, ч' }, gridLineColor: '#F1F5F9' },
+      legend: { enabled: false },
+      tooltip: { xDateFormat: '%d.%m.%Y', valueDecimals: 0, valueSuffix: ' ч' },
+      plotOptions: {
+        series: {
+          cursor: 'pointer',
+          point: {
+            events: {
+              click() {
+                const p = this as unknown as TrendChartPoint;
+                handlePointSelect(p.versionId, p.versionName);
+              },
+            },
+          },
+        },
+      },
+      series: [
+        {
+          type: 'column',
+          name: 'Δ',
+          data: deltaPoints.map((p) => ({
+            ...p,
+            color: (p.y ?? 0) >= 0 ? DELTA_POS_COLOR : DELTA_NEG_COLOR,
+          })) as unknown as Highcharts.SeriesColumnOptions['data'],
+        },
+      ],
+    }),
+    [deltaPoints, eventPlotLines, handlePointSelect],
+  );
+
+  const cumulativeChartOptions = useMemo<Highcharts.Options>(
+    () => ({
+      chart: { height: 220, style: { fontFamily: 'inherit' } },
+      title: { text: 'S-curve (накопительный факт)', style: { fontSize: '13px', color: '#475569' } },
+      credits: { enabled: false },
+      xAxis: { type: 'datetime', plotLines: eventPlotLines, crosshair: true },
+      yAxis: { title: { text: 'Накопительно, ч' }, gridLineColor: '#F1F5F9' },
+      legend: { enabled: false },
+      tooltip: { xDateFormat: '%d.%m.%Y', valueDecimals: 0, valueSuffix: ' ч' },
+      plotOptions: {
+        series: {
+          cursor: 'pointer',
+          point: {
+            events: {
+              click() {
+                const p = this as unknown as TrendChartPoint;
+                handlePointSelect(p.versionId, p.versionName);
+              },
+            },
+          },
+        },
+      },
+      series: [
+        {
+          type: 'area',
+          name: 'Накопительный факт',
+          color: FACT_COLOR,
+          fillOpacity: 0.15,
+          data: cumulativePoints as unknown as Highcharts.SeriesAreaOptions['data'],
+        },
+      ],
+    }),
+    [cumulativePoints, eventPlotLines, handlePointSelect],
+  );
+
+  // Синхронизация hover/crosshair между тремя независимыми графиками.
+  useEffect(() => {
+    ensureHighlightPrototype();
+    const refs = [mainChartRef, deltaChartRef, cumulativeChartRef];
+    const charts = refs.map((r) => r.current?.chart).filter(Boolean) as Highcharts.Chart[];
+    if (charts.length < 2) return;
+
+    const listeners: { el: Element; type: string; fn: EventListener }[] = [];
+
+    charts.forEach((chart) => {
+      ['mousemove', 'touchmove', 'touchstart'].forEach((eventType) => {
+        const fn: EventListener = (e) => {
+          const event = chart.pointer?.normalize(e as MouseEvent);
+          if (!event) return;
+          charts.forEach((c) => {
+            const point = c.series[0]?.searchPoint(event, true);
+            point?.highlight?.(event as unknown as Highcharts.PointerEventObject);
+          });
+        };
+        chart.container.addEventListener(eventType, fn);
+        listeners.push({ el: chart.container, type: eventType, fn });
+      });
+    });
+
+    return () => {
+      listeners.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
+    };
+  }, [mainChartOptions, deltaChartOptions, cumulativeChartOptions]);
+
   return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
-      <Typography variant="h5">Трендовый анализ</Typography>
+    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, height: '100%', overflow: 'auto' }}>
+      <Stack direction="row" spacing={1} alignItems="center">
+        <Typography variant="h5">Трендовый анализ</Typography>
+        {selectedFormula && (
+          <MuiTooltip title={selectedFormula.description}>
+            <InfoOutlinedIcon sx={{ fontSize: 18, color: '#94A3B8' }} />
+          </MuiTooltip>
+        )}
+      </Stack>
 
       <Stack direction="row" spacing={2} flexWrap="wrap" alignItems="center">
         <FormControl size="small" sx={{ minWidth: 220 }}>
@@ -204,18 +451,56 @@ export function TrendsAnalyticsPage() {
       {error && <Alert severity="error">{error}</Alert>}
       {!projectId && <Alert severity="info">Выберите проект для анализа трендов.</Alert>}
 
-      {projectId && (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2, flex: 1 }}>
-          <Box sx={{ bgcolor: 'background.paper', p: 1, borderRadius: 1, border: '1px solid #D5DDE5' }}>
-            <HighchartsReact highcharts={Highcharts} options={chartOptions.spline} />
+      {projectId && data && (
+        <>
+          <TrendsKpiCards kpi={kpi} />
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.6fr 1fr' }, gap: 2 }}>
+            <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E2E8F0', borderRadius: 2.5 }}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                <Typography sx={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>
+                  Факт vs Прогноз/План — вехи версий отмечены пунктиром
+                </Typography>
+                {selectedVersion && (
+                  <MuiTooltip title={`ID версии: ${selectedVersion.id}`}>
+                    <Typography
+                      sx={{
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: wpColors.accentDark,
+                        bgcolor: wpColors.accentHover,
+                        px: 1,
+                        py: 0.25,
+                        borderRadius: 1,
+                      }}
+                    >
+                      Выбрана: {selectedVersion.name}
+                    </Typography>
+                  </MuiTooltip>
+                )}
+              </Stack>
+              <HighchartsReact highcharts={Highcharts} options={mainChartOptions} ref={mainChartRef} />
+            </Paper>
+
+            <Stack spacing={2}>
+              <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E2E8F0', borderRadius: 2.5 }}>
+                <HighchartsReact highcharts={Highcharts} options={deltaChartOptions} ref={deltaChartRef} />
+              </Paper>
+              <Paper variant="outlined" sx={{ p: 1.5, borderColor: '#E2E8F0', borderRadius: 2.5 }}>
+                <HighchartsReact highcharts={Highcharts} options={cumulativeChartOptions} ref={cumulativeChartRef} />
+              </Paper>
+            </Stack>
           </Box>
-          <Box sx={{ bgcolor: 'background.paper', p: 1, borderRadius: 1, border: '1px solid #D5DDE5' }}>
-            <HighchartsReact highcharts={Highcharts} options={chartOptions.column} />
-          </Box>
-          <Box sx={{ gridColumn: { lg: '1 / -1' }, bgcolor: 'background.paper', p: 1, borderRadius: 1, border: '1px solid #D5DDE5' }}>
-            <HighchartsReact highcharts={Highcharts} options={chartOptions.area} />
-          </Box>
-        </Box>
+
+          <Paper variant="outlined" sx={{ p: 2, borderColor: '#E2E8F0', borderRadius: 2.5 }}>
+            <TrendsDetailTable
+              versionName={selectedVersion?.name ?? null}
+              rows={detailRows}
+              loading={detailLoading}
+              error={detailError}
+            />
+          </Paper>
+        </>
       )}
     </Box>
   );
