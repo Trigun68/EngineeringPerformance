@@ -209,6 +209,23 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, "application/pdf", $"FactDetail_{projectId}_v{versionId}.pdf");
     }
 
+    /// <summary>PDF вкладки «Отчёт»: сводка план/факт по основным версиям проекта + топ-5/детали фактической версии.</summary>
+    [HttpGet("export/report/pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public async Task<IActionResult> ExportProjectReportPdf(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _visualReports.ExportProjectReportPdfAsync(projectId, versionId, cancellationToken);
+        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+        var safeProject = SanitizeFileName(projectCode);
+        var safeVersion = SanitizeFileName(versionName);
+        return File(bytes, "application/pdf", $"{safeProject}_{safeVersion}_Отчёт_{timestamp}.pdf");
+    }
+
     private static string SanitizeFileName(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();

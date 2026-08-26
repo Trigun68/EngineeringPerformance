@@ -9,6 +9,7 @@ import {
   type PerformanceRow,
 } from '../../../api/analyticsApi';
 import { fetchProjectCharacteristics } from '../../../api/projectCharacteristicsApi';
+import { exportProjectReportPdf } from '../../../api/visualReportsApi';
 import type { Project } from '../../../types/project';
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
@@ -43,6 +44,16 @@ type DetailTab = 'tree' | 'forecast' | 'accuracy' | 'volumes';
 
 export function ReportsTab({ projectId, versionId, project, versions }: ReportsTabProps) {
   const [detailTab, setDetailTab] = useState<DetailTab>('tree');
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      await exportProjectReportPdf(projectId, versionId);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const selectedVersion = versions.find((v) => v.id === versionId) ?? null;
 
@@ -142,7 +153,12 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
 
   return (
     <Stack spacing={3}>
-      <ReportHeader project={project} version={selectedVersion} />
+      <ReportHeader
+        project={project}
+        version={selectedVersion}
+        onExportPdf={() => void handleExportPdf()}
+        exporting={exportingPdf}
+      />
 
       <PlanFactSummary summary={reportSummary} accuracyScore={accuracyScore} />
 
