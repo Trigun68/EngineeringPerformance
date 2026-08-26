@@ -16,6 +16,8 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('ztrend-weight-mode')).toBeVisible();
     await expect(page.getByTestId('ztrend-toggle-plan')).toBeVisible();
     await expect(page.getByTestId('ztrend-toggle-fact')).toBeVisible();
+    await expect(page.getByTestId('ztrend-weight-chip')).toBeVisible();
+    await expect(page.getByTestId('ztrend-period-chip')).toBeVisible();
 
     await expect(page.getByTestId('analytics-placeholder')).toHaveCount(0);
     await expect(
@@ -23,6 +25,12 @@ test.describe('Analytics page — trends', () => {
         .or(page.getByTestId('ztrend-empty'))
         .or(page.getByTestId('ztrend-error')),
     ).toBeVisible({ timeout: 60_000 });
+
+    if (await page.getByTestId('ztrend-overall-chart').isVisible()) {
+      await expect(page.getByTestId('ztrend-kpi-cards')).toBeVisible();
+      await expect(page.getByTestId('ztrend-kpi-fact')).toBeVisible();
+      await expect(page.getByTestId('ztrend-kpi-delta')).toBeVisible();
+    }
   });
 
   test('custom period shows date from/to fields', async ({ page }) => {
@@ -72,6 +80,10 @@ test.describe('Analytics page — trends', () => {
         .or(page.getByTestId('prod-trend-empty'))
         .or(page.getByTestId('prod-trend-error')),
     ).toBeVisible({ timeout: 60_000 });
+
+    if (await page.getByTestId('prod-trend-overall-chart').isVisible()) {
+      await expect(page.getByTestId('prod-trend-kpi-row')).toBeVisible();
+    }
   });
 
   test('legacy /analytics/trends redirects to /analytics', async ({ page }) => {

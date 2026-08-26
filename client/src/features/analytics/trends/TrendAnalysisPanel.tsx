@@ -2,15 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Alert,
   Box,
-  CircularProgress,
+  Chip,
   Grid,
   IconButton,
+  LinearProgress,
   Popover,
+  Skeleton,
   Stack,
   Tooltip,
   Typography,
 } from '@mui/material';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
+import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined';
 import {
   fetchZTrends,
   type ZTrendContribution,
@@ -20,6 +24,27 @@ import {
 import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { NormLegend } from './NormLegend';
 import { ZTrendChart } from './ZTrendChart';
+import { ZTrendKpiCards } from './ZTrendKpiCards';
+import { computeZTrendKpi } from './zTrendKpi';
+
+const WEIGHT_MODE_LABEL: Record<ZTrendWeightMode, string> = {
+  basisHours: 'Нормативные часы (basisHours)',
+};
+
+function formatPeriodChip(dateFrom: string, dateTo: string): string {
+  const fmt = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isFinite(d.getTime())
+      ? d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : '';
+  };
+  const from = dateFrom ? fmt(dateFrom) : '';
+  const to = dateTo ? fmt(dateTo) : '';
+  if (from && to) return `${from} — ${to}`;
+  if (from) return `с ${from}`;
+  if (to) return `по ${to}`;
+  return 'Весь период';
+}
 
 interface Props {
   dateFrom: string;
@@ -140,8 +165,27 @@ export function TrendAnalysisPanel({
     return o.plan.segments.length > 0 || o.fact.segments.length > 0 || result.byGroup.length > 0;
   }, [result]);
 
+  const kpi = useMemo(() => (result ? computeZTrendKpi(result.overall) : null), [result]);
+
   return (
     <Stack spacing={2} data-testid="ztrend-panel">
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+        <Chip
+          size="small"
+          icon={<FunctionsOutlinedIcon sx={{ fontSize: 15 }} />}
+          label={`Вес: ${WEIGHT_MODE_LABEL[weightMode] ?? weightMode}`}
+          data-testid="ztrend-weight-chip"
+          sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+        />
+        <Chip
+          size="small"
+          icon={<DateRangeOutlinedIcon sx={{ fontSize: 15 }} />}
+          label={formatPeriodChip(dateFrom, dateTo)}
+          data-testid="ztrend-period-chip"
+          sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+        />
+      </Stack>
+
       <Popover
         open={Boolean(infoAnchor)}
         anchorEl={infoAnchor}
@@ -179,11 +223,25 @@ export function TrendAnalysisPanel({
         ) : null}
       </Popover>
 
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress size={32} data-testid="ztrend-loading" />
+      {loading && !result && (
+        <Box data-testid="ztrend-loading" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                height={96}
+                sx={{ flex: '1 1 200px', minWidth: 200, borderRadius: 2.5 }}
+              />
+            ))}
+          </Box>
+          <Skeleton variant="rounded" height={360} sx={{ borderRadius: 2.5 }} />
         </Box>
       )}
+
+      {loading && result ? (
+        <LinearProgress sx={{ borderRadius: 1 }} data-testid="ztrend-refresh-progress" />
+      ) : null}
 
       {error && (
         <Alert severity="error" data-testid="ztrend-error">
@@ -191,20 +249,22 @@ export function TrendAnalysisPanel({
         </Alert>
       )}
 
-      {!loading && result && result.warnings.length > 0 && (
+      {result && result.warnings.length > 0 && (
         <Alert severity="info" data-testid="ztrend-warnings" sx={{ py: 0.5 }}>
           {result.warnings.slice(0, 3).join(' ')}
         </Alert>
       )}
 
-      {!loading && result && !hasSegments && (
+      {result && !hasSegments && (
         <Alert severity="info" data-testid="ztrend-empty">
           Нет основных версий (isPrimary) с рассчитанным Z в выбранном периоде.
         </Alert>
       )}
 
-      {!loading && result && hasSegments && (
+      {result && hasSegments && kpi && (
         <>
+          <ZTrendKpiCards kpi={kpi} />
+
           <Typography variant="h6" component="h2">
             Общий тренд Z
           </Typography>
