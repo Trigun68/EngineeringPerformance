@@ -49,6 +49,8 @@ const SystemSettingsPage = lazy(() =>
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
 // Дев-мокап вкладки «Анализ тренда оценки факта» с демо-данными вместо backend.
 const TrendAnalysisMockup = lazy(() => import('./pages/dev/TrendAnalysisMockup'));
+// Дев-мокап восстановленной архивной вкладки «Трендовый анализ (архив)» с демо-данными вместо backend.
+const TrendsLegacyMockup = lazy(() => import('./pages/dev/TrendsLegacyMockup'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -136,6 +138,14 @@ export default function App() {
           element={(
             <Suspense fallback={null}>
               <TrendAnalysisMockup />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="/dev/trends-legacy-mockup"
+          element={(
+            <Suspense fallback={null}>
+              <TrendsLegacyMockup />
             </Suspense>
           )}
         />
