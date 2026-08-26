@@ -1,6 +1,76 @@
 import { Box, Card, CardContent, Grid, Stack, Typography } from '@mui/material';
-import { ACCENT_FACT, ACCENT_PLAN, INTERPRETATION_COLOR } from '../reportCalc';
+import { ACCENT_FACT, ACCENT_PLAN, INTERPRETATION_COLOR, percentileFraction } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
+
+/** Градиентная дорожка перцентиля 0..100 с маркерами план/факт — компактный визуальный аналог MarkerTrack. */
+function PercentileGauge({
+  planZ,
+  factZ,
+  hasFact,
+}: {
+  planZ: number | null;
+  factZ: number | null;
+  hasFact: boolean;
+}) {
+  const planPos = percentileFraction(planZ);
+  const factPos = hasFact ? percentileFraction(factZ) : null;
+
+  return (
+    <Box>
+      <Box
+        sx={{
+          position: 'relative',
+          height: 10,
+          borderRadius: 5,
+          background: `linear-gradient(90deg, ${INTERPRETATION_COLOR.Excellent} 0%, ${INTERPRETATION_COLOR.Good} 25%, ${INTERPRETATION_COLOR.Satisfactory} 50%, ${INTERPRETATION_COLOR.NeedsAttention} 75%, ${INTERPRETATION_COLOR.Critical} 100%)`,
+        }}
+      >
+        {planPos !== null && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: `${planPos}%`,
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              bgcolor: ACCENT_PLAN,
+              border: '2px solid #FFFFFF',
+              boxShadow: `0 0 0 1px ${ACCENT_PLAN}`,
+              zIndex: 1,
+            }}
+          />
+        )}
+        {factPos !== null && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: `${factPos}%`,
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 14,
+              height: 14,
+              borderRadius: '50%',
+              bgcolor: ACCENT_FACT,
+              border: '2.5px solid #FFFFFF',
+              boxShadow: `0 0 0 1.5px ${ACCENT_FACT}, 0 2px 6px rgba(0,0,0,0.25)`,
+              zIndex: 2,
+            }}
+          />
+        )}
+      </Box>
+      <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
+        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
+          0
+        </Typography>
+        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
+          100
+        </Typography>
+      </Stack>
+    </Box>
+  );
+}
 
 const MIN = -1.75;
 const MAX = 1.75;
@@ -100,9 +170,10 @@ interface ZScaleProps {
   planZScore: number | null;
   factZScore: number | null;
   percentile: string | null;
+  planPercentile?: string | null;
 }
 
-export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
+export function ZScale({ planZScore, factZScore, percentile, planPercentile }: ZScaleProps) {
   return (
     <Card variant="outlined">
       <CardContent>
@@ -182,16 +253,25 @@ export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
             </Box>
           </Box>
 
+          <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                Перцентиль (0..100, по Z в диапазоне ±1σ)
+              </Typography>
+              <Stack direction="row" spacing={2}>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500, color: ACCENT_PLAN }}>
+                  План: {planPercentile ?? 'Н/Д'}
+                </Typography>
+                <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, color: ACCENT_FACT }}>
+                  Факт: {percentile ?? 'Н/Д'}
+                </Typography>
+              </Stack>
+            </Stack>
+            <PercentileGauge planZ={planZScore} factZ={factZScore} hasFact={factZScore !== null} />
+          </Box>
+
           <Grid container spacing={2} sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="caption" color="text.secondary" display="block">
-                Перцентиль (факт)
-              </Typography>
-              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                {percentile ?? 'Н/Д'}
-              </Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4}>
               <Typography variant="caption" color="text.secondary" display="block">
                 Метод агрегации
               </Typography>
@@ -199,7 +279,7 @@ export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
                 Σ(Z × часы) / Σ(часы)
               </Typography>
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4}>
               <Typography variant="caption" color="text.secondary" display="block">
                 База агрегации
               </Typography>
@@ -207,7 +287,7 @@ export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
                 Корневые направления
               </Typography>
             </Grid>
-            <Grid item xs={6} sm={3}>
+            <Grid item xs={6} sm={4}>
               <Typography variant="caption" color="text.secondary" display="block">
                 Источник норм
               </Typography>

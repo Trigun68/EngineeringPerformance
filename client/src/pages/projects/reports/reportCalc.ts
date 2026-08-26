@@ -49,6 +49,17 @@ export function interpretationColor(z: number | null | undefined): string {
   return i ? INTERPRETATION_COLOR[i] : MUTED_COLOR;
 }
 
+/**
+ * Численная позиция перцентиля (0..100) для визуальной шкалы — паритет backend
+ * PerformancePercentileHelper.GetPercentile: диапазон Z [-1, 1] линейно отображается на
+ * [0, 100], значения вне диапазона клэмпятся к границам.
+ */
+export function percentileFraction(z: number | null | undefined): number | null {
+  if (z === null || z === undefined || Number.isNaN(z)) return null;
+  const clamped = Math.min(1, Math.max(-1, z));
+  return ((clamped + 1) / 2) * 100;
+}
+
 export function fmt(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
   return value.toLocaleString('ru-RU', {

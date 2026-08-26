@@ -22,11 +22,13 @@ import {
 import { ReportHeader } from './components/ReportHeader';
 import { PlanFactSummary } from './components/PlanFactSummary';
 import { ZScale } from './components/ZScale';
+import { TopPerformersPanel } from './components/TopPerformersPanel';
 import { DirectionBars } from './components/DirectionBars';
 import { PerformanceTree } from './components/PerformanceTree';
 import { ForecastTable } from './components/ForecastTable';
 import { AccuracyPanel } from './components/AccuracyPanel';
 import { PhysicalVolumesGrid } from './components/PhysicalVolumesGrid';
+import { PhysicalVolumeGroupsTable } from './components/PhysicalVolumeGroupsTable';
 import { VersionTrend } from './components/VersionTrend';
 import { InsightsPanel } from './components/InsightsPanel';
 
@@ -148,7 +150,10 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
         planZScore={reportSummary.planWeightedZScore}
         factZScore={reportSummary.factWeightedZScore}
         percentile={reportSummary.factPercentile}
+        planPercentile={reportSummary.planPercentile}
       />
+
+      <TopPerformersPanel leaves={leaves} />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
         <DirectionBars
@@ -193,7 +198,19 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
           <AccuracyPanel characteristics={query.data.characteristics} score={accuracyScore} />
         )}
         {detailTab === 'volumes' && (
-          <PhysicalVolumesGrid items={summary.physicalVolumeTotalsByUnit} />
+          <Stack spacing={3}>
+            <PhysicalVolumesGrid items={summary.physicalVolumeTotalsByUnit} />
+            <Divider />
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Все группы физобъёмов ИИЦ
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Плоский список листовых направлений работ с сортировкой, поиском и фильтром по интерпретации.
+              </Typography>
+            </Stack>
+            <PhysicalVolumeGroupsTable leaves={leaves} />
+          </Stack>
         )}
       </Box>
 
