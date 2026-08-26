@@ -3,14 +3,17 @@ import {
   Alert,
   Box,
   Chip,
+  IconButton,
   LinearProgress,
   Paper,
   Skeleton,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import type { ColDef } from 'ag-grid-community';
@@ -34,9 +37,10 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { AccuracyBadge } from './AccuracyBadge';
-import { CreateNormFromSuggestionDialog } from './CreateNormFromSuggestionDialog';
+import { NormRevisionDialog } from './NormRevisionDialog';
 import { FactVsNormChart } from './FactVsNormChart';
 import { ProjectPickerDialog } from './ProjectPickerDialog';
+import { deltaHeatBackground, severityColor, severityLabel, severityRatio } from './severity';
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   ChangeFormulaType: 'Сменить формулу',
@@ -89,7 +93,10 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
   const [selected, setSelected] = useState<NormComparison | null>(null);
   const [formulas, setFormulas] = useState<ReferenceFormula[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogRow, setDialogRow] = useState<NormComparison | null>(null);
   const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
+  // Клик по KPI-карточке фильтрует таблицу; 'all' — фильтр не применён.
+  const [kpiFilter, setKpiFilter] = useState<'all' | 'actual' | 'attention' | 'insufficient'>('all');
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -237,6 +244,17 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     [result],
   );
 
+  const filteredComparisons = useMemo(() => {
+    if (kpiFilter === 'all') return sortedComparisons;
+    if (kpiFilter === 'actual') return sortedComparisons.filter((c) => c.verdict === 'NormIsActual');
+    if (kpiFilter === 'insufficient') {
+      return sortedComparisons.filter((c) => c.verdict === 'InsufficientData');
+    }
+    return sortedComparisons.filter(
+      (c) => c.verdict === 'ChangeFormulaType' || c.verdict === 'AdjustParameters',
+    );
+  }, [sortedComparisons, kpiFilter]);
+
   const summary = useMemo(() => {
     const comparisons = result?.comparisons ?? [];
     const total = comparisons.length;
@@ -249,43 +267,56 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     return { total, actual, attention, insufficient, hasCriticalAttention };
   }, [result]);
 
-  const kpiCards = [
+  const kpiCards: Array<{
+    key: string;
+    filterKey: 'all' | 'actual' | 'attention' | 'insufficient';
+    label: string;
+    value: number;
+    icon: ReactNode;
+    color: string;
+  }> = [
     {
       key: 'total',
+      filterKey: 'all',
       label: 'Групп проверено',
       value: summary.total,
       icon: <AssessmentOutlinedIcon fontSize="small" />,
-      color: 'text.secondary' as const,
+      color: 'text.secondary',
     },
     {
       key: 'actual',
+      filterKey: 'actual',
       label: 'Норма актуальна',
       value: summary.actual,
       icon: <CheckCircleOutlineIcon fontSize="small" />,
-      color: 'success.main' as const,
+      color: 'success.main',
     },
     {
       key: 'attention',
+      filterKey: 'attention',
       label: 'Требуют внимания',
       value: summary.attention,
       icon: <WarningAmberOutlinedIcon fontSize="small" />,
-      color: summary.hasCriticalAttention ? ('error.main' as const) : ('warning.main' as const),
+      color: summary.hasCriticalAttention ? 'error.main' : 'warning.main',
     },
     {
       key: 'insufficient',
+      filterKey: 'insufficient',
       label: 'Недостаточно данных',
       value: summary.insufficient,
       icon: <HelpOutlineOutlinedIcon fontSize="small" />,
-      color: 'text.secondary' as const,
+      color: 'text.secondary',
     },
   ];
 
-  const openCreateDialog = useCallback(
+  // Изменить норму можно для любой строки — в т.ч. для «Норма актуальна», на случай
+  // ручной коррекции по мнению аналитика. Если у строки есть suggestion — предзаполняем
+  // диалог им; иначе открываем ручной редактор формулы реестра норм.
+  const openRevisionDialog = useCallback(
     (row: NormComparison | undefined) => {
-      if (!row?.suggestionId || !canEditNorms) return;
-      if (row.verdict === 'NormIsActual') return;
-      const s = suggestionById.get(row.suggestionId);
-      if (!s) return;
+      if (!row || !canEditNorms) return;
+      const s = row.suggestionId ? suggestionById.get(row.suggestionId) ?? null : null;
+      setDialogRow(row);
       setDialogSuggestion(s);
       setDialogOpen(true);
     },
@@ -296,19 +327,41 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     if (!canEditNorms) return [];
     return [
       {
-        name: 'Создать норму',
-        action: openCreateDialog,
-        disabled: (row) =>
-          !row?.suggestionId ||
-          row.verdict === 'NormIsActual' ||
-          row.verdict === 'InsufficientData',
+        name: 'Изменить норму',
+        action: openRevisionDialog,
       },
     ];
-  }, [canEditNorms, openCreateDialog]);
+  }, [canEditNorms, openRevisionDialog]);
 
   const columnDefs = useMemo<ColDef<NormComparison>[]>(
     () => [
       { field: 'groupName', headerName: 'Группа IIC', flex: 1.6, minWidth: 200 },
+      {
+        colId: 'severity',
+        headerName: 'Серьёзность',
+        width: 150,
+        valueGetter: (p) => (p.data ? severityRatio(p.data) : 0),
+        cellRenderer: (p: { data?: NormComparison }) => {
+          if (!p.data) return null;
+          const ratio = severityRatio(p.data);
+          return (
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ height: '100%' }}>
+              <Box
+                sx={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  bgcolor: severityColor(ratio),
+                }}
+              />
+              <Typography variant="body2" noWrap>
+                {severityLabel(ratio)}
+              </Typography>
+            </Stack>
+          );
+        },
+      },
       {
         field: 'normMeanPerformance',
         headerName: 'μ нормы',
@@ -324,8 +377,11 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       {
         field: 'deltaMean',
         headerName: 'Δμ (факт−норма)',
-        width: 130,
+        width: 140,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+        cellStyle: (p) => ({
+          backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || p.data?.factStdDeviation || 1),
+        }),
       },
       {
         field: 'normStdDeviation',
@@ -344,12 +400,16 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         headerName: 'Δσ',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+        cellStyle: (p) => ({
+          backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || 1),
+        }),
       },
       {
         field: 'deltaR2',
         headerName: 'ΔR²',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+        cellStyle: (p) => ({ backgroundColor: deltaHeatBackground(p.value, 0.3) }),
       },
       {
         field: 'verdict',
@@ -367,8 +427,34 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
           );
         },
       },
+      {
+        colId: 'actions',
+        headerName: '',
+        width: 56,
+        pinned: 'right' as const,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (p: { data?: NormComparison }) => {
+          if (!p.data || !canEditNorms) return null;
+          return (
+            <Tooltip title="Изменить норму">
+              <IconButton
+                size="small"
+                aria-label={`Изменить норму: ${p.data.groupName}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openRevisionDialog(p.data);
+                }}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          );
+        },
+      },
     ],
-    [],
+    [canEditNorms, openRevisionDialog],
   );
 
   return (
@@ -394,32 +480,55 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
               />
             ))
           : result && result.comparisons.length > 0
-            ? kpiCards.map((card) => (
-                <Paper
-                  key={card.key}
-                  variant="outlined"
-                  sx={{
-                    flex: '1 1 220px',
-                    minWidth: 200,
-                    p: 2,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                  }}
-                >
-                  <Box sx={{ color: card.color, display: 'flex' }}>{card.icon}</Box>
-                  <Box>
-                    <Typography variant="h6" component="div" sx={{ color: card.color, lineHeight: 1.2 }}>
-                      {card.value}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {card.label}
-                    </Typography>
-                  </Box>
-                </Paper>
-              ))
+            ? kpiCards.map((card) => {
+                const active = kpiFilter === card.filterKey;
+                return (
+                  <Paper
+                    key={card.key}
+                    component="button"
+                    type="button"
+                    variant="outlined"
+                    onClick={() => setKpiFilter(active ? 'all' : card.filterKey)}
+                    aria-pressed={active}
+                    data-testid={`fact-norm-kpi-${card.filterKey}`}
+                    sx={{
+                      flex: '1 1 220px',
+                      minWidth: 200,
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      borderColor: active ? 'primary.main' : undefined,
+                      borderWidth: active ? 2 : 1,
+                      backgroundColor: active ? 'action.selected' : 'background.paper',
+                      transition: 'background-color 0.15s, border-color 0.15s',
+                      '&:hover': { backgroundColor: 'action.hover' },
+                    }}
+                  >
+                    <Box sx={{ color: card.color, display: 'flex' }}>{card.icon}</Box>
+                    <Box>
+                      <Typography variant="h6" component="div" sx={{ color: card.color, lineHeight: 1.2 }}>
+                        {card.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {card.label}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                );
+              })
             : null}
-      </Box>
+        </Box>
+
+      {kpiFilter !== 'all' && (
+        <Alert severity="info" onClose={() => setKpiFilter('all')} sx={{ py: 0 }}>
+          Показаны только строки: {kpiCards.find((c) => c.filterKey === kpiFilter)?.label}. Нажмите
+          на карточку ещё раз или на крестик, чтобы вернуться к полному списку.
+        </Alert>
+      )}
 
       {error && <Alert severity="error">{error}</Alert>}
 
@@ -446,12 +555,12 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         }}
       >
         <DataTable<NormComparison>
-          rowData={sortedComparisons}
+          rowData={filteredComparisons}
           columnDefs={columnDefs}
           objectName="GroupTrend"
           gridId="fact-norm-suggestions"
           loading={loading}
-          height={Math.max(280, Math.min(560, 48 + sortedComparisons.length * 42))}
+          height={Math.max(280, Math.min(560, 48 + filteredComparisons.length * 42))}
           contextMenuItems={contextMenuItems}
           onRowClicked={(row) => setSelected(row)}
           getRowIdValue={(row) => String(row.normId)}
@@ -472,6 +581,13 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
               label={VERDICT_LABEL[selected.verdict]}
               data-testid="fact-norm-selected-verdict"
             />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Отклонение: ${severityLabel(severityRatio(selected))}`}
+              sx={{ borderColor: severityColor(severityRatio(selected)), color: severityColor(severityRatio(selected)) }}
+              data-testid="fact-norm-selected-severity"
+            />
             {selected.suggestionId && suggestionById.get(selected.suggestionId) ? (
               <Chip
                 size="small"
@@ -482,6 +598,18 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
                 data-testid="fact-norm-selected-confidence"
               />
             ) : null}
+            {canEditNorms && (
+              <Tooltip title="Изменить норму этой группы">
+                <IconButton
+                  size="small"
+                  onClick={() => openRevisionDialog(selected)}
+                  aria-label="Изменить норму"
+                  data-testid="fact-norm-selected-edit"
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
           </Stack>
           <FactVsNormChart
             title={`${selected.groupName}: производительность vs объём`}
@@ -490,6 +618,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
             currentParams={selected.currentParameters}
             proposedFormula={selected.proposedFormula}
             proposedParams={selected.proposedParameters}
+            deviationSigma={selected.normStdDeviation}
           />
         </Box>
       )}
@@ -501,11 +630,11 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         onApply={applyProjectIds}
       />
 
-      <CreateNormFromSuggestionDialog
+      <NormRevisionDialog
         open={dialogOpen}
+        row={dialogRow}
         suggestion={dialogSuggestion}
         formulas={formulas}
-        chartPoints={selected?.chartPoints ?? []}
         onClose={() => setDialogOpen(false)}
         onSaved={() => void runAnalysis()}
       />
