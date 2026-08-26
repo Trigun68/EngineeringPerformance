@@ -3,9 +3,16 @@ import {
   Alert,
   Box,
   Chip,
+  LinearProgress,
+  Paper,
+  Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import type { ColDef } from 'ag-grid-community';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { ACTION_LABELS } from '../../../constants/actionLabels';
@@ -17,6 +24,7 @@ import {
   fetchReferenceFormulas,
   runFactNormAnalysis,
   type Accuracy,
+  type Confidence,
   type FactNormAnalysisResponse,
   type NormComparison,
   type NormSuggestion,
@@ -43,6 +51,24 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
   NormIsActual: 'success',
   InsufficientData: 'default',
 };
+
+const CONFIDENCE_LABEL: Record<Confidence, string> = {
+  Low: 'Низкая',
+  Medium: 'Средняя',
+  High: 'Высокая',
+};
+
+// Требующие внимания вердикты идут первыми, чтобы аналитик сразу видел проблемные группы.
+const VERDICT_PRIORITY: Record<Verdict, number> = {
+  ChangeFormulaType: 0,
+  AdjustParameters: 1,
+  InsufficientData: 2,
+  NormIsActual: 3,
+};
+
+function sortByAttention(comparisons: NormComparison[]): NormComparison[] {
+  return [...comparisons].sort((a, b) => VERDICT_PRIORITY[a.verdict] - VERDICT_PRIORITY[b.verdict]);
+}
 
 const FACT_NORM_PROJECTS_PREF_KEY = 'analytics.factNorm.projectIds.v1';
 
@@ -122,7 +148,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         ac.signal,
       );
       setResult(data);
-      setSelected(data.comparisons[0] ?? null);
+      setSelected(sortByAttention(data.comparisons)[0] ?? null);
     } catch (e) {
       if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') {
         return;
@@ -205,6 +231,54 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     for (const s of result?.suggestions ?? []) map.set(s.id, s);
     return map;
   }, [result]);
+
+  const sortedComparisons = useMemo(
+    () => sortByAttention(result?.comparisons ?? []),
+    [result],
+  );
+
+  const summary = useMemo(() => {
+    const comparisons = result?.comparisons ?? [];
+    const total = comparisons.length;
+    const actual = comparisons.filter((c) => c.verdict === 'NormIsActual').length;
+    const attention = comparisons.filter(
+      (c) => c.verdict === 'ChangeFormulaType' || c.verdict === 'AdjustParameters',
+    ).length;
+    const insufficient = comparisons.filter((c) => c.verdict === 'InsufficientData').length;
+    const hasCriticalAttention = comparisons.some((c) => c.verdict === 'ChangeFormulaType');
+    return { total, actual, attention, insufficient, hasCriticalAttention };
+  }, [result]);
+
+  const kpiCards = [
+    {
+      key: 'total',
+      label: 'Групп проверено',
+      value: summary.total,
+      icon: <AssessmentOutlinedIcon fontSize="small" />,
+      color: 'text.secondary' as const,
+    },
+    {
+      key: 'actual',
+      label: 'Норма актуальна',
+      value: summary.actual,
+      icon: <CheckCircleOutlineIcon fontSize="small" />,
+      color: 'success.main' as const,
+    },
+    {
+      key: 'attention',
+      label: 'Требуют внимания',
+      value: summary.attention,
+      icon: <WarningAmberOutlinedIcon fontSize="small" />,
+      color: summary.hasCriticalAttention ? ('error.main' as const) : ('warning.main' as const),
+    },
+    {
+      key: 'insufficient',
+      label: 'Недостаточно данных',
+      value: summary.insufficient,
+      icon: <HelpOutlineOutlinedIcon fontSize="small" />,
+      color: 'text.secondary' as const,
+    },
+  ];
 
   const openCreateDialog = useCallback(
     (row: NormComparison | undefined) => {
@@ -307,6 +381,46 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         участвует. Таблица — полный список направлений; график — динамика объём → производительность.
       </Typography>
 
+      {loading && result ? <LinearProgress sx={{ borderRadius: 1 }} data-testid="fact-norm-refresh-progress" /> : null}
+
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }} data-testid="fact-norm-kpi-row">
+        {loading && !result
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                sx={{ flex: '1 1 220px', minWidth: 200 }}
+                height={80}
+              />
+            ))
+          : result && result.comparisons.length > 0
+            ? kpiCards.map((card) => (
+                <Paper
+                  key={card.key}
+                  variant="outlined"
+                  sx={{
+                    flex: '1 1 220px',
+                    minWidth: 200,
+                    p: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                  }}
+                >
+                  <Box sx={{ color: card.color, display: 'flex' }}>{card.icon}</Box>
+                  <Box>
+                    <Typography variant="h6" component="div" sx={{ color: card.color, lineHeight: 1.2 }}>
+                      {card.value}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {card.label}
+                    </Typography>
+                  </Box>
+                </Paper>
+              ))
+            : null}
+      </Box>
+
       {error && <Alert severity="error">{error}</Alert>}
 
       {result?.warnings?.length ? (
@@ -323,27 +437,61 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       <Typography variant="subtitle1" component="h2">
         Сравнение по группам IIC
       </Typography>
-      <DataTable<NormComparison>
-        rowData={result?.comparisons ?? []}
-        columnDefs={columnDefs}
-        objectName="GroupTrend"
-        gridId="fact-norm-suggestions"
-        loading={loading}
-        height={Math.max(280, Math.min(560, 48 + (result?.comparisons.length ?? 0) * 42))}
-        contextMenuItems={contextMenuItems}
-        onRowClicked={(row) => setSelected(row)}
-        getRowIdValue={(row) => String(row.normId)}
-      />
+      <Box
+        sx={{
+          '& .fact-norm-row-selected': {
+            backgroundColor: 'rgba(41, 128, 185, 0.12) !important',
+            fontWeight: 600,
+          },
+        }}
+      >
+        <DataTable<NormComparison>
+          rowData={sortedComparisons}
+          columnDefs={columnDefs}
+          objectName="GroupTrend"
+          gridId="fact-norm-suggestions"
+          loading={loading}
+          height={Math.max(280, Math.min(560, 48 + sortedComparisons.length * 42))}
+          contextMenuItems={contextMenuItems}
+          onRowClicked={(row) => setSelected(row)}
+          getRowIdValue={(row) => String(row.normId)}
+          getRowClass={(p) =>
+            p.data && selected && p.data.normId === selected.normId
+              ? 'fact-norm-row-selected'
+              : undefined
+          }
+        />
+      </Box>
 
       {selected && (
-        <FactVsNormChart
-          title={`${selected.groupName}: производительность vs объём`}
-          points={selected.chartPoints ?? []}
-          currentFormula={selected.currentFormula}
-          currentParams={selected.currentParameters}
-          proposedFormula={selected.proposedFormula}
-          proposedParams={selected.proposedParameters}
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Chip
+              size="small"
+              color={VERDICT_COLOR[selected.verdict]}
+              label={VERDICT_LABEL[selected.verdict]}
+              data-testid="fact-norm-selected-verdict"
+            />
+            {selected.suggestionId && suggestionById.get(selected.suggestionId) ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Уверенность предложения: ${
+                  CONFIDENCE_LABEL[suggestionById.get(selected.suggestionId)!.confidence]
+                }`}
+                data-testid="fact-norm-selected-confidence"
+              />
+            ) : null}
+          </Stack>
+          <FactVsNormChart
+            title={`${selected.groupName}: производительность vs объём`}
+            points={selected.chartPoints ?? []}
+            currentFormula={selected.currentFormula}
+            currentParams={selected.currentParameters}
+            proposedFormula={selected.proposedFormula}
+            proposedParams={selected.proposedParameters}
+          />
+        </Box>
       )}
 
       <ProjectPickerDialog
