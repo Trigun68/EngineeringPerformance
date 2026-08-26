@@ -14,6 +14,7 @@ export interface ProjectVersion {
   isArchived: boolean;
   createdAt?: string;
   planningScenario?: number;
+  isMain: boolean;
 }
 
 export interface ProjectVersionWriteRequest {
@@ -45,6 +46,7 @@ const projectVersionSchema = z.object({
   sortOrder: z.number().int(),
   isArchived: z.boolean(),
   createdAt: z.string().optional(),
+  isMain: z.boolean().optional().default(false),
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 
@@ -85,6 +87,14 @@ export async function copyProjectVersion(
 
 export async function deleteProjectVersion(projectId: number, versionId: number): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/versions/${versionId}`);
+}
+
+/** Делает версию основной для её направления (Plan или Fact); Forecast не поддерживается. */
+export async function setMainProjectVersion(projectId: number, versionId: number): Promise<ProjectVersion> {
+  const { data } = await apiClient.post<ProjectVersion>(
+    `/projects/${projectId}/versions/${versionId}/set-main`,
+  );
+  return parseApiContract(`/projects/${projectId}/versions/${versionId}/set-main`, projectVersionSchema, data);
 }
 
 export async function recalculateLaborIntensities(

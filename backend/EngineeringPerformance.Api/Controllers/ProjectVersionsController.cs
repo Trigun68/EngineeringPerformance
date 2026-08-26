@@ -74,6 +74,25 @@ public sealed class ProjectVersionsController : ControllerBase
         return ok ? NoContent() : NotFound();
     }
 
+    [HttpPost("{versionId:int}/set-main")]
+    [RequireProjectAccess(AccessLevel.Edit)]
+    [HasPermission(PermissionType.ProjectAnalysisVersions, AccessLevel.Edit)]
+    public async Task<ActionResult<ProjectVersionDto>> SetMain(int projectId, int versionId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Ok(await _versions.SetMainAsync(projectId, versionId, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost("{versionId:int}/copy")]
     [RequireProjectAccess(AccessLevel.Edit)]
     [HasPermission(PermissionType.ProjectAnalysisVersions, AccessLevel.Edit)]

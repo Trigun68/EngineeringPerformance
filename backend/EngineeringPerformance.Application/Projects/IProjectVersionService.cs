@@ -14,6 +14,15 @@ public interface IProjectVersionService
 
     Task<bool> ArchiveAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Делает версию основной для её направления (Plan или Fact): снимает <c>IsMain</c> у всех
+    /// остальных версий проекта с тем же <see cref="AnalysisDirection"/> и устанавливает у выбранной.
+    /// Forecast-версии не поддерживаются (нет понятия «основная версия прогноза»).
+    /// </summary>
+    /// <exception cref="KeyNotFoundException">Версия не найдена в проекте.</exception>
+    /// <exception cref="InvalidOperationException">Направление версии — Forecast.</exception>
+    Task<ProjectVersionDto> SetMainAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
+
     Task<ProjectVersionDto> CopyAsync(
         int projectId,
         int versionId,

@@ -9,9 +9,11 @@ public static class FactLaborHoursTotals
 {
     public const int WeightedZDecimalPlaces = 2;
 
-    public static decimal? FromLaborIntensities(IEnumerable<ProjectLaborIntensity> laborIntensities)
+    public static decimal? FromLaborIntensities(IEnumerable<ProjectLaborIntensity> laborIntensities, bool useActualHours = false)
     {
-        var total = laborIntensities.Sum(li => li.PlannedHours);
+        var total = useActualHours
+            ? laborIntensities.Sum(li => li.ActualHours)
+            : laborIntensities.Sum(li => li.PlannedHours);
         return total > 0 ? Math.Round(total, 2) : null;
     }
 

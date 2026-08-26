@@ -29,6 +29,7 @@ import {
   copyProjectVersion,
   createProjectVersion,
   fetchProjectVersions,
+  setMainProjectVersion,
   type ProjectVersion,
 } from '../../api/projectVersionsApi';
 import { fetchProjects } from '../../api/projectsApi';
@@ -38,6 +39,7 @@ import { ImportWizard } from '../../components/ImportWizard/ImportWizard';
 import { PaginationBar } from '../../components/PaginationBar/PaginationBar';
 import { ParticipantsModal } from '../../components/ParticipantsModal/ParticipantsModal';
 import { usePermission } from '../../hooks/usePermission';
+import { getApiErrorMessage } from '../../services/apiError';
 import { useAuthStore } from '../../store/useAuthStore';
 import { canReadPermission } from '../../utils/permissionAccess';
 import type { Project } from '../../types/project';
@@ -204,6 +206,15 @@ export function ProjectDetailPage() {
     await load();
   };
 
+  const handleSetMainVersion = async (version: ProjectVersion) => {
+    try {
+      await setMainProjectVersion(pid, version.id);
+      await load();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось сделать версию основной.'));
+    }
+  };
+
   const ppvColumns = useMemo<ColDef<ProjectPhysicalVolume>[]>(
     () => [
       { field: 'facilityCode', headerName: 'Код объекта', minWidth: 120 },
@@ -247,6 +258,12 @@ export function ProjectDetailPage() {
     () => [
       { field: 'versionName', headerName: 'Версия', minWidth: 120 },
       { field: 'name', headerName: 'Наименование', minWidth: 200 },
+      {
+        field: 'isMain',
+        headerName: 'Основная',
+        width: 110,
+        valueFormatter: (p) => (p.value ? 'Да' : ''),
+      },
       { field: 'isArchived', headerName: 'Архив', width: 90 },
     ],
     [],
@@ -349,7 +366,16 @@ export function ProjectDetailPage() {
             gridId={`project-${pid}-versions`}
             contextMenuItems={
               canEditVersions
-                ? [{ name: 'Копировать', action: (row) => row && void handleCopyVersion(row), requiredLevel: 2 }]
+                ? [
+                    { name: 'Копировать', action: (row) => row && void handleCopyVersion(row), requiredLevel: 2 },
+                    {
+                      name: 'Сделать основной',
+                      action: (row) => row && void handleSetMainVersion(row),
+                      // Основной может быть только версия плана (1) или факта (2) — не прогноза.
+                      disabled: (row) => !row || row.direction === 3 || row.isMain,
+                      requiredLevel: 2,
+                    },
+                  ]
                 : []
             }
           />

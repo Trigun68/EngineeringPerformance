@@ -124,6 +124,42 @@ public sealed class ProjectVersionService : IProjectVersionService
         return true;
     }
 
+    public async Task<ProjectVersionDto> SetMainAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.ProjectAnalysisVersions
+            .FirstOrDefaultAsync(v => v.ProjectId == projectId && v.Id == versionId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Version {versionId} not found for project {projectId}.");
+
+        if (entity.Direction == AnalysisDirection.Forecast)
+            throw new InvalidOperationException("Основной может быть только версия плана или факта (не прогноза).");
+
+        var direction = entity.Direction;
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            _context.ChangeTracker.Clear();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+            await _context.ProjectAnalysisVersions
+                .Where(v => v.ProjectId == projectId && v.Direction == direction && v.IsMain)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(v => v.IsMain, false),
+                    cancellationToken);
+
+            await _context.ProjectAnalysisVersions
+                .Where(v => v.ProjectId == projectId && v.Id == versionId)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(v => v.IsMain, true),
+                    cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        });
+
+        return (await GetByIdAsync(projectId, versionId, cancellationToken))!;
+    }
+
     public Task<ProjectVersionDto> CopyAsync(
         int projectId,
         int versionId,
@@ -200,5 +236,6 @@ public sealed class ProjectVersionService : IProjectVersionService
             v.SortOrder,
             v.IsArchived,
             v.CreatedAt,
-            v.PlanningScenario);
+            v.PlanningScenario,
+            v.IsMain);
 }

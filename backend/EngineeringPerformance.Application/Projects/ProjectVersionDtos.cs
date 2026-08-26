@@ -14,7 +14,8 @@ public sealed record ProjectVersionDto(
     int SortOrder,
     bool IsArchived,
     DateTime CreatedAt,
-    PlanningScenario PlanningScenario = PlanningScenario.ByEachValue);
+    PlanningScenario PlanningScenario = PlanningScenario.ByEachValue,
+    bool IsMain = false);
 
 public sealed record ProjectVersionWriteRequest(
     string VersionName,

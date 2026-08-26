@@ -18,6 +18,13 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
 
     public PlanningScenario PlanningScenario { get; set; } = PlanningScenario.ByEachValue;
 
+    /// <summary>
+    /// Основная версия проекта для своего направления (Plan/Fact). Ровно одна основная версия
+    /// на направление (Plan и Fact независимо друг от друга); Forecast не участвует.
+    /// Используется отчётом «план/факт» (<see cref="EngineeringPerformance.Application.Analytics.ProjectReportSummaryDto"/>).
+    /// </summary>
+    public bool IsMain { get; set; }
+
     public Project Project { get; set; } = null!;
 
     public PhysicalVolumeType? PhysicalVolumeType { get; set; }

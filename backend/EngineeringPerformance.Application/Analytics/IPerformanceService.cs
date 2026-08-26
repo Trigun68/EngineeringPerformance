@@ -2,7 +2,12 @@ namespace EngineeringPerformance.Application.Analytics;
 
 public interface IPerformanceService
 {
-    Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId);
+    /// <param name="useActualHours">
+    /// Если <c>true</c> — строки трудоёмкости берутся из <c>ActualHours</c> (факт) вместо
+    /// <c>PlannedHours</c> (план); нормы/снимок версии не меняются. Используется для параллельного
+    /// расчёта «Z-факт» по той же версии (см. <see cref="IProjectReportSummaryService"/>).
+    /// </param>
+    Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId, bool useActualHours = false);
 
     /// <summary>
     /// Сбрасывает процессный кеш иерархии направлений ИИС, из которого строится производительность.

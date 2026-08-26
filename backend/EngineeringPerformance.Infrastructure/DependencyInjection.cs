@@ -106,6 +106,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectDataService, ProjectDataService>();
         services.AddScoped<IPerformanceService, PerformanceService>();
         services.AddScoped<IProjectVersionAnalysisService, ProjectVersionAnalysisService>();
+        services.AddScoped<IProjectReportSummaryService, ProjectReportSummaryService>();
         services.AddScoped<IProjectForecastService, ProjectForecastService>();
         services.AddScoped<IForecastPlannedVolumePersistenceService, ForecastPlannedVolumePersistenceService>();
         services.AddScoped<ProjectVersionGridDataLoader>();

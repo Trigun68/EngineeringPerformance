@@ -15,16 +15,27 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IProjectCompareService _compare;
     private readonly IGroupAnalyticsService _groupAnalytics;
     private readonly IVisualReportService _visualReports;
+    private readonly IProjectReportSummaryService _reportSummary;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
         IGroupAnalyticsService groupAnalytics,
-        IVisualReportService visualReports)
+        IVisualReportService visualReports,
+        IProjectReportSummaryService reportSummary)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
         _visualReports = visualReports;
+        _reportSummary = reportSummary;
     }
+
+    [HttpGet("report-summary")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public Task<ProjectReportSummaryDto> ReportSummary(
+        int projectId,
+        CancellationToken cancellationToken = default) =>
+        _reportSummary.GetSummaryAsync(projectId, cancellationToken);
 
     [HttpGet("compare")]
     [RequireProjectAccess]
