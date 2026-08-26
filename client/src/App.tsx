@@ -47,6 +47,8 @@ const SystemSettingsPage = lazy(() =>
 );
 // Дизайн-превью PDF-отчётов — доступно без авторизации и без AppLayout.
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
+// Дев-мокап вкладки «Анализ тренда оценки факта» с демо-данными вместо backend.
+const TrendAnalysisMockup = lazy(() => import('./pages/dev/TrendAnalysisMockup'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -126,6 +128,14 @@ export default function App() {
           element={(
             <Suspense fallback={null}>
               <PdfDesignMockups />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="/dev/trend-mockup"
+          element={(
+            <Suspense fallback={null}>
+              <TrendAnalysisMockup />
             </Suspense>
           )}
         />
