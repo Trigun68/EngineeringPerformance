@@ -55,6 +55,8 @@ const TrendsLegacyMockup = lazy(() => import('./pages/dev/TrendsLegacyMockup'));
 const TrendDetailMockup = lazy(() => import('./pages/dev/TrendDetailMockup'));
 // Дев-мокап переработанной вкладки «Сравнение факта и норм» с демо-данными вместо backend.
 const FactNormAnalysisMockup = lazy(() => import('./pages/dev/FactNormAnalysisMockup'));
+// Дев-мокап переработанной вкладки «Анализ норм» с демо-данными вместо backend.
+const NormAnalysisMockup = lazy(() => import('./pages/dev/NormAnalysisMockup'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -166,6 +168,14 @@ export default function App() {
           element={(
             <Suspense fallback={null}>
               <FactNormAnalysisMockup />
+            </Suspense>
+          )}
+        />
+        <Route
+          path="/dev/norm-analysis-mockup"
+          element={(
+            <Suspense fallback={null}>
+              <NormAnalysisMockup />
             </Suspense>
           )}
         />
