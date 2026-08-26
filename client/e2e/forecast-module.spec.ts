@@ -173,7 +173,8 @@ test.describe('Forecast module - WPF Style', () => {
     await page.getByRole('tab', { name: 'Детально' }).click();
     await expect(actionButton(page, 'exportExcel')).toBeVisible();
     await expect(actionButton(page, 'exportExcelSelected')).toBeVisible();
-    await expect(actionButton(page, 'exportPdf')).toBeVisible();
+    // PDF детализации отключён: полная таблица на десятки тысяч строк даёт непригодный файл.
+    await expect(actionButton(page, 'exportPdf')).toHaveCount(0);
     await expect(actionButton(page, 'exportExcelSummary')).toBeVisible();
   });
 
