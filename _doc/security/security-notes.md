@@ -11,7 +11,7 @@
 ## Строки подключения
 
 - Файл настроек: `%APPDATA%\EngineeringPerformance\settings.json` (см. `AppSettings`). Доступ ограничен профилем Windows; строка может содержать пароль SQL-аутентификации — **не** логировать целиком в Serilog/консоль.
-- Утилита `ConnectionStringMasking.MaskForDisplay` — для безопасного вывода (DbInitializer, диагностика).
+- Утилита `ConnectionStringMasking.MaskForDisplay` — для безопасного вывода (диагностика, консольные утилиты).
 
 ## SQL и импорт
 

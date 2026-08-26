@@ -5,7 +5,7 @@
 - Frontend: React 18+, TypeScript, MUI, AG Grid, Zustand, Vite
 - Infra: Docker Compose, Nginx (+ auth-spnego for Windows Auth), JWT cookie fallback
 
-**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`, `_install/`).
+**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`).
 
 ---
 

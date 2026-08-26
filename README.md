@@ -20,8 +20,9 @@ docker compose up -d
 | `backend/` | ASP.NET Core 8 API |
 | `client/` | React + Vite + MUI + AG Grid |
 | `EngineeringPerformance.App/` | WPF reference (archived) |
-| `_install/DEPLOY.md` | Развёртывание и rollback |
+| `_doc/deployment/DEPLOY.md` | Развёртывание и rollback |
 | `_doc/migration_map.md` | Карта миграции WPF → Web |
+| `archive/` | Локальный архив ненужных данных (gitignored) |
 
 ## Проверки
 

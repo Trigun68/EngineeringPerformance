@@ -70,6 +70,9 @@ scripts/*
 # Misc artifacts
 backups/
 
+# Локальный архив ненужных данных (мусор, старые логи/бэкапы, мёртвый код)
+archive/
+
 # Frontend
 node_modules/
 *.tsbuildinfo

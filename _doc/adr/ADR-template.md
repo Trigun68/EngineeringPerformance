@@ -51,8 +51,8 @@
 
 ## Связанные документы
 
-- [ADR-001](_doc/adr/ADR-001-v2-schema-normalization.md) — предыдущее решение по схеме
-- [feature-name.md](_doc/features/feature-name.md)
+- [ADR-001](ADR-001-v2-schema-normalization.md) — предыдущее решение по схеме
+- `../features/feature-name.md` — пример ссылки на фичу (placeholder)
 
 ---
 

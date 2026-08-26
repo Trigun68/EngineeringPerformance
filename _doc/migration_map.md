@@ -625,7 +625,7 @@ Browser ← application/pdf ← QuestPDF GeneratePdf()
 - [ ] UAT с ключевыми пользователями (PM, Observer, Admin) — чеклист + sign-off; **авто:** `npm run test:e2e` (Playwright), `scripts/uat-smoke.sh`
 - [x] Performance smoke: `scripts/perf-smoke.sh`, расширенные API tests
 - [x] Security audit: `_doc/security/web-security-audit.md` (JWT, CORS prod, upload, SPNEGO)
-- [x] Migration runbook + rollback: `_install/DEPLOY.md`
+- [x] Migration runbook + rollback: `_doc/deployment/DEPLOY.md`
 - [ ] Параллельная эксплуатация (2 недели) → отключение WPF-distributive (организационно)
 - [x] Архивация `EngineeringPerformance.App` — reference only (`_doc/architecture/wpf-reference-archive.md`)
 

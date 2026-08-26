@@ -26,12 +26,12 @@ SQL scripts are grouped by purpose. **Entry points** (run with `sqlcmd`; relativ
 | `migrations/tools/generate_fizobem_physical_volumes_seed.py` | `migrations/data/005_PhysicalVolumes.sql` (лист «Физ.объем») |
 | `migrations/tools/generate_iic_texas_seed.py` | fragments / IIC from «Техас» (used alongside `002`) |
 
-See also: `install/README.md` (Russian deployment guide).
+See also: `_doc/deployment/DEPLOY.md` (Russian deployment guide).
 
 ## Source of truth and legacy drift (2026-06)
 
 **Production schema is defined by EF Core migrations** in `EngineeringPerformance.Infrastructure/Migrations/`.
-The application applies them at startup (`DatabaseSeeder.MigrateAsync`) or via `dotnet ef database update` / `EngineeringPerformance.DbInitializer`.
+The application applies them at startup (`DatabaseSeeder.MigrateAsync`) or via `dotnet ef database update`.
 
 **Legacy `sqlcmd` scripts** under `migrations/schema/` and `migrations/data/` are **not kept in sync automatically**.
 As of the latest EF migration (`ExpandEquipmentTextFields`, 2026-06-01), the SQL script chain ends at `schema/016_ExpandLaborDocumentationCodeTo450.sql` and **does not include**:
