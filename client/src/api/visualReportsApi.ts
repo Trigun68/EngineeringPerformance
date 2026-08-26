@@ -23,6 +23,14 @@ export async function exportFactFacilityPdf(projectId: number, versionId: number
   triggerBrowserDownload(blob, filename);
 }
 
+/** Сводный PDF «план/факт» по основным версиям проекта (вкладка «Отчёт»). */
+export async function exportProjectReportPdf(projectId: number, versionId: number): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/report/pdf`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
 export async function exportComparePdf(
   projectId: number,
   versionA: number,

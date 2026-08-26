@@ -4,14 +4,15 @@ import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from
 
 const W = 640;
 const H = 220;
-const PAD_X = 28;
+const PAD_X = 32;
 const PAD_Y = 28;
 
 const PLAN = 1;
 const FACT = 2;
 
-const PLAN_COLOR = 'var(--ep-report-primary)';
-const FACT_COLOR = 'var(--ep-report-perf-critical)';
+// Акценты план/факт — паритет новому дизайну (reportCalc ACCENT_PLAN / ACCENT_FACT).
+const PLAN_COLOR = 'var(--ep-report-accent-plan)';
+const FACT_COLOR = 'var(--ep-report-accent-fact)';
 
 type Props = {
   points: PerformanceReportHistoryPoint[];
@@ -20,16 +21,11 @@ type Props = {
 type PointWithZ = {
   p: PerformanceReportHistoryPoint;
   z: number;
-  t: number;
   snapshotChanged: boolean;
 };
 
-function seriesPath(
-  items: Array<{ t: number; z: number }>,
-  x: (t: number) => number,
-  y: (v: number) => number,
-): string {
-  return items.map((p) => `${x(p.t)},${y(p.z)}`).join(' ');
+function seriesPath(items: Array<{ cx: number; z: number }>, y: (v: number) => number): string {
+  return items.map((p) => `${p.cx},${y(p.z)}`).join(' ');
 }
 
 function withSnapshotTint(points: PerformanceReportHistoryPoint[]): PointWithZ[] {
@@ -45,17 +41,25 @@ function withSnapshotTint(points: PerformanceReportHistoryPoint[]): PointWithZ[]
       return {
         p,
         z,
-        t: new Date(p.createdAt).getTime(),
         snapshotChanged,
       };
     })
     .filter((x): x is PointWithZ => x != null);
 }
 
-export function VersionTrend({ points }: Props) {
-  const withZ = withSnapshotTint(points);
+/** Строгая хронология: по дате создания, при равенстве — по id версии. */
+function byChronology(a: PerformanceReportHistoryPoint, b: PerformanceReportHistoryPoint): number {
+  const dt = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  return dt !== 0 ? dt : a.versionId - b.versionId;
+}
 
-  if (points.length === 0 || withZ.length === 0) {
+export function VersionTrend({ points }: Props) {
+  // Ось X — категориальная, точки отсортированы по дате: порядок всегда хронологический,
+  // даже когда у версий совпадают даты (time-scale схлопывал бы их в одну координату).
+  const sortedPoints = [...points].sort(byChronology);
+  const withZ = withSnapshotTint(sortedPoints);
+
+  if (sortedPoints.length === 0 || withZ.length === 0) {
     return (
       <ReportCard>
         <ReportCardHeader>
@@ -74,24 +78,31 @@ export function VersionTrend({ points }: Props) {
   const max = Math.max(...zs, 0.6);
   const min = Math.min(...zs, -0.2);
   const span = max - min || 1;
-  const times = points.map((p) => new Date(p.createdAt).getTime());
-  const minT = Math.min(...times);
-  const maxT = Math.max(...times);
-  const tSpan = maxT - minT || 1;
 
-  const x = (t: number) => PAD_X + ((t - minT) / tSpan) * (W - PAD_X * 2);
+  const indexByKey = new Map(withZ.map((x, i) => [`${x.p.versionId}-${x.p.direction}`, i]));
+  const xIndex = (key: string) => {
+    const i = indexByKey.get(key) ?? 0;
+    return withZ.length === 1
+      ? W / 2
+      : PAD_X + (i / (withZ.length - 1)) * (W - PAD_X * 2);
+  };
   const y = (v: number) => PAD_Y + ((max - v) / span) * (H - PAD_Y * 2);
 
-  const planSeries = withZ.filter((x) => x.p.direction === PLAN).map((x) => ({ t: x.t, z: x.z }));
-  const factSeries = withZ.filter((x) => x.p.direction === FACT).map((x) => ({ t: x.t, z: x.z }));
+  const keyOf = (p: PerformanceReportHistoryPoint) => `${p.versionId}-${p.direction}`;
+  const planSeries = withZ
+    .filter((x) => x.p.direction === PLAN)
+    .map((x) => ({ cx: xIndex(keyOf(x.p)), z: x.z }));
+  const factSeries = withZ
+    .filter((x) => x.p.direction === FACT)
+    .map((x) => ({ cx: xIndex(keyOf(x.p)), z: x.z }));
 
   return (
     <ReportCard>
       <ReportCardHeader>
         <ReportCardTitle className="text-base md:text-lg">Динамика Z-оценки по версиям</ReportCardTitle>
         <p className="text-sm text-muted-foreground">
-          Ось X — дата создания версии. План — синий, факт — красный. Смена состава снимка норм
-          подсвечена более светлой точкой.
+          Ось X — дата создания версии в хронологическом порядке. План — синий, факт — тёмный.
+          Смена состава снимка норм подсвечена более светлой точкой.
         </p>
       </ReportCardHeader>
       <ReportCardContent className="flex flex-col gap-4">
@@ -121,7 +132,7 @@ export function VersionTrend({ points }: Props) {
 
           {planSeries.length > 1 ? (
             <polyline
-              points={seriesPath(planSeries, x, y)}
+              points={seriesPath(planSeries, y)}
               fill="none"
               stroke={PLAN_COLOR}
               strokeWidth={2}
@@ -131,46 +142,67 @@ export function VersionTrend({ points }: Props) {
           ) : null}
           {factSeries.length > 1 ? (
             <polyline
-              points={seriesPath(factSeries, x, y)}
+              points={seriesPath(factSeries, y)}
               fill="none"
               stroke={FACT_COLOR}
-              strokeWidth={2}
+              strokeWidth={2.5}
               strokeLinecap="round"
               strokeLinejoin="round"
-              strokeDasharray="6 4"
             />
           ) : null}
 
-          {withZ.map(({ p, z, t, snapshotChanged }) => {
-            const color = p.direction === PLAN ? PLAN_COLOR : FACT_COLOR;
+          {withZ.map(({ p, z, snapshotChanged }) => {
+            const isFact = p.direction === FACT;
+            const color = isFact ? FACT_COLOR : PLAN_COLOR;
+            const cx = xIndex(keyOf(p));
+            const cy = y(z);
             return (
-              <g key={`${p.versionId}-${p.direction}`}>
+              <g key={keyOf(p)}>
+                {isFact ? (
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={9}
+                    fill={color}
+                    fillOpacity={0.25}
+                    aria-hidden
+                  />
+                ) : null}
                 <circle
-                  cx={x(t)}
-                  cy={y(z)}
-                  r={5}
+                  cx={cx}
+                  cy={cy}
+                  r={isFact ? 6 : 5}
                   fill={color}
                   fillOpacity={snapshotChanged ? 0.45 : 1}
                   stroke="var(--ep-report-card)"
                   strokeWidth={2}
-                  data-series={p.direction === PLAN ? 'plan' : 'fact'}
+                  data-series={isFact ? 'fact' : 'plan'}
                   data-snapshot-changed={snapshotChanged ? 'true' : 'false'}
                 />
                 <text
-                  x={x(t)}
-                  y={y(z) - 12}
+                  x={cx}
+                  y={cy - 13}
                   textAnchor="middle"
                   className="fill-[var(--ep-report-foreground)] font-mono text-[10px] font-semibold"
                 >
                   {fmtSigned(z)}
                 </text>
                 <text
-                  x={x(t)}
+                  x={cx}
+                  y={H - 18}
+                  textAnchor="middle"
+                  className="fill-[var(--ep-report-muted-foreground)] text-[9px]"
+                >
+                  {p.versionName}
+                </text>
+                <text
+                  x={cx}
                   y={H - 6}
                   textAnchor="middle"
                   className="fill-[var(--ep-report-muted-foreground)] text-[10px]"
+                  data-testid="report-version-trend-date"
                 >
-                  {p.versionName}
+                  {new Date(p.createdAt).toLocaleDateString('ru-RU')}
                 </text>
               </g>
             );
@@ -182,19 +214,12 @@ export function VersionTrend({ points }: Props) {
             <span className="inline-block h-0.5 w-4" style={{ backgroundColor: PLAN_COLOR }} /> План
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span
-              className="inline-block h-0.5 w-4"
-              style={{
-                background:
-                  'repeating-linear-gradient(90deg, var(--ep-report-perf-critical) 0 4px, transparent 4px 8px)',
-              }}
-            />{' '}
-            Факт
+            <span className="inline-block h-1 w-4" style={{ backgroundColor: FACT_COLOR }} /> Факт
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4 border-t border-border pt-4 sm:grid-cols-4">
-          {points.map((p) => (
+          {sortedPoints.map((p) => (
             <div key={`${p.versionId}-meta`} className="flex flex-col gap-0.5">
               <span className="text-xs text-muted-foreground">
                 {new Date(p.createdAt).toLocaleDateString('ru-RU')} ·{' '}

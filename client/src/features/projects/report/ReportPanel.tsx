@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Box, FormControl, MenuItem, Select, Stack, Tab, Tabs, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
@@ -22,6 +22,7 @@ import { getApiErrorMessage } from '../../../services/apiError';
 import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import { ReportsTab } from '../../../pages/projects/reports/ReportsTab';
+import { DIRECTION_FACT, DIRECTION_PLAN } from '../../../pages/projects/reports/reportCalc';
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
 import './report-theme.css';
@@ -29,6 +30,29 @@ import { SummaryCards } from './SummaryCards';
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 import { VersionTrend } from './VersionTrend';
 import { ZScale } from './ZScale';
+
+type ReportSubTab = 'summary' | 'byVersion' | 'legacy';
+
+/**
+ * Версия для детальных секций «Сводного» — зеркало backend
+ * PerformanceReportService.ResolveAssessmentVersionId: primary Fact → primary Plan →
+ * последняя Fact → последняя Plan (по CreatedAt).
+ */
+function resolveSummaryVersionId(versions: ProjectVersion[]): number | null {
+  const pool = versions.filter((v) => !v.isArchived);
+  if (pool.length === 0) return null;
+  const facts = pool.filter((v) => v.direction === DIRECTION_FACT);
+  const plans = pool.filter((v) => v.direction === DIRECTION_PLAN);
+  const byCreatedDesc = (a: ProjectVersion, b: ProjectVersion) =>
+    new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime() || b.id - a.id;
+  return (
+    facts.find((v) => v.isPrimary)?.id ??
+    plans.find((v) => v.isPrimary)?.id ??
+    [...facts].sort(byCreatedDesc)[0]?.id ??
+    [...plans].sort(byCreatedDesc)[0]?.id ??
+    null
+  );
+}
 
 export interface ReportPanelProps {
   projectId: number;
@@ -45,12 +69,17 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
   const [error, setError] = useState<string | null>(null);
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
-  const [subTab, setSubTab] = useState<'summary' | 'byVersion'>('summary');
+  const [subTab, setSubTab] = useState<ReportSubTab>('summary');
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
 
   useEffect(() => {
     setSelectedVersionId((current) => current ?? initialVersionId ?? null);
   }, [initialVersionId]);
+
+  const summaryVersionId = useMemo(
+    () => (versions && versions.length > 0 ? resolveSummaryVersionId(versions) : null),
+    [versions],
+  );
 
   const load = useCallback(async () => {
     if (!canRead || !projectId) return;
@@ -69,6 +98,14 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  // Remount ReportsTab по nonce — перезапускает react-query загрузку новых вкладок
+  // без необходимости тянуть QueryClient в панель (тесты рендерят панель без провайдера).
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const handleRefresh = useCallback(() => {
+    void load();
+    setRefreshNonce((n) => n + 1);
   }, [load]);
 
   const handlePdf = async () => {
@@ -101,25 +138,29 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
         <ToolbarActionButton
           startIcon={<RefreshIcon />}
-          onClick={() => void load()}
+          onClick={handleRefresh}
           disabled={loading}
         >
           {ACTION_LABELS.refresh}
         </ToolbarActionButton>
-        <ExportActionButton
-          kind="pdf"
-          loading={exporting}
-          onClick={() => void handlePdf()}
-          disabled={exporting || !report}
-          data-testid="performance-report-pdf"
-        />
-        <ToolbarActionButton
-          startIcon={dark ? <LightModeIcon /> : <DarkModeIcon />}
-          onClick={() => setDarkRaw(dark ? '0' : '1')}
-          data-testid="performance-report-theme"
-        >
-          {dark ? 'Светлая' : 'Тёмная'}
-        </ToolbarActionButton>
+        {subTab === 'legacy' ? (
+          <>
+            <ExportActionButton
+              kind="pdf"
+              loading={exporting}
+              onClick={() => void handlePdf()}
+              disabled={exporting || !report}
+              data-testid="performance-report-pdf"
+            />
+            <ToolbarActionButton
+              startIcon={dark ? <LightModeIcon /> : <DarkModeIcon />}
+              onClick={() => setDarkRaw(dark ? '0' : '1')}
+              data-testid="performance-report-theme"
+            >
+              {dark ? 'Светлая' : 'Тёмная'}
+            </ToolbarActionButton>
+          </>
+        ) : null}
       </Stack>
 
       {error ? (
@@ -140,11 +181,12 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
         >
           <Tabs
             value={subTab}
-            onChange={(_, v: 'summary' | 'byVersion') => setSubTab(v)}
+            onChange={(_, v: ReportSubTab) => setSubTab(v)}
             sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
           >
-            <Tab value="summary" label="Сводный" />
+            <Tab value="summary" label="Сводный" data-testid="report-summary-tab" />
             <Tab value="byVersion" label="По версии" data-testid="report-by-version-tab" />
+            <Tab value="legacy" label="Сводный (прежний)" data-testid="report-legacy-tab" />
           </Tabs>
           {subTab === 'byVersion' ? (
             <FormControl size="small" sx={{ minWidth: 260, mb: 0.5 }}>
@@ -164,13 +206,18 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
         </Stack>
       ) : null}
 
-      {subTab === 'byVersion' && project && versions && versions.length > 0 ? (
+      {subTab !== 'legacy' && project && versions && versions.length > 0 ? (
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
           <ReportsTab
+            key={refreshNonce}
             projectId={projectId}
             project={project}
             versions={versions}
-            versionId={selectedVersionId ?? versions[0].id}
+            versionId={
+              subTab === 'summary'
+                ? (summaryVersionId ?? versions[0].id)
+                : (selectedVersionId ?? versions[0].id)
+            }
           />
         </Box>
       ) : (

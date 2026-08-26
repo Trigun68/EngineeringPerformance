@@ -298,6 +298,21 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, ExcelContentType, fileName);
     }
 
+    /// <summary>Сводный PDF «план/факт» по основным версиям проекта (вкладка «Отчёт»).</summary>
+    [HttpGet("export/report/pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    public async Task<IActionResult> ExportProjectReportPdf(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _visualReports.ExportProjectReportPdfAsync(projectId, versionId, cancellationToken);
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId, versionId, ExportFileNameBuilder.Modules.Report, "pdf", cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
+    }
+
     /// <summary>Excel текущего вида грида факта «Детально» (видимые колонки + отфильтрованные строки).</summary>
     [HttpPost("export/fact-detail/excel-visible")]
     [RequireProjectAccess]

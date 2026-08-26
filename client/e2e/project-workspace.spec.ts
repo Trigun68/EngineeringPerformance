@@ -167,13 +167,23 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByRole('tab', { name: 'Отчет' })).toBeVisible();
   });
 
-  test('report tab loads performance report panel', async ({ page }) => {
+  test('report tab loads summary (new design) and legacy panel', async ({ page }) => {
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
 
     await page.getByRole('tab', { name: 'Отчет' }).click();
+
+    // Дефолт — новый «Сводный»: блоки план/факт по основным версиям, шкала, динамика.
+    await expect(page.getByText('Трудоёмкость плана')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText('Z-план')).toBeVisible();
+    await expect(page.getByText('Шкала интерпретации Z-оценки')).toBeVisible();
+    await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
+    await expect(page.getByTestId('report-export-pdf')).toBeVisible();
+
+    // «Сводный (прежний)» — старый механизм для отката.
+    await page.getByTestId('report-legacy-tab').click();
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Факт:/ })).toHaveCount(0);

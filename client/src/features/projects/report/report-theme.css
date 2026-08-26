@@ -12,9 +12,14 @@
   --ep-report-accent: oklch(0.95 0.012 248);
   --ep-report-perf-excellent: oklch(0.52 0.13 158);
   --ep-report-perf-good: oklch(0.58 0.13 145);
-  --ep-report-perf-satisfactory: oklch(0.62 0.13 82);
+  /* Удовлетворительно — тёплый янтарь (паритет новому дизайну #D9A100). */
+  --ep-report-perf-satisfactory: #d9a100;
   --ep-report-perf-attention: oklch(0.6 0.16 52);
-  --ep-report-perf-critical: oklch(0.53 0.2 25);
+  /* Критично — смягчённый кирпичный вместо ядовито-красного (паритет #B5544C). */
+  --ep-report-perf-critical: #b5544c;
+  /* Акценты план/факт — паритет client reportCalc.ts (ACCENT_PLAN / ACCENT_FACT). */
+  --ep-report-accent-plan: #3498db;
+  --ep-report-accent-fact: #2c3e50;
   --ep-report-metric: #0b2c5c;
   color: var(--ep-report-foreground);
   background: var(--ep-report-background);
@@ -32,6 +37,9 @@
   --ep-report-muted-foreground: oklch(0.72 0.02 250);
   --ep-report-border: oklch(0.32 0.02 250);
   --ep-report-accent: oklch(0.28 0.03 248);
+  /* Тёмная тема: акценты план/факт светлее, чтобы читались на тёмном фоне. */
+  --ep-report-accent-plan: #5dade2;
+  --ep-report-accent-fact: #aeb6bf;
   --ep-report-metric: #8eb6e8;
   color-scheme: dark;
 }
