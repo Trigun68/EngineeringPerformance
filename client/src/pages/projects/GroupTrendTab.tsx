@@ -6,10 +6,10 @@ export function GroupTrendTab({ projectId }: { projectId: number }) {
     <Box sx={{ p: 2 }}>
       <Typography variant="h6" sx={{ mb: 1 }}>Тренд по группам</Typography>
       <Alert severity="info" sx={{ mb: 2 }}>
-        Трендовый анализ перенесён на отдельную страницу аналитики с графиками факта, прогноза и накопительного итога.
+        Тренд оценки факта (Z) и тренд производительности нормы вынесены на страницу «Аналитика».
       </Alert>
-      <Button component={Link} to={`/analytics/trends?projectId=${projectId}`} variant="contained">
-        Открыть трендовый анализ
+      <Button component={Link} to={`/analytics?projectId=${projectId}`} variant="contained">
+        Открыть аналитику
       </Button>
     </Box>
   );

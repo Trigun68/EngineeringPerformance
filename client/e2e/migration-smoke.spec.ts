@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin, openFirstProject } from './helpers';
+import { loginAsAdmin, openFirstProject, waitForWorkingOverlayHidden } from './helpers';
 
 test.describe('Migration UAT smoke (Playwright)', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,6 +13,17 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     await expect(page.getByRole('link', { name: 'Справка' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Администрирование' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Настройки' })).toBeVisible();
+  });
+
+  test('sidebar stays mounted while opening lazy analytics and admin', async ({ page }) => {
+    const nav = page.getByTestId('app-nav-list');
+    await expect(nav).toBeVisible();
+    await page.getByRole('link', { name: 'Аналитика' }).click();
+    await expect(nav).toBeVisible();
+    await expect(page).toHaveURL(/\/analytics/);
+    await page.getByRole('link', { name: 'Администрирование' }).click();
+    await expect(nav).toBeVisible();
+    await expect(page).toHaveURL(/\/admin/);
   });
 
   test('dashboard — methodology and sigma chart', async ({ page }) => {
@@ -62,14 +73,16 @@ test.describe('Migration UAT smoke (Playwright)', () => {
   test('project detail — data and analytics tabs', async ({ page }) => {
     const projectId = await openFirstProject(page);
     test.skip(projectId === null, 'No projects in database');
+    await waitForWorkingOverlayHidden(page);
 
     for (const tabName of [
       'Прогнозирование',
       'Оценка факта',
       'Сравнение версий',
-      'Отчёты',
     ]) {
+      await waitForWorkingOverlayHidden(page);
       await page.getByRole('tab', { name: tabName, exact: true }).first().click();
+      await waitForWorkingOverlayHidden(page);
       await expect(page.getByRole('tab', { name: tabName, exact: true }).first()).toHaveAttribute('aria-selected', 'true');
     }
   });
@@ -79,8 +92,8 @@ test.describe('Migration UAT smoke (Playwright)', () => {
     test.skip(projectId === null, 'No projects in database');
 
     await page.getByRole('tab', { name: 'Сравнение' }).click();
-    await page.getByRole('tab', { name: 'Итого по объектам' }).click();
-    await expect(page.getByRole('tab', { name: 'Итого по объектам' })).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('tab', { name: 'По объектам', exact: true }).click();
+    await expect(page.getByRole('tab', { name: 'По объектам', exact: true })).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('tab', { name: 'Детально' }).click();
     await page.waitForSelector('.ag-root', { timeout: 15_000 });
   });

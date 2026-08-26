@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
-import { Button, Stack, Typography } from '@mui/material';
+import { Stack, Typography } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
+import { ACTION_LABELS } from '../../constants/actionLabels';
+import { ToolbarActionButton } from '../export/ToolbarActionButton';
 
 const EXCEL_EXTENSIONS = ['.xlsx', '.xls'];
 
@@ -19,7 +21,7 @@ export interface FileUploaderProps {
 export function FileUploader({
   onUpload,
   disabled = false,
-  label = 'Импорт Excel',
+  label = ACTION_LABELS.importExcel,
   accept = '.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel',
 }: FileUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,14 +64,14 @@ export function FileUploader({
         hidden
         onChange={handleFileChange}
       />
-      <Button
-        variant="outlined"
+      <ToolbarActionButton
         startIcon={<UploadFileIcon />}
-        disabled={disabled || isUploading}
+        loading={isUploading}
+        disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
-        {isUploading ? 'Загрузка...' : label}
-      </Button>
+        {label}
+      </ToolbarActionButton>
       {selectedFile && !error && (
         <Typography variant="body2" color="text.secondary">
           {selectedFile.name}

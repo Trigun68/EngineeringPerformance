@@ -1,4 +1,6 @@
 /** Русская локализация AG Grid: фильтры, меню столбцов, контекстное меню. */
+import { ACTION_LABELS } from '../constants/actionLabels';
+
 export const agGridLocaleRu: Record<string, string> = {
   filterOoo: 'Фильтр...',
   equals: 'Равно',
@@ -40,8 +42,8 @@ export const agGridLocaleRu: Record<string, string> = {
   cut: 'Вырезать',
   paste: 'Вставить',
   export: 'Экспорт',
-  csvExport: 'Экспорт CSV',
-  excelExport: 'Экспорт Excel',
+  csvExport: ACTION_LABELS.exportCsv,
+  excelExport: ACTION_LABELS.exportExcel,
   pinColumn: 'Закрепить столбец',
   pinLeft: 'Закрепить слева',
   pinRight: 'Закрепить справа',

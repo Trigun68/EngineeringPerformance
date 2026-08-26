@@ -33,6 +33,7 @@ export async function createUser(form: UserFormData): Promise<AppUser> {
     password: form.password || null,
     windowsUsername: form.windowsUsername || null,
     isActive: form.isActive,
+    mustChangePassword: form.mustChangePassword,
   });
   return data;
 }
@@ -59,4 +60,17 @@ export async function archiveUser(id: number): Promise<void> {
 
 export async function unarchiveUser(id: number): Promise<void> {
   await apiClient.post(`/users/${id}/unarchive`);
+}
+
+export async function unlockUser(id: number): Promise<void> {
+  await apiClient.post(`/users/${id}/unlock`);
+}
+
+export async function resetUserMfa(id: number): Promise<void> {
+  await apiClient.post(`/users/${id}/reset-mfa`);
+}
+
+export async function resetUserPassword(id: number): Promise<string> {
+  const { data } = await apiClient.post<{ temporaryPassword: string }>(`/users/${id}/reset-password`);
+  return data.temporaryPassword;
 }

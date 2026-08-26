@@ -1,0 +1,7 @@
+node_modules
+dist
+e2e-report
+playwright-report
+test-results
+coverage
+*.zip

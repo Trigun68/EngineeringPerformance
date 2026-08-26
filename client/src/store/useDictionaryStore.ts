@@ -6,6 +6,63 @@ import {
   type DictionaryKey,
   type DictionariesAllResponse,
 } from '../types/dictionary';
+import { formatIisNorm } from '../utils/formatIisNorm';
+import { resolveIicDirectionUnitName } from '../utils/resolveIicDirectionUnit';
+
+const DICTIONARIES_STORAGE_KEY = 'ep.dictionaries.v1';
+
+interface StoredDictionaries {
+  etag: string;
+  data: DictionariesAllResponse;
+}
+
+function readStoredDictionaries(): StoredDictionaries | null {
+  try {
+    const raw = sessionStorage.getItem(DICTIONARIES_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<StoredDictionaries>;
+    if (typeof parsed.etag === 'string' && parsed.data) {
+      return { etag: parsed.etag, data: parsed.data };
+    }
+  } catch {
+    /* private mode / quota */
+  }
+  return null;
+}
+
+function writeStoredDictionaries(etag: string, data: DictionariesAllResponse): void {
+  try {
+    sessionStorage.setItem(DICTIONARIES_STORAGE_KEY, JSON.stringify({ etag, data }));
+  } catch {
+    /* quota */
+  }
+}
+
+function clearStoredDictionaries(): void {
+  try {
+    sessionStorage.removeItem(DICTIONARIES_STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function requestDictionaries(useHttpCache: boolean): Promise<DictionariesAllResponse> {
+  const stored = useHttpCache ? readStoredDictionaries() : null;
+  const response = await apiClient.get<DictionariesAllResponse>('/dictionaries/all', {
+    headers: stored ? { 'If-None-Match': stored.etag } : undefined,
+    validateStatus: (status) => status === 200 || status === 304,
+  });
+  if (response.status === 304 && stored) {
+    return stored.data;
+  }
+  const etag = response.headers.etag;
+  if (typeof etag === 'string' && etag.length > 0) {
+    writeStoredDictionaries(etag, response.data);
+  }
+  return response.data;
+}
 
 /**
  * Справочники загружаются один раз при старте приложения (см. AppLayout.tsx)
@@ -83,7 +140,16 @@ export const useDictionaryStore = create<DictionaryState>((set, get) => ({
     if (get().isLoaded || get().isLoading) {
       return;
     }
-    await get().invalidate();
+    set({ isLoading: true, error: null });
+    try {
+      const data = await requestDictionaries(true);
+      const { caches, lists } = buildCaches(data);
+      set({ dictionaries: data, caches, lists, isLoaded: true });
+    } catch {
+      set({ error: 'Не удалось загрузить справочники.' });
+    } finally {
+      set({ isLoading: false });
+    }
   },
 
   fetchDictionaries: async () => {
@@ -91,9 +157,10 @@ export const useDictionaryStore = create<DictionaryState>((set, get) => ({
   },
 
   invalidate: async () => {
+    clearStoredDictionaries();
     set({ isLoading: true, error: null, isLoaded: false });
     try {
-      const { data } = await apiClient.get<DictionariesAllResponse>('/dictionaries/all');
+      const data = await requestDictionaries(false);
       const { caches, lists } = buildCaches(data);
       set({ dictionaries: data, caches, lists, isLoaded: true });
     } catch {
@@ -116,7 +183,23 @@ export const useDictionaryStore = create<DictionaryState>((set, get) => ({
 
   getUnitName: (id) => get().getName('unitsOfMeasurement', id),
 
-  getDirectionName: (id) => get().getName('iicWorkDirections', id),
+  getDirectionName: (id) => {
+    if (id == null) {
+      return '';
+    }
+
+    const directions = get().lists.iicWorkDirections;
+    const direction = get().caches.iicWorkDirections.get(id);
+    if (!direction) {
+      return String(id);
+    }
+
+    return formatIisNorm({
+      code: direction.code,
+      name: direction.name,
+      unitName: resolveIicDirectionUnitName(id, directions, get().getUnitName),
+    });
+  },
 
   getNormTypeName: (codeOrId) => {
     if (codeOrId == null || codeOrId === '') {

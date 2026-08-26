@@ -5,7 +5,7 @@ export interface CompareTreeRow extends VersionCompareRow {
 }
 
 export function buildCompareTreeRows(rows: VersionCompareRow[]): CompareTreeRow[] {
-  const byId = new Map(rows.map((r) => [r.workDirectionId, r]));
+  const byId = new Map(rows.filter((r) => !r.isTotal).map((r) => [r.workDirectionId, r]));
 
   const buildPath = (id: number, visited = new Set<number>()): string[] => {
     if (visited.has(id)) return [`cycle-${id}`];
@@ -18,8 +18,16 @@ export function buildCompareTreeRows(rows: VersionCompareRow[]): CompareTreeRow[
     return [...buildPath(row.parentId, visited), row.name];
   };
 
-  return rows.map((row) => ({
-    ...row,
-    hierarchy: buildPath(row.workDirectionId),
-  }));
+  return rows.map((row) => {
+    if (row.isTotal) {
+      return {
+        ...row,
+        hierarchy: [row.name],
+      };
+    }
+    return {
+      ...row,
+      hierarchy: buildPath(row.workDirectionId),
+    };
+  });
 }

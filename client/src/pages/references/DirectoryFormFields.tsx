@@ -50,17 +50,18 @@ export function DirectoryFormFields({
       setNormOptions(
         norms.map((norm) => ({
           id: norm.id,
-          label: formatIisNorm({
-            code: norm.workDirectionName ?? String(norm.workDirectionId),
-            name: [
+          label: [
+            norm.workDirectionName ?? String(norm.workDirectionId),
+            [
               norm.effectiveFrom?.slice(0, 10),
               norm.effectiveTo ? `— ${norm.effectiveTo.slice(0, 10)}` : '',
               norm.performance != null ? `П=${norm.performance}` : '',
             ]
               .filter(Boolean)
               .join(' '),
-            unitName: norm.unitName ?? (norm.resolvedUnitId ? getUnitName(norm.resolvedUnitId) : undefined),
-          }),
+          ]
+            .filter(Boolean)
+            .join(' — '),
         })),
       );
     } catch {

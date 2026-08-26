@@ -1,4 +1,5 @@
 import type { ContextMenuItem } from '../../components/DataTable/DataTable';
+import { ACTION_LABELS } from '../../constants/actionLabels';
 
 export interface ProjectsPageMenuHandlers {
   onEdit?: () => void;
@@ -31,13 +32,13 @@ export function buildProjectsPageContextMenu(
     items.push({ name: 'Копировать версию', action: () => handlers.onCopyVersion?.(), requiredLevel: 2 });
   }
   if (permissions.canImport && handlers.onImport) {
-    items.push({ name: 'Импорт Excel', action: () => handlers.onImport?.(), requiredLevel: 2 });
+    items.push({ name: ACTION_LABELS.importExcel, action: () => handlers.onImport?.(), requiredLevel: 2 });
   }
   if (permissions.canExport && handlers.onExportExcel) {
-    items.push({ name: 'Экспорт Excel', action: () => handlers.onExportExcel?.(), requiredLevel: 1 });
+    items.push({ name: ACTION_LABELS.exportExcel, action: () => handlers.onExportExcel?.(), requiredLevel: 1 });
   }
   if (permissions.canExport && handlers.onExportPdf) {
-    items.push({ name: 'Экспорт PDF', action: () => handlers.onExportPdf?.(), requiredLevel: 1 });
+    items.push({ name: ACTION_LABELS.exportPdf, action: () => handlers.onExportPdf?.(), requiredLevel: 1 });
   }
   if (permissions.canDelete && handlers.onDelete) {
     items.push({ name: 'Удалить', action: () => handlers.onDelete?.(), requiredLevel: 2 });

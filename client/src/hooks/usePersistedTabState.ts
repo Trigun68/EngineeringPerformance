@@ -5,6 +5,9 @@ import { getUserPreferences, putUserPreferences } from '../api/userPreferencesAp
  * Сохраняет значение вкладки/состояния UI в user preferences.
  * Persist только при явном update() — не в useEffect(value), иначе риск цикла
  * Maximum update depth при смене prefKey / Tabs.
+ *
+ * Загрузка prefs не должна перетирать уже сделанный пользователем update()
+ * (гонка: click → put prefs, затем late getUserPreferences → setValue(default)).
  */
 export function usePersistedTabState<T extends string>(
   prefKey: string,
@@ -13,23 +16,23 @@ export function usePersistedTabState<T extends string>(
   const [value, setValue] = useState<T>(defaultValue);
   const prefKeyRef = useRef(prefKey);
   prefKeyRef.current = prefKey;
+  const userTouchedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    userTouchedRef.current = false;
+    setValue(defaultValue);
+
     void getUserPreferences()
       .then((prefs) => {
-        if (cancelled || prefKeyRef.current !== prefKey) return;
+        if (cancelled || prefKeyRef.current !== prefKey || userTouchedRef.current) return;
         const raw = prefs[prefKey];
         if (typeof raw === 'string' && raw.length > 0) {
           setValue(raw as T);
-        } else {
-          setValue(defaultValue);
         }
       })
       .catch(() => {
-        if (!cancelled && prefKeyRef.current === prefKey) {
-          setValue(defaultValue);
-        }
+        // оставляем defaultValue, уже выставленный выше
       });
     return () => {
       cancelled = true;
@@ -37,6 +40,7 @@ export function usePersistedTabState<T extends string>(
   }, [prefKey, defaultValue]);
 
   const update = useCallback((next: T) => {
+    userTouchedRef.current = true;
     setValue(next);
     void putUserPreferences({ [prefKeyRef.current]: next });
   }, []);
