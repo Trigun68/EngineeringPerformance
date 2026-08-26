@@ -18,6 +18,7 @@ public sealed class VisualReportService : IVisualReportService
     private readonly IChartImageRenderer _charts;
     private readonly IForecastDetailSummaryTableContext _meta;
     private readonly IPerformanceReportService _performanceReport;
+    private readonly IProjectReportSummaryService _reportSummary;
 
     public VisualReportService(
         IProjectsPageDataFetcher pageData,
@@ -26,7 +27,8 @@ public sealed class VisualReportService : IVisualReportService
         ITrendAnalyticsService trends,
         IChartImageRenderer charts,
         IForecastDetailSummaryTableContext meta,
-        IPerformanceReportService performanceReport)
+        IPerformanceReportService performanceReport,
+        IProjectReportSummaryService reportSummary)
     {
         _pageData = pageData;
         _compare = compare;
@@ -35,6 +37,7 @@ public sealed class VisualReportService : IVisualReportService
         _charts = charts;
         _meta = meta;
         _performanceReport = performanceReport;
+        _reportSummary = reportSummary;
     }
 
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -800,6 +803,116 @@ public sealed class VisualReportService : IVisualReportService
         kpis,
         $"ГИП: {report.Project.Gip ?? "—"}; заказчик: {report.Project.Customer ?? "—"}; статус: {report.Project.WorkStatus ?? "—"}",
         $"План версий: {report.Project.PlanVersionCount}; факт версий: {report.Project.FactVersionCount}");
+    }
+
+    /// <summary>
+    /// Сводный отчёт «план/факт» по основным версиям (вкладка «Отчёт»).
+    /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService);
+    /// таблицы листьев — из факт-грида текущей версии, паритет client ReportsTab.
+    /// </summary>
+    public async Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
+    {
+        var reportSummary = await _reportSummary.GetSummaryAsync(projectId, cancellationToken);
+        var report = await _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+
+        var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
+        var allRows = data.Fact.Performance.Where(r => r.WorkDirectionId >= 0).ToList();
+        var parentIds = allRows.Where(r => r.ParentId.HasValue).Select(r => r.ParentId!.Value).ToHashSet();
+        // Лист дерева = узел, который никто не указывает своим родителем — паритет
+        // client reportCalc.ts::flattenTree + ReportsTab.tsx (leaves = flat.filter(children.length === 0)).
+        var leaves = allRows.Where(r => !parentIds.Contains(r.WorkDirectionId)).ToList();
+
+        var scoredLeaves = leaves.Where(r => r.ZScore.HasValue).ToList();
+        var best = scoredLeaves.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
+        var worst = scoredLeaves
+            .OrderByDescending(r => r.ZScore!.Value)
+            .Where(r => !best.Any(b => b.WorkDirectionId == r.WorkDirectionId))
+            .Take(5)
+            .ToList();
+
+        string[] rankHeaders = ["#", "Направление ИИЦ", "Код", "Часы", "Z", "Оценка"];
+        static IEnumerable<string[]> RankRows(IReadOnlyList<PerformanceRowDto> rows) =>
+            rows.Select((r, i) => new[]
+            {
+                (i + 1).ToString(),
+                r.WorkDirectionName,
+                r.WorkDirectionCode,
+                (r.SubtreeHours ?? r.FactLaborHours)?.ToString("N0") ?? "—",
+                r.ZScore?.ToString("N2") ?? "—",
+                r.Interpretation?.ToRussian() ?? "—",
+            });
+
+        var volumeRows = leaves.Select(r => new HierarchicalPdfRow(
+            0,
+            [
+                r.WorkDirectionCode,
+                r.WorkDirectionName,
+                r.NormUnitName ?? "—",
+                r.FactPhysicalVolume?.ToString("N2") ?? "—",
+                r.FactLaborHours?.ToString("N0") ?? "—",
+                r.FactProductivity?.ToString("N3") ?? "—",
+                r.NormProductivity?.ToString("N3") ?? "—",
+                r.ZScore?.ToString("N2") ?? "—",
+                r.Interpretation?.ToRussian() ?? "—",
+            ],
+            InterpretationText: r.Interpretation?.ToRussian()));
+
+        var planColumn = new PdfPlanFactColumn(
+            reportSummary.PlanVersionName ?? "Основная версия не назначена",
+            reportSummary.PlanHours?.ToString("N0") ?? "—",
+            reportSummary.PlanWeightedZScore?.ToString("N2") ?? "—",
+            reportSummary.PlanPercentile ?? "Н/Д",
+            reportSummary.PlanInterpretation ?? "—");
+        var factColumn = reportSummary.FactVersionId.HasValue
+            ? new PdfPlanFactColumn(
+                reportSummary.FactVersionName ?? "—",
+                reportSummary.FactHours?.ToString("N0") ?? "—",
+                reportSummary.FactWeightedZScore?.ToString("N2") ?? "—",
+                reportSummary.FactPercentile ?? "Н/Д",
+                reportSummary.FactInterpretation ?? "—")
+            : null;
+        var deltaCaption = reportSummary.FactHours.HasValue && reportSummary.PlanHours.HasValue
+            ? $"Δ трудоёмкость: {(reportSummary.FactHours.Value - reportSummary.PlanHours.Value):N0} ч относительно плана"
+            : null;
+
+        var headlineInterpretation = reportSummary.FactInterpretation ?? reportSummary.PlanInterpretation;
+        var teaserKpis = new[]
+        {
+            new ReportKpiItem("Часы (факт/план)", (reportSummary.FactHours ?? reportSummary.PlanHours)?.ToString("N0") ?? "—"),
+            new ReportKpiItem("Взвеш. Z", (reportSummary.FactWeightedZScore ?? reportSummary.PlanWeightedZScore)?.ToString("N2") ?? "—"),
+            new ReportKpiItem("Оценка", headlineInterpretation ?? "—"),
+        };
+
+        return QuestPdfReportComposer.BuildLandscapeReport(col =>
+        {
+            col.Item().Element(c => QuestPdfReportComposer.ComposePlanFactSummary(c, planColumn, factColumn, deltaCaption));
+            col.Item().PaddingTop(10).Element(c => QuestPdfReportComposer.ComposeZScoreScaleLegend(
+                c, (double?)reportSummary.PlanWeightedZScore, (double?)reportSummary.FactWeightedZScore));
+
+            col.Item().PaddingTop(10).Text("Топ-5 направлений ИИЦ по трудоёмкости").SemiBold()
+                .FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
+            col.Item().Row(row =>
+            {
+                row.Spacing(10);
+                row.RelativeItem().Element(c => QuestPdfReportComposer.ComposeTable(
+                    c, "Лучшие (наименьший Z — опережение нормы)", rankHeaders, RankRows(best), interpretationColumnIndex: 5));
+                row.RelativeItem().Element(c => QuestPdfReportComposer.ComposeTable(
+                    c, "Худшие (наибольший Z — перерасход)", rankHeaders, RankRows(worst), interpretationColumnIndex: 5));
+            });
+
+            col.Item().PageBreak();
+            col.Item().Element(c => QuestPdfReportComposer.ComposeHierarchicalTable(
+                c, "Все группы физобъёмов ИИЦ",
+                ["Код", "Направление ИИЦ", "Ед. изм.", "Факт. объём", "Часы", "Произв. (факт)", "Норма ИИЦ", "Z", "Оценка"],
+                volumeRows,
+                interpretationColumnIndex: 8));
+        },
+        PdfReportKind.Report,
+        "Отчёт по проекту — план/факт",
+        $"Проект: {report.ProjectName}",
+        $"Факт. версия: {report.VersionName}",
+        teaserKpis);
     }
 
     private static readonly string[] FactPlanHourHeaders =

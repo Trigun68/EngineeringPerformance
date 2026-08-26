@@ -8,6 +8,7 @@ public enum PdfReportKind
     Compare,
     Trend,
     Combined,
+    Report,
 }
 
 /// <summary>Дизайн-токены PDF — «Executive Technical»: глубокий графит + инженерный синий акцент.</summary>

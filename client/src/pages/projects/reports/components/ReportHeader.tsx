@@ -5,15 +5,18 @@ import BusinessIcon from '@mui/icons-material/Business';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import type { Project } from '../../../../types/project';
 import type { ProjectVersion } from '../../../../api/projectVersionsApi';
+import { ExportActionButton } from '../../../../components/export/ExportActionButton';
 import { DIRECTION_LABEL } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
 interface ReportHeaderProps {
   project: Project;
   version: ProjectVersion;
+  onExportPdf?: () => void;
+  exporting?: boolean;
 }
 
-export function ReportHeader({ project, version }: ReportHeaderProps) {
+export function ReportHeader({ project, version, onExportPdf, exporting }: ReportHeaderProps) {
   const versionDate = version.createdAt
     ? new Date(version.createdAt).toLocaleDateString('ru-RU')
     : null;
@@ -37,7 +40,7 @@ export function ReportHeader({ project, version }: ReportHeaderProps) {
           >
             <AssessmentIcon fontSize="small" />
           </Box>
-          <Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               variant="caption"
               sx={{ color: wpColors.muted, letterSpacing: 0.4, textTransform: 'uppercase', fontWeight: 600 }}
@@ -48,6 +51,15 @@ export function ReportHeader({ project, version }: ReportHeaderProps) {
               Отчёт по инженерной производительности
             </Typography>
           </Box>
+          {onExportPdf && (
+            <ExportActionButton
+              kind="pdf"
+              loading={exporting}
+              onClick={onExportPdf}
+              disabled={exporting}
+              data-testid="report-export-pdf"
+            />
+          )}
         </Stack>
 
         <Stack

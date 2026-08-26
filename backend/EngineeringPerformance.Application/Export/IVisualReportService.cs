@@ -43,4 +43,7 @@ public interface IVisualReportService
         int? planVersionId = null,
         int? factVersionId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Сводный отчёт «план/факт» по основным версиям проекта (вкладка «Отчёт»).</summary>
+    Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
 }
