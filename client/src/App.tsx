@@ -23,6 +23,7 @@ import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { TrendsAnalyticsPage } from './pages/analytics/TrendsAnalyticsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import PdfDesignMockups from './pages/dev/PdfDesignMockups';
+import ReportRedesignMockup from './pages/dev/ReportRedesignMockup';
 import { MonitoringDashboard } from './features/monitoring/MonitoringDashboard';
 import { AdminLayout } from './features/admin/AdminLayout';
 import { LogViewer } from './features/admin/LogViewer';
@@ -103,6 +104,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/dev/pdf-mockups" element={<PdfDesignMockups />} />
+        <Route path="/dev/report-redesign" element={<ReportRedesignMockup />} />
         {user ? (
           <Route element={<AppLayout />}>
             <Route
