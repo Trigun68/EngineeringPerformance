@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import apiClient from '../services/apiClient';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import apiClient, { refreshSessionHeartbeat } from '../services/apiClient';
 import {
   Box,
   Divider,
@@ -24,27 +24,30 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import MonitorHeartOutlinedIcon from '@mui/icons-material/MonitorHeartOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { UserMenu } from '../components/auth/UserMenu';
+import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
+import { RouteContentFallback } from '../components/WorkingOverlay/RouteContentFallback';
 import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
-import { isAdministrator } from '../utils/permissionAccess';
+import { isSuperAdmin } from '../utils/permissionAccess';
 import { wpColors } from '../theme/wpColors';
 import { useAuthStore } from '../store/useAuthStore';
 import { useDictionaryStore } from '../store/useDictionaryStore';
 
 const SIDEBAR_WIDTH = 280;
 
+/** Запас относительно минимально допустимого срока access-токена (5 мин). */
+const DEFAULT_HEARTBEAT_MS = 10 * 60 * 1000;
+
 const NAV_ICONS: Record<string, React.ReactNode> = {
   '/': <HomeOutlinedIcon fontSize="small" />,
   '/projects': <FolderOutlinedIcon fontSize="small" />,
-  '/analytics/trends': <MenuBookOutlinedIcon fontSize="small" />,
+  '/analytics': <MenuBookOutlinedIcon fontSize="small" />,
   '/references': <MenuBookOutlinedIcon fontSize="small" />,
-  '/settings/users': <SettingsOutlinedIcon fontSize="small" />,
+  '/settings': <SettingsOutlinedIcon fontSize="small" />,
   '/help': <HelpOutlineIcon fontSize="small" />,
-  '/monitoring': <MonitorHeartOutlinedIcon fontSize="small" />,
   '/admin': <AdminPanelSettingsOutlinedIcon fontSize="small" />,
 };
 
@@ -57,7 +60,6 @@ function resolvePageTitle(pathname: string): string {
     if (pathname.startsWith('/admin/user-actions')) return 'Журнал действий';
     return 'Администрирование';
   }
-  if (pathname.startsWith('/monitoring')) return 'Мониторинг';
   if (pathname.startsWith('/help')) return 'Справка';
   if (pathname === '/projects') return 'Проекты';
   if (pathname === '/') return 'Главная';
@@ -125,16 +127,10 @@ function AppNavList({
           </ListItemButton>
         ))}
         {isAdmin && (
-          <>
-            <ListItemButton component={NavLink} to="/admin" sx={navLinkSx} onClick={onNavigate}>
-              <ListItemIcon>{NAV_ICONS['/admin']}</ListItemIcon>
-              <ListItemText primary="Администрирование" primaryTypographyProps={{ fontSize: 14 }} />
-            </ListItemButton>
-            <ListItemButton component={NavLink} to="/monitoring" sx={navLinkSx} onClick={onNavigate}>
-              <ListItemIcon>{NAV_ICONS['/monitoring']}</ListItemIcon>
-              <ListItemText primary="Мониторинг" primaryTypographyProps={{ fontSize: 14 }} />
-            </ListItemButton>
-          </>
+          <ListItemButton component={NavLink} to="/admin" sx={navLinkSx} onClick={onNavigate}>
+            <ListItemIcon>{NAV_ICONS['/admin']}</ListItemIcon>
+            <ListItemText primary="Администрирование" primaryTypographyProps={{ fontSize: 14 }} />
+          </ListItemButton>
         )}
       </List>
 
@@ -149,10 +145,11 @@ export function AppLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const fetchDictionaries = useDictionaryStore((s) => s.fetchDictionaries);
+  const dictionariesLoading = useDictionaryStore((s) => s.isLoading);
   const location = useLocation();
   const projectMatch = useMatch('/projects/:projectId');
   const { visibleItems } = useAccessibleNavigation();
-  const isAdmin = isAdministrator(user?.roleName);
+  const isAdmin = isSuperAdmin(user?.roleName, user?.roleId);
 
   usePersistLastRoute();
 
@@ -165,13 +162,33 @@ export function AppLayout() {
 
   useEffect(() => {
     if (!user) return undefined;
-    const intervalId = window.setInterval(() => {
-      void apiClient.post('/auth/refresh').catch(() => {
-        // 401 обработает interceptor apiClient.
-      });
-    }, 15 * 60 * 1000);
-    return () => window.clearInterval(intervalId);
-  }, [user]);
+
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let cancelled = false;
+
+    const startHeartbeat = (intervalMs: number) => {
+      if (cancelled) return;
+      intervalId = window.setInterval(() => {
+        void refreshSessionHeartbeat();
+      }, intervalMs);
+    };
+
+    // Настройки сессии доступны только администраторам; остальным ролям запрос вернёт 403
+    // и покажет ложную ошибку «Недостаточно прав», поэтому используем безопасный интервал.
+    if (!isAdmin) {
+      startHeartbeat(DEFAULT_HEARTBEAT_MS);
+    } else {
+      void apiClient
+        .get<{ sessionExpirationMinutes: number }>('/admin/system-settings')
+        .then(({ data }) => startHeartbeat(Math.floor(data.sessionExpirationMinutes * 60 * 1000 * 0.8)))
+        .catch(() => startHeartbeat(DEFAULT_HEARTBEAT_MS));
+    }
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [user, isAdmin]);
 
   useEffect(() => {
     if (user) {
@@ -189,6 +206,7 @@ export function AppLayout() {
   );
 
   const pageTitle = projectMatch ? 'Проекты' : resolvePageTitle(location.pathname);
+  const isAnalyticsRoute = location.pathname.startsWith('/analytics');
 
   const navBody = (
     <Box
@@ -272,11 +290,14 @@ export function AppLayout() {
           {user && <UserMenu />}
         </Box>
 
+        {/* Справочники грузятся фоном: страницы остаются доступными (ISS-018). */}
+        <PanelBusyBar open={dictionariesLoading} delayMs={600} data-testid="dictionaries-busy" />
+
         <Box
           sx={{
             flex: 1,
             p: { xs: 1, md: 2 },
-            overflow: 'hidden',
+            overflow: isAnalyticsRoute ? 'auto' : 'hidden',
             display: 'flex',
             flexDirection: 'column',
             minHeight: 0,
@@ -288,15 +309,17 @@ export function AppLayout() {
               border: `1px solid ${wpColors.cardBorder}`,
               borderRadius: { xs: 1, md: 2 },
               p: { xs: 1, sm: 1.5, md: 2.5 },
-              flex: 1,
-              minHeight: 0,
+              flex: isAnalyticsRoute ? '0 0 auto' : 1,
+              minHeight: isAnalyticsRoute ? 'auto' : 0,
               display: 'flex',
               flexDirection: 'column',
               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              overflow: 'hidden',
+              overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
-            <Outlet />
+            <Suspense fallback={<RouteContentFallback />}>
+              <Outlet />
+            </Suspense>
           </Box>
         </Box>
       </Box>

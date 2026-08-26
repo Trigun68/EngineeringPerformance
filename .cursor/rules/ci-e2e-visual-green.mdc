@@ -1,0 +1,36 @@
+---
+description: After tasks, GitHub E2E (and Visual if present) must be green
+alwaysApply: true
+---
+
+# CI E2E / Visual после задачи (Engineering Performance)
+
+Дополняет глобальные `~/.cursor/rules/ci-e2e-visual-after-task.mdc` и
+`github-ci-after-push.mdc`.
+
+## Workflows репозитория
+
+| Workflow | Файл | Обязателен |
+|----------|------|------------|
+| **E2E Playwright** | `.github/workflows/e2e-tests.yml` | да (после push с `client/**` / compose / migrations) |
+| API Tests | `.github/workflows/api-tests.yml` | да (после push с `backend/**`) |
+| Visual | — | N/A (пока нет отдельного workflow) |
+
+## После push на master / PR
+
+```bash
+gh run list --commit "$(git rev-parse HEAD)" --limit 10
+gh run watch <e2e_run_id> --exit-status
+gh run watch <api_run_id> --exit-status   # если запущен
+```
+
+В ответе явно: **E2E = OK/FAIL** + URL; **Visual = N/A**; API Tests = OK/FAIL.
+
+## Локально (если push ещё нет / UI правки)
+
+```bash
+docker compose build frontend backend && docker compose up -d
+cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
+```
+
+Не закрывать UI-задачу на красном Playwright (локально или в Actions).

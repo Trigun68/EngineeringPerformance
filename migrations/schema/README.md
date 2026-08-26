@@ -19,8 +19,9 @@ pwsh -File scripts/Regenerate-SqlSchema.ps1
 
 ## Применение
 
-Для новой инсталляции рекомендуется использовать `EngineeringPerformance.DbInitializer`
-(см. `SETUP.md`). Он применяет EF миграции напрямую и заполняет тестовые данные.
+Для новой инсталляции используется контейнер `ep-db-init` (см. `_doc/deployment/DEPLOY.md`),
+который применяет SQL-миграции из `migrations/`. Legacy-утилита `EngineeringPerformance.DbInitializer`
+перенесена в `archive/` (2026-08-26) и более не поддерживается.
 
 Если нужен «голый» SQL (CI, удалённое развёртывание без .NET SDK на машине) —
 запустите `_generated.sql` через `sqlcmd`/SSMS на пустой БД.

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -25,6 +26,7 @@ public sealed class ProjectsCatalogExportService : IProjectsCatalogExportService
     {
         var projects = await LoadActiveProjectsAsync(cancellationToken);
 
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add("Projects");
         sheet.Cell(1, 1).Value = "Code";
@@ -66,7 +68,7 @@ public sealed class ProjectsCatalogExportService : IProjectsCatalogExportService
                         column.Item().Text($"{project.Code} — {project.Name}");
                     }
                 });
-                page.Footer().AlignCenter().Text($"Generated {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC");
+                page.Footer().AlignCenter().Text($"Generated {DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(3)):yyyy-MM-dd HH:mm} MSK");
             });
         });
 

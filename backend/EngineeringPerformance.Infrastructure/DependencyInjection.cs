@@ -58,16 +58,41 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
+        services.Configure<MfaOptions>(configuration.GetSection(MfaOptions.SectionName));
+        services.Configure<RateLimitOptions>(configuration.GetSection(RateLimitOptions.SectionName));
+        services.Configure<AuthAuditOptions>(configuration.GetSection(AuthAuditOptions.SectionName));
+        services.Configure<LdapOptions>(configuration.GetSection(LdapOptions.SectionName));
+        services.Configure<AdminOptions>(configuration.GetSection(AdminOptions.SectionName));
+
+        if (configuration.GetValue<bool>($"{LdapOptions.SectionName}:Enabled"))
+            services.AddScoped<ILdapService, LdapService>();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection");
-        services.AddDbContextFactory<AppDbContext>(options =>
-            options.UseSqlServer(connectionString, sql =>
-                sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(10), errorNumbersToAdd: null)));
+        services.Configure<Diagnostics.SqlProfilingOptions>(
+            configuration.GetSection(Diagnostics.SqlProfilingOptions.SectionName));
+        services.Configure<Application.Analytics.FactNorm.AnalyticsOptions>(
+            configuration.GetSection(Application.Analytics.FactNorm.AnalyticsOptions.SectionName));
+        services.Configure<Application.Analytics.NormRegistry.NormHealthOptions>(
+            configuration.GetSection(Application.Analytics.NormRegistry.NormHealthOptions.SectionName));
+        services.Configure<AnalyticsTrendsOptions>(
+            configuration.GetSection(AnalyticsTrendsOptions.SectionName));
+        var analyticsOptions = configuration
+            .GetSection(Application.Analytics.FactNorm.AnalyticsOptions.SectionName)
+            .Get<Application.Analytics.FactNorm.AnalyticsOptions>()
+            ?? new Application.Analytics.FactNorm.AnalyticsOptions();
+        analyticsOptions.Validate();
+        services.AddSingleton<Diagnostics.SqlQueryCommandInterceptor>();
+        ConfigureSqlLanes(services, connectionString);
         services.AddScoped(sp => sp.GetRequiredService<IDbContextFactory<AppDbContext>>().CreateDbContext());
 
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddScoped<IRefreshTokenService, RefreshTokenService>();
+        services.AddScoped<IAccountLockoutService, AccountLockoutService>();
+        services.AddScoped<IMfaService, MfaService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IProjectRepository, ProjectRepository>();
 
@@ -81,6 +106,7 @@ public static class DependencyInjection
 
         services.AddScoped<IProjectExportService, ProjectExportService>();
         services.AddScoped<IDirectoryExportService, DirectoryExportService>();
+        services.AddScoped<IExportFileNameService, ExportFileNameService>();
         services.AddScoped<IForecastDetailSummaryTableContext, ForecastDetailSummaryTableContext>();
         services.AddScoped<IProjectsCatalogExportService, ProjectsCatalogExportService>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
@@ -90,30 +116,55 @@ public static class DependencyInjection
         services.AddScoped<ILogViewerService, LogViewerService>();
         services.AddScoped<Application.Monitoring.IHealthCheckService, Monitoring.HealthCheckService>();
         services.AddScoped<IAuditConfigService, AuditConfigService>();
+        services.AddScoped<ISqlProfilingPersistence, Diagnostics.SqlProfilingPersistence>();
+        services.AddScoped<ISqlProfilingReportService, Diagnostics.SqlProfilingReportService>();
         services.AddScoped<IProjectImportService, ProjectExcelDataImportService>();
         services.AddScoped<IDirectoryFacade, DirectoryFacade>();
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
         services.AddScoped<ILaborIntensityRecalculationService, LaborIntensityRecalculationService>();
+        services.AddScoped<IAnalysisVersionRecalculationOrchestrator, AnalysisVersionRecalculationOrchestrator>();
         services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();
         services.AddSingleton<INormCalculator, NormCalculator>();
         services.AddSingleton<IDeviationCalculator, DeviationCalculator>();
+        services.AddSingleton<INormPreviewService, NormPreviewService>();
         services.AddSingleton<IPerformanceCalculationEngine, PerformanceCalculationEngine>();
         services.AddScoped<IProjectVisibilityService, ProjectVisibilityService>();
         services.AddScoped<IProjectCharacteristicSelectionService, ProjectCharacteristicSelectionService>();
         services.AddScoped<IProjectVersionDeepCopyService, ProjectVersionDeepCopyService>();
         services.AddScoped<IProjectVersionPlanningParameterService, ProjectVersionPlanningParameterService>();
         services.AddScoped<IProjectVersionService, ProjectVersionService>();
+        services.AddScoped<IProjectVersionReadinessService, ProjectVersionReadinessService>();
         services.AddScoped<IProjectDataService, ProjectDataService>();
         services.AddScoped<IPerformanceService, PerformanceService>();
         services.AddScoped<IProjectVersionAnalysisService, ProjectVersionAnalysisService>();
+        services.AddScoped<IPerformanceReportService, PerformanceReportService>();
         services.AddScoped<IProjectForecastService, ProjectForecastService>();
         services.AddScoped<IForecastPlannedVolumePersistenceService, ForecastPlannedVolumePersistenceService>();
         services.AddScoped<ProjectVersionGridDataLoader>();
+        services.AddSingleton<AnalyticsSqlGate>();
+        services.AddSingleton<IPageDataBuildCoalescer, PageDataBuildCoalescer>();
         services.AddScoped<ProjectsPageRawDataLoader>();
+        services.AddScoped<IProjectsPageRawDataLoader>(sp =>
+            sp.GetRequiredService<ProjectsPageRawDataLoader>());
         services.AddScoped<IProjectsPageDataFetcher, ProjectsPageDataFetcher>();
         services.AddScoped<IProjectCompareService, ProjectCompareService>();
         services.AddScoped<IFactAssessmentPipeline, FactAssessmentPipeline>();
+        services.AddSingleton<Application.Analytics.FactNorm.IFactNormAnalysisEngine,
+            Application.Analytics.FactNorm.FactNormAnalysisEngine>();
+        services.AddScoped<Application.Analytics.FactNorm.IFactNormCacheGeneration, FactNormCacheGeneration>();
+        services.AddScoped<Application.Analytics.IProjectAnalyticsCache, ProjectAnalyticsCache>();
+        services.AddScoped<Application.Analytics.FactNorm.IFactNormAnalysisService, FactNormAnalysisService>();
+        services.AddScoped<Application.Analytics.NormRegistry.INormUsageStatsService,
+            Analytics.NormRegistry.NormUsageStatsService>();
+        services.AddScoped<Analytics.NormRegistry.NormRegistryService>();
+        services.AddScoped<Application.Analytics.NormRegistry.INormRegistryService>(sp =>
+            sp.GetRequiredService<Analytics.NormRegistry.NormRegistryService>());
+        services.AddScoped<Application.Analytics.NormRegistry.INormHealthCheckService>(sp =>
+            sp.GetRequiredService<Analytics.NormRegistry.NormRegistryService>());
         services.AddScoped<ITrendAnalyticsService, TrendAnalyticsService>();
+        services.AddScoped<IZTrendEngine, ZTrendEngine>();
+        services.AddScoped<IZTrendAnalyticsService, ZTrendAnalyticsService>();
+        services.AddScoped<IProductivityTrendAnalyticsService, ProductivityTrendAnalyticsService>();
         services.AddScoped<IGroupAnalyticsService, GroupAnalyticsService>();
         services.AddScoped<IAnalyticsExportService, AnalyticsExportService>();
         services.AddScoped<IChartImageRenderer, ScottPlotChartRenderer>();
@@ -191,7 +242,8 @@ public static class DependencyInjection
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = jwtSettings.Issuer,
                     ValidAudience = jwtSettings.Audience,
-                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret))
+                    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.Secret)),
+                    ClockSkew = TimeSpan.FromSeconds(jwtSettings.ClockSkewSeconds)
                 };
 
                 // JWT из httpOnly cookie (приоритет) или Authorization: Bearer
@@ -200,7 +252,7 @@ public static class DependencyInjection
                     OnMessageReceived = context =>
                     {
                         if (string.IsNullOrEmpty(context.Token)
-                            && context.Request.Cookies.TryGetValue("ep_auth_token", out var cookieToken))
+                            && context.Request.Cookies.TryGetValue(jwtSettings.AccessTokenCookieName, out var cookieToken))
                         {
                             context.Token = cookieToken;
                         }
@@ -213,5 +265,39 @@ public static class DependencyInjection
         services.AddAuthorization();
 
         return services;
+    }
+
+    private static void ConfigureSqlLanes(IServiceCollection services, string? connectionString)
+    {
+        services.AddDbContextFactory<AppDbContext>((sp, options) =>
+        {
+            var interactive = string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : SqlConnectionStringLane.ForInteractive(connectionString);
+            options.UseSqlServer(interactive, sql =>
+            {
+                sql.CommandTimeout(30);
+                sql.ExecutionStrategy(dependencies =>
+                    new SqlLaneRetryingExecutionStrategy(dependencies, 3, TimeSpan.FromSeconds(2)));
+            });
+            options.AddInterceptors(sp.GetRequiredService<Diagnostics.SqlQueryCommandInterceptor>());
+        });
+
+        services.AddSingleton<IAnalyticsDbContextFactory>(sp =>
+        {
+            var interceptor = sp.GetRequiredService<Diagnostics.SqlQueryCommandInterceptor>();
+            var builder = new DbContextOptionsBuilder<AppDbContext>();
+            var analytics = string.IsNullOrWhiteSpace(connectionString)
+                ? connectionString
+                : SqlConnectionStringLane.ForAnalytics(connectionString);
+            builder.UseSqlServer(analytics, sql =>
+            {
+                sql.CommandTimeout(60);
+                sql.ExecutionStrategy(dependencies =>
+                    new SqlLaneRetryingExecutionStrategy(dependencies, 3, TimeSpan.FromSeconds(2)));
+            });
+            builder.AddInterceptors(interceptor);
+            return new AnalyticsDbContextFactory(builder.Options);
+        });
     }
 }

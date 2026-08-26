@@ -1,5 +1,7 @@
+import { Suspense } from 'react';
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, Button, Stack } from '@mui/material';
+import { RouteContentFallback } from '../../components/WorkingOverlay/RouteContentFallback';
 import { wpColors } from '../../theme/wpColors';
 
 const subNavSx = {
@@ -18,6 +20,7 @@ const subNavSx = {
 const ADMIN_TABS = [
   { to: '/admin/logs', label: 'Логи системы' },
   { to: '/admin/health', label: 'Состояние сервисов' },
+  { to: '/admin/monitoring', label: 'Мониторинг' },
   { to: '/admin/audit', label: 'Аудит настроек' },
   { to: '/admin/user-actions', label: 'Журнал действий' },
 ] as const;
@@ -59,7 +62,9 @@ export function AdminLayout() {
         ))}
       </Stack>
       <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <Outlet />
+        <Suspense fallback={<RouteContentFallback />}>
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

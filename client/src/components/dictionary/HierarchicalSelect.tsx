@@ -20,8 +20,11 @@ export interface HierarchicalSelectProps {
   disabled?: boolean;
 }
 
+// Формат IIC («код — имя (ед.)») — только через явный formatLabel для IIC-ресурсов;
+// по умолчанию обычный каталог: «код имя».
 function defaultLabel(item: DictionaryItem): string {
-  return item.code?.trim() ? `${item.code} ${item.name}` : item.name;
+  const code = item.code?.trim();
+  return code ? `${code} ${item.name}` : item.name;
 }
 
 function buildFlatOptions(
@@ -59,6 +62,14 @@ function buildFlatOptions(
 
   visit(null, 0, new Set());
   return result;
+}
+
+export function buildHierarchicalOptions(
+  items: DictionaryItem[],
+  formatLabel: (item: DictionaryItem) => string = defaultLabel,
+  excludeIds: number[] = [],
+): HierarchicalSelectOption[] {
+  return buildFlatOptions(items, formatLabel, new Set(excludeIds));
 }
 
 export function HierarchicalSelect({

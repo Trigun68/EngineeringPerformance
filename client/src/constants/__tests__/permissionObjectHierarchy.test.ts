@@ -15,9 +15,10 @@ function makeMatrix(
     objects: Object.keys(entries),
     objectHierarchy: [],
     roles: [
-      { id: 1, name: 'Administrator' },
-      { id: 2, name: 'ProjectManager' },
-      { id: 3, name: 'Observer' },
+      { id: 1, name: 'SuperAdmin' },
+      { id: 2, name: 'Admin' },
+      { id: 3, name: 'Engineer' },
+      { id: 4, name: 'Gip' },
     ],
     matrix: entries,
   };

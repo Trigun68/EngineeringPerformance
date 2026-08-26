@@ -128,4 +128,53 @@ public sealed class RegistersApiTests : IClassFixture<ApiWebApplicationFactory>
         var secondId = (await createSecond.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
         await _client.DeleteAsync($"/api/registers/iic-work-direction-norms/{secondId}");
     }
+
+    [Fact]
+    public async Task Create_WithNormFormulaOnly_Succeeds()
+    {
+        if (!_sqlAvailable) return;
+
+        var directionsResponse = await _client.GetAsync("/api/dictionaries/all");
+        directionsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var directionsDoc = JsonDocument.Parse(await directionsResponse.Content.ReadAsStringAsync());
+        var directions = directionsDoc.RootElement.GetProperty("iicWorkDirections");
+        if (directions.GetArrayLength() == 0)
+            return;
+
+        var workDirectionId = directions[0].GetProperty("id").GetInt32();
+        var hash = Math.Abs(Guid.NewGuid().GetHashCode());
+        var year = 2040 + (hash % 40);
+        var dayOffset = (hash % 27) + 1;
+        var from = $"{year}-06-{dayOffset:D2}";
+
+        var create = await _client.PostAsJsonAsync("/api/registers/iic-work-direction-norms", new
+        {
+            workDirectionId,
+            performance = (double?)null,
+            estimate = (double?)null,
+            standardDeviation = (double?)null,
+            unitId = (int?)null,
+            effectiveFrom = from,
+            effectiveTo = (string?)null,
+            normFormula = new
+            {
+                type = 1,
+                coefficients = new Dictionary<string, double> { ["a"] = 15.5, ["b"] = 0 },
+                minVolume = 0,
+                maxVolume = 999999,
+                extrapolation = 2,
+            },
+            deviationFormula = new
+            {
+                modelType = 1,
+                coefficients = new Dictionary<string, double> { ["sigma"] = 0.1 },
+            },
+        });
+
+        create.StatusCode.Should().Be(HttpStatusCode.Created);
+        var body = await create.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("performance").GetDecimal().Should().Be(15.5m);
+        var id = body.GetProperty("id").GetInt32();
+        await _client.DeleteAsync($"/api/registers/iic-work-direction-norms/{id}");
+    }
 }

@@ -18,10 +18,9 @@ public sealed class RequireProjectAccessAttribute : Attribute, IAsyncActionFilte
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (!context.RouteData.Values.TryGetValue(ProjectIdRouteKey, out var raw)
-            || !int.TryParse(raw?.ToString(), out var projectId))
+        if (!TryResolveProjectId(context, out var projectId))
         {
-            context.Result = new BadRequestObjectResult($"Route parameter '{ProjectIdRouteKey}' is required.");
+            context.Result = new BadRequestObjectResult($"Parameter '{ProjectIdRouteKey}' is required.");
             return;
         }
 
@@ -36,5 +35,42 @@ public sealed class RequireProjectAccessAttribute : Attribute, IAsyncActionFilte
         }
 
         await next();
+    }
+
+    private bool TryResolveProjectId(ActionExecutingContext context, out int projectId)
+    {
+        if (context.ActionArguments.TryGetValue(ProjectIdRouteKey, out var arg)
+            && TryParseInt(arg, out projectId))
+        {
+            return true;
+        }
+
+        if (context.RouteData.Values.TryGetValue(ProjectIdRouteKey, out var routeRaw)
+            && TryParseInt(routeRaw, out projectId))
+        {
+            return true;
+        }
+
+        var query = context.HttpContext.Request.Query[ProjectIdRouteKey].FirstOrDefault();
+        if (int.TryParse(query, out projectId))
+            return true;
+
+        projectId = default;
+        return false;
+    }
+
+    private static bool TryParseInt(object? value, out int projectId)
+    {
+        switch (value)
+        {
+            case int i:
+                projectId = i;
+                return true;
+            case long l when l is >= int.MinValue and <= int.MaxValue:
+                projectId = (int)l;
+                return true;
+            default:
+                return int.TryParse(value?.ToString(), out projectId);
+        }
     }
 }

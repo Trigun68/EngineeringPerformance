@@ -30,13 +30,20 @@ public sealed class IicWorkDirectionNormConfiguration : IEntityTypeConfiguration
             .HasForeignKey(n => n.UnitId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        // V2-A: одна норма на направление в заданной временной точке.
-        // Ранее при накладывающихся окнах сервисы Performance и Forecast выбирали
-        // норму недетерминированно (First/OrderByDescending First), что давало
-        // расхождение Z-score на тех же данных.
+        // Covering unique: as-of lookup (parity → 111_SqlMetricsWave2Indexes.sql).
+        // Legacy entity has no parametric columns — INCLUDE only scalar fields present here.
         builder.HasIndex(n => new { n.WorkDirectionId, n.EffectiveFrom })
             .IsUnique()
-            .HasDatabaseName("UX_IicWorkDirectionNorms_WorkDirection_EffectiveFrom");
+            .IsDescending(false, true)
+            .HasDatabaseName("UX_IicWorkDirectionNorms_WorkDirection_EffectiveFrom")
+            .IncludeProperties(n => new
+            {
+                n.EffectiveTo,
+                n.UnitId,
+                n.Performance,
+                n.Estimate,
+                n.StandardDeviation,
+            });
 
         // V2-A: «закрытие» окна нормы не может быть раньше её открытия.
         builder.ToTable(t => t.HasCheckConstraint(

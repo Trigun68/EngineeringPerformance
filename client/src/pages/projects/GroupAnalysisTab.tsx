@@ -15,6 +15,7 @@ import {
 import type { ColDef } from 'ag-grid-community';
 import { fetchGroupAnalysis, type GroupAnalysisResult } from '../../api/analyticsApi';
 import { DataTable } from '../../components/DataTable/DataTable';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 
 interface GroupAnalysisTabProps {
@@ -63,6 +64,7 @@ export function GroupAnalysisTab({ projectId }: GroupAnalysisTabProps) {
 
   return (
     <Box>
+      <WorkingOverlay open={loading} delayMs={1000} />
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
         <Typography variant="h6">Групповой анализ</Typography>
         {data && (

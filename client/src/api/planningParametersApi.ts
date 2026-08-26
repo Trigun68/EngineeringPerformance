@@ -12,6 +12,8 @@ export interface ProjectVersionPlanningParameter {
   zBase: number;
   zOptimistic: number;
   zActual: number | null;
+  /** Вес LI Base для средневзвешенного rollup (с сервера). */
+  laborHoursWeight?: number;
 }
 
 export interface PlanningParameterWriteItem {

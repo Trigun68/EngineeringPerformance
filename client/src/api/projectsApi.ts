@@ -20,7 +20,8 @@ const projectSchema = z.object({
   workStatus: z.string().nullable().optional(),
   workStart: z.string().nullable().optional(),
   program: z.string().nullable().optional(),
-  versionCount: z.number().int(),
+  planVersionCount: z.number().int(),
+  factVersionCount: z.number().int(),
   isArchived: z.boolean().optional(),
 });
 const projectListSchema = z.array(projectSchema);
@@ -96,12 +97,12 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 export async function exportProjectsExcel(): Promise<void> {
-  const { blob, filename } = await downloadBlob('/projects/export/excel', undefined, 'projects.xlsx');
+  const { blob, filename } = await downloadBlob('/projects/export/excel');
   triggerBrowserDownload(blob, filename);
 }
 
 export async function exportProjectsPdf(): Promise<void> {
-  const { blob, filename } = await downloadBlob('/projects/export/pdf', undefined, 'projects.pdf');
+  const { blob, filename } = await downloadBlob('/projects/export/pdf');
   triggerBrowserDownload(blob, filename);
 }
 

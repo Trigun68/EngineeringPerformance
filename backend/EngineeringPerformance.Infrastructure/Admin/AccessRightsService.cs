@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Admin;
+using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -99,7 +100,7 @@ public sealed class AccessRightsService : IAccessRightsService
 
         var roleIds = roles.Select(r => r.Id).ToHashSet();
         var administratorRoleIds = roles
-            .Where(r => string.Equals(r.Name, nameof(UserRole.Administrator), StringComparison.Ordinal))
+            .Where(r => PermissionObjectCatalog.IsSuperAdmin(r.Name, r.Id))
             .Select(r => r.Id)
             .ToHashSet();
 

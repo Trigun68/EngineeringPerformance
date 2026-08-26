@@ -11,6 +11,8 @@ public sealed class AppDbContext : DbContext
     }
 
     public DbSet<User> Users => Set<User>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AuthAuditLog> AuthAuditLogs => Set<AuthAuditLog>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectAnalysisVersion> ProjectAnalysisVersions => Set<ProjectAnalysisVersion>();
@@ -35,11 +37,16 @@ public sealed class AppDbContext : DbContext
     public DbSet<ProjectVersionPlanningParameter> ProjectVersionPlanningParameters => Set<ProjectVersionPlanningParameter>();
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<UserActionLog> UserActionLogs => Set<UserActionLog>();
+    public DbSet<SqlQueryMetric> SqlQueryMetrics => Set<SqlQueryMetric>();
+    public DbSet<NormSuggestion> NormSuggestions => Set<NormSuggestion>();
+    public DbSet<NormChangeAudit> NormChangeAudits => Set<NormChangeAudit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new ProjectConfiguration());
         modelBuilder.ApplyConfiguration(new UserConfiguration());
+        modelBuilder.ApplyConfiguration(new RefreshTokenConfiguration());
+        modelBuilder.ApplyConfiguration(new AuthAuditLogConfiguration());
         modelBuilder.ApplyConfiguration(new AccessRightConfiguration());
         modelBuilder.ApplyConfiguration(new UserActionLogConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectPhysicalVolumeConfiguration());
@@ -47,6 +54,12 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new PhysicalVolumeKfoConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeBerConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectVersionPlanningParameterConfiguration());
+        modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
+        modelBuilder.ApplyConfiguration(new SqlQueryMetricConfiguration());
+        modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());
+        modelBuilder.ApplyConfiguration(new DataImportIterationConfiguration());
+        modelBuilder.ApplyConfiguration(new NormSuggestionConfiguration());
+        modelBuilder.ApplyConfiguration(new NormChangeAuditConfiguration());
 
         foreach (var property in modelBuilder.Model.GetEntityTypes()
                      .SelectMany(entityType => entityType.GetProperties())

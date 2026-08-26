@@ -12,6 +12,7 @@ namespace EngineeringPerformance.Api.Tests;
 /// <summary>
 /// Версия БЭР/КФО: AsOfDate → CreatedAt + снимок норм; импорт ФО → корректный FK;
 /// смена каталога при уже импортированных PPV запрещена.
+/// Uses disposable <see cref="TestProjectScope"/> — never attaches to seed projects.
 /// </summary>
 public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWebApplicationFactory>
 {
@@ -31,17 +32,16 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
     {
         if (!_sqlAvailable) return;
 
-        var projectId = await GetFirstProjectIdAsync();
-        if (projectId is null) return;
-
         var types = await ResolveCatalogTypeIdsAsync();
         if (types.BerTypeId is null) return;
+
+        await using var project = await TestProjectScope.CreateAsync(_client, "ber-asof");
 
         var asOf = new DateTime(2026, 4, 13, 12, 0, 0, DateTimeKind.Utc);
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var createResponse = await _client.PostAsJsonAsync(
-            $"/api/projects/{projectId}/versions",
+            $"/api/projects/{project.Id}/versions",
             new
             {
                 versionName = $"ber-asof-{suffix}",
@@ -86,9 +86,6 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
     {
         if (!_sqlAvailable) return;
 
-        var projectId = await GetFirstProjectIdAsync();
-        if (projectId is null) return;
-
         var types = await ResolveCatalogTypeIdsAsync();
         if (types.BerTypeId is null || types.KfoTypeId is null) return;
 
@@ -96,20 +93,21 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
         var kfoCatalogId = await GetFirstCatalogIdAsync("PhysicalVolumesKfo");
         if (berCatalogId is null || kfoCatalogId is null) return;
 
+        await using var project = await TestProjectScope.CreateAsync(_client, "ber-kfo-fk");
         var suffix = Guid.NewGuid().ToString("N")[..8];
 
         var berVersionId = await CreateVersionAsync(
-            projectId.Value, $"ber-fk-{suffix}", types.BerTypeId.Value, new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc));
+            project.Id, $"ber-fk-{suffix}", types.BerTypeId.Value, new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc));
         var kfoVersionId = await CreateVersionAsync(
-            projectId.Value, $"kfo-fk-{suffix}", types.KfoTypeId.Value, new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc));
+            project.Id, $"kfo-fk-{suffix}", types.KfoTypeId.Value, new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc));
 
         var berPpv = await _client.PostAsJsonAsync(
-            $"/api/projects/{projectId}/versions/{berVersionId}/physical-volumes",
+            $"/api/projects/{project.Id}/versions/{berVersionId}/physical-volumes",
             new { physicalVolumeId = berCatalogId.Value, quantity = 1.5m, workName = "ber-row" });
         berPpv.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var kfoPpv = await _client.PostAsJsonAsync(
-            $"/api/projects/{projectId}/versions/{kfoVersionId}/physical-volumes",
+            $"/api/projects/{project.Id}/versions/{kfoVersionId}/physical-volumes",
             new { physicalVolumeId = kfoCatalogId.Value, quantity = 2.5m, workName = "kfo-row" });
         kfoPpv.StatusCode.Should().Be(HttpStatusCode.Created);
 
@@ -144,26 +142,24 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
     {
         if (!_sqlAvailable) return;
 
-        var projectId = await GetFirstProjectIdAsync();
-        if (projectId is null) return;
-
         var types = await ResolveCatalogTypeIdsAsync();
         if (types.BerTypeId is null || types.KfoTypeId is null) return;
 
         var berCatalogId = await GetFirstCatalogIdAsync("PhysicalVolumesBer");
         if (berCatalogId is null) return;
 
+        await using var project = await TestProjectScope.CreateAsync(_client, "ber-block");
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var versionId = await CreateVersionAsync(
-            projectId.Value, $"ber-block-{suffix}", types.BerTypeId.Value, DateTime.UtcNow);
+            project.Id, $"ber-block-{suffix}", types.BerTypeId.Value, DateTime.UtcNow);
 
         var ppv = await _client.PostAsJsonAsync(
-            $"/api/projects/{projectId}/versions/{versionId}/physical-volumes",
+            $"/api/projects/{project.Id}/versions/{versionId}/physical-volumes",
             new { physicalVolumeId = berCatalogId.Value, quantity = 1m, workName = "block-row" });
         ppv.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var update = await _client.PutAsJsonAsync(
-            $"/api/projects/{projectId}/versions/{versionId}",
+            $"/api/projects/{project.Id}/versions/{versionId}",
             new
             {
                 versionName = $"ber-block-{suffix}",
@@ -183,23 +179,21 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
     {
         if (!_sqlAvailable) return;
 
-        var projectId = await GetFirstProjectIdAsync();
-        if (projectId is null) return;
-
         var types = await ResolveCatalogTypeIdsAsync();
         if (types.KfoTypeId is null) return;
 
+        await using var project = await TestProjectScope.CreateAsync(_client, "asof-refresh");
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var firstAsOf = new DateTime(2026, 4, 13, 12, 0, 0, DateTimeKind.Utc);
         var secondAsOf = new DateTime(2026, 6, 30, 12, 0, 0, DateTimeKind.Utc);
 
         var versionId = await CreateVersionAsync(
-            projectId.Value, $"asof-refresh-{suffix}", types.KfoTypeId.Value, firstAsOf);
+            project.Id, $"asof-refresh-{suffix}", types.KfoTypeId.Value, firstAsOf);
 
         var beforeNormIds = await LoadSnapshotNormIdsAsync(versionId);
 
         var update = await _client.PutAsJsonAsync(
-            $"/api/projects/{projectId}/versions/{versionId}",
+            $"/api/projects/{project.Id}/versions/{versionId}",
             new
             {
                 versionName = $"asof-refresh-{suffix}",
@@ -217,7 +211,6 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
         var afterNormIds = await LoadSnapshotNormIdsAsync(versionId);
         await AssertSnapshotNormsValidForDateAsync(versionId, secondAsOf);
 
-        // Набор норм может совпасть, но снимок обязан быть валиден на новую дату.
         afterNormIds.Should().NotBeNull();
         _ = beforeNormIds;
     }
@@ -237,15 +230,6 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("id").GetInt32();
-    }
-
-    private async Task<int?> GetFirstProjectIdAsync()
-    {
-        var projectsResponse = await _client.GetAsync("/api/projects");
-        projectsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        using var projectsDoc = JsonDocument.Parse(await projectsResponse.Content.ReadAsStringAsync());
-        if (projectsDoc.RootElement.GetArrayLength() == 0) return null;
-        return projectsDoc.RootElement[0].GetProperty("id").GetInt32();
     }
 
     private async Task<(int? BerTypeId, int? KfoTypeId)> ResolveCatalogTypeIdsAsync()

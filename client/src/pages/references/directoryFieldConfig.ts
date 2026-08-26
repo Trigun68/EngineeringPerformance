@@ -33,7 +33,7 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
     {
       key: 'kfoId',
       label: 'Классификатор (КФО)',
-      formLabel: 'Классификатор (КФО/нормы ИИС)',
+      formLabel: 'Классификатор (КФО/нормы IIC)',
       type: 'lookup',
       lookupKey: 'iicWorkDirections',
       propertyKey: 'classifierId',
@@ -63,8 +63,8 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
     },
     {
       key: 'kfoId',
-      label: 'Классификатор (ИИС)',
-      formLabel: 'Классификатор (группы физ. объёмов / нормы ИИС)',
+      label: 'Классификатор (IIC)',
+      formLabel: 'Классификатор (группы физ. объёмов / нормы IIC)',
       type: 'lookup',
       lookupKey: 'iicWorkDirections',
       propertyKey: 'classifierId',

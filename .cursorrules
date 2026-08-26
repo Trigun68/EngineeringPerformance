@@ -5,7 +5,7 @@
 - Frontend: React 18+, TypeScript, MUI, AG Grid, Zustand, Vite
 - Infra: Docker Compose, Nginx (+ auth-spnego for Windows Auth), JWT cookie fallback
 
-**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`, `_install/`, `docs/`).
+**Language policy:** code/commits/API in English; comments in code and user-facing docs in Russian (`_doc/`).
 
 ---
 
@@ -48,6 +48,7 @@ Api (Controllers, Auth) → Application (DTOs, Interfaces, CQRS handlers) → Do
 | Physical volume import | EP code normalization (trim, dash variants, zero-padding); regex patterns for catalog codes. |
 | Excel validation | Extension `.xlsx`, MIME check, PK zip magic bytes, max 50 MB (`ExcelUploadValidator`). |
 | Access matrix | 3 roles (Administrator, Manager, Observer) + per-object levels 0/1/2; enforce on API **and** hide UI controls. |
+| Export filenames | Russian template `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext`; SoT `ExportFileNameBuilder` + `Content-Disposition`. |
 
 ---
 
@@ -125,24 +126,37 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 
 ## 8. Workflow for AI agents
 
-1. Read `docs/revision_report.md` and `docs/development_roadmap.md` before large features.
-2. Match WPF behavior via `docs/migration_map.md` and `EngineeringPerformance.App/`.
-3. After logic changes: `dotnet build EngineeringPerformance.slnx`, `dotnet test`, rebuild `web` if client changed.
+1. Read `_doc/revision_report.md` and `_doc/development_roadmap.md` before large features.
+2. Match WPF behavior via `_doc/migration_map.md` and `EngineeringPerformance.App/`.
+3. After logic changes: `dotnet build EngineeringPerformance.Legacy.slnx`, `dotnet test`, rebuild `web` if client changed.
 4. After **UI changes**: rebuild frontend, run Playwright on `:8081` per `.cursor/rules/playwright-e2e-verify.mdc`.
-5. Docs: update `docs/changelog/CHANGELOG.md` for user-visible changes.
+5. Docs: update `_doc/changelog/CHANGELOG.md` for user-visible changes.
 
 ---
 
 ## 9. Архитектурные правила (критически важно)
 
-1. **Единый движок расчётов (Single Source of Truth):**
+1. **Единый формат имён групп IIC:**
+   Для групп IIC (`IicWorkDirection`) везде `код — наименование (ед.)`.
+   C#: `IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit`;
+   TS: `formatIisNorm` / `formatAsIisNorm`.
+   Не подменять name-only / `` `${code} ${name}` `` / перезапись `getDirectionName`.
+   См. `.cursor/rules/iic-group-naming.mdc`.
+
+2. **Единый движок расчётов (Single Source of Truth):**
    ЗАПРЕЩЕНО размазывать логику расчётов (взвешенный Z-score, распределение LI, ИИС, Forecast/Fact) по ViewModel, контроллерам или сервисам импорта.
    ВСЯ математическая и агрегирующая логика ДОЛЖНА находиться исключительно в классе `PerformanceCalculationEngine` (реализующем `IPerformanceCalculationEngine`). Сервисы только передают туда данные и получают результат.
+   См. `.cursor/rules/performance-calculation-engine-ssot.mdc`.
 
-2. **Работа с БД и транзакциями:**
+3. **Работа с БД и транзакциями:**
    - Строго один `DbContext` на HTTP-запрос (Scoped).
    - Для импорта Excel использовать стратегию **Replace** для дубликатов в рамках одной транзакции (не откатывать весь импорт из-за skip, как в legacy).
    - Всегда использовать `.AsNoTracking()` для чтений, питающих UI-гриды.
 
-3. **Глубокое копирование (Deep Copy):**
+4. **Глубокое копирование (Deep Copy):**
    Метод копирования версии проекта (`CopyProjectVersion`) ОБЯЗАН рекурсивно копировать ВСЕ связанные сущности: PPV, LI, итерации и **Equipment**. Исправить GAP legacy-кода, где Equipment не копировался.
+
+5. **Единый формат имён файлов экспорта:**
+   Excel/PDF/CSV: `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext`.
+   C#: `ExportFileNameBuilder` + `IExportFileNameService`; имя задаёт `Content-Disposition`.
+   Клиент не подменяет английским fallback. См. `.cursor/rules/export-file-naming.mdc`.

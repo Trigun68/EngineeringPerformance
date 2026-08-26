@@ -6,6 +6,7 @@ using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Export;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 // Make PagedDirectoryResponse available without namespace prefix
 using static EngineeringPerformance.Application.Directories.PagedDirectoryResponse;
@@ -34,13 +35,15 @@ public sealed class DirectoriesController : ControllerBase
     // NOTE: regex constraint only on {resource}/{id:int} routes to avoid conflict with project-characteristics/{id}/options
     [HttpPost("{resource}/export")]
     [DirectoryPermission(AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public IActionResult ExportExcelPost(string resource, [FromBody] DirectoryExportRequest request)
     {
         var bytes = _directoryExport.ExportToExcel(request);
-        var safeName = SanitizeFileName(request.TabName);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        var filename = $"{safeName}_{timestamp}.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.DirectoryView(resource));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{resource}/export.xlsx")]
@@ -58,7 +61,11 @@ public sealed class DirectoriesController : ControllerBase
         };
 
         var bytes = ReferenceExcelExporter.Export(resource, columns, items.Cast<object>());
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"{resource}.xlsx");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.DirectoryView(resource));
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{resource}")]
@@ -68,9 +75,10 @@ public sealed class DirectoriesController : ControllerBase
         [FromQuery] bool includeArchived = false,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 100,
+        [FromQuery] int? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var allItems = await _directories.ListAsync(resource, includeArchived, cancellationToken);
+        var allItems = await _directories.ListAsync(resource, includeArchived, cancellationToken, projectId);
         var totalCount = allItems.Count;
         var items = allItems
             .Skip((page - 1) * pageSize)
@@ -84,11 +92,12 @@ public sealed class DirectoriesController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<DirectoryTreeNodeDto>>> Tree(
         string resource,
         [FromQuery] bool includeArchived = false,
+        [FromQuery] int? projectId = null,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            var tree = await _directories.GetTreeAsync(resource, includeArchived, cancellationToken);
+            var tree = await _directories.GetTreeAsync(resource, includeArchived, cancellationToken, projectId);
             return Ok(tree);
         }
         catch (InvalidOperationException ex)
@@ -103,9 +112,10 @@ public sealed class DirectoriesController : ControllerBase
         string resource,
         [FromQuery] int? parentId,
         [FromQuery] bool includeArchived = false,
+        [FromQuery] int? projectId = null,
         CancellationToken cancellationToken = default)
     {
-        var items = await _directories.GetChildrenAsync(resource, parentId, includeArchived, cancellationToken);
+        var items = await _directories.GetChildrenAsync(resource, parentId, includeArchived, cancellationToken, projectId);
         return Ok(items);
     }
 
@@ -174,12 +184,5 @@ public sealed class DirectoriesController : ControllerBase
     {
         var ok = await _directories.DeleteAsync(resource, id, cancellationToken);
         return ok ? NoContent() : NotFound();
-    }
-
-    private static string SanitizeFileName(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
-        return string.IsNullOrWhiteSpace(cleaned) ? "Справочник" : cleaned;
     }
 }

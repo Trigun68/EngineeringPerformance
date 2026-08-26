@@ -54,5 +54,8 @@ public sealed class ProjectEquipmentConfiguration : IEntityTypeConfiguration<Pro
         builder.HasIndex(e => e.ProjectAnalysisVersionId);
         builder.HasIndex(e => e.EquipmentId);
         builder.HasIndex(e => e.FacilityCode);
+        // Hot path: /performance, import replace (parity → migrations/schema/110_HotPathIndexes.sql)
+        builder.HasIndex(e => new { e.ProjectAnalysisVersionId, e.EquipmentId })
+            .HasDatabaseName("IX_ProjectEquipments_VersionId_EquipmentId");
     }
 }

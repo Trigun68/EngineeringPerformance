@@ -6,8 +6,10 @@ namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Единая формула прогнозных часов: LI = N(V) · (1 + σ·z) · V_eff (мультипликативная модель).
+/// Internal-деталь <see cref="Services.PerformanceCalculationEngine"/> — прямые вызовы
+/// из Infrastructure запрещены, наружу торчит только IPerformanceCalculationEngine.
 /// </summary>
-public static class ForecastCalculation
+internal static class ForecastCalculation
 {
     public static PlanningZParameters ResolvePlanningZ(
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,

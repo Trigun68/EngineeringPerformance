@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
 import { AppLayout } from './layout/AppLayout';
 import { AdminRouteGuard } from './components/auth/AdminRouteGuard';
+import { MfaSetupDialog } from './components/auth/MfaSetupDialog';
 import { PermissionGuard, SettingsGuard } from './components/auth/PermissionGuard';
+import { AdminLayout } from './features/admin/AdminLayout';
 import { useFirstAccessiblePath } from './hooks/useAccessibleNavigation';
 import { ProjectsPage as ProjectsListPage } from './pages/projects/ProjectsPage';
 import { FullProjectsPage } from './pages/projects/FullProjectsPage';
@@ -13,22 +15,38 @@ import { DirectoryPage } from './pages/references/DirectoryPage';
 import { IicNormsPage } from './pages/references/IicNormsPage';
 import { REFERENCE_ROUTES } from './pages/references/referenceConfig';
 import { ReferencesIndexRedirect } from './pages/references/ReferencesIndexRedirect';
-import { UserActionLogPage } from './pages/audit/UserActionLogPage';
-import { SettingsLayout } from './pages/settings/SettingsLayout';
-import { UsersPage } from './pages/settings/UsersPage';
-import { AccessRightsPage } from './pages/settings/AccessRightsPage';
-import { SystemSettingsPage } from './pages/settings/SystemSettingsPage';
-import { HelpPage } from './pages/help/HelpPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
-import { TrendsAnalyticsPage } from './pages/analytics/TrendsAnalyticsPage';
 import { LoginPage } from './pages/auth/LoginPage';
-import { MonitoringDashboard } from './features/monitoring/MonitoringDashboard';
-import { AdminLayout } from './features/admin/AdminLayout';
-import { LogViewer } from './features/admin/LogViewer';
-import { HealthDashboard } from './features/admin/HealthDashboard';
-import { ConfigAudit } from './features/admin/ConfigAudit';
+import { SettingsLayout } from './pages/settings/SettingsLayout';
 import { useAuthStore } from './store/useAuthStore';
 import { resolvePreferredPath } from './utils/projectWorkspacePrefs';
+
+// Тяжёлые страницы — отдельные чанки. Каркасы AdminLayout / SettingsLayout грузятся сразу,
+// чтобы вторичное меню не исчезало, пока подгружается вкладка.
+const AnalyticsPage = lazy(() =>
+  import('./pages/analytics/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })),
+);
+const HelpPage = lazy(() => import('./pages/help/HelpPage').then((m) => ({ default: m.HelpPage })));
+const LogViewer = lazy(() => import('./features/admin/LogViewer').then((m) => ({ default: m.LogViewer })));
+const HealthDashboard = lazy(() =>
+  import('./features/admin/HealthDashboard').then((m) => ({ default: m.HealthDashboard })),
+);
+const ConfigAudit = lazy(() => import('./features/admin/ConfigAudit').then((m) => ({ default: m.ConfigAudit })));
+const MonitoringDashboard = lazy(() =>
+  import('./features/monitoring/MonitoringDashboard').then((m) => ({ default: m.MonitoringDashboard })),
+);
+const UserActionLogPage = lazy(() =>
+  import('./pages/audit/UserActionLogPage').then((m) => ({ default: m.UserActionLogPage })),
+);
+const UsersPage = lazy(() => import('./pages/settings/UsersPage').then((m) => ({ default: m.UsersPage })));
+const AccessRightsPage = lazy(() =>
+  import('./pages/settings/AccessRightsPage').then((m) => ({ default: m.AccessRightsPage })),
+);
+const SystemSettingsPage = lazy(() =>
+  import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
+);
+// Дизайн-превью PDF-отчётов — доступно без авторизации и без AppLayout.
+const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -67,14 +85,15 @@ function DefaultRedirect() {
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
   const isInitialized = useAuthStore((state) => state.isInitialized);
-  const isLoading = useAuthStore((state) => state.isLoading);
   const user = useAuthStore((state) => state.user);
+  const requiresMfaSetup = useAuthStore((state) => state.requiresMfaSetup);
+  const completeMfaSetup = useAuthStore((state) => state.completeMfaSetup);
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
 
-  if (!isInitialized || isLoading) {
+  if (!isInitialized) {
     return (
       <Box
         sx={{
@@ -100,8 +119,17 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      {user ? (
+      <>
         <Routes>
+        <Route
+          path="/dev/pdf-mockups"
+          element={(
+            <Suspense fallback={null}>
+              <PdfDesignMockups />
+            </Suspense>
+          )}
+        />
+        {user ? (
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -128,13 +156,14 @@ export default function App() {
               )}
             />
             <Route
-              path="/analytics/trends"
+              path="/analytics"
               element={(
                 <PermissionGuard objectName="GroupTrend">
-                  <TrendsAnalyticsPage />
+                  <AnalyticsPage />
                 </PermissionGuard>
               )}
             />
+            <Route path="/analytics/trends" element={<Navigate to="/analytics" replace />} />
             <Route
               path="/references"
               element={(
@@ -187,17 +216,11 @@ export default function App() {
             >
               <Route path="logs" element={<LogViewer />} />
               <Route path="health" element={<HealthDashboard />} />
+              <Route path="monitoring" element={<MonitoringDashboard />} />
               <Route path="audit" element={<ConfigAudit />} />
               <Route path="user-actions" element={<UserActionLogPage />} />
             </Route>
-            <Route
-              path="/monitoring"
-              element={(
-                <AdminRouteGuard>
-                  <MonitoringDashboard />
-                </AdminRouteGuard>
-              )}
-            />
+            <Route path="/monitoring" element={<Navigate to="/admin/monitoring" replace />} />
             <Route
               path="/settings"
               element={(
@@ -226,10 +249,16 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
+        ) : (
+          <Route path="*" element={<LoginPage />} />
+        )}
         </Routes>
-      ) : (
-        <LoginPage />
-      )}
+        <MfaSetupDialog
+          open={Boolean(user && requiresMfaSetup)}
+          onCompleted={completeMfaSetup}
+          onDismiss={completeMfaSetup}
+        />
+      </>
     </BrowserRouter>
   );
 }

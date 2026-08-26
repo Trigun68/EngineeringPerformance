@@ -24,10 +24,11 @@ alwaysApply: true
 cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
 ```
 
-Точечно по затронутому модулю:
+Точечно по затронутому модулю (тот же контейнер, спеки после `--`):
 ```bash
-cd client && E2E_BASE_URL=http://127.0.0.1:8081 npx playwright test e2e/<spec>.spec.ts
+cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker -- e2e/<spec>.spec.ts
 ```
+Локальный `npx playwright test` на хосте не поддерживается (ubuntu26).
 
 ## Минимальный набор spec по области
 
@@ -37,6 +38,34 @@ cd client && E2E_BASE_URL=http://127.0.0.1:8081 npx playwright test e2e/<spec>.s
 | Прогноз / проект | `e2e/forecast-module.spec.ts`, `e2e/project-workspace.spec.ts` |
 | Нормы ИИС | `e2e/iic-norms-history.spec.ts` |
 | Логин / навигация | `e2e/login-page.spec.ts`, `e2e/migration-smoke.spec.ts` |
+
+## «Target crashed» / «Page crashed» — это память, а не тест
+
+Если тесты валятся на `page.goto('/')` в `loginAsAdmin` и падения «переезжают»
+между прогонами — падает не тест, а вкладка Chromium.
+
+1. `--ipc=host` в `run-e2e-docker.sh` обязателен: без него контейнеру достаётся
+   `/dev/shm` **64 МБ** (проверить: `docker run --rm <image> df -h /dev/shm`).
+2. Проверить свободную память Docker VM — Chromium на гридах прогноза/факта
+   (десятки тысяч строк) требует 2-3 ГБ:
+   ```bash
+   docker run --rm alpine grep MemAvailable /proc/meminfo
+   ```
+   При `MemAvailable` меньше ~2 ГБ прогон будет флакать независимо от кода;
+   сначала освободить память, потом делать выводы о регрессии.
+
+## `cancelled` в Actions — смотреть шаг, а не тесты
+
+Прогон E2E со статусом `cancelled` обычно означает бюджет job (`timeout-minutes: 100`),
+а не флак теста. Сначала выяснить, на каком шаге стоял прогон:
+
+```bash
+gh run view <id> --json jobs --jq '[.jobs[].steps[]|{name,conclusion}]'
+```
+
+Известный случай: `Install Playwright browsers` встаёт в `apt` на зеркале Ubuntu
+(шаг ограничен 20 минутами и повторяется — см. комментарий в `e2e-tests.yml`).
+Если `Playwright E2E` в статусе `skipped` — тесты не запускались, вердикта нет.
 
 ## Критерий готовности UI-задачи
 

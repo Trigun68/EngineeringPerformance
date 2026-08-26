@@ -38,7 +38,7 @@ public sealed class PermissionDriftService : IPermissionDriftService
             .ToList();
 
         var missingByRole = roles
-            .Where(role => !string.Equals(role.Name, PermissionObjectCatalog.AdministratorRoleName, StringComparison.Ordinal))
+            .Where(role => !string.Equals(role.Name, PermissionObjectCatalog.SuperAdminRoleName, StringComparison.Ordinal))
             .Select(role =>
             {
                 var grantedObjects = rights

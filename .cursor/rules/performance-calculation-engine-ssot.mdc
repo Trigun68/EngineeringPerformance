@@ -1,0 +1,38 @@
+---
+description: Единый движок расчётов — PerformanceCalculationEngine (SSOT)
+alwaysApply: true
+---
+
+# Единый класс расчётов (SSOT)
+
+Вся математика и агрегация бизнес-логики — только в `PerformanceCalculationEngine` (`IPerformanceCalculationEngine`):
+
+- производительность / иерархия Z (`CalculatePerformance`);
+- оценка факта / распределение LI / Z по объектам (`CalculateFactAssessment`);
+- сценарии прогноза и часы (`ComputeForecastHours` / `ComputeForecastBaseHours`);
+- пересчёт трудоёмкости по сценарию планирования;
+- агрегирование прогнозных часов по направлениям;
+- взвешенный Z по корням / выборке строк.
+
+Сервисы, контроллеры, импорт, UI — **загрузка данных → вызов движка → маппинг DTO**. Без своей формулы Z, `Math.Log` производительности, `объём × норма`, пропорционального распределения часов.
+
+## Запрещено
+
+- Параллельный SoT факта: `FactAssessmentRowsCalculator` vs `CalculateFactAssessment` (нужен один путь через движок).
+- Прямые вызовы `ForecastCalculation` / `LaborIntensityCalculator` из сервисов в обход `IPerformanceCalculationEngine`.
+- Локальный `new DeviationCalculator(...)` в грид-билдерах для бизнес-часов (инжектировать движок).
+- Дубли `Σ(Z×hours)/Σ(hours)` вне движка (`WeightedZScoreCalculator` как отдельный публичный SoT — сводить к методу движка).
+
+## Допустимо вне движка
+
+- Маппинг EF → input DTO, обогащение RowId / IsEquipment / имена.
+- Сумма уже сохранённых полей БД без пересчёта формул.
+- Форматирование отображения (ед. изм., Excel layout) без новой математики.
+- Примитивы норм в UI справочника (`NormCalculator` для полос норм) — не для LI/Forecast/Fact проекта.
+
+## При новом коде
+
+1. Добавить/расширить метод на `IPerformanceCalculationEngine`.
+2. Вызвать из Infrastructure-сервиса.
+3. Покрыть unit-тестом в Application/Infrastructure.Tests.
+4. Не копировать формулы в `ProjectsPageGridBuilder`, `ProjectForecastService`, Import.

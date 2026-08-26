@@ -1,5 +1,6 @@
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Audit;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -45,10 +46,14 @@ public sealed class AuditController : ControllerBase
     {
         var filter = new UserActionLogFilter(from, to, userId, actionType);
         var bytes = await _userActionLog.ExportXlsxAsync(filter, includeArchived, cancellationToken);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Audit,
+            "xlsx",
+            ExportFileNameBuilder.Views.AuditLog);
         return File(
             bytes,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "user-actions.xlsx");
+            fileName);
     }
 
     [HttpPost("user-actions/archive")]

@@ -25,7 +25,7 @@ public sealed class PermissionService : IPermissionService
         if (role is null)
             return false;
 
-        if (string.Equals(role.Value.RoleName, nameof(UserRole.Administrator), StringComparison.Ordinal))
+        if (PermissionObjectCatalog.IsSuperAdmin(role.Value.RoleName, role.Value.RoleId))
             return true;
 
         var objectName = permission.ToObjectName();

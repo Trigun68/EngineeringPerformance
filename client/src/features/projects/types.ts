@@ -16,6 +16,7 @@ export interface ProjectsPageForecastSummaryRow {
   displayName: string;
   normUnitName: string;
   factPhysicalVolume: number | null;
+  factPhysicalVolumeDisplay?: string | null;
   normProductivity: number | null;
   baseHours: number | null;
   optimisticHours: number | null;

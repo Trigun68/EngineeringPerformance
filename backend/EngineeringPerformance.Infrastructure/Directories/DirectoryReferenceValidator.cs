@@ -88,6 +88,23 @@ internal sealed class DirectoryReferenceValidator
     {
         await ValidateClassifierIdAsync(request, cancellationToken);
         await ValidateUnitIdAsync(request, cancellationToken);
+
+        if (!TryGetInt(request, "projectId", out var projectId))
+            throw new InvalidOperationException("Equipment requires properties.projectId.");
+
+        if (!await _context.Projects.AsNoTracking().AnyAsync(x => x.Id == projectId, cancellationToken))
+            throw new KeyNotFoundException($"Project {projectId} not found.");
+
+        if (request.ParentId is int parentId)
+        {
+            var parentProjectId = await _context.Equipments.AsNoTracking()
+                .Where(x => x.Id == parentId)
+                .Select(x => x.ProjectId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (parentProjectId != projectId)
+                throw new InvalidOperationException("Equipment parent must belong to the same project.");
+        }
     }
 
     private async Task ValidateLaborIntensityAsync(DirectoryWriteRequest request, CancellationToken cancellationToken)

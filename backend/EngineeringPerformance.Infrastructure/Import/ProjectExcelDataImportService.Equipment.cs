@@ -11,31 +11,33 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 public sealed partial class ProjectExcelDataImportService
 {
-    private Task<DataImportResultDto> ImportEquipmentAsync(int projectId, int versionId, string filePath, string description) =>
+    private Task<DataImportResultDto> ImportEquipmentAsync(
+        int projectId,
+        int versionId,
+        string filePath,
+        string description,
+        ImportSourceMetadata source) =>
         ExecuteWithRetryableTransactionAsync(context =>
-            ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description));
+            ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description, source));
 
     private async Task<DataImportResultDto> ImportEquipmentCoreAsync(
         AppDbContext context,
         int projectId,
         int versionId,
         string filePath,
-        string description)
+        string description,
+        ImportSourceMetadata source)
     {
         // Паритет WPF: полная замена данных оборудования версии перед импортом.
         await ClearEquipmentDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = new DataImportIteration
-        {
-            ProjectId = projectId,
-            ProjectAnalysisVersionId = versionId,
-            DataType = DataImportType.Equipment,
-            Description = description,
-            SourceFileName = Path.GetFileName(filePath),
-            ImportedAt = DateTime.UtcNow,
-        };
-        context.DataImportIterations.Add(iteration);
-        await context.SaveChangesAsync();
+        var iteration = await CreateIterationAsync(
+            context,
+            projectId,
+            versionId,
+            DataImportType.Equipment,
+            description,
+            source);
 
         // ClosedXML: using предотвращает утечки памяти Workbook/Worksheet.
         using var workbook = new XLWorkbook(filePath);
@@ -55,19 +57,24 @@ public sealed partial class ProjectExcelDataImportService
         }
 
         var lastRowNumber = worksheet.LastRowUsed()?.RowNumber() ?? firstDataRowNumber - 1;
-        var catalogRows = await context.Equipments.AsNoTracking().ToListAsync();
+        // Все проектные строки (для доноров) + lookup текущего проекта.
+        var catalogRows = await context.Equipments.AsNoTracking()
+            .Where(e => e.ProjectId != null)
+            .ToListAsync();
         var units = await context.UnitsOfMeasurement.AsNoTracking().ToListAsync();
         var (catalogLookup, ambiguousKeys, duplicateKeyCount) =
-            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, _logger);
+            EquipmentImportCatalogMatcher.BuildCatalogLookup(catalogRows, projectId, _logger);
         if (duplicateKeyCount > 0)
         {
             _logger.LogWarning(
-                "Equipment import: catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                "Equipment import: project {ProjectId} catalog contains {Count} ambiguous keys (Name + UnitId); affected rows will be skipped",
+                projectId,
                 duplicateKeyCount);
         }
 
         var pendingCatalogCreates = new List<Equipment>();
         var autoCreatedCount = 0;
+        var copiedFromOtherProjectCount = 0;
         var skippedDuplicateCount = 0;
         var skippedDuplicateRows = new List<(int RowNumber, string Name, string Unit)>();
         var importTimestamp = iteration.ImportedAt;
@@ -105,10 +112,12 @@ public sealed partial class ProjectExcelDataImportService
                          ?? EquipmentUnitNameMatcher.ResolveUnitId(rawUnitName, units);
 
             var resolveResult = EquipmentImportCatalogMatcher.ResolveOrCreate(
+                projectId,
                 catalogName,
                 unitId,
                 catalogLookup,
                 ambiguousKeys,
+                catalogRows,
                 pendingCatalogCreates);
 
             if (resolveResult.SkippedDuplicate)
@@ -125,10 +134,19 @@ public sealed partial class ProjectExcelDataImportService
             }
 
             if (resolveResult.Created)
-                autoCreatedCount++;
+            {
+                if (resolveResult.CopiedFromOtherProject)
+                    copiedFromOtherProjectCount++;
+                else
+                    autoCreatedCount++;
+            }
 
-            if (dictionaryRefs.DirectionId is int directionId)
+            // DirectionId из Excel перекрывает только stub; у копии с донора уже есть ClassifierId.
+            if (dictionaryRefs.DirectionId is int directionId
+                && (!resolveResult.CopiedFromOtherProject || resolveResult.Equipment.ClassifierId is null))
+            {
                 resolveResult.Equipment.ClassifierId = directionId;
+            }
 
             newEntities.Add(BuildProjectEquipmentFromImportRow(
                 row, columnMap, projectId, versionId, resolveResult.Equipment, importTimestamp));
@@ -142,7 +160,8 @@ public sealed partial class ProjectExcelDataImportService
                 0,
                 autoCreatedCount,
                 skippedDuplicateCount,
-                skippedDuplicateRows);
+                skippedDuplicateRows,
+                copiedFromOtherProjectCount);
             return new DataImportResultDto(
                 true,
                 0,
@@ -163,7 +182,8 @@ public sealed partial class ProjectExcelDataImportService
             newEntities.Count,
             autoCreatedCount,
             skippedDuplicateCount,
-            skippedDuplicateRows);
+            skippedDuplicateRows,
+            copiedFromOtherProjectCount);
 
         var rowErrors = dictionaryErrors
             .Concat(skippedDuplicateRows.Select(s => new ImportRowErrorDto(

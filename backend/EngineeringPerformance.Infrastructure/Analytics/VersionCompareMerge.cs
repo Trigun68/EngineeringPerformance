@@ -12,6 +12,12 @@ internal static class VersionCompareMerge
         var dictB = facilityB.GroupBy(f => f.Code).ToDictionary(g => g.Key, g => g.First());
         var allCodes = dictA.Keys.Union(dictB.Keys).OrderBy(c => c);
 
+        static decimal? PlannedProd(decimal? hours, decimal? volume) =>
+            hours.HasValue && volume is > 0 ? hours.Value / volume.Value : null;
+
+        static decimal? FactProd(decimal? hours, decimal? volume) =>
+            hours.HasValue && volume is > 0 ? hours.Value / volume.Value : null;
+
         var result = new List<VersionCompareFacilityRowDto>();
         foreach (var code in allCodes)
         {
@@ -29,14 +35,30 @@ internal static class VersionCompareMerge
             result.Add(new VersionCompareFacilityRowDto(
                 code,
                 rowB?.Name ?? rowA?.Name ?? string.Empty,
-                hoursA,
-                hoursB,
-                hoursDelta,
-                zScoreA,
-                zScoreB,
-                zDelta,
-                rowA?.Interpretation ?? string.Empty,
-                rowB?.Interpretation ?? string.Empty));
+                FactPhysicalVolumeA: rowA?.FactPhysicalVolume,
+                FactPhysicalVolumeB: rowB?.FactPhysicalVolume,
+                PlannedLaborHoursA: rowA?.PlannedLaborHoursBase,
+                PlannedLaborHoursB: rowB?.PlannedLaborHoursBase,
+                PlannedLaborHoursOptimisticA: rowA?.PlannedLaborHoursOptimistic,
+                PlannedLaborHoursOptimisticB: rowB?.PlannedLaborHoursOptimistic,
+                PlannedLaborHoursPessimisticA: rowA?.PlannedLaborHoursPessimistic,
+                PlannedLaborHoursPessimisticB: rowB?.PlannedLaborHoursPessimistic,
+                FactLaborHoursA: hoursA,
+                FactLaborHoursB: hoursB,
+                HoursDelta: hoursDelta,
+                PlannedProductivityA: PlannedProd(rowA?.PlannedLaborHoursBase, rowA?.FactPhysicalVolume),
+                PlannedProductivityB: PlannedProd(rowB?.PlannedLaborHoursBase, rowB?.FactPhysicalVolume),
+                PlannedProductivityOptimisticA: PlannedProd(rowA?.PlannedLaborHoursOptimistic, rowA?.FactPhysicalVolume),
+                PlannedProductivityOptimisticB: PlannedProd(rowB?.PlannedLaborHoursOptimistic, rowB?.FactPhysicalVolume),
+                PlannedProductivityPessimisticA: PlannedProd(rowA?.PlannedLaborHoursPessimistic, rowA?.FactPhysicalVolume),
+                PlannedProductivityPessimisticB: PlannedProd(rowB?.PlannedLaborHoursPessimistic, rowB?.FactPhysicalVolume),
+                FactProductivityA: FactProd(hoursA, rowA?.FactPhysicalVolume),
+                FactProductivityB: FactProd(hoursB, rowB?.FactPhysicalVolume),
+                ZScoreA: zScoreA,
+                ZScoreB: zScoreB,
+                ZDelta: zDelta,
+                InterpretationA: rowA?.Interpretation ?? string.Empty,
+                InterpretationB: rowB?.Interpretation ?? string.Empty));
         }
 
         return result;
@@ -46,11 +68,30 @@ internal static class VersionCompareMerge
         IReadOnlyList<FactDetailRowInternal> detailA,
         IReadOnlyList<FactDetailRowInternal> detailB)
     {
-        static decimal? AverageProductivity(IEnumerable<FactDetailRowInternal> rows)
+        static decimal? AverageNullable(IEnumerable<decimal?> values)
         {
-            var values = rows.Where(d => d.FactProductivity.HasValue).Select(d => d.FactProductivity!.Value).ToList();
-            return values.Count > 0 ? values.Average() : null;
+            var list = values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+            return list.Count > 0 ? list.Average() : null;
         }
+
+        // ISS-010: Z в compare «Детально» — только Σ(Z×часы)/Σ(часы); без часов → null.
+        static decimal? WeightedZ(IEnumerable<FactDetailRowInternal> rows)
+        {
+            var aggregator = new WeightedZAggregator();
+            foreach (var row in rows)
+                aggregator.Add(row.ZScore, row.FactLaborHours);
+
+            return aggregator.Result(4);
+        }
+
+        static decimal? SumNullable(IEnumerable<decimal?> values)
+        {
+            var list = values.Where(v => v.HasValue).Select(v => v!.Value).ToList();
+            return list.Count > 0 ? Math.Round(list.Sum(), 2) : null;
+        }
+
+        static decimal? PlannedProd(decimal? hours, decimal? quantity) =>
+            hours.HasValue && quantity is > 0 ? hours.Value / quantity.Value : null;
 
         var groupedA = detailA
             .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
@@ -59,8 +100,12 @@ internal static class VersionCompareMerge
                 g => (
                     First: g.First(),
                     Quantity: g.Sum(d => d.Quantity),
+                    PlanBase: SumNullable(g.Select(d => d.PlannedLaborHoursBase)),
+                    PlanOpt: SumNullable(g.Select(d => d.PlannedLaborHoursOptimistic)),
+                    PlanPes: SumNullable(g.Select(d => d.PlannedLaborHoursPessimistic)),
                     FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
-                    FactProductivity: AverageProductivity(g)));
+                    FactProductivity: AverageNullable(g.Select(d => d.FactProductivity)),
+                    ZScore: WeightedZ(g)));
 
         var groupedB = detailB
             .GroupBy(d => (d.FacilityCode, d.DocumentSet, d.PvCode, d.WorkId))
@@ -69,8 +114,12 @@ internal static class VersionCompareMerge
                 g => (
                     First: g.First(),
                     Quantity: g.Sum(d => d.Quantity),
+                    PlanBase: SumNullable(g.Select(d => d.PlannedLaborHoursBase)),
+                    PlanOpt: SumNullable(g.Select(d => d.PlannedLaborHoursOptimistic)),
+                    PlanPes: SumNullable(g.Select(d => d.PlannedLaborHoursPessimistic)),
                     FactLaborHours: g.Sum(d => d.FactLaborHours ?? 0m),
-                    FactProductivity: AverageProductivity(g)));
+                    FactProductivity: AverageNullable(g.Select(d => d.FactProductivity)),
+                    ZScore: WeightedZ(g)));
 
         var allKeys = groupedA.Keys.Union(groupedB.Keys)
             .OrderBy(k => k.FacilityCode)
@@ -96,6 +145,10 @@ internal static class VersionCompareMerge
             var prodB = hasB ? rowB!.FactProductivity : null;
             var prodDelta = prodA.HasValue && prodB.HasValue ? prodB - prodA : null;
 
+            var zA = hasA ? rowA!.ZScore : null;
+            var zB = hasB ? rowB!.ZScore : null;
+            var zDelta = zA.HasValue && zB.HasValue ? zB - zA : null;
+
             var presence = hasA && hasB ? "A+B" : hasA ? "только A" : "только B";
             var refRow = hasB ? rowB!.First : hasA ? rowA!.First : null;
 
@@ -107,18 +160,44 @@ internal static class VersionCompareMerge
                 refRow?.PvName ?? string.Empty,
                 key.WorkId,
                 refRow?.WorkName ?? string.Empty,
-                quantityA,
-                quantityB,
-                quantityDelta,
-                hoursA,
-                hoursB,
-                hoursDelta,
-                prodA,
-                prodB,
-                prodDelta,
-                refRow?.IicGroupName ?? string.Empty,
-                refRow?.IicUnitName ?? string.Empty,
-                presence));
+                QuantityA: quantityA,
+                QuantityB: quantityB,
+                QuantityDelta: quantityDelta,
+                PlannedLaborHoursA: hasA ? rowA!.PlanBase : null,
+                PlannedLaborHoursB: hasB ? rowB!.PlanBase : null,
+                PlannedLaborHoursOptimisticA: hasA ? rowA!.PlanOpt : null,
+                PlannedLaborHoursOptimisticB: hasB ? rowB!.PlanOpt : null,
+                PlannedLaborHoursPessimisticA: hasA ? rowA!.PlanPes : null,
+                PlannedLaborHoursPessimisticB: hasB ? rowB!.PlanPes : null,
+                FactLaborHoursA: hoursA,
+                FactLaborHoursB: hoursB,
+                HoursDelta: hoursDelta,
+                PlannedProductivityA: hasA ? PlannedProd(rowA!.PlanBase, quantityA) : null,
+                PlannedProductivityB: hasB ? PlannedProd(rowB!.PlanBase, quantityB) : null,
+                PlannedProductivityOptimisticA: hasA ? PlannedProd(rowA!.PlanOpt, quantityA) : null,
+                PlannedProductivityOptimisticB: hasB ? PlannedProd(rowB!.PlanOpt, quantityB) : null,
+                PlannedProductivityPessimisticA: hasA ? PlannedProd(rowA!.PlanPes, quantityA) : null,
+                PlannedProductivityPessimisticB: hasB ? PlannedProd(rowB!.PlanPes, quantityB) : null,
+                FactProductivityA: prodA,
+                FactProductivityB: prodB,
+                ProductivityDelta: prodDelta,
+                ZScoreA: zA,
+                ZScoreB: zB,
+                ZDelta: zDelta,
+                IicGroupName: refRow?.IicGroupName ?? string.Empty,
+                IicUnitName: refRow?.IicUnitName ?? string.Empty,
+                Presence: presence,
+                BindingType: refRow?.BindingType ?? string.Empty,
+                CatalogId: refRow?.CatalogId ?? string.Empty,
+                Tag: refRow?.Tag ?? string.Empty,
+                ItemName: refRow?.ItemName ?? string.Empty,
+                WorkComment: refRow?.WorkComment ?? string.Empty,
+                EstimationBasis: refRow?.EstimationBasis ?? string.Empty,
+                IsAssessment: refRow?.IsAssessment ?? string.Empty,
+                Coefficient: refRow?.Coefficient,
+                NormProductivity: refRow?.NormProductivity,
+                NormStdDev: refRow?.NormStdDev,
+                IsEquipment: refRow?.IsEquipment ?? false));
         }
 
         return result;

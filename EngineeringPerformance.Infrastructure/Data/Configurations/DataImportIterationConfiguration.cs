@@ -44,5 +44,11 @@ public sealed class DataImportIterationConfiguration : IEntityTypeConfiguration<
         builder.HasIndex(i => i.SourceFileHash)
             .HasFilter("SourceFileHash IS NOT NULL");
         builder.HasIndex(i => i.ImportedByUserId);
+        builder.HasIndex(i => i.ProjectId);
+
+        // List iterations by project/version/type ordered by ImportedAt (parity → 111)
+        builder.HasIndex(i => new { i.ProjectId, i.ProjectAnalysisVersionId, i.DataType, i.ImportedAt })
+            .IsDescending(false, false, false, true)
+            .HasDatabaseName("IX_DataImportIterations_Project_Version_DataType_ImportedAt");
     }
 }

@@ -1,8 +1,11 @@
+import { Suspense } from 'react';
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, Button, Stack } from '@mui/material';
+import { RouteContentFallback } from '../../components/WorkingOverlay/RouteContentFallback';
 import { wpColors } from '../../theme/wpColors';
 import { useAuthStore } from '../../store/useAuthStore';
 import { usePermission } from '../../hooks/usePermission';
+import { isSuperAdmin } from '../../utils/permissionAccess';
 
 const subNavSx = {
   textTransform: 'none' as const,
@@ -20,7 +23,7 @@ const subNavSx = {
 export function SettingsLayout() {
   const user = useAuthStore((s) => s.user);
   const { canRead: canReadUsers } = usePermission('Users');
-  const isAdmin = user?.roleName === 'Administrator';
+  const isAdmin = isSuperAdmin(user?.roleName, user?.roleId);
   const canReadAccessRights = isAdmin;
 
   const tabs = [
@@ -76,7 +79,9 @@ export function SettingsLayout() {
           overflow: 'hidden',
         }}
       >
-        <Outlet />
+        <Suspense fallback={<RouteContentFallback />}>
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

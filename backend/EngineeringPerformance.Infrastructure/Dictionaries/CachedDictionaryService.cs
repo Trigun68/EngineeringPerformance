@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -47,19 +48,25 @@ public sealed class CachedDictionaryService : IDictionaryService
                 });
     }
 
-    public Task<DictionariesAllDto> GetAllAsync(CancellationToken cancellationToken = default) =>
-        GetOrLoadAsync(cancellationToken);
+    public async Task<DictionariesAllDto> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        var (data, _) = await GetAllWithETagAsync(cancellationToken);
+        return data;
+    }
+
+    public Task<(DictionariesAllDto Data, string ETag)> GetAllWithETagAsync(CancellationToken cancellationToken = default) =>
+        GetOrLoadWithETagAsync(cancellationToken);
 
     public async Task<bool> UnitExistsAsync(int unitId, CancellationToken cancellationToken = default)
     {
-        var all = await GetOrLoadAsync(cancellationToken);
-        return all.UnitsOfMeasurement.Any(u => u.Id == unitId);
+        var all = await GetAllWithETagAsync(cancellationToken);
+        return all.Data.UnitsOfMeasurement.Any(u => u.Id == unitId);
     }
 
     public async Task<bool> DirectionExistsAsync(int directionId, CancellationToken cancellationToken = default)
     {
-        var all = await GetOrLoadAsync(cancellationToken);
-        return all.IicWorkDirections.Any(d => d.Id == directionId);
+        var all = await GetAllWithETagAsync(cancellationToken);
+        return all.Data.IicWorkDirections.Any(d => d.Id == directionId);
     }
 
     public async Task<bool> NormTypeExistsAsync(string normType, CancellationToken cancellationToken = default)
@@ -68,15 +75,14 @@ public sealed class CachedDictionaryService : IDictionaryService
             return false;
 
         var token = normType.Trim();
-        var all = await GetOrLoadAsync(cancellationToken);
-        return all.PhysicalVolumeTypes.Any(t =>
+        var all = await GetAllWithETagAsync(cancellationToken);
+        return all.Data.PhysicalVolumeTypes.Any(t =>
             string.Equals(t.Code, token, StringComparison.OrdinalIgnoreCase)
             || string.Equals(t.Name, token, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task<DictionariesAllDto> GetOrLoadAsync(CancellationToken cancellationToken)
+    private async Task<(DictionariesAllDto Data, string ETag)> GetOrLoadWithETagAsync(CancellationToken cancellationToken)
     {
-        // Попытка получить из кэша с retry при ошибках подключения
         try
         {
             var cachedBytes = await _redisRetryPolicy.ExecuteAsync(async () =>
@@ -88,21 +94,24 @@ public sealed class CachedDictionaryService : IDictionaryService
                 if (cached is not null)
                 {
                     _logger.LogInformation("Dictionary cache HIT for {CacheKey}", CacheKey);
-                    return cached;
+                    return (cached, ToETag(cachedBytes));
                 }
             }
 
             _logger.LogInformation("Dictionary cache MISS for {CacheKey}", CacheKey);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to read from cache, falling back to database");
         }
 
-        // Загрузка из БД (параллельно с отдельными контекстами)
         var dto = await LoadAllFromDbParallelAsync(cancellationToken);
+        var payload = JsonSerializer.SerializeToUtf8Bytes(dto);
 
-        // Попытка записать в кэш (не критично если не получится)
         try
         {
             await _redisRetryPolicy.ExecuteAsync(async () =>
@@ -111,7 +120,7 @@ public sealed class CachedDictionaryService : IDictionaryService
                 {
                     AbsoluteExpirationRelativeToNow = CacheTtl
                 };
-                await _cache.SetAsync(CacheKey, JsonSerializer.SerializeToUtf8Bytes(dto), options, cancellationToken);
+                await _cache.SetAsync(CacheKey, payload, options, cancellationToken);
             });
         }
         catch (Exception ex)
@@ -119,8 +128,11 @@ public sealed class CachedDictionaryService : IDictionaryService
             _logger.LogWarning(ex, "Failed to write to cache, but returning data from database");
         }
 
-        return dto;
+        return (dto, ToETag(payload));
     }
+
+    private static string ToETag(byte[] utf8Json) =>
+        $"\"{Convert.ToHexString(SHA256.HashData(utf8Json))}\"";
 
     /// <summary>
     /// Параллельная загрузка всех справочников из БД для максимальной производительности.
@@ -192,7 +204,7 @@ public sealed class CachedDictionaryService : IDictionaryService
 
     private static Task<List<DictionaryItemDto>> LoadEquipmentsAsync(AppDbContext context, CancellationToken ct) =>
         context.Equipments.AsNoTracking()
-            .Where(x => !x.IsArchived)
+            .Where(x => !x.IsArchived && x.ProjectId != null)
             .OrderBy(x => x.SortOrder)
             .Select(x => new DictionaryItemDto(x.Id, x.Name, null, x.Description, x.ParentId, null))
             .ToListAsync(ct);

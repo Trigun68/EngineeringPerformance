@@ -20,14 +20,14 @@ public sealed class ProjectPermissionsController : ControllerBase
     }
 
     [HttpGet]
-    [RequireProjectAccess(AccessLevel.Read)]
+    [RequireProjectAccess]
     public async Task<ActionResult<IReadOnlyList<ProjectPermissionDto>>> Get(int projectId, CancellationToken cancellationToken)
     {
         return Ok(await _visibility.GetProjectPermissionsAsync(projectId, cancellationToken));
     }
 
     [HttpPut]
-    [RequireProjectAccess(AccessLevel.Edit)]
+    [RequireProjectAccess]
     public async Task<IActionResult> BulkUpsert(int projectId, [FromBody] ProjectPermissionsBulkRequest request, CancellationToken cancellationToken)
     {
         await _visibility.SaveProjectPermissionsAsync(projectId, request.Participants, cancellationToken);
@@ -35,7 +35,7 @@ public sealed class ProjectPermissionsController : ControllerBase
     }
 
     [HttpDelete("{userId:int}")]
-    [RequireProjectAccess(AccessLevel.Edit)]
+    [RequireProjectAccess]
     public async Task<IActionResult> Remove(int projectId, int userId, CancellationToken cancellationToken)
     {
         var ok = await _visibility.RemoveProjectPermissionAsync(projectId, userId, cancellationToken);

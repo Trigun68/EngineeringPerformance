@@ -5,7 +5,11 @@ using EngineeringPerformance.Domain.Norms;
 
 namespace EngineeringPerformance.Application.LaborIntensity;
 
-/// <summary>Чистая логика пересчёта LI по сценариям планирования (без БД).</summary>
+/// <summary>
+/// Чистая логика пересчёта LI по сценариям планирования (без БД).
+/// Реализация для IPerformanceCalculationEngine.RecalculateLaborIntensities;
+/// Infrastructure вызывает только через движок.
+/// </summary>
 public static class LaborIntensityCalculator
 {
     public sealed record PpvLine(
@@ -18,7 +22,16 @@ public static class LaborIntensityCalculator
 
     public sealed record RecalcResult(int PpvId, decimal? Base, decimal? Pessimistic, decimal? Optimistic);
 
-    public static IReadOnlyList<RecalcResult> Recalculate(
+    /// <summary>Строка оборудования для persist: часы считаются поштучно, без группировки сценария.</summary>
+    public sealed record EquipmentLine(
+        int Id,
+        int? ClassifierId,
+        decimal VolumeInIicUnits,
+        bool IsAssessment);
+
+    // Метод internal: расчёт доступен только через IPerformanceCalculationEngine,
+    // наружу остаются публичные DTO-строки (PpvLine/EquipmentLine/RecalcResult).
+    internal static IReadOnlyList<RecalcResult> Recalculate(
         PlanningScenario scenario,
         IReadOnlyList<PpvLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,

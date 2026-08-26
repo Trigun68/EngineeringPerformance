@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 
 namespace EngineeringPerformance.Infrastructure.Export;
@@ -8,6 +9,7 @@ public static class ReferenceExcelExporter
 
     public static byte[] Export(string title, IReadOnlyList<ColumnDef> columns, IEnumerable<object> rows)
     {
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
         var sheetName = title.Length <= 31 ? title : title[..31];
         var ws = workbook.Worksheets.Add(sheetName);
@@ -32,7 +34,7 @@ public static class ReferenceExcelExporter
         foreach (var item in rows)
         {
             for (var c = 0; c < columns.Count; c++)
-                ws.Cell(rowIdx, c + 1).Value = columns[c].GetValue(item) ?? string.Empty;
+                SetCellValue(ws, rowIdx, c + 1, columns[c].GetValue(item));
 
             if (rowIdx % 2 == 0)
             {
@@ -49,5 +51,26 @@ public static class ReferenceExcelExporter
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
+    }
+
+    private static void SetCellValue(IXLWorksheet ws, int row, int col, string? value)
+    {
+        var cell = ws.Cell(row, col);
+        if (string.IsNullOrEmpty(value))
+        {
+            cell.Value = string.Empty;
+            return;
+        }
+
+        // Попробовать распарсить число из строки (для экспорта через visible-пути,
+        // где valueFormatter уже отформатировал числа в строки).
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        {
+            cell.Value = parsed;
+        }
+        else
+        {
+            cell.Value = value;
+        }
     }
 }

@@ -34,6 +34,12 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
 
         var response = await _client.GetAsync("/api/dictionaries/all");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.ETag.Should().NotBeNull();
+
+        var cached = new HttpRequestMessage(HttpMethod.Get, "/api/dictionaries/all");
+        cached.Headers.TryAddWithoutValidation("If-None-Match", response.Headers.ETag!.ToString());
+        var notModified = await _client.SendAsync(cached);
+        notModified.StatusCode.Should().Be(HttpStatusCode.NotModified);
     }
 
     [Fact]
@@ -41,7 +47,7 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
     {
         if (!_sqlAvailable) return;
 
-        // Observer в seed часто имеет References=Read — временно снимаем право через admin API.
+        // Engineer в seed часто имеет References=Read — временно снимаем право через admin API.
         var rightsResponse = await _client.GetAsync("/api/access-rights");
         rightsResponse.StatusCode.Should().Be(HttpStatusCode.OK);
         var rightsJson = await rightsResponse.Content.ReadAsStringAsync();
@@ -53,7 +59,7 @@ public sealed class DictionariesAclApiTests : IClassFixture<ApiWebApplicationFac
         {
             var roleName = item.GetProperty("roleName").GetString();
             var objectName = item.GetProperty("objectName").GetString();
-            if (!string.Equals(roleName, "Observer", StringComparison.Ordinal)
+            if (!string.Equals(roleName, "Engineer", StringComparison.Ordinal)
                 || !string.Equals(objectName, "References", StringComparison.Ordinal))
             {
                 continue;

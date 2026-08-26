@@ -1,0 +1,118 @@
+@baseUrl = http://127.0.0.1:8081
+@token = 
+
+### Login
+# @name login
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "admin"
+}
+
+### Me (Bearer)
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Dictionaries
+GET {{baseUrl}}/api/dictionaries/all
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Directory list (units)
+GET {{baseUrl}}/api/directories/units-of-measurement
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### IIC norms alias
+GET {{baseUrl}}/api/iic-norms
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Projects
+GET {{baseUrl}}/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Create project
+# @name createProject
+POST {{baseUrl}}/api/projects
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "code": "ext-demo-001",
+  "name": "External demo project"
+}
+
+### Create version (set physicalVolumeTypeId from dictionaries)
+POST {{baseUrl}}/api/projects/{{createProject.response.body.id}}/versions
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "versionName": "Plan-1",
+  "direction": 1,
+  "physicalVolumeTypeId": 1
+}
+
+### Readiness (подставьте projectId / versionId)
+GET {{baseUrl}}/api/projects/1/versions/1/readiness
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### JSON ingest labor (подставьте ids)
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/labor-intensities
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "description": "from-erp",
+    "items": [
+        {
+            "documentTypeName": "РД-технология",
+            "plannedHours": 10,
+            "actualHours": 0
+        }
+    ]
+}
+
+### JSON ingest physical volumes
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/physical-volumes
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "items": [
+        {
+            "epCode": "01-01-001-01",
+            "quantity": 1,
+            "facilityCode": "OBJ-1",
+            "facilityName": "Объект",
+            "workId": "W-1"
+        }
+    ]
+}
+
+### JSON ingest equipment
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/equipment
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "mode": "replace",
+    "items": [
+        {
+            "catalogName": "Насос",
+            "unitName": "шт",
+            "quantity": 1
+        }
+    ]
+}
+
+### Labor ingest preview
+POST {{baseUrl}}/api/projects/1/versions/1/ingest/labor-intensities/preview
+Authorization: Bearer {{login.response.body.accessToken}}
+Content-Type: application/json
+
+{
+    "documentTypeNames": ["РД-технология"]
+}

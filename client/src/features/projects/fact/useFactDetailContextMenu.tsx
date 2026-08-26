@@ -10,6 +10,7 @@ import {
 import type { ImportDataType } from '../../../api/importApi';
 import type { ContextMenuItem } from '../../../components/DataTable/DataTable';
 import { usePermission } from '../../../hooks/usePermission';
+import { useConfirmation } from '../../../hooks/useConfirmation';
 import { getApiErrorMessage } from '../../../services/apiError';
 import type { ProjectsPageDetailRow } from '../types';
 import { ProjectEquipmentQuickEditDialog } from '../forecast/ProjectEquipmentQuickEditDialog';
@@ -52,8 +53,9 @@ export function useFactDetailContextMenu({
   const { hasAccess: canEditPpv } = usePermission('ProjectPhysicalVolumes');
   const { hasAccess: canEditPeq } = usePermission('ProjectEquipments');
   const { hasAccess: canEditPvCatalog } = usePermission('PhysicalVolumes');
-  const { hasAccess: canEditEquipmentCatalog } = usePermission('Equipments');
+  const { hasAccess: canEditEquipmentCatalog } = usePermission('Equipment');
   const { hasAccess: canEditNorms } = usePermission('IicWorkDirectionNorms');
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
 
   const [ppvEdit, setPpvEdit] = useState<QuickEditState | null>(null);
   const [peqEdit, setPeqEdit] = useState<QuickEditState | null>(null);
@@ -72,7 +74,10 @@ export function useFactDetailContextMenu({
   const handleDeleteDetailRow = useCallback(async (row: ProjectsPageDetailRow) => {
     if (!factVersionId || !row.rowId) return;
     const label = detailNomenclature(row);
-    if (!window.confirm(`Удалить строку «${label}»?`)) return;
+    if (!(await confirm({
+      title: 'Удалить строку?',
+      description: `Удалить строку «${label}»?`,
+    }))) return;
 
     setLoading(true);
     setError(null);
@@ -180,7 +185,7 @@ export function useFactDetailContextMenu({
         },
       });
       items.push({
-        name: 'Редактировать норму EAC',
+        name: 'Редактировать норму IIC',
         disabled: (row) => !canEditNorms || !row?.normId || !row.classifierId,
         action: (row) => {
           if (!canEditNorms || !row?.normId || !row.classifierId) return;
@@ -280,5 +285,5 @@ export function useFactDetailContextMenu({
     </>
   ) : null;
 
-  return { contextMenuItems, contextDialogs };
+  return { contextMenuItems, contextDialogs, ConfirmDialog };
 }

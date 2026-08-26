@@ -13,6 +13,7 @@ export const PERMISSION_MATRIX_NODES: readonly PermissionMatrixObjectNode[] = [
   { objectName: 'Assessment', displayName: 'Оценка', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'Assessment'], isGroupHeader: false },
   { objectName: 'Planning', displayName: 'Планирование', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'Planning'], isGroupHeader: false },
   { objectName: 'VersionComparison', displayName: 'Сравнение версий', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'VersionComparison'], isGroupHeader: false },
+  { objectName: 'Reports', displayName: 'Отчёты', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'Reports'], isGroupHeader: false },
   { objectName: 'GroupAnalysis', displayName: 'Анализ по группам', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'GroupAnalysis'], isGroupHeader: false },
   { objectName: 'GroupTrend', displayName: 'Тренд по группам', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'GroupTrend'], isGroupHeader: false },
   { objectName: 'ProjectAnalysisVersions', displayName: 'Версии анализа проекта', parentGroup: PROJECTS_GROUP_ID, level: 1, hierarchyPath: [PROJECTS_GROUP_ID, 'ProjectAnalysisVersions'], isGroupHeader: false },

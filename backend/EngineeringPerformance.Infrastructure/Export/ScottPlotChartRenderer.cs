@@ -4,7 +4,9 @@ using ScottPlot.Plottables;
 
 namespace EngineeringPerformance.Infrastructure.Export;
 
-/// <summary>Рендер графиков для PDF через ScottPlot → PNG.</summary>
+/// <summary>Рендер графиков для PDF через ScottPlot → PNG. Заголовок графика не рисуется внутри PNG —
+/// он выводится отдельным H2-блоком в QuestPDF (<see cref="QuestPdfReportComposer.ComposeChartImage"/>),
+/// здесь остаются только оси, данные и подписи — единая палитра «Executive Technical».</summary>
 public sealed class ScottPlotChartRenderer : IChartImageRenderer
 {
     private static bool _fontInitialized;
@@ -31,20 +33,31 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
         var opts = Opt(options);
 
         var plot = new Plot();
-        plot.Title(title);
+        // Заголовок не рисуется в PNG — дублируется как H2 в PDF-слое (см. ComposeChartImage).
+        plot.Title(string.Empty);
+        plot.Axes.Title.Label.IsVisible = false;
         plot.FigureBackground.Color = Color.FromHex("#FFFFFF");
-        plot.DataBackground.Color = Color.FromHex("#FAFBFC");
+        plot.DataBackground.Color = Color.FromHex("#FBFCFD");
+
+        // Единая сетка «Executive Technical»: только горизонтальные линии, тонкие, приглушённые.
         plot.Grid.IsVisible = opts.ShowGrid;
+        plot.Grid.MajorLineColor = Color.FromHex(ReportVisualTheme.RuleColor);
+        plot.Grid.MajorLineWidth = 1;
+        plot.Grid.XAxisStyle.IsVisible = false;
+        plot.Grid.YAxisStyle.IsVisible = opts.ShowGrid;
 
         var fontName = ResolveFont(sampleTexts);
         ApplyFont(plot, fontName);
 
         plot.Axes.Bottom.TickLabelStyle.FontSize = 9;
         plot.Axes.Left.TickLabelStyle.FontSize = 9;
-        plot.Axes.Title.Label.FontSize = 14;
-        plot.Axes.Title.Label.Bold = true;
-        plot.Axes.Bottom.Label.FontSize = 11;
-        plot.Axes.Left.Label.FontSize = 11;
+        plot.Axes.Bottom.Label.FontSize = 10.5f;
+        plot.Axes.Left.Label.FontSize = 10.5f;
+        plot.Axes.Bottom.TickLabelStyle.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
+        plot.Axes.Left.TickLabelStyle.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
+        plot.Axes.Bottom.Label.ForeColor = Color.FromHex(ReportVisualTheme.Muted);
+        plot.Axes.Left.Label.ForeColor = Color.FromHex(ReportVisualTheme.Muted);
+        plot.Axes.Color(Color.FromHex(ReportVisualTheme.RuleColor));
 
         if (!string.IsNullOrWhiteSpace(opts.XAxisLabel))
         {
@@ -86,6 +99,7 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
         bars.ValueLabelStyle.IsVisible = options?.ShowValueLabels ?? true;
         bars.ValueLabelStyle.FontName = fontName;
         bars.ValueLabelStyle.FontSize = 8;
+        bars.ValueLabelStyle.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
     }
 
     private static byte[] ToPng(Plot plot, int width, int height) =>
@@ -250,8 +264,10 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
             var ys = s.Points.Select(p => p.Y).ToArray();
             var scatter = plot.Add.Scatter(xs, ys);
             scatter.Color = ParseColor(s.Color, ReportVisualTheme.AccentA);
-            scatter.LineWidth = 2;
+            scatter.LineWidth = 2.5f;
             scatter.MarkerSize = 6;
+            scatter.MarkerStyle.OutlineColor = Colors.White;
+            scatter.MarkerStyle.OutlineWidth = 1.2f;
             scatter.LegendText = s.Name;
         }
 
@@ -292,7 +308,7 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
         polygon.LineColor = ParseColor(series.Color, ReportVisualTheme.AccentA);
         var line = plot.Add.Scatter(xs, ys);
         line.Color = ParseColor(series.Color, ReportVisualTheme.AccentA);
-        line.LineWidth = 2;
+        line.LineWidth = 2.5f;
         line.MarkerSize = 0;
         plot.Axes.DateTimeTicksBottom();
         plot.Legend.IsVisible = true;

@@ -32,6 +32,34 @@ export function factVersionPrefKey(projectId: number): string {
   return `projects.${projectId}.factVersionId`;
 }
 
+export function compareVersionAPrefKey(projectId: number): string {
+  return `projects.${projectId}.compareVersionAId`;
+}
+
+export function compareVersionBPrefKey(projectId: number): string {
+  return `projects.${projectId}.compareVersionBId`;
+}
+
+export function compareViewModePrefKey(projectId: number): string {
+  return `projects.${projectId}.compareViewMode`;
+}
+
+export function compareShowDiffPrefKey(projectId: number): string {
+  return `projects.${projectId}.compareShowDiff`;
+}
+
+export function compareScenarioPrefKey(projectId: number): string {
+  return `projects.${projectId}.compareScenario`;
+}
+
+export function reportDarkPrefKey(projectId: number): string {
+  return `projects.${projectId}.report.dark`;
+}
+
+export function reportCollapsedPrefKey(projectId: number): string {
+  return `projects.${projectId}.report.collapsed`;
+}
+
 export function parsePrefId(raw: string | undefined): number | null {
   if (!raw) return null;
   const id = Number.parseInt(raw, 10);

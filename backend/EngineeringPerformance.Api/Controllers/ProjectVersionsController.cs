@@ -3,7 +3,6 @@ using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
-using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,19 +16,22 @@ public sealed class ProjectVersionsController : ControllerBase
 {
     private readonly IProjectVersionService _versions;
     private readonly IProjectVersionPlanningParameterService _planningParameters;
-    private readonly ILaborIntensityRecalculationService _recalculation;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly IAggregatedLaborIntensitiesService _aggregation;
+    private readonly IProjectVersionReadinessService _readiness;
 
     public ProjectVersionsController(
         IProjectVersionService versions,
         IProjectVersionPlanningParameterService planningParameters,
-        ILaborIntensityRecalculationService recalculation,
-        IAggregatedLaborIntensitiesService aggregation)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IAggregatedLaborIntensitiesService aggregation,
+        IProjectVersionReadinessService readiness)
     {
         _versions = versions;
         _planningParameters = planningParameters;
-        _recalculation = recalculation;
+        _recalcOrchestrator = recalcOrchestrator;
         _aggregation = aggregation;
+        _readiness = readiness;
     }
 
     [HttpGet]
@@ -45,6 +47,19 @@ public sealed class ProjectVersionsController : ControllerBase
     {
         var item = await _versions.GetByIdAsync(projectId, versionId, cancellationToken);
         return item is null ? NotFound() : Ok(item);
+    }
+
+    /// <summary>Проверка полноты версии: какие блоки данных ещё не заполнены.</summary>
+    [HttpGet("{versionId:int}/readiness")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    public async Task<ActionResult<ProjectVersionReadinessDto>> GetReadiness(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var result = await _readiness.GetAsync(projectId, versionId, cancellationToken);
+        return result is null ? NotFound() : Ok(result);
     }
 
     [HttpPost]
@@ -72,6 +87,27 @@ public sealed class ProjectVersionsController : ControllerBase
     {
         var ok = await _versions.ArchiveAsync(projectId, versionId, cancellationToken);
         return ok ? NoContent() : NotFound();
+    }
+
+    [HttpPost("{versionId:int}/restore")]
+    [RequireProjectAccess(AccessLevel.Edit)]
+    [HasPermission(PermissionType.ProjectAnalysisVersions, AccessLevel.Edit)]
+    public async Task<ActionResult<ProjectVersionDto>> Restore(int projectId, int versionId, CancellationToken cancellationToken)
+    {
+        var restored = await _versions.UnarchiveAsync(projectId, versionId, cancellationToken);
+        return restored is null ? NotFound() : Ok(restored);
+    }
+
+    [HttpPost("{versionId:int}/set-primary")]
+    [RequireProjectAccess(AccessLevel.Edit)]
+    [HasPermission(PermissionType.ProjectAnalysisVersions, AccessLevel.Edit)]
+    public async Task<ActionResult<ProjectVersionDto>> SetPrimary(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        var updated = await _versions.SetPrimaryAsync(projectId, versionId, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpPost("{versionId:int}/copy")]
@@ -154,7 +190,7 @@ public sealed class ProjectVersionsController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var updated = await _recalculation.RecalculateAsync(projectId, versionId, cancellationToken);
+        var updated = await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
         return Ok(new { updatedRows = updated });
     }
 

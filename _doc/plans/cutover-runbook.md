@@ -3,7 +3,7 @@
 > **Статус (2026-07-14):** cutover с точки зрения **разработки завершён** — активен только web. Runbook сохранён для ops/rollback. Политика: [web-only-development-plan.md](./web-only-development-plan.md).
 
 **Обновлено:** 2026-07-14  
-**Связано:** `_install/DEPLOY.md`, `uat-phase4-checklist.md`
+**Связано:** `_doc/deployment/DEPLOY.md`, `uat-phase4-checklist.md`
 
 ---
 
@@ -40,7 +40,7 @@
 ## Cutover day (D0)
 
 1. 08:00 — финальный backup БД
-2. 09:00 — deploy web prod (`_install/DEPLOY.md`)
+2. 09:00 — deploy web prod (`_doc/deployment/DEPLOY.md`)
 3. 09:30 — `uat-smoke.sh` на prod URL
 4. 10:00 — объявление: WPF read-only / не рекомендуется
 5. 18:00 — сводка инцидентов
@@ -57,7 +57,7 @@
 
 ## Rollback
 
-См. `_install/DEPLOY.md` § Rollback. Триггеры:
+См. `_doc/deployment/DEPLOY.md` § Rollback. Триггеры:
 
 - Потеря данных
 - Невозможность импорта / расчёта для >50% PM

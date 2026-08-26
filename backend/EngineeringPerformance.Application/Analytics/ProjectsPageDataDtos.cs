@@ -31,7 +31,9 @@ public sealed record ProjectsPageForecastSummaryRowDto(
     int Level,
     int? ParentId = null,
     string Code = "",
-    IReadOnlyList<string>? Hierarchy = null);
+    IReadOnlyList<string>? Hierarchy = null,
+    /// <summary>ФО на строках итогов по единицам измерения: «число (ЕИ); …».</summary>
+    string? FactPhysicalVolumeDisplay = null);
 
 public sealed record ProjectsPageFactGridsDto(
     IReadOnlyList<PerformanceRowDto> Performance,

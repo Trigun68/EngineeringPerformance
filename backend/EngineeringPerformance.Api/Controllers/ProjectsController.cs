@@ -7,8 +7,11 @@ using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -27,7 +30,8 @@ public sealed class ProjectsController : ControllerBase
     private readonly IProjectExportService _exportService;
     private readonly IProjectsCatalogExportService _catalogExportService;
     private readonly IVisualReportService _visualReports;
-    private readonly IProjectImportService _importService;
+    private readonly AppDbContext _context;
+    private readonly IExportFileNameService _fileNames;
 
     public ProjectsController(
         GetProjectsQueryHandler getProjects,
@@ -40,7 +44,8 @@ public sealed class ProjectsController : ControllerBase
         IProjectExportService exportService,
         IProjectsCatalogExportService catalogExportService,
         IVisualReportService visualReports,
-        IProjectImportService importService)
+        AppDbContext context,
+        IExportFileNameService fileNames)
     {
         _getProjects = getProjects;
         _getProjectById = getProjectById;
@@ -52,7 +57,8 @@ public sealed class ProjectsController : ControllerBase
         _exportService = exportService;
         _catalogExportService = catalogExportService;
         _visualReports = visualReports;
-        _importService = importService;
+        _context = context;
+        _fileNames = fileNames;
     }
 
     [HttpGet]
@@ -66,6 +72,7 @@ public sealed class ProjectsController : ControllerBase
     }
 
     [HttpGet("{id:int}")]
+    [RequireProjectAccess(ProjectIdRouteKey = "id")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
     public async Task<ActionResult<ProjectDto>> GetById(int id, CancellationToken cancellationToken)
     {
@@ -115,22 +122,34 @@ public sealed class ProjectsController : ControllerBase
 
     [HttpGet("export/excel")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAllExcel(CancellationToken cancellationToken)
     {
         var bytes = await _catalogExportService.ExportAllToExcelAsync(cancellationToken);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "projects.xlsx");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Projects,
+            "xlsx",
+            ExportFileNameBuilder.Views.Catalog);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/pdf")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAllPdf(CancellationToken cancellationToken)
     {
         var bytes = await _catalogExportService.ExportAllToPdfAsync(cancellationToken);
-        return File(bytes, "application/pdf", "projects.pdf");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Projects,
+            "pdf",
+            ExportFileNameBuilder.Views.Catalog);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("{id:int}/export/excel")]
+    [RequireProjectAccess(ProjectIdRouteKey = "id")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportExcel(int id, CancellationToken cancellationToken)
     {
         var versionId = await _catalogExportService.GetFirstVersionIdAsync(id, cancellationToken);
@@ -138,11 +157,20 @@ public sealed class ProjectsController : ControllerBase
             return NotFound("No analysis version found for project.");
 
         var bytes = await _exportService.ExportToExcelAsync(id, versionId.Value, cancellationToken: cancellationToken);
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"project-{id}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            id,
+            versionId.Value,
+            ExportFileNameBuilder.Modules.Report,
+            "xlsx",
+            ExportFileNameBuilder.Views.Version,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("{id:int}/export/pdf")]
+    [RequireProjectAccess(ProjectIdRouteKey = "id")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportPdf(int id, CancellationToken cancellationToken)
     {
         var versionId = await _catalogExportService.GetFirstVersionIdAsync(id, cancellationToken);
@@ -150,12 +178,20 @@ public sealed class ProjectsController : ControllerBase
             return NotFound("No analysis version found for project.");
 
         var bytes = await _exportService.ExportToPdfAsync(id, versionId.Value, cancellationToken: cancellationToken);
-        return File(bytes, "application/pdf", $"project-{id}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            id,
+            versionId.Value,
+            ExportFileNameBuilder.Modules.Report,
+            "pdf",
+            ExportFileNameBuilder.Views.Version,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("{id:int}/export/combined.pdf")]
-    [RequireProjectAccess]
+    [RequireProjectAccess(ProjectIdRouteKey = "id")]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportCombinedPdf(
         int id,
         [FromQuery] int planVersionId,
@@ -166,6 +202,24 @@ public sealed class ProjectsController : ControllerBase
         [FromQuery] bool includeAppendix = false,
         CancellationToken cancellationToken = default)
     {
+        // Validate that all versionIds belong to the requested project.
+        var expectedProjectId = id;
+        var versionIds = new[] { planVersionId, factVersionId, compareVersionAId, compareVersionBId };
+        var versions = await _context.ProjectAnalysisVersions
+            .AsNoTracking()
+            .Where(v => versionIds.Contains(v.Id))
+            .Select(v => new { v.Id, v.ProjectId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var vid in versionIds)
+        {
+            var found = versions.FirstOrDefault(v => v.Id == vid);
+            if (found is null)
+                throw new InvalidOperationException($"Версия с идентификатором {vid} не найдена.");
+            if (found.ProjectId != expectedProjectId)
+                throw new InvalidOperationException($"Версия {vid} принадлежит другому проекту.");
+        }
+
         var bytes = await _visualReports.ExportCombinedPdfAsync(
             id,
             planVersionId,
@@ -175,7 +229,14 @@ public sealed class ProjectsController : ControllerBase
             formulaId,
             includeAppendix,
             cancellationToken);
-        return File(bytes, "application/pdf", $"Combined_{id}.pdf");
+        var fileName = await _fileNames.ForVersionsAsync(
+            id,
+            [planVersionId, factVersionId],
+            ExportFileNameBuilder.Modules.Report,
+            "pdf",
+            ExportFileNameBuilder.Views.Combined,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpPost("import/excel")]

@@ -67,5 +67,25 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
         builder.HasIndex(li => li.PhysicalVolumeKfoId);
         builder.HasIndex(li => li.PhysicalVolumeBerId);
         builder.HasIndex(li => new { li.ProjectAnalysisVersionId, li.ProjectId });
+
+        // Covering index for version-scoped LI load (parity → 111_SqlMetricsWave2Indexes.sql)
+        builder.HasIndex(li => li.ProjectAnalysisVersionId)
+            .HasDatabaseName("IX_ProjectLaborIntensities_VersionId_Covering")
+            .IncludeProperties(li => new
+            {
+                li.ProjectId,
+                li.DocumentationCode,
+                li.WorkDirectionId,
+                li.PlannedHours,
+                li.ActualHours,
+                li.Notes,
+                li.Brand,
+                li.CreatedAt,
+                li.ModifiedAt,
+                li.PhysicalVolumeKfoId,
+                li.PhysicalVolumeBerId,
+                li.LaborIntensityId,
+                li.ProjectPhysicalVolumeId,
+            });
     }
 }

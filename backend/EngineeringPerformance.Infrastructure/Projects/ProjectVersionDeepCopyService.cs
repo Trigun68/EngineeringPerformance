@@ -117,6 +117,16 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
     {
         var createdAt = DateTime.UtcNow;
         var sameDirection = targetDirection == source.Direction;
+
+        var hasPeers = await _context.ProjectAnalysisVersions
+            .AnyAsync(
+                v => v.ProjectId == source.ProjectId
+                     && v.Direction == targetDirection
+                     && !v.IsArchived,
+                cancellationToken);
+        // Копия не наследует primary; становится основной только если это первая версия направления.
+        var makePrimary = !hasPeers;
+
         var copy = new ProjectAnalysisVersion
         {
             ProjectId = source.ProjectId,
@@ -126,8 +136,10 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             Direction = targetDirection,
             PhysicalVolumeTypeId = source.PhysicalVolumeTypeId,
             PlanningScenario = source.PlanningScenario,
+            ZParameterLevel = source.ZParameterLevel,
             SortOrder = source.SortOrder,
             IsArchived = false,
+            IsPrimary = makePrimary,
             CreatedAt = createdAt,
         };
         _context.ProjectAnalysisVersions.Add(copy);
@@ -154,8 +166,8 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
 
         CopyEquipments(source.Equipments.ToList(), copy.Id, source.ProjectId, createdAt);
 
-        await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
-            _context, copy.Id, createdAt, cancellationToken);
+        await AnalysisVersionSnapshotService.CopyFromVersionAsync(
+            _context, source.Id, copy.Id, copy.CreatedAt, cancellationToken);
 
         await _planningParameters.CopyFromVersionAsync(source.Id, copy.Id, cancellationToken);
 
@@ -312,6 +324,9 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
                 SupplyStandard = eq.SupplyStandard,
                 OlReference = eq.OlReference,
                 EstimationBasis = eq.EstimationBasis,
+                LaborIntensityBase = eq.LaborIntensityBase,
+                LaborIntensityPessimistic = eq.LaborIntensityPessimistic,
+                LaborIntensityOptimistic = eq.LaborIntensityOptimistic,
                 CreatedAt = createdAt,
             });
         }
@@ -365,5 +380,7 @@ public sealed class ProjectVersionDeepCopyService : IProjectVersionDeepCopyServi
             v.SortOrder,
             v.IsArchived,
             v.CreatedAt,
-            v.PlanningScenario);
+            v.PlanningScenario,
+            v.ZParameterLevel,
+            v.IsPrimary);
 }

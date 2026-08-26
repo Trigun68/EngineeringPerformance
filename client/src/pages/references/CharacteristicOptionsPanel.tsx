@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import {
   Alert,
   Box,
@@ -54,6 +55,7 @@ export function CharacteristicOptionsPanel({
   canEdit,
   onChanged,
 }: CharacteristicOptionsPanelProps) {
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const [newOption, setNewOption] = useState<OptionDraft>(emptyDraft());
   const [modalOpen, setModalOpen] = useState(false);
   const [editingOption, setEditingOption] = useState<CharacteristicOption | null>(null);
@@ -107,7 +109,10 @@ export function CharacteristicOptionsPanel({
   };
 
   const handleDelete = async (optionId: number) => {
-    if (!window.confirm('Удалить опцию?')) return;
+    if (!(await confirm({
+      title: 'Удалить опцию?',
+      description: 'Удалить опцию?',
+    }))) return;
     setError(null);
     try {
       await deleteCharacteristicOption(characteristicId, optionId);
@@ -232,6 +237,7 @@ export function CharacteristicOptionsPanel({
           </Button>
         </DialogActions>
       </Dialog>
+      {ConfirmDialog}
     </Box>
   );
 }

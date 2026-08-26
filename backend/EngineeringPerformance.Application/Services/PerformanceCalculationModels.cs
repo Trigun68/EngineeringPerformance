@@ -63,7 +63,9 @@ public sealed record FactPhysicalVolumeLine(
     int? ClassifierId,
     bool IsAssessment,
     decimal Quantity,
-    decimal Coefficient);
+    decimal Coefficient,
+    /// <summary>Id строки PPV для обогащения UI (не участвует в математике).</summary>
+    int? SourceRowId = null);
 
 public sealed record FactEquipmentLine(
     string FacilityCode,
@@ -74,7 +76,9 @@ public sealed record FactEquipmentLine(
     int? ClassifierId,
     bool IsAssessment,
     decimal Quantity,
-    decimal Coefficient);
+    decimal Coefficient,
+    /// <summary>Id строки ProjectEquipment для обогащения UI (не участвует в математике).</summary>
+    int? SourceRowId = null);
 
 public sealed record FactLaborIntensityLine(
     string DocSet,
@@ -96,7 +100,9 @@ public sealed record FactAssessmentDetailRowDto(
     decimal Quantity,
     decimal? FactLaborHours,
     decimal? FactProductivity,
-    decimal? ZScore);
+    decimal? ZScore,
+    int? SourceRowId = null,
+    bool IsEquipment = false);
 
 public sealed record FactAssessmentFacilityRowDto(
     string Code,

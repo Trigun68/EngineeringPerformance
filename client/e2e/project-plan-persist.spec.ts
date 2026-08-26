@@ -40,8 +40,11 @@ test.describe('Project and plan persistence', () => {
     const savedLabel = (await label.innerText()).trim();
     expect(savedLabel.length).toBeGreaterThan(0);
 
-    // Даём время на putUserPreferences.
-    await page.waitForTimeout(800);
+    // Дожидаемся putUserPreferences (planVersionId).
+    await page.waitForResponse(
+      (r) => r.url().includes('/preferences') && r.request().method() === 'PUT',
+      { timeout: 10_000 },
+    ).catch(() => undefined);
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForURL(new RegExp(`${projectPath.replace(/\//g, '\\/')}$`));
     await page.getByRole('tab', { name: 'Прогнозирование' }).click();

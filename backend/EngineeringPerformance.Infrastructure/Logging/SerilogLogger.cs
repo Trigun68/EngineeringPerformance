@@ -28,6 +28,8 @@ public static class SerilogLogger
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
             .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Connection", LogEventLevel.Fatal)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Query", LogEventLevel.Fatal)
             .Enrich.FromLogContext()
             .Enrich.WithProperty("Application", "EngineeringPerformance.Api")
             .WriteTo.Console()

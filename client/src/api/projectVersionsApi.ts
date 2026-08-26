@@ -14,6 +14,8 @@ export interface ProjectVersion {
   isArchived: boolean;
   createdAt?: string;
   planningScenario?: number;
+  zParameterLevel?: number;
+  isPrimary?: boolean;
 }
 
 export interface ProjectVersionWriteRequest {
@@ -23,8 +25,11 @@ export interface ProjectVersionWriteRequest {
   physicalVolumeTypeId?: number | null;
   name?: string | null;
   planningScenario?: number | null;
+  zParameterLevel?: number | null;
   /** Дата фиксации норм IIC (CreatedAt + AnalysisVersionSnapshot). ISO date или datetime. */
   asOfDate?: string | null;
+  /** Только create: сделать версию основной. */
+  isPrimary?: boolean | null;
 }
 
 export interface CopyVersionRequest {
@@ -45,6 +50,9 @@ const projectVersionSchema = z.object({
   sortOrder: z.number().int(),
   isArchived: z.boolean(),
   createdAt: z.string().optional(),
+  planningScenario: z.number().int().optional(),
+  zParameterLevel: z.number().int().optional(),
+  isPrimary: z.boolean().optional(),
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 
@@ -85,6 +93,20 @@ export async function copyProjectVersion(
 
 export async function deleteProjectVersion(projectId: number, versionId: number): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/versions/${versionId}`);
+}
+
+export async function setPrimaryProjectVersion(
+  projectId: number,
+  versionId: number,
+): Promise<ProjectVersion> {
+  const { data } = await apiClient.post<ProjectVersion>(
+    `/projects/${projectId}/versions/${versionId}/set-primary`,
+  );
+  return parseApiContract(
+    `/projects/${projectId}/versions/${versionId}/set-primary`,
+    projectVersionSchema,
+    data,
+  );
 }
 
 export async function recalculateLaborIntensities(

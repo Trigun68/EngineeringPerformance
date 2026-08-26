@@ -28,16 +28,19 @@ public sealed class QuestPdfReportComposerSmokeTests
             new HierarchicalPdfRow(1, ["Лист", "5", "Удовлетворительно"], "Удовлетворительно"),
         };
 
+        var kpis = new[] { new ReportKpiItem("Часы", "10") };
+
         var pdf = QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(QuestPdfReportComposer.ComposeZScoreScaleLegend);
+            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
+            col.Item().PaddingTop(6).Element(c => QuestPdfReportComposer.ComposeZScoreScaleLegend(c, 0.7m));
             col.Item().PaddingTop(6).Element(c =>
                 QuestPdfReportComposer.ComposeHierarchicalTable(
                     c, "Тест иерархии",
                     ["Направление", "Часы", "Оценка"],
                     rows,
                     interpretationColumnIndex: 2));
-        }, "Smoke PDF", "meta");
+        }, PdfReportKind.Fact, "Smoke PDF", "Тестовый проект", "v1", kpis);
 
         pdf.Should().NotBeEmpty();
         pdf[0].Should().Be((byte)'%');
@@ -45,9 +48,27 @@ public sealed class QuestPdfReportComposerSmokeTests
         pdf[2].Should().Be((byte)'D');
         pdf[3].Should().Be((byte)'F');
 
-        QuestPdfReportComposer.IndentLabel("Лист", 1).Should().Contain("└");
-        ReportVisualTheme.AccentA.Should().Be("#3498DB");
+        // Отступ иерархии — пробелы (визуальный маркер-линия рисуется только внутри PDF-ячейки).
+        QuestPdfReportComposer.IndentLabel("Лист", 1).Should().StartWith(new string(' ', ReportVisualTheme.HierarchyIndentSpaces));
+        QuestPdfReportComposer.IndentLabel("Лист", 1).Should().EndWith("Лист");
+        QuestPdfReportComposer.IndentLabel("Корень", 0).Should().Be("Корень");
+
+        ReportVisualTheme.AccentA.Should().Be("#2E86C1");
         ReportVisualTheme.InterpretationColor("Требует внимания").Should().Be(ReportVisualTheme.Negative);
         ReportVisualTheme.InterpretationColor("Хорошо").Should().Be(ReportVisualTheme.Positive);
+    }
+
+    [Fact]
+    public void BuildPortraitReport_ProducesCoverAndContentPages()
+    {
+        var pdf = QuestPdfReportComposer.BuildPortraitReport(
+            col => col.Item().Text("Содержимое отчёта"),
+            PdfReportKind.Trend,
+            "Smoke Portrait",
+            "Тестовый проект",
+            "v1");
+
+        pdf.Should().NotBeEmpty();
+        pdf[0].Should().Be((byte)'%');
     }
 }

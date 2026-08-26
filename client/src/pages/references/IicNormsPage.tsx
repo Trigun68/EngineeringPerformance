@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
 import type { ColDef, GridApi } from 'ag-grid-community';
 import { useQuery } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import {
   createIicNorm,
   deleteIicNorm,
@@ -15,6 +16,7 @@ import {
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import type { DictionaryItem } from '../../types/dictionary';
 import { formatIisNorm } from '../../utils/formatIisNorm';
@@ -27,6 +29,7 @@ import {
 import { DirectoryEditDialog, DirectoryFormRow } from './DirectoryEditDialog';
 import { DirectoryToolbar } from './DirectoryToolbar';
 import { IicNormHistoryDialog } from './IicNormHistoryDialog';
+import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { DeviationFormulaEditor } from '../../features/norms/DeviationFormulaEditor';
 import { NormFormulaEditor } from '../../features/norms/NormFormulaEditor';
 import { defaultDeviationFormula, defaultNormFormula } from '../../types/norms';
@@ -105,6 +108,8 @@ function toTreeRows(
 
 export function IicNormsPage() {
   const { canRead, canEdit } = usePermission(OBJECT_NAME);
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const directions = useDictionaryStore((s) => s.getList('iicWorkDirections'));
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
   const fetchAll = useDictionaryStore((s) => s.fetchAll);
@@ -115,6 +120,8 @@ export function IicNormsPage() {
   );
 
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionInfo, setActionInfo] = useState<string | null>(null);
+  const [mutating, setMutating] = useState(false);
   const [selected, setSelected] = useState<IicNorm | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<IicNorm | null>(null);
@@ -197,9 +204,14 @@ export function IicNormsPage() {
       { field: 'estimate', headerName: 'Оценка', minWidth: 100 },
       { field: 'standardDeviation', headerName: 'Станд. отклонение', minWidth: 140 },
       {
+        colId: 'unitName',
         headerName: 'Ед. изм.',
         minWidth: 100,
         valueGetter: (p) => p.data?.unitName ?? getUnitLabel(p.data?.workDirectionId ?? 0),
+        filterValueGetter: (p) => {
+          const id = p.data?.resolvedUnitId ?? p.data?.unitId;
+          return id == null ? '' : String(id);
+        },
       },
       {
         field: 'effectiveFrom',
@@ -242,10 +254,11 @@ export function IicNormsPage() {
       headerName: 'Группа',
       minWidth: 320,
       flex: 1,
-      field: 'hierarchy',
       cellRendererParams: { suppressCount: true },
-      valueFormatter: (p) => {
-        const hierarchy = p.value as string[] | undefined;
+      // Excel-set не читает valueFormatter; filter по workDirectionId, подпись — лист иерархии.
+      filterValueGetter: (p) => (p.data?.workDirectionId != null ? String(p.data.workDirectionId) : ''),
+      valueGetter: (p) => {
+        const hierarchy = p.data?.hierarchy;
         if (!hierarchy || hierarchy.length === 0) return '';
         return hierarchy[hierarchy.length - 1];
       },
@@ -276,6 +289,43 @@ export function IicNormsPage() {
     setModalOpen(true);
   };
 
+  // Deep-link из «Анализ норм»: ?workDirectionId=&normId=
+  useEffect(() => {
+    if (!canRead || loading || rows.length === 0) return;
+    const wdRaw = searchParams.get('workDirectionId');
+    const normRaw = searchParams.get('normId');
+    if (!wdRaw && !normRaw) return;
+
+    const workDirectionId = wdRaw ? Number(wdRaw) : NaN;
+    const normId = normRaw ? Number(normRaw) : NaN;
+
+    void (async () => {
+      if (Number.isFinite(workDirectionId) && workDirectionId > 0) {
+        const history = await fetchIicNormHistory(workDirectionId);
+        setHistoryRows(history);
+        if (Number.isFinite(normId) && normId > 0) {
+          const item = history.find((h) => h.id === normId) ?? null;
+          setHistoryDialogInitial(item);
+          setSelectedHistory(item);
+          setHistoryDialogOpen(true);
+          const current = rows.find((r) => r.workDirectionId === workDirectionId);
+          if (current) setSelected(current);
+        } else {
+          const current = rows.find((r) => r.workDirectionId === workDirectionId);
+          if (current) openEdit(current);
+        }
+      } else if (Number.isFinite(normId) && normId > 0) {
+        const current = rows.find((r) => r.id === normId);
+        if (current) openEdit(current);
+      }
+
+      const next = new URLSearchParams(searchParams);
+      next.delete('workDirectionId');
+      next.delete('normId');
+      setSearchParams(next, { replace: true });
+    })();
+  }, [canRead, loading, rows, searchParams, setSearchParams]);
+
   const openAddHistory = () => {
     setHistoryDialogInitial(null);
     setHistoryDialogOpen(true);
@@ -288,7 +338,11 @@ export function IicNormsPage() {
   };
 
   const handleDeleteHistory = async () => {
-    if (!selectedHistory?.id || !window.confirm('Удалить запись истории?')) return;
+    if (!selectedHistory?.id) return;
+    if (!(await confirm({
+      title: 'Удалить запись истории?',
+      description: 'Удалить запись истории?',
+    }))) return;
     setActionError(null);
     try {
       await deleteIicNorm(selectedHistory.id);
@@ -299,7 +353,10 @@ export function IicNormsPage() {
     }
   };
 
-  const handleHistorySaved = async () => {
+  const handleHistorySaved = async (saved: IicNorm) => {
+    const recalculated = saved.recalculatedVersionCount ?? 0;
+    setActionInfo(`Пересчитано версий: ${recalculated}`);
+    setActionError(null);
     await loadHistory(form.workDirectionId);
     await load();
   };
@@ -313,17 +370,24 @@ export function IicNormsPage() {
         return;
       }
       const unitId = resolveIicDirectionUnitId(form.workDirectionId, directions);
+      setMutating(true);
       await createIicNorm({ ...form, unitId });
       setModalOpen(false);
       await load();
     } catch {
       setActionError('Не удалось сохранить норму.');
       throw new Error('save failed');
+    } finally {
+      setMutating(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!selected || !window.confirm('Удалить норму?')) return;
+    if (!selected) return;
+    if (!(await confirm({
+      title: 'Удалить норму?',
+      description: 'Удалить норму?',
+    }))) return;
     setActionError(null);
     try {
       await deleteIicNorm(selected.id);
@@ -348,6 +412,7 @@ export function IicNormsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      <WorkingOverlay open={loading || mutating} delayMs={mutating ? 0 : 1000} />
       <Box sx={{ flexShrink: 0 }}>
         <DirectoryToolbar
         canEdit={canEdit}
@@ -381,6 +446,11 @@ export function IicNormsPage() {
       {error && (
         <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }}>
           {error}
+        </Alert>
+      )}
+      {actionInfo && (
+        <Alert severity="success" sx={{ mb: 2, flexShrink: 0 }} onClose={() => setActionInfo(null)}>
+          {actionInfo}
         </Alert>
       )}
 
@@ -596,8 +666,9 @@ export function IicNormsPage() {
         workDirectionId={form.workDirectionId}
         initial={historyDialogInitial}
         onClose={() => setHistoryDialogOpen(false)}
-        onSaved={() => void handleHistorySaved()}
+        onSaved={(saved) => void handleHistorySaved(saved)}
       />
+      {ConfirmDialog}
     </Box>
   );
 }
