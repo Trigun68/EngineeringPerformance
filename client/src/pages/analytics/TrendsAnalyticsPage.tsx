@@ -3,11 +3,14 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   FormControl,
   InputLabel,
+  LinearProgress,
   MenuItem,
   Paper,
   Select,
+  Skeleton,
   Stack,
   TextField,
   Tooltip as MuiTooltip,
@@ -16,7 +19,9 @@ import {
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import EventNoteOutlinedIcon from '@mui/icons-material/EventNoteOutlined';
+import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined';
+import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import { useSearchParams } from 'react-router-dom';
 import {
   fetchTrendDetail,
@@ -220,6 +225,18 @@ export function TrendsAnalyticsPage() {
     };
   }, [factPoints, forecastPoints, deltaPoints]);
 
+  const summaryInfo = useMemo(() => {
+    const timestamps = factPoints.filter((p) => p.y != null).map((p) => p.x);
+    if (!timestamps.length) return null;
+    const min = new Date(Math.min(...timestamps));
+    const max = new Date(Math.max(...timestamps));
+    const fmt = (d: Date) => d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return {
+      rangeLabel: min.getTime() === max.getTime() ? fmt(min) : `${fmt(min)} — ${fmt(max)}`,
+      eventsCount: data?.events?.length ?? 0,
+    };
+  }, [factPoints, data]);
+
   const eventPlotLines = useMemo<Highcharts.XAxisPlotLinesOptions[]>(() => {
     const events = data?.events ?? [];
     return events.map((ev) => ({
@@ -389,11 +406,34 @@ export function TrendsAnalyticsPage() {
 
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2, height: '100%', overflow: 'auto' }}>
-      <Stack direction="row" spacing={1} alignItems="center">
+      <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
         <Typography variant="h5">Трендовый анализ</Typography>
         {selectedFormula && (
           <MuiTooltip title={selectedFormula.description}>
-            <InfoOutlinedIcon sx={{ fontSize: 18, color: '#94A3B8' }} />
+            <Chip
+              size="small"
+              icon={<FunctionsOutlinedIcon sx={{ fontSize: 15 }} />}
+              label={selectedFormula.displayName}
+              sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+            />
+          </MuiTooltip>
+        )}
+        {summaryInfo && (
+          <Chip
+            size="small"
+            icon={<DateRangeOutlinedIcon sx={{ fontSize: 15 }} />}
+            label={summaryInfo.rangeLabel}
+            sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+          />
+        )}
+        {summaryInfo && summaryInfo.eventsCount > 0 && (
+          <MuiTooltip title="Количество отмеченных на графике вех версий">
+            <Chip
+              size="small"
+              icon={<EventNoteOutlinedIcon sx={{ fontSize: 15 }} />}
+              label={`${summaryInfo.eventsCount} ${summaryInfo.eventsCount === 1 ? 'веха' : 'вехи'}`}
+              sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+            />
           </MuiTooltip>
         )}
       </Stack>
@@ -451,8 +491,30 @@ export function TrendsAnalyticsPage() {
       {error && <Alert severity="error">{error}</Alert>}
       {!projectId && <Alert severity="info">Выберите проект для анализа трендов.</Alert>}
 
-      {projectId && data && (
+      {projectId && loading && !data && (
         <>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(5, 1fr)' }, gap: 1.5 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" height={84} sx={{ borderRadius: 2.5 }} />
+            ))}
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.6fr 1fr' }, gap: 2 }}>
+            <Skeleton variant="rounded" height={412} sx={{ borderRadius: 2.5 }} />
+            <Stack spacing={2}>
+              <Skeleton variant="rounded" height={198} sx={{ borderRadius: 2.5 }} />
+              <Skeleton variant="rounded" height={198} sx={{ borderRadius: 2.5 }} />
+            </Stack>
+          </Box>
+        </>
+      )}
+
+      {projectId && data && factPoints.every((p) => p.y == null) && !loading && (
+        <Alert severity="info">Нет данных факта за выбранный период — измените диапазон дат или проект.</Alert>
+      )}
+
+      {projectId && data && factPoints.some((p) => p.y != null) && (
+        <>
+          {loading && <LinearProgress sx={{ borderRadius: 1, height: 3 }} />}
           <TrendsKpiCards kpi={kpi} />
 
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.6fr 1fr' }, gap: 2 }}>
