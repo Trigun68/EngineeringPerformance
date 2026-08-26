@@ -76,6 +76,15 @@ function PageFrame({
   );
 }
 
+// Точное зеркало ReportVisualTheme.ReportKindLabel / ReportKindColor.
+const KIND_META = {
+  forecast: { label: 'ПРОГНОЗ', color: theme.accentA },
+  fact: { label: 'ОЦЕНКА ФАКТА', color: theme.accentB },
+  compare: { label: 'СРАВНЕНИЕ ВЕРСИЙ', color: theme.neutral },
+  trend: { label: 'ТРЕНДОВЫЙ АНАЛИЗ', color: theme.positive },
+  combined: { label: 'СВОДНЫЙ ОТЧЁТ', color: theme.accentDark },
+} as const;
+
 function KindBadge({ label, color }: { label: string; color: string }) {
   return (
     <Box
@@ -549,6 +558,179 @@ function ChartPlaceholder({ title }: { title: string }) {
   );
 }
 
+function ChartLinePlaceholder({
+  title,
+  caption,
+  points,
+  secondPoints,
+}: {
+  title: string;
+  caption: string;
+  points: number[];
+  secondPoints?: number[];
+}) {
+  const toPath = (pts: number[]) =>
+    pts
+      .map((v, i) => `${i === 0 ? 'M' : 'L'} ${(i / (pts.length - 1)) * 100} ${100 - v}`)
+      .join(' ');
+  return (
+    <Box sx={{ bgcolor: theme.white, p: 1.6 }}>
+      <Typography sx={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 600, color: theme.primary, mb: 1 }}>
+        {title}
+      </Typography>
+      <Box sx={{ height: 100, position: 'relative' }}>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
+          {[25, 50, 75].map((y) => (
+            <line key={y} x1={0} y1={y} x2={100} y2={y} stroke={theme.ruleColor} strokeWidth={0.4} />
+          ))}
+          {secondPoints && (
+            <path d={toPath(secondPoints)} fill="none" stroke={theme.accentB} strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+          )}
+          <path d={toPath(points)} fill="none" stroke={theme.accentA} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+        </svg>
+      </Box>
+      <Box sx={{ height: 1, bgcolor: theme.ruleColor, mt: 0.5 }} />
+      <Typography sx={{ fontFamily: FONT, fontSize: 7, color: theme.muted, mt: 0.5 }}>{caption}</Typography>
+    </Box>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 4. Контентная страница — «Прогноз» (ландшафт, KPI + callout + график сценариев)
+// ---------------------------------------------------------------------------
+
+function ForecastContentPageMockup() {
+  return (
+    <PageFrame width={PAGE_W_L} height={PAGE_H_L} label="Контентная страница · Прогноз — Итого · A4 ландшафт">
+      <ContentHeader
+        title="Прогноз — Итого"
+        project="Реконструкция ГПУ-14"
+        version="Версия 3.2"
+        kindLabel={KIND_META.forecast.label}
+        kindColor={KIND_META.forecast.color}
+      />
+      <Box sx={{ px: 3.5, pt: 1.8, pb: 4.5, bgcolor: theme.pageBg, height: '100%' }}>
+        <Stack spacing={1.4}>
+          <Stack direction="row" spacing={1}>
+            <KpiCard label="Базовый" value="18 240 ч" />
+            <KpiCard label="Оптимист." value="15 890 ч" />
+            <KpiCard label="Пессимист." value="21 470 ч" />
+          </Stack>
+          <Callout
+            kind="data"
+            title="Разброс сценариев"
+            detail="Диапазон между оптимистичным и пессимистичным сценарием — 5 580 ч (30% от базового). Наибольший вклад — направление «Электромонтаж»."
+          />
+          <Stack direction="row" spacing={1.6}>
+            <Box sx={{ flex: 1 }}>
+              <ChartPlaceholder title="Сравнение сценариев трудоёмкости" />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <ChartPlaceholder title="Top-15 направлений IIC по базовым часам" />
+            </Box>
+          </Stack>
+        </Stack>
+      </Box>
+      <ContentFooter page="2 / 4" />
+    </PageFrame>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 5. Контентная страница — «Трендовый анализ» (ландшафт, линейные графики)
+// ---------------------------------------------------------------------------
+
+function TrendContentPageMockup() {
+  return (
+    <PageFrame width={PAGE_W_L} height={PAGE_H_L} label="Контентная страница · Трендовый анализ · A4 ландшафт">
+      <ContentHeader
+        title="Трендовый анализ"
+        project="Проект ID: 142"
+        version="Формула: v1-docset-proportional"
+        kindLabel={KIND_META.trend.label}
+        kindColor={KIND_META.trend.color}
+        extraMeta="Гранулярность: по версиям"
+      />
+      <Box sx={{ px: 3.5, pt: 1.8, pb: 4.5, bgcolor: theme.pageBg, height: '100%' }}>
+        <Stack spacing={1.4}>
+          <Callout
+            kind="attention"
+            title="Рост отклонения факта от прогноза"
+            detail="Последние 3 версии показывают устойчивый рост Δ(факт-прогноз): +6% → +9% → +13%. Рекомендуется пересмотреть нормы для направления «Электромонтаж»."
+          />
+          <ChartLinePlaceholder
+            title="Факт vs Прогноз"
+            caption="Факт (синий) · Прогноз/План (фиолетовый) — часы по датам"
+            points={[70, 62, 58, 65, 55, 48, 40, 35]}
+            secondPoints={[60, 60, 58, 56, 52, 50, 46, 42]}
+          />
+          <Stack direction="row" spacing={1.6}>
+            <Box sx={{ flex: 1 }}>
+              <ChartPlaceholder title="Δ Факт − Прогноз по версиям" />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <ChartLinePlaceholder
+                title="S-curve — накопительный факт"
+                caption="Накопительные фактические часы по датам"
+                points={[95, 90, 82, 70, 55, 38, 20, 4]}
+              />
+            </Box>
+          </Stack>
+        </Stack>
+      </Box>
+      <ContentFooter page="1 / 3" />
+    </PageFrame>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 6. Контентная страница — «Сводный отчёт» (ландшафт, KPI + Z-шкала + callouts)
+// ---------------------------------------------------------------------------
+
+function CombinedContentPageMockup() {
+  return (
+    <PageFrame width={PAGE_W_L} height={PAGE_H_L} label="Контентная страница · Сводный отчёт · A4 ландшафт">
+      <ContentHeader
+        title="Сводный отчёт"
+        project="Проект ID: 142"
+        version="План v3 · Факт v5 · Сравнение 4/5"
+        kindLabel={KIND_META.combined.label}
+        kindColor={KIND_META.combined.color}
+      />
+      <Box sx={{ px: 3.5, pt: 1.8, pb: 4.5, bgcolor: theme.pageBg, height: '100%' }}>
+        <Stack spacing={1.3}>
+          <Stack direction="row" spacing={1}>
+            <KpiCard label="Прогноз база" value="18 240 ч" />
+            <KpiCard label="Факт часы" value="12 480 ч" />
+            <KpiCard label="Взвеш. Z" value="−0.34" />
+            <KpiCard label="Оценка" value="Хорошо" dotColor={theme.positive} />
+          </Stack>
+          <Box sx={{ bgcolor: theme.white, p: 1.2 }}>
+            <ZScaleLegend z={-0.34} />
+          </Box>
+          <Callout
+            kind="strength"
+            title="Проект в целом эффективен"
+            detail="Взвешенный Z-score −0.34 соответствует оценке «Хорошо» — фактическая трудоёмкость ниже нормы по группе аналогов."
+          />
+          <Typography sx={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 600, color: theme.primary }}>
+            Ключевые визуализации
+          </Typography>
+          <Stack direction="row" spacing={1.6}>
+            <Box sx={{ flex: 1 }}>
+              <ChartPlaceholder title="1. Прогнозирование — сценарии" />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <ChartPlaceholder title="2. Оценка факта — Z-score top-10" />
+            </Box>
+          </Stack>
+        </Stack>
+      </Box>
+      <ContentFooter page="1 / 5" />
+    </PageFrame>
+  );
+}
+
 function CompareContentPageMockup() {
   return (
     <PageFrame width={PAGE_W_L} height={PAGE_H_L} label="Контентная страница · Сравнение версий · A4 ландшафт">
@@ -618,18 +800,52 @@ function Swatch({ label, hex }: { label: string; hex: string }) {
   );
 }
 
+function TabSection({
+  tabName,
+  reportNames,
+  children,
+}: {
+  tabName: string;
+  reportNames: string;
+  children: ReactNode;
+}) {
+  return (
+    <Box sx={{ mt: 6 }}>
+      <Stack direction="row" alignItems="baseline" spacing={1.5} sx={{ mb: 2.5 }}>
+        <Typography sx={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: theme.primary }}>
+          Вкладка «{tabName}»
+        </Typography>
+        <Typography sx={{ fontFamily: FONT, fontSize: 12, color: theme.muted }}>{reportNames}</Typography>
+      </Stack>
+      <Stack direction="row" spacing={5} sx={{ flexWrap: 'wrap', justifyContent: 'center' }} useFlexGap>
+        {children}
+      </Stack>
+    </Box>
+  );
+}
+
 export default function PdfDesignMockups() {
   return (
-    <Box sx={{ bgcolor: '#F1F4F7', minHeight: '100vh', py: 6 }}>
+    <Box
+      sx={{
+        position: 'fixed',
+        inset: 0,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        bgcolor: '#F1F4F7',
+        py: 6,
+      }}
+    >
       <Box sx={{ maxWidth: 1300, mx: 'auto', px: 3 }}>
         <Typography sx={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: '#1B2A38' }}>
           Дизайн-система PDF-отчётов — «Executive Technical»
         </Typography>
-        <Typography sx={{ fontFamily: FONT, fontSize: 14, color: '#7B8794', mt: 0.5, maxWidth: 720 }}>
-          Единый визуальный стиль для всех 10 PDF-отчётов: глубокий графитовый + инженерный синий акцент,
-          полноценная обложка, структурированный хедер/футер, KPI-карточки, шкала Z-score с маркером, краткие
-          авто-выводы (callout) и стилизованные иерархические таблицы. Ниже — статичные макеты в масштабе, точно
-          повторяющие композицию QuestPDF-документа.
+        <Typography sx={{ fontFamily: FONT, fontSize: 14, color: '#7B8794', mt: 0.5, maxWidth: 780 }}>
+          Единый визуальный стиль для всех 10 PDF-отчётов, доступных на вкладках страницы «Проекты»: глубокий
+          графитовый + инженерный синий акцент, полноценная обложка, структурированный хедер/футер, KPI-карточки,
+          шкала Z-score с маркером, краткие авто-выводы (callout) и стилизованные иерархические таблицы. Ниже —
+          статичные макеты в масштабе, точно повторяющие композицию QuestPDF-документа; обложка и хедер/футер
+          общие для всех типов — различается только бейдж, заголовок и содержимое страницы.
         </Typography>
 
         <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '10px', p: 2.5, mt: 4, boxShadow: '0 1px 0 rgba(16,24,31,0.06)' }}>
@@ -647,19 +863,50 @@ export default function PdfDesignMockups() {
           </Stack>
         </Box>
 
-        <Stack
-          direction="row"
-          spacing={5}
-          sx={{ mt: 5, flexWrap: 'wrap', justifyContent: 'center' }}
-          useFlexGap
-        >
-          <CoverPageMockup />
-          <FactContentPageMockup />
-        </Stack>
+        <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '10px', p: 2.5, mt: 3, boxShadow: '0 1px 0 rgba(16,24,31,0.06)' }}>
+          <Typography sx={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#1B2A38', letterSpacing: 0.5, mb: 1.5 }}>
+            БЕЙДЖИ ТИПОВ ОТЧЁТА (обложка и хедер каждой страницы)
+          </Typography>
+          <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
+            {Object.values(KIND_META).map((k) => (
+              <KindBadge key={k.label} label={k.label} color={k.color} />
+            ))}
+          </Stack>
+        </Box>
 
-        <Stack sx={{ mt: 5, alignItems: 'center' }}>
+        <Box sx={{ mt: 6 }}>
+          <Stack direction="row" alignItems="baseline" spacing={1.5} sx={{ mb: 2.5 }}>
+            <Typography sx={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: theme.primary }}>
+              Титульная страница — общий шаблон
+            </Typography>
+            <Typography sx={{ fontFamily: FONT, fontSize: 12, color: theme.muted }}>
+              Одинаковая композиция для всех 10 PDF — меняется только бейдж, заголовок и тизер-KPI
+            </Typography>
+          </Stack>
+          <Stack direction="row" sx={{ justifyContent: 'center' }}>
+            <CoverPageMockup />
+          </Stack>
+        </Box>
+
+        <TabSection tabName="Планирование" reportNames="Прогноз — Итого / По объектам / Детально">
+          <ForecastContentPageMockup />
+        </TabSection>
+
+        <TabSection tabName="Оценка факта" reportNames="Факт — Итого / По объектам / Детально">
+          <FactContentPageMockup />
+        </TabSection>
+
+        <TabSection tabName="Сравнение версий" reportNames="Сравнение — Итого / По объектам / Детально / Полный">
           <CompareContentPageMockup />
-        </Stack>
+        </TabSection>
+
+        <TabSection tabName="Тренды" reportNames="Трендовый анализ">
+          <TrendContentPageMockup />
+        </TabSection>
+
+        <TabSection tabName="Проекты → Сводный отчёт PDF" reportNames="Сводный отчёт (прогноз + факт + сравнение + тренд)">
+          <CombinedContentPageMockup />
+        </TabSection>
       </Box>
     </Box>
   );
