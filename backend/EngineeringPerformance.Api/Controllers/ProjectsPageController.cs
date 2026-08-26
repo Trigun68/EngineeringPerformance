@@ -161,7 +161,7 @@ public sealed class ProjectsPageController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var bytes = await _exportService.ExportForecastSummaryPdfAsync(projectId, versionId, cancellationToken);
+        var bytes = await _visualReports.ExportForecastSummaryPdfAsync(projectId, versionId, cancellationToken);
         var fileName = await ForecastFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Summary, "pdf", cancellationToken);
         return File(bytes, "application/pdf", fileName);
     }
@@ -254,7 +254,7 @@ public sealed class ProjectsPageController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var bytes = await _exportService.ExportFactSummaryPdfAsync(projectId, versionId, cancellationToken);
+        var bytes = await _visualReports.ExportFactSummaryPdfAsync(projectId, versionId, cancellationToken);
         var fileName = await FactFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Summary, "pdf", cancellationToken);
         return File(bytes, "application/pdf", fileName);
     }
@@ -267,7 +267,7 @@ public sealed class ProjectsPageController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var bytes = await _exportService.ExportFactFacilityPdfAsync(projectId, versionId, cancellationToken);
+        var bytes = await _visualReports.ExportFactFacilityPdfAsync(projectId, versionId, cancellationToken);
         var fileName = await FactFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Facility, "pdf", cancellationToken);
         return File(bytes, "application/pdf", fileName);
     }

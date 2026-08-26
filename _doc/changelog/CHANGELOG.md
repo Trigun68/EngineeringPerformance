@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed (2026-08-26, визуальные PDF в продуктиве)
+- **4 PDF-эндпоинта рабочей области переведены на визуальный движок `VisualReportService`** (дизайн «Executive Technical»: обложка, KPI, callout-инсайты, графики ScottPlot): `export/forecast-summary/pdf`, `export/fact-summary/pdf`, `export/fact-facility/pdf` в `ProjectsPageController` и `export/analysis.pdf` в `ProjectAnalyticsController` (через `AnalyticsExportService.ExportAnalysisPdfAsync`). Ранее эти кнопки отдавали табличный PDF.
+- **`/dev/pdf-mockups` закрыт авторизацией**: страница дизайн-превью PDF перенесена под `AdminRouteGuard` (была публичной вне AppLayout); сама страница обновлена до актуальной версии темы (бейджи видов отчётов, линейные графики, контентные страницы).
+
 ### Removed (2026-08-26, детальный PDF)
 - **PDF-выгрузка вкладок «Детально» (прогноз и факт) отключена**: полная детализация на десятки тысяч строк давала PDF в 13k+ страниц / ~100 МБ, который ронял вкладку браузера при скачивании. Удалены кнопки «Выгрузить PDF» на обеих вкладках, эндпоинты `export/forecast-detail/pdf` и `export/fact-detail/pdf`, методы `ExportForecastDetailPdfAsync`/`ExportFactDetailPdfAsync` из `IProjectExportService` и `IVisualReportService`. Детальные данные остаются в Excel (полный, выделенное, сводная).
 - E2E `forecast-detail-export.spec.ts`: тест PDF заменён на проверку Excel-выгрузки и отсутствия PDF-кнопки.

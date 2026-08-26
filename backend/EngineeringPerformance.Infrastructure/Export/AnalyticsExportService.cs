@@ -32,15 +32,8 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
         return ForecastTableRenderers.ToExcel(document);
     }
 
-    public async Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
-    {
-        var report = await _analysisService.GenerateReportAsync(projectId, versionId, cancellationToken);
-        var document = FactTableDocumentBuilder.BuildAnalysis(report) with
-        {
-            HeaderLines = TabularReportBanner.Lines(report.ProjectCode ?? string.Empty, report.ProjectName, report.VersionName),
-        };
-        return ForecastTableRenderers.ToPdf(document);
-    }
+    public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
+        _visualReports.ExportAnalysisPdfAsync(projectId, versionId, cancellationToken);
 
     public async Task<byte[]> ExportForecastExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {

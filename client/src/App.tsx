@@ -45,7 +45,7 @@ const AccessRightsPage = lazy(() =>
 const SystemSettingsPage = lazy(() =>
   import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
 );
-// Дизайн-превью PDF-отчётов — доступно без авторизации и без AppLayout.
+// Дизайн-превью PDF-отчётов — только для администраторов, без AppLayout.
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
 
 const LOGO_SRC = '/assets/logo.png';
@@ -121,15 +121,18 @@ export default function App() {
     <BrowserRouter>
       <>
         <Routes>
-        <Route
-          path="/dev/pdf-mockups"
-          element={(
-            <Suspense fallback={null}>
-              <PdfDesignMockups />
-            </Suspense>
-          )}
-        />
         {user ? (
+          <>
+          <Route
+            path="/dev/pdf-mockups"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <PdfDesignMockups />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -249,6 +252,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
+          </>
         ) : (
           <Route path="*" element={<LoginPage />} />
         )}
