@@ -261,6 +261,66 @@ public static class QuestPdfReportComposer
     }
 
     // ------------------------------------------------------------------
+    // Сводка «план/факт» (вкладка «Отчёт»)
+    // ------------------------------------------------------------------
+
+    /// <summary>Цвет акцента блока «План» — паритет client/src/pages/projects/reports/reportCalc.ts::ACCENT_PLAN.</summary>
+    public const string PlanAccent = "#3498DB";
+
+    /// <summary>Цвет акцента блока «Факт» — паритет ACCENT_FACT.</summary>
+    public const string FactAccent = "#2C3E50";
+
+    /// <summary>Двухколоночная сводка «план/факт» — аналог PlanFactSummary.tsx на портале.</summary>
+    public static void ComposePlanFactSummary(
+        IContainer container,
+        PdfPlanFactColumn plan,
+        PdfPlanFactColumn? fact,
+        string? deltaCaption)
+    {
+        container.Row(row =>
+        {
+            row.Spacing(10);
+            row.RelativeItem().Element(e => ComposePlanFactColumn(e, "ПЛАН", PlanAccent, plan, null));
+            row.RelativeItem().Element(e => ComposePlanFactColumn(
+                e, "ФАКТ", fact is null ? ReportVisualTheme.Muted : FactAccent,
+                fact ?? new PdfPlanFactColumn("Основная версия факта не назначена", "—", "—", "—", "Н/Д"),
+                fact is null ? null : deltaCaption));
+        });
+    }
+
+    private static void ComposePlanFactColumn(
+        IContainer container, string kicker, string accentColor, PdfPlanFactColumn column, string? deltaCaption)
+    {
+        container.Background(Colors.White).BorderLeft(3).BorderColor(accentColor).Padding(12).Column(col =>
+        {
+            col.Spacing(6);
+            col.Item().Row(r =>
+            {
+                r.RelativeItem().Text(kicker).SemiBold().FontSize(9).FontColor(accentColor);
+                r.RelativeItem().AlignRight().Text(column.VersionLabel).FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+            });
+            col.Item().Row(r =>
+            {
+                r.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Трудоёмкость").FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    c.Item().Text($"{column.Hours} ч").SemiBold().FontSize(17).FontColor(ReportVisualTheme.Primary);
+                });
+                r.RelativeItem().Column(c =>
+                {
+                    c.Item().Text("Z-оценка").FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    c.Item().Text(column.ZScore).SemiBold().FontSize(17)
+                        .FontColor(ReportVisualTheme.InterpretationColor(column.Interpretation));
+                });
+            });
+            col.Item().Text($"{column.Interpretation}{(string.IsNullOrWhiteSpace(column.Percentile) ? "" : $" · перцентиль {column.Percentile}")}")
+                .FontSize(8.5f).FontColor(ReportVisualTheme.InterpretationColor(column.Interpretation));
+            if (!string.IsNullOrWhiteSpace(deltaCaption))
+                col.Item().Text(deltaCaption).FontSize(8).FontColor(ReportVisualTheme.Muted);
+        });
+    }
+
+    // ------------------------------------------------------------------
     // Шкала Z-score
     // ------------------------------------------------------------------
 
@@ -293,25 +353,56 @@ public static class QuestPdfReportComposer
                 }
             });
             if (currentZ.HasValue)
-                col.Item().PaddingTop(2).Element(e => ComposeZScoreMarker(e, currentZ.Value));
+                col.Item().PaddingTop(2).Element(e => ComposeZScoreMarker(e, currentZ.Value, "Z", ReportVisualTheme.Primary, ReportVisualTheme.GlyphUp));
         });
     }
 
-    private static void ComposeZScoreMarker(IContainer container, decimal z)
+    /// <summary>Шкала с двумя маркерами — план (тонкий) и факт (крупный, акцентный). Аналог ZScale.tsx с двумя значениями.</summary>
+    public static void ComposeZScoreScaleLegend(IContainer container, decimal? planZ, decimal? factZ)
+    {
+        container.Column(col =>
+        {
+            col.Spacing(3);
+            col.Item().Text("Шкала оценки (Z-score)").SemiBold().FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
+            col.Item().Row(row =>
+            {
+                row.Spacing(2);
+                foreach (var (label, range, color, _) in ZScoreBands)
+                {
+                    row.RelativeItem().Background(color).Padding(6).Column(c =>
+                    {
+                        c.Item().AlignCenter().Text(label).SemiBold().FontSize(8).FontColor(Colors.White);
+                        c.Item().AlignCenter().Text(range).FontSize(7).FontColor(Colors.White);
+                    });
+                }
+            });
+            if (planZ.HasValue)
+                col.Item().PaddingTop(2).Element(e => ComposeZScoreMarker(e, planZ.Value, "План", ReportVisualTheme.Muted, ReportVisualTheme.GlyphDot, small: true));
+            if (factZ.HasValue)
+                col.Item().PaddingTop(1).Element(e => ComposeZScoreMarker(e, factZ.Value, "Факт", ReportVisualTheme.Primary, ReportVisualTheme.GlyphUp));
+            if (!planZ.HasValue && !factZ.HasValue)
+                col.Item().PaddingTop(2).Text("Нет данных для отображения маркера.").FontSize(7.5f).Italic().FontColor(ReportVisualTheme.Muted);
+        });
+    }
+
+    private static void ComposeZScoreMarker(
+        IContainer container, decimal z, string label, string color, string glyph, bool small = false)
     {
         // Диапазон шкалы визуально соответствует [-2, 2]; клэмп + перевод в долю 0..1.
         var clamped = Math.Max(-2m, Math.Min(2m, z));
         var proportion = (double)((clamped + 2m) / 4m);
         var left = Math.Clamp(proportion, 0.02, 0.94);
         var right = 1 - left;
+        var markerWidth = small ? 46 : 40;
+        var glyphSize = small ? 8f : 10f;
 
         container.Row(row =>
         {
             row.RelativeItem((float)left);
-            row.ConstantItem(36).AlignCenter().Column(c =>
+            row.ConstantItem(markerWidth).AlignCenter().Column(c =>
             {
-                c.Item().AlignCenter().Text(ReportVisualTheme.GlyphUp).FontSize(10).FontColor(ReportVisualTheme.Primary);
-                c.Item().AlignCenter().Text($"Z = {z:N2}").FontSize(7).FontColor(ReportVisualTheme.Muted);
+                c.Item().AlignCenter().Text(glyph).FontSize(glyphSize).FontColor(color);
+                c.Item().AlignCenter().Text($"{label} {z:N2}").FontSize(small ? 6.5f : 7).FontColor(ReportVisualTheme.Muted);
             });
             row.RelativeItem((float)right);
         });
@@ -321,13 +412,11 @@ public static class QuestPdfReportComposer
     // Графики
     // ------------------------------------------------------------------
 
-    public static void ComposeChartImage(IContainer container, string title, byte[]? pngBytes, string? caption = null)
+    public static void ComposeChartImage(IContainer container, byte[]? pngBytes, string? caption = null)
     {
         container.Column(col =>
         {
             col.Spacing(4);
-            if (!string.IsNullOrWhiteSpace(title))
-                col.Item().Text(title).SemiBold().FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
             if (pngBytes is { Length: > 0 })
                 col.Item().Image(pngBytes).FitWidth();
             else

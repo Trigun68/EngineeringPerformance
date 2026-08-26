@@ -18,6 +18,14 @@ public sealed record ChartAreaSeries(string Name, IReadOnlyList<(DateTime X, dou
 
 public sealed record ReportKpiItem(string Label, string Value);
 
+/// <summary>Одна колонка сводки «план/факт» (вкладка «Отчёт») — паритет PlanFactSummary.tsx.</summary>
+public sealed record PdfPlanFactColumn(
+    string VersionLabel,
+    string Hours,
+    string ZScore,
+    string Percentile,
+    string Interpretation);
+
 /// <summary>Данные для титульной страницы PDF — рендерится первой в каждом отчёте.</summary>
 public sealed record PdfCoverInfo(
     PdfReportKind Kind,

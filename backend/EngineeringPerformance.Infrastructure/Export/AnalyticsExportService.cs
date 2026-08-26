@@ -122,4 +122,7 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public Task<byte[]> ExportForecastPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
         _visualReports.ExportForecastSummaryPdfAsync(projectId, versionId, cancellationToken);
+
+    public Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
+        _visualReports.ExportProjectReportPdfAsync(projectId, versionId, cancellationToken);
 }
