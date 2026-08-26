@@ -6,7 +6,7 @@ test.describe('Forecast detail export buttons', () => {
     await loginAsAdmin(page);
   });
 
-  test('detail tab shows excel, pdf and summary table buttons in tabs row', async ({ page }) => {
+  test('detail tab shows excel buttons and no pdf button in tabs row', async ({ page }) => {
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
@@ -27,11 +27,12 @@ test.describe('Forecast detail export buttons', () => {
     await page.getByRole('tab', { name: 'Детально' }).click();
     await expect(actionButton(page, 'exportExcel')).toBeVisible();
     await expect(actionButton(page, 'exportExcelSelected')).toBeVisible();
-    await expect(actionButton(page, 'exportPdf')).toBeVisible();
     await expect(actionButton(page, 'exportExcelSummary')).toBeVisible();
+    // PDF детализации отключён: полная таблица на десятки тысяч строк даёт непригодный файл.
+    await expect(actionButton(page, 'exportPdf')).toHaveCount(0);
   });
 
-  test('detail PDF returns application/pdf', async ({ page }) => {
+  test('detail Excel returns spreadsheet with Russian filename', async ({ page }) => {
     test.setTimeout(180_000);
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
@@ -53,46 +54,12 @@ test.describe('Forecast detail export buttons', () => {
 
     await page.getByRole('tab', { name: 'Детально' }).click();
     await waitForWorkingOverlayHidden(page);
-    const pdfButton = page.getByTestId('forecast-detail-export-pdf');
-    await expect(pdfButton).toBeEnabled({ timeout: 30_000 });
-
-    // Полный PDF детальной таблицы на большом проекте роняет Chromium (blob в вкладке).
-    // Имя и тип проверяем по реальному ответу, в страницу отдаём маленькую заглушку.
-    let contentType = '';
-    let contentDisposition = '';
-    await page.route('**/export/forecast-detail/pdf', async (route) => {
-      const response = await route.fetch();
-      contentType = response.headers()['content-type'] ?? '';
-      contentDisposition = response.headers()['content-disposition'] ?? '';
-      await route.fulfill({
-        status: response.status(),
-        contentType: contentType || 'application/pdf',
-        headers: {
-          'content-disposition': contentDisposition,
-        },
-        body: Buffer.from('%PDF-1.4 stub'),
-      });
-    });
+    const excelButton = actionButton(page, 'exportExcel');
+    await expect(excelButton).toBeEnabled({ timeout: 30_000 });
 
     const downloadPromise = page.waitForEvent('download', { timeout: 120_000 });
-    await pdfButton.click();
+    await excelButton.click();
     const download = await downloadPromise;
-    expect(contentType).toContain('application/pdf');
-    const headerName = filenameFromContentDisposition(contentDisposition);
-    expect(headerName).toMatch(/^прогноз_детально_-_.+\(.+\)\.pdf$/);
-    expect(download.suggestedFilename()).toMatch(/^прогноз_детально_-_.+\(.+\)\.pdf$/);
+    expect(download.suggestedFilename()).toMatch(/^прогноз_детально_-_.+\(.+\)\.xlsx$/);
   });
 });
-
-function filenameFromContentDisposition(header: string): string {
-  const utf8 = /filename\*=(?:UTF-8'')?([^;]+)/i.exec(header);
-  if (utf8?.[1]) {
-    try {
-      return decodeURIComponent(utf8[1].replace(/"/g, '').trim());
-    } catch {
-      return utf8[1].replace(/"/g, '').trim();
-    }
-  }
-  const ascii = /filename="?([^";]+)"?/i.exec(header);
-  return ascii?.[1]?.trim() ?? '';
-}

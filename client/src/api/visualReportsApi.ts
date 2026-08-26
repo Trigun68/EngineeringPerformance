@@ -23,13 +23,6 @@ export async function exportFactFacilityPdf(projectId: number, versionId: number
   triggerBrowserDownload(blob, filename);
 }
 
-export async function exportFactDetailPdf(projectId: number, versionId: number): Promise<void> {
-  const { blob, filename } = await downloadBlob(
-    `/projects/${projectId}/versions/${versionId}/export/fact-detail/pdf`,
-  );
-  triggerBrowserDownload(blob, filename);
-}
-
 export async function exportComparePdf(
   projectId: number,
   versionA: number,

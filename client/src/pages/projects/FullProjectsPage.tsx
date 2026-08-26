@@ -476,7 +476,12 @@ export function FullProjectsPage() {
         )}
 
         {mainTab === 'report' && currentProjectId && hasProject && workspace && (
-          <ReportPanel projectId={currentProjectId} />
+          <ReportPanel
+            projectId={currentProjectId}
+            project={resolvedProject!}
+            versions={workspace.versions}
+            initialVersionId={workspace.factVersionId ?? workspace.planVersionId ?? undefined}
+          />
         )}
         {mainTab === 'report' && (!currentProjectId || !hasProject) && (
           <>

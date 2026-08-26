@@ -214,19 +214,6 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, ExcelContentType, fileName);
     }
 
-    [HttpGet("export/forecast-detail/pdf")]
-    [RequireProjectAccess]
-    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
-    public async Task<IActionResult> ExportForecastDetailPdf(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken)
-    {
-        var bytes = await _exportService.ExportForecastDetailPdfAsync(projectId, versionId, cancellationToken);
-        var fileName = await ForecastFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Detail, "pdf", cancellationToken);
-        return File(bytes, "application/pdf", fileName);
-    }
-
     [HttpGet("export/forecast-detail/summary-table")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
@@ -350,19 +337,6 @@ public sealed class ProjectsPageController : ControllerBase
             cancellationToken,
             ExportFileNameBuilder.Qualifiers.SummaryTable);
         return File(bytes, ExcelContentType, fileName);
-    }
-
-    [HttpGet("export/fact-detail/pdf")]
-    [RequireProjectAccess]
-    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
-    public async Task<IActionResult> ExportFactDetailPdf(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken)
-    {
-        var bytes = await _exportService.ExportFactDetailPdfAsync(projectId, versionId, cancellationToken);
-        var fileName = await FactFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Detail, "pdf", cancellationToken);
-        return File(bytes, "application/pdf", fileName);
     }
 
     private Task<string> ForecastFileNameAsync(

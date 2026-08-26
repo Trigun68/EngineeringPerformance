@@ -215,17 +215,6 @@ public sealed class ProjectExportService : IProjectExportService
             WithBanner(ForecastTableDocumentBuilder.BuildDetail(data.Forecast.Detail, title), headerLines));
     }
 
-    public async Task<byte[]> ExportForecastDetailPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default)
-    {
-        var (data, title, headerLines) = await LoadForecastTableAsync(
-            projectId, versionId, "Детализация прогноза", cancellationToken);
-        return ForecastTableRenderers.ToPdf(
-            WithBanner(ForecastTableDocumentBuilder.BuildDetail(data.Forecast.Detail, title), headerLines));
-    }
-
     private static ForecastTableDocument WithBanner(ForecastTableDocument document, IReadOnlyList<string> headerLines) =>
         document with { HeaderLines = headerLines };
 
@@ -332,14 +321,13 @@ public sealed class ProjectExportService : IProjectExportService
     public async Task<byte[]> ExportFactDetailExcelAsync(
         int projectId,
         int versionId,
-        CancellationToken cancellationToken = default) =>
-        await RenderFactDetailAsync(projectId, versionId, excel: true, cancellationToken);
-
-    public async Task<byte[]> ExportFactDetailPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default) =>
-        await RenderFactDetailAsync(projectId, versionId, excel: false, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        // PDF для детализации факта отключён: таблица на десятки тысяч строк даёт непригодный файл (13k+ страниц).
+        var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Детализация оценки факта", cancellationToken);
+        var document = WithBanner(FactTableDocumentBuilder.BuildDetail(data.Fact.Detail, title), headerLines);
+        return ForecastTableRenderers.ToExcel(document);
+    }
 
     private async Task<byte[]> RenderFactSummaryAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
     {
@@ -352,13 +340,6 @@ public sealed class ProjectExportService : IProjectExportService
     {
         var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Оценка факта по объектам", cancellationToken);
         var document = WithBanner(FactTableDocumentBuilder.BuildFacility(data.Fact.Facility, title), headerLines);
-        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
-    }
-
-    private async Task<byte[]> RenderFactDetailAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
-    {
-        var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Детализация оценки факта", cancellationToken);
-        var document = WithBanner(FactTableDocumentBuilder.BuildDetail(data.Fact.Detail, title), headerLines);
         return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
     }
 

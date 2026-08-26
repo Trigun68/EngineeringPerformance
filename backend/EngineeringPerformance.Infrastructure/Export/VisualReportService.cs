@@ -70,6 +70,8 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Пессимист.", $"{totals.PessimisticHours:N0} ч"),
         };
 
+        var callout = PdfInsightBuilder.BuildForecastCallout(totals.BaseHours, totals.OptimisticHours, totals.PessimisticHours);
+
         var hierRows = data.Forecast.Summary
             .Where(r => !r.IsTotal)
             .Select(r => new HierarchicalPdfRow(
@@ -85,15 +87,22 @@ public sealed class VisualReportService : IVisualReportService
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
             col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
-            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, scenarioChart, "Сравнение сценариев трудоёмкости"));
+            if (callout is not null)
+                col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeCalloutBlock(c, callout));
+            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Сравнение сценариев трудоёмкости", scenarioChart));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, iicChart, "Top-15 направлений IIC (длинные подписи усечены)"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Top-15 направлений IIC", iicChart, "Длинные подписи усечены"));
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeHierarchicalTable(
                 c, "Итого по направлениям",
                 ["Направление", "План. объём", "Опт.", "База", "Пессим."],
                 hierRows));
-        }, "Прогноз — Итого", $"Проект: {projectCode}", $"Версия: {versionName}");
+        },
+        PdfReportKind.Forecast,
+        "Прогноз — Итого",
+        $"Проект: {projectCode}",
+        $"Версия: {versionName}",
+        kpis);
     }
 
     public async Task<byte[]> ExportForecastFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -122,48 +131,17 @@ public sealed class VisualReportService : IVisualReportService
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chart, "Базовый сценарий по объектам"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Базовый сценарий по объектам", chart));
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
                 c, "По объектам",
                 ["Код", "Объект", "Опт.", "База ч", "Пессим."],
                 tableRows));
-        }, "Прогноз — По объектам", $"Проект: {projectCode}", $"Версия: {versionName}");
-    }
-
-    public async Task<byte[]> ExportForecastDetailPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
-    {
-        var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
-
-        var chartItems = data.Forecast.Detail
-            .OrderByDescending(d => d.BaseHours ?? 0)
-            .Take(20)
-            .Select(d => new ChartBarItem($"{d.CatalogCode}", (double)(d.BaseHours ?? 0), ReportVisualTheme.AccentA))
-            .ToList();
-        var chart = _charts.RenderHorizontalBarChart(
-            "Top-20 позиций по базовым часам",
-            chartItems,
-            options: new ChartRenderOptions(YAxisLabel: "Код позиции", XAxisLabel: "Часы"));
-
-        var tableRows = data.Forecast.Detail.Select(d => new[]
-        {
-            d.FacilityName,
-            d.CatalogCode,
-            d.CatalogName,
-            d.Quantity.ToString("N2"),
-            d.BaseHours?.ToString("N0") ?? "—",
-        });
-
-        return QuestPdfReportComposer.BuildLandscapeReport(col =>
-        {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chart, "Топ позиций по трудоёмкости"));
-            col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
-                c, "Детализация",
-                ["Объект", "Код", "Наименование", "Кол-во", "База ч"],
-                tableRows));
-        }, "Прогноз — Детально", $"Проект: {projectCode}", $"Версия: {versionName}");
+        },
+        PdfReportKind.Forecast,
+        "Прогноз — По объектам",
+        $"Проект: {projectCode}",
+        $"Версия: {versionName}");
     }
 
     public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
@@ -195,6 +173,14 @@ public sealed class VisualReportService : IVisualReportService
 
         var interpretationRu = summary.WeightedZScoreInterpretation?.ToRussian() ?? "—";
 
+        var teaserKpis = new[]
+        {
+            new ReportKpiItem("Факт. часы", summary.TotalFactLaborHours?.ToString("N0") ?? "—"),
+            new ReportKpiItem("Взвеш. Z", summary.WeightedZScore?.ToString("N2") ?? "—"),
+            new ReportKpiItem("Оценка", interpretationRu),
+        };
+        var callouts = PdfInsightBuilder.BuildFactCallouts(data.Fact.Performance, summary);
+
         var hierRows = data.Fact.Performance
             .Where(r => r.WorkDirectionId >= 0)
             .Select(r =>
@@ -224,15 +210,22 @@ public sealed class VisualReportService : IVisualReportService
                 summary.WeightedZScore?.ToString("N2") ?? "—",
                 summary.WeightedZScorePercentile ?? "—",
                 interpretationRu));
-            col.Item().PaddingTop(8).Element(QuestPdfReportComposer.ComposeZScoreScaleLegend);
-            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, chart, "Отклонение Z-score по направлениям (Top-20)"));
+            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeZScoreScaleLegend(c, summary.WeightedZScore));
+            if (callouts.Count > 0)
+                col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeCalloutList(c, callouts));
+            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Отклонение Z-score по направлениям", chart, "Top-20 по модулю Z"));
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeHierarchicalTable(
                 c, "Производительность по IIC",
                 ["Направление", "Код", "ФО", "Часы", ..FactPlanHourHeaders, "Z", "Перцентиль", "Оценка"],
                 hierRows,
                 interpretationColumnIndex: 9));
-        }, "Оценка факта — Итого", $"Проект: {report.ProjectName ?? projectCode}", $"Версия: {report.VersionName ?? versionName}");
+        },
+        PdfReportKind.Fact,
+        "Оценка факта — Итого",
+        $"Проект: {report.ProjectName ?? projectCode}",
+        $"Версия: {report.VersionName ?? versionName}",
+        teaserKpis);
     }
 
     public async Task<byte[]> ExportFactFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -263,59 +256,18 @@ public sealed class VisualReportService : IVisualReportService
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chart, "Фактическая трудоёмкость по объектам (Top-15)"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Фактическая трудоёмкость по объектам", chart, "Top-15"));
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
                 c, "По объектам",
                 ["Код", "Объект", "Часы", ..FactPlanHourHeaders, "Z", "Перцентиль", "Оценка"],
                 tableRows,
                 interpretationColumnIndex: 8));
-        }, "Оценка факта — По объектам", $"Проект: {projectCode}", $"Версия: {versionName}");
-    }
-
-    public async Task<byte[]> ExportFactDetailPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
-    {
-        var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
-
-        var chartItems = data.Fact.Detail
-            .Where(d => d.ZScore.HasValue)
-            .OrderByDescending(d => Math.Abs(d.ZScore!.Value))
-            .Take(20)
-            .Select(d => new ChartBarItem(
-                $"{d.CatalogCode}",
-                (double)Math.Abs(d.ZScore!.Value),
-                ReportVisualTheme.InterpretationColor(d.Interpretation)))
-            .ToList();
-        var chart = _charts.RenderHorizontalBarChart(
-            "Top-20 |Z| по позициям",
-            chartItems,
-            options: new ChartRenderOptions(YAxisLabel: "Код позиции", XAxisLabel: "|Z|"));
-
-        var tableRows = data.Fact.Detail.Select(d => (string[])
-        [
-            d.FacilityName,
-            d.CatalogCode,
-            d.CatalogName,
-            d.Quantity.ToString("N2"),
-            d.FactLaborHours?.ToString("N0") ?? "—",
-            ..FactPlanHourCells(d.OptimisticHours, d.BaseHours, d.PessimisticHours),
-            d.ZScore?.ToString("N2") ?? "—",
-            PerformancePercentileHelper.GetPercentile(d.ZScore),
-            d.Interpretation ?? "—",
-        ]);
-
-        return QuestPdfReportComposer.BuildLandscapeReport(col =>
-        {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chart, "Абсолютное отклонение Z по позициям (Top-20)"));
-            col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
-                c, "Детализация",
-                ["Объект", "Код", "Наименование", "Кол-во", "Часы", ..FactPlanHourHeaders, "Z", "Перцентиль", "Оценка"],
-                tableRows,
-                maxRows: 200,
-                interpretationColumnIndex: 10));
-        }, "Оценка факта — Детально", $"Проект: {projectCode}", $"Версия: {versionName}");
+        },
+        PdfReportKind.Fact,
+        "Оценка факта — По объектам",
+        $"Проект: {projectCode}",
+        $"Версия: {versionName}");
     }
 
     public async Task<byte[]> ExportComparePdfAsync(
@@ -339,7 +291,11 @@ public sealed class VisualReportService : IVisualReportService
                 ComposeCompareFacility(col, compare, chart, showOnlyDifferences, top);
                 col.Item().PageBreak();
                 ComposeCompareDetail(col, compare, showOnlyDifferences, top);
-            }, "Сравнение версий — Полный отчёт", $"A: {chart.VersionAName}", $"B: {chart.VersionBName}");
+            },
+            PdfReportKind.Compare,
+            "Сравнение версий — Полный отчёт",
+            $"A: {chart.VersionAName}",
+            $"B: {chart.VersionBName}");
         }
 
         if (section is CompareReportSection.Summary)
@@ -397,17 +353,24 @@ public sealed class VisualReportService : IVisualReportService
                 new ChartRenderOptions(XAxisLabel: "Дата", YAxisLabel: "Накопительно, ч"))
             : Array.Empty<byte>();
 
+        var deltaPoints = (deltaSeries?.Points ?? []).Select(p => (p.Label, p.Timestamp, p.Value)).ToList();
+        var callout = PdfInsightBuilder.BuildTrendCallout(deltaPoints);
+
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, lineChart, "Динамика фактических и плановых часов"));
+            if (callout is not null)
+                col.Item().PaddingBottom(8).Element(c => QuestPdfReportComposer.ComposeCalloutBlock(c, callout));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Динамика фактических и плановых часов", lineChart));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, columnChart, "Отклонение факта от прогноза по версиям"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Отклонение факта от прогноза по версиям", columnChart));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, areaChart, "Кривая накопления фактических часов"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Кривая накопления фактических часов", areaChart));
         },
+        PdfReportKind.Trend,
         "Трендовый анализ",
         $"Проект ID: {projectId}",
         $"Формула: {trends.Formula.DisplayName}",
+        null,
         $"Гранулярность: {trends.Granularity}");
     }
 
@@ -479,23 +442,26 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Оценка", analysis.Summary.WeightedZScoreInterpretation?.ToRussian() ?? "—"),
         };
 
+        var callouts = PdfInsightBuilder.BuildFactCallouts(factData.Fact.Performance, analysis.Summary);
+
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Text("Сводный отчёт по проекту").SemiBold().FontSize(16).FontColor(ReportVisualTheme.Primary);
-            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
-            col.Item().PaddingTop(8).Element(QuestPdfReportComposer.ComposeZScoreScaleLegend);
-            col.Item().PaddingTop(10).Text("Ключевые визуализации").SemiBold().FontSize(12);
-            col.Item().PaddingTop(6).Element(c => QuestPdfReportComposer.ComposeChartImage(c, forecastChart, "1. Прогнозирование — сценарии трудоёмкости"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
+            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeZScoreScaleLegend(c, analysis.Summary.WeightedZScore));
+            if (callouts.Count > 0)
+                col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeCalloutList(c, callouts));
+            col.Item().PaddingTop(10).Text("Ключевые визуализации").SemiBold().FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
+            col.Item().PaddingTop(6).Element(c => QuestPdfReportComposer.ComposeChartImage(c, "1. Прогнозирование — сценарии трудоёмкости", forecastChart));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, factChart, "2. Оценка факта — Z-score по направлениям"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "2. Оценка факта — Z-score по направлениям", factChart));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, compareChartPng, $"3. Сравнение {compareChart.VersionAName} / {compareChart.VersionBName}"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, $"3. Сравнение {compareChart.VersionAName} / {compareChart.VersionBName}", compareChartPng));
             col.Item().PageBreak();
-            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, trendChart, "4. Тренды — факт vs прогноз"));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "4. Тренды — факт vs прогноз", trendChart));
             if (includeAppendix)
             {
                 col.Item().PageBreak();
-                col.Item().Text("Приложение: прогноз по направлениям").SemiBold();
+                col.Item().Text("Приложение: прогноз по направлениям").SemiBold().FontColor(ReportVisualTheme.Primary);
                 col.Item().Element(c => QuestPdfReportComposer.ComposeHierarchicalTable(
                     c, "",
                     ["Направление", "База ч"],
@@ -503,9 +469,11 @@ public sealed class VisualReportService : IVisualReportService
                         .Select(r => new HierarchicalPdfRow(r.Level, [r.DisplayName, r.BaseHours?.ToString("N0") ?? "—"]))));
             }
         },
+        PdfReportKind.Combined,
         "Сводный отчёт",
         $"Проект ID: {projectId}",
-        $"План v{planVersionId} · Факт v{factVersionId} · Сравнение {compareVersionAId}/{compareVersionBId}");
+        $"План v{planVersionId} · Факт v{factVersionId} · Сравнение {compareVersionAId}/{compareVersionBId}",
+        kpis);
     }
 
     private byte[] BuildCompareSummaryPdf(
@@ -515,6 +483,7 @@ public sealed class VisualReportService : IVisualReportService
         int top) =>
         QuestPdfReportComposer.BuildLandscapeReport(
             col => ComposeCompareSummary(col, compare, chart, showOnlyDifferences, top),
+            PdfReportKind.Compare,
             "Сравнение версий — Итого",
             $"A: {chart.VersionAName}",
             $"B: {chart.VersionBName}");
@@ -547,6 +516,11 @@ public sealed class VisualReportService : IVisualReportService
             new("Версия B", chart.VersionBName),
         };
 
+        var callout = PdfInsightBuilder.BuildCompareCallout(
+            summary.Select(r => (r.Name, r.FactZDelta ?? r.PlanZDelta)),
+            chart.VersionAName,
+            chart.VersionBName);
+
         var tableRows = summary
             .Where(r => r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
                 || r.PlannedLaborHoursA.HasValue || r.PlannedLaborHoursB.HasValue
@@ -573,7 +547,9 @@ public sealed class VisualReportService : IVisualReportService
             ]);
 
         col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
-        col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, chartPng, $"Изменение {chart.Metric} между версиями"));
+        if (callout is not null)
+            col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeCalloutBlock(c, callout));
+        col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, $"Изменение {chart.Metric} между версиями", chartPng));
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "Итого IIC",
@@ -589,6 +565,7 @@ public sealed class VisualReportService : IVisualReportService
         int top) =>
         QuestPdfReportComposer.BuildLandscapeReport(
             col => ComposeCompareFacility(col, compare, chart, showOnlyDifferences, top),
+            PdfReportKind.Compare,
             "Сравнение версий — По объектам",
             $"A: {chart.VersionAName}",
             $"B: {chart.VersionBName}");
@@ -656,7 +633,7 @@ public sealed class VisualReportService : IVisualReportService
                 "—",
             ]);
 
-        col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chartPng, "Сравнение трудоёмкости по объектам"));
+        col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Сравнение трудоёмкости по объектам", chartPng));
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "По объектам",
@@ -671,7 +648,10 @@ public sealed class VisualReportService : IVisualReportService
         int top) =>
         QuestPdfReportComposer.BuildLandscapeReport(
             col => ComposeCompareDetail(col, compare, showOnlyDifferences, top),
-            "Сравнение версий — Детально");
+            PdfReportKind.Compare,
+            "Сравнение версий — Детально",
+            "Постатейное сравнение",
+            $"Позиций: {compare.Detail.Count}");
 
     private void ComposeCompareDetail(
         ColumnDescriptor col,
@@ -710,7 +690,7 @@ public sealed class VisualReportService : IVisualReportService
             d.Presence,
         ]);
 
-        col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, chartPng, "Наибольшие отклонения по позициям"));
+        col.Item().Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Наибольшие отклонения по позициям", chartPng));
         col.Item().PageBreak();
         col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
             c, "Детально",
@@ -813,12 +793,13 @@ public sealed class VisualReportService : IVisualReportService
                     treeRows));
             }
         },
+        PdfReportKind.Combined,
         "Отчет по инженерной производительности",
         $"Проект: {report.Project.Code} — {report.Project.Name}",
+        $"{(report.Plan is null ? "План: —" : $"План: {report.Plan.VersionName}")} · {(report.Fact is null ? "Факт: —" : $"Факт: {report.Fact.VersionName}")}",
+        kpis,
         $"ГИП: {report.Project.Gip ?? "—"}; заказчик: {report.Project.Customer ?? "—"}; статус: {report.Project.WorkStatus ?? "—"}",
-        $"План версий: {report.Project.PlanVersionCount}; факт версий: {report.Project.FactVersionCount}",
-        report.Plan is null ? "План (основная): —" : $"План (основная): {report.Plan.VersionName}",
-        report.Fact is null ? "Факт (основная): —" : $"Факт (основная): {report.Fact.VersionName}");
+        $"План версий: {report.Project.PlanVersionCount}; факт версий: {report.Project.FactVersionCount}");
     }
 
     private static readonly string[] FactPlanHourHeaders =

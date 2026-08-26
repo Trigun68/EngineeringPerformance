@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Stack, Typography } from '@mui/material';
+import { Alert, Box, FormControl, MenuItem, Select, Stack, Tab, Tabs, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -12,6 +12,8 @@ import {
   fetchPerformanceReport,
   type PerformanceReportDto,
 } from '../../../api/performanceReportApi';
+import type { Project } from '../../../types/project';
+import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import { usePermission } from '../../../hooks/usePermission';
@@ -19,6 +21,7 @@ import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
+import { ReportsTab } from '../../../pages/projects/reports/ReportsTab';
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
 import './report-theme.css';
@@ -29,9 +32,12 @@ import { ZScale } from './ZScale';
 
 export interface ReportPanelProps {
   projectId: number;
+  project?: Project;
+  versions?: ProjectVersion[];
+  initialVersionId?: number;
 }
 
-export function ReportPanel({ projectId }: ReportPanelProps) {
+export function ReportPanel({ projectId, project, versions, initialVersionId }: ReportPanelProps) {
   const { canRead } = usePermission('Reports');
   const [report, setReport] = useState<PerformanceReportDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,6 +45,12 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
+  const [subTab, setSubTab] = useState<'summary' | 'byVersion'>('summary');
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
+
+  useEffect(() => {
+    setSelectedVersionId((current) => current ?? initialVersionId ?? null);
+  }, [initialVersionId]);
 
   const load = useCallback(async () => {
     if (!canRead || !projectId) return;
@@ -116,6 +128,52 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
         </Alert>
       ) : null}
 
+      {project && versions && versions.length > 0 ? (
+        <Stack
+          direction="row"
+          spacing={2}
+          alignItems="center"
+          justifyContent="space-between"
+          flexWrap="wrap"
+          useFlexGap
+          sx={{ borderBottom: 1, borderColor: 'divider', mb: 1.5 }}
+        >
+          <Tabs
+            value={subTab}
+            onChange={(_, v: 'summary' | 'byVersion') => setSubTab(v)}
+            sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
+          >
+            <Tab value="summary" label="Сводный" />
+            <Tab value="byVersion" label="По версии" data-testid="report-by-version-tab" />
+          </Tabs>
+          {subTab === 'byVersion' ? (
+            <FormControl size="small" sx={{ minWidth: 260, mb: 0.5 }}>
+              <Select<number>
+                value={selectedVersionId ?? versions[0].id}
+                onChange={(e) => setSelectedVersionId(Number(e.target.value))}
+                data-testid="report-version-select"
+              >
+                {versions.map((v) => (
+                  <MenuItem key={v.id} value={v.id}>
+                    {v.versionName}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          ) : null}
+        </Stack>
+      ) : null}
+
+      {subTab === 'byVersion' && project && versions && versions.length > 0 ? (
+        <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+          <ReportsTab
+            projectId={projectId}
+            project={project}
+            versions={versions}
+            versionId={selectedVersionId ?? versions[0].id}
+          />
+        </Box>
+      ) : (
       <Box
         className={`ep-report-root${dark ? ' dark' : ''}`}
         data-testid="performance-report-panel"
@@ -195,6 +253,7 @@ export function ReportPanel({ projectId }: ReportPanelProps) {
           </div>
         ) : null}
       </Box>
+      )}
     </>
   );
 }

@@ -82,13 +82,18 @@ export interface ProjectVersionLaborRow {
   actualHours: number;
 }
 
+export interface PhysicalVolumeTotalByUnit {
+  unitName: string;
+  totalVolume: number;
+}
+
 export interface ProjectVersionAnalysisSummary {
   totalFactLaborHours: number | null;
   weightedZScore: number | null;
   weightedZScorePercentile: string;
   weightedZScoreInterpretation: string | null;
   unallocatedLaborHours: number | null;
-  physicalVolumeTotalsByUnit?: { unitName: string; totalVolume: number }[];
+  physicalVolumeTotalsByUnit: PhysicalVolumeTotalByUnit[];
 }
 
 export async function fetchPerformance(

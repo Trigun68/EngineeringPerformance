@@ -162,16 +162,6 @@ export async function exportForecastDetailExcelVisible(
   triggerBrowserDownload(blob, filename);
 }
 
-export async function exportForecastDetailPdf(
-  projectId: number,
-  versionId: number,
-): Promise<void> {
-  const { blob, filename } = await downloadBlob(
-    `/projects/${projectId}/versions/${versionId}/export/forecast-detail/pdf`,
-  );
-  triggerBrowserDownload(blob, filename);
-}
-
 export async function exportForecastDetailSummaryTable(
   projectId: number,
   versionId: number,

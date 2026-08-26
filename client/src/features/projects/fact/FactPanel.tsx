@@ -15,7 +15,7 @@ import { ACTION_LABELS } from '../../../constants/actionLabels';
 import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import type { ImportDataType } from '../../../api/importApi';
-import { exportFactDetailPdf, exportFactFacilityPdf, exportFactSummaryPdf } from '../../../api/visualReportsApi';
+import { exportFactFacilityPdf, exportFactSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import {
   exportFactDetailExcel,
@@ -241,13 +241,12 @@ export function FactPanel({
     }
   };
 
-  const handleExportDetail = async (type: 'excel' | 'pdf') => {
+  const handleExportDetail = async () => {
     if (!factVersionId) return;
     setExporting(true);
     setError(null);
     try {
-      if (type === 'excel') await exportFactDetailExcel(projectId, factVersionId);
-      else await exportFactDetailPdf(projectId, factVersionId);
+      await exportFactDetailExcel(projectId, factVersionId);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
     } finally {
@@ -582,19 +581,13 @@ export function FactPanel({
                 kind="excel"
                 disabled={!factVersionId}
                 loading={exporting}
-                onClick={() => void handleExportDetail('excel')}
+                onClick={() => void handleExportDetail()}
               />
               <ExportActionButton
                 kind="excelSelected"
                 disabled={!factVersionId || !detailGridReady}
                 loading={exporting}
                 onClick={() => void handleExportDetailVisibleExcel()}
-              />
-              <ExportActionButton
-                kind="pdf"
-                disabled={!factVersionId}
-                loading={exporting}
-                onClick={() => void handleExportDetail('pdf')}
               />
               <ExportActionButton
                 kind="excelSummary"

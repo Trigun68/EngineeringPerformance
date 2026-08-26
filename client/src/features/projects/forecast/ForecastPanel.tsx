@@ -18,7 +18,6 @@ import { deleteEquipment, deletePhysicalVolume, createEquipment, createPhysicalV
 import {
   exportForecastDetailExcel,
   exportForecastDetailExcelVisible,
-  exportForecastDetailPdf,
   exportForecastDetailSummaryTable,
   exportForecastFacilityExcel,
   exportForecastFacilityPdf,
@@ -326,16 +325,12 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
     }
   };
 
-  const handleExportDetail = async (type: 'excel' | 'pdf') => {
+  const handleExportDetail = async () => {
     if (!planVersionId) return;
     setExporting(true);
     setError(null);
     try {
-      if (type === 'excel') {
-        await exportForecastDetailExcel(projectId, planVersionId);
-      } else {
-        await exportForecastDetailPdf(projectId, planVersionId);
-      }
+      await exportForecastDetailExcel(projectId, planVersionId);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
     } finally {
@@ -803,20 +798,13 @@ export function ForecastPanel({ projectId, projectName = '', projectCode = '', w
                 kind="excel"
                 disabled={!planVersionId}
                 loading={exporting}
-                onClick={() => void handleExportDetail('excel')}
+                onClick={() => void handleExportDetail()}
               />
               <ExportActionButton
                 kind="excelSelected"
                 disabled={!planVersionId || !detailGridReady}
                 loading={exporting}
                 onClick={() => void handleExportDetailVisibleExcel()}
-              />
-              <ExportActionButton
-                kind="pdf"
-                disabled={!planVersionId}
-                loading={exporting}
-                onClick={() => void handleExportDetail('pdf')}
-                data-testid="forecast-detail-export-pdf"
               />
               <ExportActionButton
                 kind="excelSummary"

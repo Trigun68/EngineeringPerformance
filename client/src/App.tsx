@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
@@ -45,6 +45,8 @@ const AccessRightsPage = lazy(() =>
 const SystemSettingsPage = lazy(() =>
   import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
 );
+// Дизайн-превью PDF-отчётов — доступно без авторизации и без AppLayout.
+const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -118,8 +120,16 @@ export default function App() {
   return (
     <BrowserRouter>
       <>
-        {user ? (
         <Routes>
+        <Route
+          path="/dev/pdf-mockups"
+          element={(
+            <Suspense fallback={null}>
+              <PdfDesignMockups />
+            </Suspense>
+          )}
+        />
+        {user ? (
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -239,10 +249,10 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
-        </Routes>
         ) : (
-          <LoginPage />
+          <Route path="*" element={<LoginPage />} />
         )}
+        </Routes>
         <MfaSetupDialog
           open={Boolean(user && requiresMfaSetup)}
           onCompleted={completeMfaSetup}
