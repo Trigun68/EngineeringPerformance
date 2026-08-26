@@ -133,10 +133,21 @@ export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
                       alignItems: 'center',
                       justifyContent: 'center',
                       width: `${((zone.to - zone.from) / (MAX - MIN)) * 100}%`,
+                      minWidth: 0,
+                      overflow: 'hidden',
                       bgcolor: zone.color,
                     }}
                   >
-                    <Typography sx={{ fontSize: 11, fontWeight: 500, color: '#FFFFFF', px: 0.5 }}>
+                    <Typography
+                      noWrap
+                      sx={{
+                        display: { xs: 'none', sm: 'block' },
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: '#FFFFFF',
+                        px: 0.5,
+                      }}
+                    >
                       {zone.label}
                     </Typography>
                   </Box>
@@ -150,6 +161,22 @@ export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
               >
                 {['−1.5', '−1.0', '−0.5', '0', '+0.5', '+1.0', '+1.5'].map((tick) => (
                   <span key={tick}>{tick}</span>
+                ))}
+              </Stack>
+
+              {/* На узких экранах полосы зон слишком тонкие для подписей — дублируем их обёртываемой легендой. */}
+              <Stack
+                direction="row"
+                spacing={1.5}
+                useFlexGap
+                flexWrap="wrap"
+                sx={{ display: { xs: 'flex', sm: 'none' }, mt: 1 }}
+              >
+                {ZONES.map((zone) => (
+                  <Stack key={zone.label} direction="row" spacing={0.5} alignItems="center">
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: zone.color, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: 11, color: wpColors.muted }}>{zone.label}</Typography>
+                  </Stack>
                 ))}
               </Stack>
             </Box>
