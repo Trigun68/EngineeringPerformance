@@ -4,6 +4,7 @@ import { Alert, Box, CircularProgress, Divider, Stack, Tab, Tabs, Typography } f
 import {
   fetchForecast,
   fetchPerformance,
+  fetchProjectReportSummary,
   fetchVersionAnalysis,
   type PerformanceRow,
 } from '../../../api/analyticsApi';
@@ -19,7 +20,7 @@ import {
   type VersionTrendPoint,
 } from './reportCalc';
 import { ReportHeader } from './components/ReportHeader';
-import { SummaryCards } from './components/SummaryCards';
+import { PlanFactSummary } from './components/PlanFactSummary';
 import { ZScale } from './components/ZScale';
 import { DirectionBars } from './components/DirectionBars';
 import { PerformanceTree } from './components/PerformanceTree';
@@ -51,11 +52,12 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   const query = useQuery({
     queryKey: ['reports-tab', projectId, versionId, nonArchivedVersions.map((v) => v.id).join(',')],
     queryFn: async () => {
-      const [performance, analysis, forecast, characteristics, trendAnalyses] = await Promise.all([
+      const [performance, analysis, forecast, characteristics, reportSummary, trendAnalyses] = await Promise.all([
         fetchPerformance(projectId, versionId),
         fetchVersionAnalysis(projectId, versionId),
         fetchForecast(projectId, versionId),
         fetchProjectCharacteristics(projectId).catch(() => []),
+        fetchProjectReportSummary(projectId),
         Promise.all(
           nonArchivedVersions.map(async (v) => {
             try {
@@ -68,15 +70,20 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
         ),
       ]);
 
-      const trendPoints: VersionTrendPoint[] = trendAnalyses.map(({ version, summary }) => ({
-        versionId: version.id,
-        versionName: version.versionName,
-        date: version.createdAt ? new Date(version.createdAt).toLocaleDateString('ru-RU') : null,
-        weightedZScore: summary?.weightedZScore ?? null,
-        totalHours: summary?.totalFactLaborHours ?? null,
-      }));
+      const trendPoints: VersionTrendPoint[] = trendAnalyses.map(({ version, summary }) => {
+        const createdAt = version.createdAt ? new Date(version.createdAt) : null;
+        return {
+          versionId: version.id,
+          versionName: version.versionName,
+          direction: version.direction,
+          date: createdAt ? createdAt.toLocaleDateString('ru-RU') : null,
+          sortDate: createdAt ? createdAt.getTime() : 0,
+          weightedZScore: summary?.weightedZScore ?? null,
+          totalHours: summary?.totalFactLaborHours ?? null,
+        };
+      });
 
-      return { performance, analysis, forecast, characteristics, trendPoints };
+      return { performance, analysis, forecast, characteristics, reportSummary, trendPoints };
     },
     staleTime: 30_000,
   });
@@ -109,9 +116,7 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   );
 
   const trendPoints = query.data?.trendPoints ?? [];
-  const currentIndex = trendPoints.findIndex((p) => p.versionId === versionId);
-  const previousZScore =
-    currentIndex > 0 ? trendPoints[currentIndex - 1].weightedZScore : null;
+  const reportSummary = query.data?.reportSummary;
 
   if (!selectedVersion) {
     return <Alert severity="warning">Версия анализа не найдена.</Alert>;
@@ -129,7 +134,7 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
     return <Alert severity="error">{getApiErrorMessage(query.error, 'Не удалось загрузить отчёт.')}</Alert>;
   }
 
-  if (!query.data || !summary) {
+  if (!query.data || !summary || !reportSummary) {
     return null;
   }
 
@@ -137,9 +142,13 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
     <Stack spacing={3}>
       <ReportHeader project={project} version={selectedVersion} />
 
-      <SummaryCards summary={summary} previousZScore={previousZScore} accuracyScore={accuracyScore} />
+      <PlanFactSummary summary={reportSummary} accuracyScore={accuracyScore} />
 
-      <ZScale zScore={summary.weightedZScore} percentile={summary.weightedZScorePercentile} />
+      <ZScale
+        planZScore={reportSummary.planWeightedZScore}
+        factZScore={reportSummary.factWeightedZScore}
+        percentile={reportSummary.factPercentile}
+      />
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
         <DirectionBars

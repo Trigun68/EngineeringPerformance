@@ -1,5 +1,5 @@
 import { Box, Card, CardContent, Grid, Stack, Typography } from '@mui/material';
-import { fmtSigned, interpretationColor, INTERPRETATION_COLOR } from '../reportCalc';
+import { ACCENT_FACT, ACCENT_PLAN, INTERPRETATION_COLOR } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
 const MIN = -1.75;
@@ -18,12 +18,91 @@ function pct(z: number) {
   return ((clamped - MIN) / (MAX - MIN)) * 100;
 }
 
-interface ZScaleProps {
-  zScore: number | null;
-  percentile: string;
+/**
+ * Строка-дорожка с маркером на шкале Z. План и факт рисуются на раздельных дорожках
+ * (а не общим слоем над шкалой), чтобы подписи значений не пересекались, даже когда
+ * оба Z близки друг к другу.
+ */
+function MarkerTrack({
+  z,
+  rowLabel,
+  color,
+  emphasized,
+}: {
+  z: number | null;
+  rowLabel: string;
+  color: string;
+  emphasized?: boolean;
+}) {
+  const dim = emphasized ? 20 : 13;
+  return (
+    <Stack direction="row" alignItems="center" spacing={1.2} sx={{ height: emphasized ? 30 : 22 }}>
+      <Box sx={{ width: 46, textAlign: 'right', flexShrink: 0 }}>
+        <Typography
+          sx={{
+            fontFamily: 'inherit',
+            fontSize: emphasized ? 11.5 : 10.5,
+            fontWeight: emphasized ? 800 : 700,
+            color: emphasized ? color : wpColors.muted,
+          }}
+        >
+          {rowLabel}
+        </Typography>
+      </Box>
+      <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
+        {z !== null && (
+          <>
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${pct(z)}%`,
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: dim,
+                height: dim,
+                borderRadius: '50%',
+                bgcolor: color,
+                border: emphasized ? '3px solid #FFFFFF' : '2px solid #FFFFFF',
+                boxShadow: emphasized
+                  ? `0 0 0 2.5px ${color}, 0 3px 8px rgba(0,0,0,0.28)`
+                  : `0 0 0 1.5px ${color}`,
+                zIndex: emphasized ? 2 : 1,
+              }}
+            />
+            <Box
+              sx={{
+                position: 'absolute',
+                left: `${pct(z)}%`,
+                top: '50%',
+                transform: emphasized ? 'translate(14px, -50%)' : 'translate(11px, -50%)',
+                bgcolor: emphasized ? color : 'transparent',
+                color: emphasized ? '#FFFFFF' : wpColors.muted,
+                px: emphasized ? 0.9 : 0,
+                py: emphasized ? 0.15 : 0,
+                borderRadius: '6px',
+                fontFamily: 'monospace',
+                fontSize: emphasized ? 11 : 10,
+                fontWeight: emphasized ? 800 : 600,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {z > 0 ? '+' : ''}
+              {z.toFixed(2)}
+            </Box>
+          </>
+        )}
+      </Box>
+    </Stack>
+  );
 }
 
-export function ZScale({ zScore, percentile }: ZScaleProps) {
+interface ZScaleProps {
+  planZScore: number | null;
+  factZScore: number | null;
+  percentile: string | null;
+}
+
+export function ZScale({ planZScore, factZScore, percentile }: ZScaleProps) {
   return (
     <Card variant="outlined">
       <CardContent>
@@ -38,9 +117,14 @@ export function ZScale({ zScore, percentile }: ZScaleProps) {
             </Typography>
           </Stack>
 
-          <Box sx={{ pt: 3 }}>
-            <Box sx={{ position: 'relative' }}>
-              <Box sx={{ display: 'flex', height: 32, width: '100%', overflow: 'hidden', borderRadius: 1 }}>
+          <Box>
+            <Stack spacing={0.5} sx={{ mb: 1 }}>
+              <MarkerTrack z={planZScore} rowLabel="План" color={ACCENT_PLAN} />
+              <MarkerTrack z={factZScore} rowLabel="Факт" color={ACCENT_FACT} emphasized />
+            </Stack>
+
+            <Box sx={{ pl: '58px' }}>
+              <Box sx={{ display: 'flex', height: 28, width: '100%', overflow: 'hidden', borderRadius: 1 }}>
                 {ZONES.map((zone) => (
                   <Box
                     key={zone.label}
@@ -59,36 +143,6 @@ export function ZScale({ zScore, percentile }: ZScaleProps) {
                 ))}
               </Box>
 
-              {zScore !== null && (
-                <Box
-                  sx={{
-                    position: 'absolute',
-                    top: -28,
-                    left: `${pct(zScore)}%`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    transform: 'translateX(-50%)',
-                  }}
-                >
-                  <Box
-                    sx={{
-                      borderRadius: 0.5,
-                      px: 0.75,
-                      py: 0.25,
-                      fontFamily: 'monospace',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: '#FFFFFF',
-                      bgcolor: interpretationColor(zScore),
-                    }}
-                  >
-                    {fmtSigned(zScore)}
-                  </Box>
-                  <Box sx={{ width: 2, height: 36, bgcolor: interpretationColor(zScore) }} />
-                </Box>
-              )}
-
               <Stack
                 direction="row"
                 justifyContent="space-between"
@@ -104,10 +158,10 @@ export function ZScale({ zScore, percentile }: ZScaleProps) {
           <Grid container spacing={2} sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
             <Grid item xs={6} sm={3}>
               <Typography variant="caption" color="text.secondary" display="block">
-                Перцентиль
+                Перцентиль (факт)
               </Typography>
               <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
-                {percentile}
+                {percentile ?? 'Н/Д'}
               </Typography>
             </Grid>
             <Grid item xs={6} sm={3}>

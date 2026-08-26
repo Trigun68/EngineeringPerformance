@@ -37,9 +37,9 @@ export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
 export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
   Excellent: '#1E8449',
   Good: '#27AE60',
-  Satisfactory: '#F1C40F',
+  Satisfactory: '#D9A100',
   NeedsAttention: '#E67E22',
-  Critical: '#E74C3C',
+  Critical: '#B5544C',
 };
 
 export const MUTED_COLOR = '#95A5A6';
@@ -173,7 +173,9 @@ export function keyDisciplines(leaves: PerformanceTreeRow[], top = 3): Performan
 export interface VersionTrendPoint {
   versionId: number;
   versionName: string;
+  direction: number;
   date: string | null;
+  sortDate: number;
   weightedZScore: number | null;
   totalHours: number | null;
 }
@@ -183,3 +185,14 @@ export const DIRECTION_LABEL: Record<number, string> = {
   2: 'Версия факта',
   3: 'Прогноз',
 };
+
+/** Направления версии — паритет backend enum AnalysisDirection. */
+export const DIRECTION_PLAN = 1;
+export const DIRECTION_FACT = 2;
+
+/**
+ * Акцентные цвета для различения плана и факта на шкале Z и графике динамики.
+ * Согласованы с общей палитрой приложения (wpColors: accent, heading).
+ */
+export const ACCENT_PLAN = '#3498DB';
+export const ACCENT_FACT = '#2C3E50';
