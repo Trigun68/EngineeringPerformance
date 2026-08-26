@@ -57,18 +57,14 @@ public static class QuestPdfReportComposer
     public static void ComposeCoverPage(IContainer container, PdfCoverInfo cover, DateTime generatedAtUtc)
     {
         container
-            .BackgroundLinearGradient(135, new[]
-            {
-                Color.FromHex(ReportVisualTheme.CoverGradientTop),
-                Color.FromHex(ReportVisualTheme.CoverGradientBottom),
-            })
+            .Background(ReportVisualTheme.CoverGradientTop)
             .Padding(40)
             .Column(col =>
             {
                 col.Item().Row(row =>
                 {
                     row.ConstantItem(52).Height(52)
-                        .Background(ReportVisualTheme.WatermarkGray).CornerRadius(26)
+                        .Background(ReportVisualTheme.WatermarkGray)
                         .AlignCenter().AlignMiddle()
                         .Text("EP").Bold().FontSize(18).FontColor(Colors.White);
                     row.RelativeItem();
@@ -97,7 +93,6 @@ public static class QuestPdfReportComposer
     {
         container
             .Background(ReportVisualTheme.ReportKindColor(kind))
-            .CornerRadius(3)
             .PaddingHorizontal(9).PaddingVertical(5)
             .AlignCenter()
             .Text(ReportVisualTheme.ReportKindLabel(kind)).FontSize(7.5f).SemiBold().FontColor(Colors.White);
@@ -333,13 +328,13 @@ public static class QuestPdfReportComposer
         ("Критично", "Z > 1", ReportVisualTheme.Negative, 1m),
     ];
 
-    /// <summary>Шкала Excellent…Critical (±1σ). Если передан <paramref name="currentZ"/> — под шкалой рисуется маркер положения.</summary>
+    /// <summary>��кала Excellent…Critical (±1σ). Если передан <paramref name="currentZ"/> — под шкалой рисуется маркер положения.</summary>
     public static void ComposeZScoreScaleLegend(IContainer container, decimal? currentZ = null)
     {
         container.Column(col =>
         {
             col.Spacing(3);
-            col.Item().Text("Шкала оценки (Z-score)").SemiBold().FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
+            col.Item().Text("Шкал�� оценки (Z-score)").SemiBold().FontSize(ReportVisualTheme.FontH2).FontColor(ReportVisualTheme.Primary);
             col.Item().Row(row =>
             {
                 row.Spacing(2);
@@ -511,7 +506,7 @@ public static class QuestPdfReportComposer
                 for (var rowIndex = 0; rowIndex < data.Count; rowIndex++)
                 {
                     var row = data[rowIndex];
-                    var rowBg = rowIndex % 2 == 1 ? ReportVisualTheme.SectionBg : Colors.White;
+                    var rowBg = rowIndex % 2 == 1 ? ReportVisualTheme.SectionBg : (string)Colors.White;
                     for (var i = 0; i < headers.Length; i++)
                     {
                         var raw = i < row.Cells.Length ? row.Cells[i] ?? "—" : "—";
@@ -556,7 +551,7 @@ public static class QuestPdfReportComposer
 
     private static void ComposeInterpretationChip(IContainer container, string text, string color)
     {
-        container.AlignLeft().Background(color).CornerRadius(3)
+        container.AlignLeft().Background(color)
             .PaddingHorizontal(6).PaddingVertical(2)
             .Text(text).FontSize(7.5f).SemiBold().FontColor(Colors.White);
     }
