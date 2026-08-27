@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton } from './helpers';
 
 async function openFirstProject(page: import('@playwright/test').Page) {
   await page.goto('/projects');
@@ -17,17 +17,23 @@ test.describe('PDF visual reports export', () => {
     await openFirstProject(page);
     await page.getByRole('tab', { name: 'Сравнение версий' }).click();
     await expect(page.getByRole('button', { name: /Версия А/ })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible({ timeout: 15_000 });
+    await expect(actionButton(page, 'exportPdf')).toBeVisible({ timeout: 15_000 });
   });
 
-  test('reports tab has combined PDF button', async ({ page }) => {
+  test('report tab has PDF export for performance report', async ({ page }) => {
     await openFirstProject(page);
-    await page.getByRole('tab', { name: 'Отчёты' }).click();
-    await expect(page.getByRole('button', { name: 'Скачать сводный PDF' })).toBeVisible();
+    await page.getByRole('tab', { name: 'Отчет' }).click();
+    // Дефолтная под-вкладка «Сводный вер 1» — новый дизайн со своей кнопкой PDF в шапке.
+    await expect(page.getByTestId('report-export-pdf')).toBeVisible({ timeout: 30_000 });
+    // Прежняя сводная (откат) — под-вкладка «Сводный вер 2», там своя кнопка PDF.
+    await page.getByTestId('report-legacy-tab').click();
+    await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(actionButton(page, 'exportPdf')).toBeVisible();
   });
 
-  test('trends page has PDF export button', async ({ page }) => {
-    await page.goto('/analytics/trends');
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toBeVisible({ timeout: 15_000 });
+  test('analytics page shell is reachable (charts deferred)', async ({ page }) => {
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('analytics-main-tabs')).toBeVisible();
   });
 });

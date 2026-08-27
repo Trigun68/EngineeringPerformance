@@ -13,10 +13,11 @@ export interface Project {
   workStatus?: string | null;
   workStart?: string | null;
   program?: string | null;
-  versionCount: number;
+  planVersionCount: number;
+  factVersionCount: number;
   isArchived?: boolean;
 }
 
-export type ProjectFormData = Omit<Project, 'id' | 'versionCount'> & {
+export type ProjectFormData = Omit<Project, 'id' | 'planVersionCount' | 'factVersionCount'> & {
   id?: number;
 };

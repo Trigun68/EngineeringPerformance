@@ -1,45 +1,119 @@
 #!/usr/bin/env bash
 # Smoke-проверка latency ключевых endpoint после деплоя.
+#
+# Каждый endpoint измеряется дважды: cold (первый вызов) и warm (повтор из кэша).
+# Бюджеты задаются в мс через переменные окружения, например:
+#   BUDGET_PAGE_DATA_COLD=6000 ./scripts/perf-smoke.sh http://localhost:8081
+# PERF_STRICT=0 — превышение бюджета печатается как WARN и не роняет прогон.
 set -euo pipefail
 
 BASE_URL="${1:-http://localhost:8081}"
 API="${BASE_URL}/api"
+PERF_STRICT="${PERF_STRICT:-1}"
 
-echo "=== Perf smoke: ${BASE_URL} ==="
+# Бюджеты (мс). Cold — холодный расчёт, warm — повтор (ожидается кэш, ISS-018).
+BUDGET_LOGIN="${BUDGET_LOGIN:-3000}"
+BUDGET_PROJECTS="${BUDGET_PROJECTS:-2000}"
+BUDGET_DICTIONARIES="${BUDGET_DICTIONARIES:-3000}"
+BUDGET_AUDIT="${BUDGET_AUDIT:-2000}"
+BUDGET_VERSIONS="${BUDGET_VERSIONS:-1500}"
+BUDGET_PERFORMANCE="${BUDGET_PERFORMANCE:-8000}"
+BUDGET_PAGE_DATA_COLD="${BUDGET_PAGE_DATA_COLD:-10000}"
+BUDGET_PAGE_DATA_WARM="${BUDGET_PAGE_DATA_WARM:-4000}"
+BUDGET_REPORT_COLD="${BUDGET_REPORT_COLD:-10000}"
+BUDGET_REPORT_WARM="${BUDGET_REPORT_WARM:-2000}"
+BUDGET_EXPORT="${BUDGET_EXPORT:-15000}"
+BUDGET_COMPARE_COLD="${BUDGET_COMPARE_COLD:-60000}"
+BUDGET_COMPARE_WARM="${BUDGET_COMPARE_WARM:-8000}"
+BUDGET_COMPARE_CHART="${BUDGET_COMPARE_CHART:-5000}"
+
+# Объём распакованного ответа page-data (МБ). Гриды «Детально» упакованы колоночно (ISS-019):
+# распаковка формата вернула бы ~48 МБ, поэтому регрессия видна по размеру, а не по времени.
+BUDGET_PAGE_DATA_MB="${BUDGET_PAGE_DATA_MB:-12}"
+
+echo "=== Perf smoke: ${BASE_URL} (strict=${PERF_STRICT}) ==="
 
 COOKIE_JAR=$(mktemp)
 trap 'rm -f "$COOKIE_JAR"' EXIT
 
-http_code=$(curl -s -o /dev/null -w "%{http_code}" -c "$COOKIE_JAR" -X POST "${API}/auth/login" \
+failures=0
+warnings=0
+
+login_metrics=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" -c "$COOKIE_JAR" -X POST "${API}/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"admin"}')
+login_code=$(echo "$login_metrics" | awk '{print $1}')
+login_ms=$(echo "$login_metrics" | awk '{printf "%.0f", $2 * 1000}')
 
-if [[ "$http_code" != "200" ]]; then
-  echo "FAIL login HTTP $http_code"
+if [[ "$login_code" != "200" ]]; then
+  echo "FAIL login HTTP $login_code"
   exit 1
 fi
 
-CURL_AUTH=(-b "$COOKIE_JAR")
+# --compressed: меряем как браузер (nginx отдаёт JSON и бандлы в gzip).
+CURL_AUTH=(-b "$COOKIE_JAR" --compressed)
+
+# Превышение бюджета: FAIL при PERF_STRICT=1, иначе WARN.
+check_budget() {
+  local label="$1" elapsed_ms="$2" budget_ms="$3"
+  if (( elapsed_ms <= budget_ms )); then
+    return 0
+  fi
+  if [[ "$PERF_STRICT" == "1" ]]; then
+    echo "    FAIL ${label}: ${elapsed_ms}ms > бюджет ${budget_ms}ms"
+    failures=$((failures + 1))
+  else
+    echo "    WARN ${label}: ${elapsed_ms}ms > бюджет ${budget_ms}ms"
+    warnings=$((warnings + 1))
+  fi
+}
 
 time_curl() {
-  local label="$1"
-  local url="$2"
-  local code elapsed_ms
-  local metrics
+  local label="$1" url="$2" budget="$3"
+  local metrics code elapsed_ms
   metrics=$(curl -s -o /dev/null -w "%{http_code} %{time_total}" "${CURL_AUTH[@]}" "$url")
   code=$(echo "$metrics" | awk '{print $1}')
   elapsed_ms=$(echo "$metrics" | awk '{printf "%.0f", $2 * 1000}')
-  echo "  ${label}: HTTP ${code}, ${elapsed_ms}ms"
+  echo "  ${label}: HTTP ${code}, ${elapsed_ms}ms (бюджет ${budget}ms)"
   if [[ "$code" != "200" && "$code" != "204" ]]; then
-    echo "FAIL ${label}"
-    exit 1
+    echo "    FAIL ${label}: HTTP ${code}"
+    failures=$((failures + 1))
+    return 0
+  fi
+  check_budget "$label" "$elapsed_ms" "$budget"
+}
+
+# Cold + warm: второй вызов должен попасть в кэш аналитики (ISS-018).
+time_curl_cached() {
+  local label="$1" url="$2" cold_budget="$3" warm_budget="$4"
+  time_curl "${label} (cold)" "$url" "$cold_budget"
+  time_curl "${label} (warm)" "$url" "$warm_budget"
+}
+
+# Размер ответа без сжатия: сжатие маскирует раздутый payload, а разбирать его всё равно клиенту.
+check_payload_size() {
+  local label="$1" url="$2" budget_mb="$3"
+  local bytes size_mb
+  bytes=$(curl -s -o /dev/null -w "%{size_download}" -b "$COOKIE_JAR" "$url")
+  size_mb=$(awk -v b="$bytes" 'BEGIN { printf "%.2f", b / 1048576 }')
+  echo "  ${label} размер: ${size_mb} МБ (бюджет ${budget_mb} МБ)"
+  if awk -v s="$size_mb" -v b="$budget_mb" 'BEGIN { exit !(s > b) }'; then
+    if [[ "$PERF_STRICT" == "1" ]]; then
+      echo "    FAIL ${label}: ${size_mb} МБ > бюджет ${budget_mb} МБ"
+      failures=$((failures + 1))
+    else
+      echo "    WARN ${label}: ${size_mb} МБ > бюджет ${budget_mb} МБ"
+      warnings=$((warnings + 1))
+    fi
   fi
 }
 
 echo "Endpoints:"
-time_curl "projects" "${API}/projects"
-time_curl "dictionaries" "${API}/dictionaries/all"
-time_curl "audit" "${API}/audit/user-actions?take=50"
+echo "  login: HTTP ${login_code}, ${login_ms}ms (бюджет ${BUDGET_LOGIN}ms)"
+check_budget "login" "$login_ms" "$BUDGET_LOGIN"
+time_curl "projects" "${API}/projects" "$BUDGET_PROJECTS"
+time_curl "dictionaries" "${API}/dictionaries/all" "$BUDGET_DICTIONARIES"
+time_curl "audit" "${API}/audit/user-actions?take=50" "$BUDGET_AUDIT"
 
 project_id=$(curl -s "${CURL_AUTH[@]}" "${API}/projects" | python3 -c "
 import sys, json
@@ -48,16 +122,55 @@ print(data[0]['id'] if data else '')
 " 2>/dev/null || true)
 
 if [[ -n "$project_id" ]]; then
-  time_curl "versions" "${API}/projects/${project_id}/versions"
+  time_curl "versions" "${API}/projects/${project_id}/versions" "$BUDGET_VERSIONS"
   version_id=$(curl -s "${CURL_AUTH[@]}" "${API}/projects/${project_id}/versions" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 print(data[0]['id'] if data else '')
 " 2>/dev/null || true)
   if [[ -n "$version_id" ]]; then
-    time_curl "performance" "${API}/projects/${project_id}/versions/${version_id}/performance"
-    time_curl "analysis-export" "${API}/projects/${project_id}/versions/${version_id}/export/analysis.xlsx"
+    time_curl "performance" "${API}/projects/${project_id}/versions/${version_id}/performance" "$BUDGET_PERFORMANCE"
+    time_curl_cached "page-data" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data" \
+      "$BUDGET_PAGE_DATA_COLD" "$BUDGET_PAGE_DATA_WARM"
+    check_payload_size "page-data" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data" "$BUDGET_PAGE_DATA_MB"
+    time_curl_cached "page-data-detail" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data/detail" \
+      "$BUDGET_PAGE_DATA_COLD" "$BUDGET_PAGE_DATA_WARM"
+    check_payload_size "page-data-detail" \
+      "${API}/projects/${project_id}/versions/${version_id}/page-data/detail" "$BUDGET_PAGE_DATA_MB"
+    time_curl_cached "performance-report" \
+      "${API}/projects/${project_id}/performance-report" \
+      "$BUDGET_REPORT_COLD" "$BUDGET_REPORT_WARM"
+    time_curl "analysis-export" \
+      "${API}/projects/${project_id}/versions/${version_id}/export/analysis.xlsx" "$BUDGET_EXPORT"
+    version_b_id=$(curl -s "${CURL_AUTH[@]}" "${API}/projects/${project_id}/versions" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+print(data[1]['id'] if len(data) > 1 else '')
+" 2>/dev/null || true)
+    if [[ -n "$version_b_id" ]]; then
+      time_curl_cached "compare" \
+        "${API}/projects/${project_id}/compare?versionA=${version_id}&versionB=${version_b_id}" \
+        "$BUDGET_COMPARE_COLD" "$BUDGET_COMPARE_WARM"
+      time_curl "compare-chart" \
+        "${API}/projects/${project_id}/compare/chart?versionA=${version_id}&versionB=${version_b_id}&level=iic&metric=zScore&top=20" \
+        "$BUDGET_COMPARE_CHART"
+      time_curl "compare-detail" \
+        "${API}/projects/${project_id}/compare/detail?versionA=${version_id}&versionB=${version_b_id}" \
+        "$BUDGET_COMPARE_WARM"
+    fi
   fi
 fi
 
-echo "=== OK ==="
+if (( failures > 0 )); then
+  echo "=== FAIL: превышено бюджетов/ошибок — ${failures} ==="
+  exit 1
+fi
+
+if (( warnings > 0 )); then
+  echo "=== OK с предупреждениями: ${warnings} ==="
+else
+  echo "=== OK ==="
+fi

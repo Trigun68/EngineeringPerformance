@@ -11,7 +11,9 @@ public sealed record ProjectVersionPlanningParameterDto(
     decimal ZPessimistic,
     decimal ZBase,
     decimal ZOptimistic,
-    decimal? ZActual);
+    decimal? ZActual,
+    /// <summary>Вес для средневзвешенного rollup Z: сумма LaborIntensityBase по классификатору.</summary>
+    decimal LaborHoursWeight = 0m);
 
 public sealed record SaveProjectVersionPlanningParametersRequest(
     IReadOnlyList<ProjectVersionPlanningParameterWriteItem> Items);

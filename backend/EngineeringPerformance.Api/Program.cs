@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using EngineeringPerformance.Api.Auth;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
 using EngineeringPerformance.Api.Middleware;
@@ -14,6 +15,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Prometheus;
 using Serilog;
 using StackExchange.Redis;
 using CorsOptions = EngineeringPerformance.Api.Configuration.CorsOptions;
@@ -37,6 +39,7 @@ try
         {
             options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         });
+    builder.Services.AddScoped<AuthCookieHelper>();
 
     // FluentValidation: авто-регистрация валидаторов из Assembly (S1-01)
     builder.Services.AddFluentValidationAutoValidation();
@@ -88,7 +91,65 @@ try
     });
 
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(options =>
+    {
+        options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+        {
+            Title = "Engineering Performance API",
+            Version = "v1",
+            Description = "HTTP API for SPA and external integration modules. Authenticate via POST /api/auth/login and send Authorization: Bearer.",
+        });
+        options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
+            Name = "Authorization",
+            In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+            Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+        });
+        options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+        {
+            {
+                new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+                {
+                    Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                    {
+                        Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                        Id = "Bearer",
+                    },
+                },
+                Array.Empty<string>()
+            },
+        });
+        options.TagActionsBy(api =>
+        {
+            var controller = api.ActionDescriptor.RouteValues.TryGetValue("controller", out var name)
+                ? name
+                : "Other";
+            return [controller ?? "Other"];
+        });
+        options.CustomOperationIds(api =>
+        {
+            api.ActionDescriptor.RouteValues.TryGetValue("controller", out var controller);
+            api.ActionDescriptor.RouteValues.TryGetValue("action", out var action);
+            return $"{controller}_{action}";
+        });
+        // IFormFile + [FromForm] requires explicit binary mapping for Swashbuckle
+        options.MapType<IFormFile>(() => new Microsoft.OpenApi.Models.OpenApiSchema
+        {
+            Type = "string",
+            Format = "binary",
+        });
+        options.OperationFilter<EngineeringPerformance.Api.Swagger.FileUploadOperationFilter>();
+
+        var apiXml = Path.Combine(AppContext.BaseDirectory, "EngineeringPerformance.Api.xml");
+        if (File.Exists(apiXml))
+            options.IncludeXmlComments(apiXml, includeControllerXmlComments: true);
+        var appXml = Path.Combine(AppContext.BaseDirectory, "EngineeringPerformance.Application.xml");
+        if (File.Exists(appXml))
+            options.IncludeXmlComments(appXml);
+    });
 
     // Health checks (конкретные чеки добавляются в AddInfrastructure)
     builder.Services.AddHealthChecks();
@@ -138,6 +199,18 @@ builder.Services.AddRateLimiter(options =>
         limiter.PermitLimit = 10;
         limiter.QueueLimit = 0;
     });
+    options.AddFixedWindowLimiter("mfa", limiter =>
+    {
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.PermitLimit = 10;
+        limiter.QueueLimit = 0;
+    });
+    options.AddFixedWindowLimiter("export", limiter =>
+    {
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.PermitLimit = 5;
+        limiter.QueueLimit = 0;
+    });
     options.OnRejected = async (context, token) =>
     {
         context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -154,15 +227,21 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+var swaggerEnabled = app.Environment.IsDevelopment()
+    || string.Equals(app.Configuration["Swagger:Enabled"], "true", StringComparison.OrdinalIgnoreCase);
+if (swaggerEnabled)
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Engineering Performance API v1");
+    });
 }
 
 app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RequestMetricsMiddleware>();
+app.UseMiddleware<SqlProfilingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors();
 app.UseRateLimiter();
@@ -174,6 +253,8 @@ app.MapControllers();
 
 // Health check endpoint для Redis и других зависимостей (доступен без аутентификации)
 app.MapHealthChecks("/api/health").AllowAnonymous();
+app.MapHealthChecks("/health").AllowAnonymous();
+app.MapMetrics("/metrics").AllowAnonymous();
 
 app.Run();
 }

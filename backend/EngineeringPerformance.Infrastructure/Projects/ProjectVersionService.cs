@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Projects;
+using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -12,15 +13,21 @@ public sealed class ProjectVersionService : IProjectVersionService
     private readonly AppDbContext _context;
     private readonly IProjectVersionDeepCopyService _deepCopy;
     private readonly IProjectVersionPlanningParameterService _planningParameters;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IProjectAnalyticsCache _analyticsCache;
 
     public ProjectVersionService(
         AppDbContext context,
         IProjectVersionDeepCopyService deepCopy,
-        IProjectVersionPlanningParameterService planningParameters)
+        IProjectVersionPlanningParameterService planningParameters,
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IProjectAnalyticsCache analyticsCache)
     {
         _context = context;
         _deepCopy = deepCopy;
         _planningParameters = planningParameters;
+        _recalcOrchestrator = recalcOrchestrator;
+        _analyticsCache = analyticsCache;
     }
 
     public async Task<IReadOnlyList<ProjectVersionDto>> ListAsync(int projectId, CancellationToken cancellationToken = default)
@@ -45,6 +52,16 @@ public sealed class ProjectVersionService : IProjectVersionService
         await ValidatePhysicalVolumeTypeAsync(request.PhysicalVolumeTypeId, cancellationToken);
 
         var asOf = NormalizeAsOfDate(request.AsOfDate) ?? DateTime.UtcNow;
+        var hasPeers = await _context.ProjectAnalysisVersions.AsNoTracking()
+            .AnyAsync(
+                v => v.ProjectId == projectId
+                     && v.Direction == request.Direction
+                     && !v.IsArchived,
+                cancellationToken);
+
+        // Первая версия направления — всегда основная; иначе только по явному запросу.
+        var makePrimary = !hasPeers || request.IsPrimary == true;
+
         var entity = new ProjectAnalysisVersion
         {
             ProjectId = projectId,
@@ -54,8 +71,13 @@ public sealed class ProjectVersionService : IProjectVersionService
             Direction = request.Direction,
             PhysicalVolumeTypeId = request.PhysicalVolumeTypeId,
             PlanningScenario = request.PlanningScenario ?? Domain.Norms.PlanningScenario.ByEachValue,
+            ZParameterLevel = request.ZParameterLevel ?? Domain.Norms.ZParameterLevel.EachElement,
+            IsPrimary = makePrimary,
             CreatedAt = asOf,
         };
+
+        if (makePrimary && hasPeers)
+            await ClearPrimaryAsync(projectId, request.Direction, excludeVersionId: null, cancellationToken);
 
         _context.ProjectAnalysisVersions.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
@@ -65,6 +87,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         await _context.SaveChangesAsync(cancellationToken);
 
         await _planningParameters.SeedForVersionAsync(entity.Id, cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
 
         return (await GetByIdAsync(projectId, entity.Id, cancellationToken))!;
     }
@@ -88,6 +111,8 @@ public sealed class ProjectVersionService : IProjectVersionService
         var createdAtChanged = asOf.HasValue
             && asOf.Value.Date != entity.CreatedAt.ToUniversalTime().Date;
 
+        var previousScenario = entity.PlanningScenario;
+        var previousDirection = entity.Direction;
         entity.Name = request.Name?.Trim() ?? request.VersionName.Trim();
         entity.VersionName = request.VersionName.Trim();
         entity.Description = request.Description;
@@ -95,9 +120,43 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.PhysicalVolumeTypeId = request.PhysicalVolumeTypeId;
         if (request.PlanningScenario.HasValue)
             entity.PlanningScenario = request.PlanningScenario.Value;
+        if (request.ZParameterLevel.HasValue)
+            entity.ZParameterLevel = request.ZParameterLevel.Value;
         if (createdAtChanged)
             entity.CreatedAt = asOf!.Value;
         entity.ModifiedAt = DateTime.UtcNow;
+        // IsPrimary не меняется через Update — только Create / SetPrimary / Archive.
+
+        if (previousDirection != request.Direction && entity.IsPrimary)
+        {
+            // Смена направления: снять primary здесь и при необходимости восстановить у старого направления.
+            entity.IsPrimary = false;
+            await PromotePrimaryIfMissingAsync(projectId, previousDirection, cancellationToken);
+
+            var targetHasPrimary = await _context.ProjectAnalysisVersions
+                .AnyAsync(
+                    v => v.ProjectId == projectId
+                         && v.Direction == request.Direction
+                         && !v.IsArchived
+                         && v.IsPrimary
+                         && v.Id != versionId,
+                    cancellationToken);
+            if (!targetHasPrimary)
+            {
+                var hasPeers = await _context.ProjectAnalysisVersions
+                    .AnyAsync(
+                        v => v.ProjectId == projectId
+                             && v.Direction == request.Direction
+                             && !v.IsArchived
+                             && v.Id != versionId,
+                        cancellationToken);
+                if (!hasPeers)
+                    entity.IsPrimary = true;
+            }
+        }
+
+        var scenarioChanged = request.PlanningScenario.HasValue
+            && request.PlanningScenario.Value != previousScenario;
 
         // Снимок норм зависит от CreatedAt; смена справочника БЭР/КФО тоже требует
         // явного пересоздания (единая политика версии).
@@ -108,7 +167,18 @@ public sealed class ProjectVersionService : IProjectVersionService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        return await GetByIdAsync(projectId, versionId, cancellationToken);
+
+        var recalcCount = 0;
+        if (catalogChanged || createdAtChanged || scenarioChanged)
+        {
+            await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+            recalcCount = 1;
+        }
+
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
+
+        var dto = await GetByIdAsync(projectId, versionId, cancellationToken);
+        return dto is null ? null : dto with { RecalculatedVersionCount = recalcCount };
     }
 
     public async Task<bool> ArchiveAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -118,12 +188,21 @@ public sealed class ProjectVersionService : IProjectVersionService
         if (entity is null)
             return false;
 
+        var wasPrimary = entity.IsPrimary;
+        var direction = entity.Direction;
         entity.IsArchived = true;
+        entity.IsPrimary = false;
         entity.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (wasPrimary)
+            await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
+
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return true;
     }
 
+<<<<<<< HEAD
     public async Task<ProjectVersionDto> SetMainAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var entity = await _context.ProjectAnalysisVersions
@@ -161,19 +240,69 @@ public sealed class ProjectVersionService : IProjectVersionService
     }
 
     public Task<ProjectVersionDto> CopyAsync(
+=======
+    public async Task<ProjectVersionDto?> UnarchiveAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.ProjectAnalysisVersions
+            .FirstOrDefaultAsync(v => v.ProjectId == projectId && v.Id == versionId, cancellationToken);
+        if (entity is null || !entity.IsArchived)
+            return null;
+
+        entity.IsArchived = false;
+        entity.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
+
+        return await GetByIdAsync(projectId, versionId, cancellationToken);
+    }
+
+    public async Task<ProjectVersionDto?> SetPrimaryAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
+    {
+        var entity = await _context.ProjectAnalysisVersions
+            .FirstOrDefaultAsync(
+                v => v.ProjectId == projectId && v.Id == versionId && !v.IsArchived,
+                cancellationToken);
+        if (entity is null)
+            return null;
+
+        if (!entity.IsPrimary)
+        {
+            await ClearPrimaryAsync(projectId, entity.Direction, excludeVersionId: versionId, cancellationToken);
+            entity.IsPrimary = true;
+            entity.ModifiedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+            await InvalidateAnalyticsAsync(projectId, cancellationToken);
+        }
+
+        return await GetByIdAsync(projectId, versionId, cancellationToken);
+    }
+
+    public async Task<ProjectVersionDto> CopyAsync(
+>>>>>>> origin/master
         int projectId,
         int versionId,
         string newVersionName,
         string? newDescription = null,
         AnalysisDirection? targetDirection = null,
-        CancellationToken cancellationToken = default) =>
-        _deepCopy.CopyVersionAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var copy = await _deepCopy.CopyVersionAsync(
             projectId,
             versionId,
             newVersionName,
             newDescription,
             targetDirection,
             cancellationToken);
+        await InvalidateAnalyticsAsync(projectId, cancellationToken);
+        return copy;
+    }
+
+    /// <summary>
+    /// Состав и признаки версий влияют на page-data и отчёт производительности,
+    /// поэтому любая мутация версии сбрасывает кэш проекта (ISS-018).
+    /// </summary>
+    private Task InvalidateAnalyticsAsync(int projectId, CancellationToken cancellationToken) =>
+        _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
 
     /// <summary>
     /// Смена БЭР↔КФО при уже импортированных ФО недопустима: FK указывают на другой каталог.
@@ -188,6 +317,56 @@ public sealed class ProjectVersionService : IProjectVersionService
         throw new InvalidOperationException(
             "Нельзя сменить справочник физобъёмов (БЭР/КФО): для версии уже импортированы "
             + "физические объёмы. Удалите данные ФО версии или создайте новую версию с нужным справочником.");
+    }
+
+    private async Task ClearPrimaryAsync(
+        int projectId,
+        AnalysisDirection direction,
+        int? excludeVersionId,
+        CancellationToken cancellationToken)
+    {
+        var query = _context.ProjectAnalysisVersions
+            .Where(v => v.ProjectId == projectId
+                        && v.Direction == direction
+                        && !v.IsArchived
+                        && v.IsPrimary);
+        if (excludeVersionId.HasValue)
+            query = query.Where(v => v.Id != excludeVersionId.Value);
+
+        var others = await query.ToListAsync(cancellationToken);
+        foreach (var other in others)
+        {
+            other.IsPrimary = false;
+            other.ModifiedAt = DateTime.UtcNow;
+        }
+    }
+
+    private async Task PromotePrimaryIfMissingAsync(
+        int projectId,
+        AnalysisDirection direction,
+        CancellationToken cancellationToken)
+    {
+        var hasPrimary = await _context.ProjectAnalysisVersions
+            .AnyAsync(
+                v => v.ProjectId == projectId
+                     && v.Direction == direction
+                     && !v.IsArchived
+                     && v.IsPrimary,
+                cancellationToken);
+        if (hasPrimary)
+            return;
+
+        var next = await _context.ProjectAnalysisVersions
+            .Where(v => v.ProjectId == projectId && v.Direction == direction && !v.IsArchived)
+            .OrderBy(v => v.SortOrder)
+            .ThenBy(v => v.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (next is null)
+            return;
+
+        next.IsPrimary = true;
+        next.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
     }
 
     private async Task ValidatePhysicalVolumeTypeAsync(int? physicalVolumeTypeId, CancellationToken cancellationToken)
@@ -237,5 +416,11 @@ public sealed class ProjectVersionService : IProjectVersionService
             v.IsArchived,
             v.CreatedAt,
             v.PlanningScenario,
+<<<<<<< HEAD
             v.IsMain);
+=======
+            v.ZParameterLevel,
+            v.IsPrimary,
+            0);
+>>>>>>> origin/master
 }

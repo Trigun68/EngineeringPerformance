@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
-  Button,
   Checkbox,
   FormControlLabel,
   Stack,
@@ -18,13 +17,19 @@ import {
   type UserActionLogEntry,
 } from '../../api/auditApi';
 import { DataTable } from '../../components/DataTable/DataTable';
+import { ACTION_LABELS } from '../../constants/actionLabels';
+import { ExportActionButton } from '../../components/export/ExportActionButton';
+import { ToolbarActionButton } from '../../components/export/ToolbarActionButton';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useAuthStore } from '../../store/useAuthStore';
 import { formatDateTime } from '../../utils/formatDateTime';
+import { isSuperAdmin } from '../../utils/permissionAccess';
 
 export function UserActionLogPage() {
   const { canRead } = usePermission('UserActionLog');
-  const isAdmin = useAuthStore((s) => s.user?.roleName === 'Administrator');
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
+  const isAdmin = useAuthStore((s) => isSuperAdmin(s.user?.roleName, s.user?.roleId));
   const [rows, setRows] = useState<UserActionLogEntry[]>([]);
   const [selected, setSelected] = useState<UserActionLogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,7 +82,10 @@ export function UserActionLogPage() {
 
   const handleArchiveSelected = async () => {
     if (selected.length === 0) return;
-    if (!window.confirm(`Перенести в архив ${selected.length} записей?`)) return;
+    if (!(await confirm({
+      title: 'Перенести в архив?',
+      description: `Перенести в архив ${selected.length} записей?`,
+    }))) return;
     setError(null);
     try {
       await archiveUserActionLogs(selected.map((row) => row.id));
@@ -126,19 +134,17 @@ export function UserActionLogPage() {
           <>
             <Tooltip title="Архивировать выбранные записи">
               <span>
-                <Button
-                  size="small"
-                  variant="outlined"
+                <ToolbarActionButton
                   disabled={selected.length === 0}
                   onClick={() => void handleArchiveSelected()}
                 >
                   В архив
-                </Button>
+                </ToolbarActionButton>
               </span>
             </Tooltip>
-            <Button size="small" variant="outlined" onClick={() => fileInputRef.current?.click()}>
+            <ToolbarActionButton onClick={() => fileInputRef.current?.click()}>
               Восстановить
-            </Button>
+            </ToolbarActionButton>
             <input
               ref={fileInputRef}
               type="file"
@@ -152,12 +158,10 @@ export function UserActionLogPage() {
             />
           </>
         )}
-        <Button size="small" variant="outlined" onClick={() => void handleExport()}>
-          Выгрузить в Excel
-        </Button>
-        <Button size="small" onClick={() => void load()}>
-          Обновить
-        </Button>
+        <ExportActionButton kind="excel" onClick={() => void handleExport()} />
+        <ToolbarActionButton onClick={() => void load()}>
+          {ACTION_LABELS.refresh}
+        </ToolbarActionButton>
         <FormControlLabel
           control={
             <Checkbox
@@ -194,6 +198,7 @@ export function UserActionLogPage() {
           onSelectionChanged={setSelected}
         />
       </Box>
+      {ConfirmDialog}
     </Box>
   );
 }

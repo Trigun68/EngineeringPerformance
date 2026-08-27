@@ -3,12 +3,14 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   FormControl,
+  FormControlLabel,
+  IconButton,
   InputLabel,
   MenuItem,
   Select,
@@ -21,12 +23,15 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DriveFileMoveIcon from '@mui/icons-material/DriveFileMove';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import type { ColDef } from 'ag-grid-community';
 import {
   copyProjectVersion,
   createProjectVersion,
   deleteProjectVersion,
   fetchProjectVersions,
+  setPrimaryProjectVersion,
   updateProjectVersion,
   type ProjectVersion,
   type ProjectVersionWriteRequest,
@@ -34,6 +39,7 @@ import {
 import { DataTable } from '../DataTable/DataTable';
 import { WorkingOverlay } from '../WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../services/apiError';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { formatDateTime } from '../../utils/formatDateTime';
 
@@ -71,6 +77,7 @@ interface VersionFormState {
   description: string;
   physicalVolumeTypeId: string;
   asOfDate: string;
+  isPrimary: boolean;
 }
 
 const emptyForm = (): VersionFormState => ({
@@ -78,6 +85,7 @@ const emptyForm = (): VersionFormState => ({
   description: '',
   physicalVolumeTypeId: '',
   asOfDate: new Date().toISOString().slice(0, 10),
+  isPrimary: false,
 });
 
 function toDateInputValue(iso?: string | null): string {
@@ -118,6 +126,7 @@ export function ProjectVersionPickerDialog({
   );
   const [submitting, setSubmitting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   /** Id, выбранный пользователем кликом; не сбрасываем при перезагрузке списка. */
   const userPickedIdRef = useRef<number | null>(null);
   const wasOpenRef = useRef(false);
@@ -200,6 +209,12 @@ export function ProjectVersionPickerDialog({
         maxWidth: 90,
         valueFormatter: (p) => directionLabel(Number(p.value)),
       },
+      {
+        field: 'isPrimary',
+        headerName: 'Основная',
+        maxWidth: 110,
+        valueFormatter: (p) => (p.value ? 'Да' : ''),
+      },
       { field: 'description', headerName: 'Описание', minWidth: 180, flex: 1 },
       {
         field: 'createdAt',
@@ -213,7 +228,12 @@ export function ProjectVersionPickerDialog({
 
   const openCreate = () => {
     setEditMode('create');
-    setForm(emptyForm());
+    const peers = filteredVersions;
+    setForm({
+      ...emptyForm(),
+      // Первая версия направления — основная по умолчанию (сервер всё равно выставит).
+      isPrimary: peers.length === 0,
+    });
     setEditOpen(true);
   };
 
@@ -226,6 +246,7 @@ export function ProjectVersionPickerDialog({
       description: selected.description ?? '',
       physicalVolumeTypeId: selected.physicalVolumeTypeId?.toString() ?? '',
       asOfDate: toDateInputValue(selected.createdAt),
+      isPrimary: selected.isPrimary === true,
     });
     setEditOpen(true);
   };
@@ -233,6 +254,18 @@ export function ProjectVersionPickerDialog({
   const handleSaveVersion = async () => {
     if (!form.versionName.trim() || !form.physicalVolumeTypeId || !form.asOfDate) return;
     const editTarget = actionTarget ?? selected;
+
+    if (editMode === 'create' && form.isPrimary) {
+      const existingPrimary = filteredVersions.find((v) => v.isPrimary);
+      if (existingPrimary) {
+        const ok = await confirm({
+          title: 'Сделать основной?',
+          description: 'Вы действительно хотите сделать эту версию основной?',
+        });
+        if (!ok) return;
+      }
+    }
+
     setSubmitting(true);
     setError(null);
     try {
@@ -249,6 +282,7 @@ export function ProjectVersionPickerDialog({
         const updated = await updateProjectVersion(projectId, editTarget.id, body);
         pickVersion(updated, true);
       } else {
+        if (form.isPrimary) body.isPrimary = true;
         const created = await createProjectVersion(projectId, body);
         pickVersion(created, true);
       }
@@ -257,6 +291,21 @@ export function ProjectVersionPickerDialog({
       await loadVersions();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось сохранить версию.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSetPrimary = async () => {
+    if (!selected || selected.isPrimary) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const updated = await setPrimaryProjectVersion(projectId, selected.id);
+      pickVersion(updated, true);
+      await loadVersions();
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось назначить основную версию.'));
     } finally {
       setSubmitting(false);
     }
@@ -296,7 +345,7 @@ export function ProjectVersionPickerDialog({
   };
 
   const openCopyFromPlan = () => {
-    const source = planVersions[0] ?? null;
+    const source = planVersions.find((v) => v.isPrimary) ?? planVersions[0] ?? null;
     setCopyMode('from-plan');
     setActionTarget(null);
     setPlanSource(source);
@@ -385,6 +434,23 @@ export function ProjectVersionPickerDialog({
               >
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
+            </Tooltip>
+            <Tooltip title="Сделать основной">
+              <span>
+                <IconButton
+                  size="small"
+                  onClick={() => void handleSetPrimary()}
+                  disabled={!selected || selected.isPrimary === true || submitting}
+                  aria-label="Сделать основной"
+                  data-testid="version-set-primary-button"
+                >
+                  {selected?.isPrimary ? (
+                    <StarIcon fontSize="small" color="warning" />
+                  ) : (
+                    <StarBorderIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </span>
             </Tooltip>
             {allowCopyFromPlan && (
               <Tooltip title="Копировать из плана (ФО и оборудование; трудоёмкость — отдельно)">
@@ -495,6 +561,21 @@ export function ProjectVersionPickerDialog({
               fullWidth
               InputLabelProps={{ shrink: true }}
               helperText="Снимок норм IIC на эту дату. Смена БЭР↔КФО после импорта ФО недоступна."
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.isPrimary}
+                  disabled={editMode === 'edit'}
+                  onChange={(e) => setForm({ ...form, isPrimary: e.target.checked })}
+                  data-testid="version-primary-checkbox"
+                />
+              }
+              label={
+                editMode === 'edit'
+                  ? 'Основная (меняется только в списке версий)'
+                  : 'Основная'
+              }
             />
           </Stack>
         </DialogContent>
@@ -629,6 +710,7 @@ export function ProjectVersionPickerDialog({
           </Button>
         </DialogActions>
       </Dialog>
+      {ConfirmDialog}
     </>
   );
 }

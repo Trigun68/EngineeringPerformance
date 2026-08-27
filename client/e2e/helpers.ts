@@ -1,4 +1,11 @@
 import { expect, type Page } from '@playwright/test';
+import { ACTION_LABELS, type ActionLabelKey } from '../src/constants/actionLabels';
+
+export { ACTION_LABELS };
+
+export function actionButton(page: Page, key: ActionLabelKey) {
+  return page.getByRole('button', { name: ACTION_LABELS[key], exact: true });
+}
 
 export const ADMIN_USER = { username: 'admin', password: 'admin' };
 export const OBSERVER_USER = { username: 'observer', password: 'observer' };
@@ -12,7 +19,17 @@ async function fillAndSubmitLogin(
   await expect(page.getByText('Авторизация')).toBeVisible({ timeout: 20_000 });
   await page.getByLabel('Имя пользователя').fill(credentials.username);
   await page.getByLabel('Пароль').fill(credentials.password);
-  await page.getByRole('button', { name: 'Войти' }).click();
+  const loginBtn = page.getByRole('button', { name: 'Войти' });
+  // Кнопка может быть disabled до blur полей — клик после небольшого ожидания + force.
+  await page.getByLabel('Пароль').blur().catch(() => undefined);
+  await loginBtn.click({ timeout: 30_000, force: true });
+
+  // Soft MFA setup for SuperAdmin/Admin — dismiss so e2e can proceed.
+  const mfaSkip = page.getByTestId('mfa-setup-skip');
+  if (await mfaSkip.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await mfaSkip.click();
+  }
+
   await expect(page.locator(USER_MENU)).toBeVisible({ timeout: 30_000 });
 }
 
@@ -75,15 +92,171 @@ export async function logoutViaUserMenu(page: Page): Promise<void> {
   await expect(page.getByText('Авторизация')).toBeVisible({ timeout: 15_000 });
 }
 
-export async function openFirstProject(page: Page): Promise<number | null> {
+/**
+ * Сбрасывает сохранённые подвкладки проекта на «Итого», чтобы E2E не поднимал
+ * грид «Детально» (десятки тысяч строк) и не ронял Chromium по памяти.
+ */
+export async function resetProjectWorkspaceTabs(page: Page, projectId: number): Promise<void> {
+  await page.evaluate(async (id) => {
+    await fetch('/api/users/me/preferences', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        preferences: {
+          [`projects.${id}.forecastSubTab`]: 'forecast-total',
+          [`projects.${id}.factSubTab`]: 'fact-total',
+          [`projects.${id}.compareSubTab`]: 'compare-total',
+          [`projects.${id}.compareShowDiff`]: '0',
+          [`projects.${id}.compareViewMode`]: 'table',
+          [`projects.${id}.report.dark`]: '0',
+        },
+      }),
+    });
+  }, projectId);
+}
+
+/**
+ * Открывает проект с данными (по умолчанию 25-310), иначе первую строку списка.
+ */
+export async function openPreferredProject(
+  page: Page,
+  projectCode = '25-310',
+): Promise<number | null> {
   await page.goto('/projects');
-  await page.waitForSelector('.ag-row', { timeout: 15_000 }).catch(() => null);
-  const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
-  if (!(await firstRow.isVisible().catch(() => false))) {
+  await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 }).catch(() => null);
+
+  const preferredId = await page.evaluate(async (code) => {
+    const res = await fetch('/api/projects', { credentials: 'include' });
+    if (!res.ok) {
+      return null;
+    }
+    const projects = (await res.json()) as Array<{ id: number; code?: string }>;
+    const match = projects.find((p) => p.code === code);
+    return (match ?? projects[0])?.id ?? null;
+  }, projectCode);
+  if (preferredId != null) {
+    await resetProjectWorkspaceTabs(page, preferredId);
+  }
+
+  const preferred = page
+    .locator('.ag-center-cols-container .ag-row')
+    .filter({ hasText: projectCode });
+  const target =
+    (await preferred.count()) > 0
+      ? preferred.first()
+      : page.locator('.ag-center-cols-container .ag-row').first();
+  if (!(await target.isVisible().catch(() => false))) {
     return null;
   }
-  await firstRow.dblclick();
+  await target.dblclick();
   await expect(page).toHaveURL(/\/projects\/\d+/);
+  await waitForWorkingOverlayHidden(page);
   const match = page.url().match(/\/projects\/(\d+)/);
   return match ? Number(match[1]) : null;
+}
+
+/** @deprecated Prefer openPreferredProject for data-rich seeds. */
+export async function openFirstProject(page: Page): Promise<number | null> {
+  return openPreferredProject(page);
+}
+
+/** Ждёт исчезновения «Работаю…», чтобы клики не перехватывались Backdrop. */
+export async function waitForWorkingOverlayHidden(page: Page, timeout = 60_000): Promise<void> {
+  // Несколько WorkingOverlay могут быть смонтированы одновременно (layout + page).
+  await expect(page.locator('[data-testid="working-overlay"]:visible')).toHaveCount(0, { timeout });
+  // Загрузка данных больше не блокирует экран оверлеем (ISS-018): готовность датасета
+  // показывает PanelBusyBar. Без этой проверки хелпер завершался мгновенно, и тест
+  // обращался к гриду до прихода данных.
+  await expect(page.locator('[data-busy="true"]')).toHaveCount(0, { timeout });
+}
+
+/**
+ * Сбрасывает сохранённые layout/filter prefs гридов (ключи, содержащие needles).
+ * Нужно, когда прошлые E2E спрятали колонки через applyColumnState.
+ */
+export async function clearMatchingGridLayouts(page: Page, needles: string[]): Promise<void> {
+  await page.evaluate(async (keys) => {
+    const prefsRes = await fetch('/api/users/me/preferences', { credentials: 'include' });
+    if (prefsRes.ok) {
+      const prefs = (await prefsRes.json()) as Record<string, string>;
+      const updates: Record<string, string> = {};
+      for (const key of Object.keys(prefs ?? {})) {
+        if (keys.some((n) => key.includes(n))) {
+          updates[key] = '[]';
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        await fetch('/api/users/me/preferences', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ preferences: updates }),
+        });
+      }
+    }
+
+    // Legacy userSettings: grid-{gridId}
+    for (const needle of keys) {
+      const legacyKeys = [
+        `grid-${needle}`,
+        `grid-ref-${needle}`,
+        needle.startsWith('grid-') ? needle : `grid-${needle}`,
+      ];
+      for (const legacyKey of legacyKeys) {
+        await fetch(`/api/users/me/settings/${encodeURIComponent(legacyKey)}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: '[]' }),
+        }).catch(() => undefined);
+      }
+    }
+  }, needles);
+}
+
+/** Горизонтальный скролл viewport AG Grid (колонки за краем при virtualisation). */
+export async function scrollAgGridToColumn(page: Page, colId: string, gridId?: string): Promise<void> {
+  if (gridId) {
+    await page.evaluate(
+      ({ id, column }) => {
+        const api = (window as unknown as { __epGridApis?: Record<string, { ensureColumnVisible?: (c: string) => void }> })
+          .__epGridApis?.[id];
+        api?.ensureColumnVisible?.(column);
+      },
+      { id: gridId, column: colId },
+    );
+  }
+
+  const header = page.locator(`.ag-header-cell[col-id="${colId}"]`).first();
+  if (await header.isVisible().catch(() => false)) {
+    await header.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }));
+    return;
+  }
+
+  // Сразу в конец, затем пошагово назад — быстрее, чем только вперёд.
+  await page.locator('.ag-body-horizontal-scroll-viewport').first().evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  }).catch(() => undefined);
+  await page.locator('.ag-header-viewport').first().evaluate((el) => {
+    el.scrollLeft = el.scrollWidth;
+  }).catch(() => undefined);
+
+  if (await header.isVisible().catch(() => false)) {
+    await header.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }));
+    return;
+  }
+
+  for (let i = 0; i < 16; i++) {
+    await page.locator('.ag-body-horizontal-scroll-viewport').first().evaluate((el) => {
+      el.scrollLeft = Math.max(0, el.scrollLeft - el.clientWidth * 0.7);
+    }).catch(() => undefined);
+    await page.locator('.ag-header-viewport').first().evaluate((el) => {
+      el.scrollLeft = Math.max(0, el.scrollLeft - el.clientWidth * 0.7);
+    }).catch(() => undefined);
+    if (await header.isVisible().catch(() => false)) {
+      await header.evaluate((el) => el.scrollIntoView({ inline: 'center', block: 'nearest' }));
+      return;
+    }
+  }
 }

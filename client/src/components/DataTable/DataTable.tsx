@@ -31,7 +31,11 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
-import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
+import {
+  agGridLocaleRu,
+  GRID_OVERLAY_LOADING_TEMPLATE,
+  GRID_OVERLAY_NO_ROWS_TEMPLATE,
+} from './gridDefaults';
 import {
   filterPrefKey,
   loadGridLayout,
@@ -54,6 +58,8 @@ export interface DataTableProps<T> {
   columnDefs: ColDef<T>[];
   objectName: string;
   gridId?: string;
+  /** Scope column layout/filters per project; falls back to global gridId keys. */
+  projectId?: number;
   contextMenuItems?: ContextMenuItem<T>[];
   onRowDoubleClicked?: (row: T) => void;
   onRowClicked?: (row: T) => void;
@@ -74,6 +80,7 @@ export interface DataTableProps<T> {
   showColumnSettings?: boolean;
   pinnedBottomRowData?: T[];
   gridTestId?: string;
+  onGridApiReady?: (api: GridApi<T>) => void;
 }
 
 const LAYOUT_DEBOUNCE_MS = 400;
@@ -94,6 +101,7 @@ export function DataTable<T extends object>({
   columnDefs,
   objectName,
   gridId,
+  projectId,
   contextMenuItems = [],
   onRowDoubleClicked,
   onRowClicked,
@@ -114,6 +122,7 @@ export function DataTable<T extends object>({
   enableRowGrouping = false,
   showColumnSettings = false,
   pinnedBottomRowData,
+  onGridApiReady,
 }: DataTableProps<T>) {
   const gridRef = useRef<AgGridReact<T>>(null);
   const gridApiRef = useRef<GridApi<T> | null>(null);
@@ -125,6 +134,10 @@ export function DataTable<T extends object>({
   /** Последний layout — flush при unmount, когда GridApi уже уничтожен. */
   const lastLayoutRef = useRef<ColumnState[] | null>(null);
   const { canRead, hasLevel } = usePermission(objectName);
+
+  useEffect(() => {
+    filterAppliedRef.current = false;
+  }, [gridId, projectId]);
 
   const [columnConfigOpen, setColumnConfigOpen] = useState(false);
   const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
@@ -150,26 +163,25 @@ export function DataTable<T extends object>({
     if (!api) return lastLayoutRef.current;
     const layout = api.getColumnState();
     lastLayoutRef.current = layout;
-    if (gridId) setCachedGridLayout(gridId, layout);
+    if (gridId) setCachedGridLayout(gridId, layout, projectId);
     return layout;
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const persistLayoutNow = useCallback(async () => {
     if (!gridId || !gridInitializedRef.current) return;
     const layout = captureLayoutFromApi() ?? lastLayoutRef.current;
     if (!layout || layout.length === 0) return;
-    await persistGridLayout(gridId, layout);
-  }, [captureLayoutFromApi, gridId]);
+    await persistGridLayout(gridId, layout, { projectId });
+  }, [captureLayoutFromApi, gridId, projectId]);
 
   const scheduleLayoutSave = useCallback(() => {
     if (!gridId || !gridInitializedRef.current) return;
     if (isFirstRenderRef.current) return;
-    captureLayoutFromApi();
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       void persistLayoutNow();
     }, LAYOUT_DEBOUNCE_MS);
-  }, [captureLayoutFromApi, gridId, persistLayoutNow]);
+  }, [gridId, persistLayoutNow]);
 
   const scheduleFilterSave = useCallback(() => {
     if (!gridId || !gridApiRef.current || !gridInitializedRef.current) return;
@@ -181,24 +193,24 @@ export function DataTable<T extends object>({
       const filter = api.getFilterModel() as Record<string, unknown>;
       const sanitized = sanitizeFilterModel(filter);
       void putUserPreferences({
-        [filterPrefKey(gridId)]: JSON.stringify(sanitized ?? {}),
+        [filterPrefKey(gridId, projectId)]: JSON.stringify(sanitized ?? {}),
       });
     }, FILTER_DEBOUNCE_MS);
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const applySavedLayout = useCallback(async (api: GridApi<T>) => {
     if (!gridId) return;
-    const state = await loadGridLayout(gridId);
+    const state = await loadGridLayout(gridId, projectId);
     if (!state || state.length === 0) return;
     lastLayoutRef.current = state;
     api.applyColumnState({ state, applyOrder: true });
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const applySavedFilters = useCallback(async (api: GridApi<T>) => {
     if (!gridId || filterAppliedRef.current) return;
     try {
       const prefs = await getUserPreferences();
-      const raw = prefs[filterPrefKey(gridId)];
+      const raw = prefs[filterPrefKey(gridId, projectId)] ?? (projectId != null ? prefs[filterPrefKey(gridId)] : undefined);
       if (!raw) return;
       const model = JSON.parse(raw) as Record<string, unknown>;
       if (Object.keys(model).length > 0) {
@@ -208,7 +220,7 @@ export function DataTable<T extends object>({
     } catch {
       // ignore
     }
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const syncColumnVisibilityState = useCallback((api: GridApi<T>) => {
     const labels: Record<string, string> = {};
@@ -224,12 +236,18 @@ export function DataTable<T extends object>({
 
   const onGridReady = useCallback((event: GridReadyEvent<T>) => {
     gridApiRef.current = event.api;
+    if (typeof window !== 'undefined' && gridId) {
+      const w = window as Window & { __epGridApis?: Record<string, import('ag-grid-community').GridApi> };
+      w.__epGridApis = w.__epGridApis ?? {};
+      w.__epGridApis[gridId] = event.api;
+    }
+    onGridApiReady?.(event.api);
     void applySavedLayout(event.api).then(() => {
       syncColumnVisibilityState(event.api);
       gridInitializedRef.current = true;
       isFirstRenderRef.current = false;
     });
-  }, [applySavedLayout, syncColumnVisibilityState]);
+  }, [applySavedLayout, gridId, onGridApiReady, syncColumnVisibilityState]);
 
   useEffect(() => {
     const api = gridApiRef.current;
@@ -239,6 +257,19 @@ export function DataTable<T extends object>({
     }, 300);
     return () => clearTimeout(timer);
   }, [applySavedFilters, rowData.length]);
+
+  // AG Grid 32 + getRowId/treeData: controlled rowData может обновить option, но не client-side model
+  // (getGridOption('rowData').length уже новый, getDisplayedRowCount() — старый). Явный sync + refresh.
+  useEffect(() => {
+    const api = gridApiRef.current;
+    if (!api || !gridInitializedRef.current) return;
+    api.setGridOption('rowData', rowData);
+    // Для treeData сокращение набора без remount оставляет старые displayed rows.
+    if (treeData) {
+      api.setGridOption('rowData', []);
+      api.setGridOption('rowData', rowData);
+    }
+  }, [rowData, treeData]);
 
   const onColumnRowGroupChanged = useCallback(() => {
     scheduleLayoutSave();
@@ -268,9 +299,9 @@ export function DataTable<T extends object>({
       filterTimerRef.current = null;
     }
     if (gridId && lastLayoutRef.current && lastLayoutRef.current.length > 0) {
-      void persistGridLayout(gridId, lastLayoutRef.current);
+      void persistGridLayout(gridId, lastLayoutRef.current, { projectId });
     }
-  }, [gridId]);
+  }, [gridId, projectId]);
 
   const getContextMenuItems = useCallback(
     (params: GetContextMenuItemsParams<T>): (string | MenuItemDef)[] => {
@@ -429,8 +460,8 @@ export function DataTable<T extends object>({
               onRowDoubleClicked(event.data);
             }
           }}
-          overlayLoadingTemplate='<span class="ag-overlay-loading-center">Загрузка...</span>'
-          overlayNoRowsTemplate='<span class="ag-overlay-loading-center">Нет данных</span>'
+          overlayLoadingTemplate={GRID_OVERLAY_LOADING_TEMPLATE}
+          overlayNoRowsTemplate={GRID_OVERLAY_NO_ROWS_TEMPLATE}
         />
       </GridViewport>
 

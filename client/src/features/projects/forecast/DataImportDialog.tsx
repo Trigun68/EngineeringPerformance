@@ -22,6 +22,8 @@ import {
   type ImportDataType,
   type ImportRowError,
 } from '../../../api/importApi';
+import { ACTION_LABELS } from '../../../constants/actionLabels';
+import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../../services/apiError';
 
@@ -177,14 +179,14 @@ export function DataImportDialog({
           hidden
           onChange={handleFileChange}
         />
-        <Button
-          variant="outlined"
+        <ToolbarActionButton
           startIcon={<UploadFileIcon />}
-          disabled={importing || previewing}
+          loading={previewing}
+          disabled={importing}
           onClick={() => inputRef.current?.click()}
         >
-          Выбрать файл
-        </Button>
+          {ACTION_LABELS.selectFile}
+        </ToolbarActionButton>
         {pendingFile && (
           <Typography variant="body2" sx={{ mt: 1 }}>
             Файл: <strong>{pendingFile.name}</strong>

@@ -41,6 +41,12 @@ public sealed class ProjectEquipment : DataTableRecord
 
     public string? EstimationBasis { get; set; }
 
+    public decimal? LaborIntensityBase { get; set; }
+
+    public decimal? LaborIntensityPessimistic { get; set; }
+
+    public decimal? LaborIntensityOptimistic { get; set; }
+
     public Project Project { get; set; } = null!;
 
     public ProjectAnalysisVersion ProjectAnalysisVersion { get; set; } = null!;

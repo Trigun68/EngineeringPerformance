@@ -44,6 +44,10 @@ public static class NormFormulaEvaluator
             FormulaType.ExponentialDecay => Coeff(c, "a") * (decimal)Math.Exp(-(double)Coeff(c, "b") * (double)v) + Coeff(c, "c"),
             FormulaType.PiecewiseLinear => EvaluatePiecewise(formula.PiecewisePoints, v),
             FormulaType.Polynomial => EvaluatePolynomial(formula.PolynomialCoeffs, v),
+            FormulaType.Constant => Math.Max(0m, Coeff(c, "a")),
+            FormulaType.Hyperbolic when v <= 0m => 0m,
+            FormulaType.Hyperbolic => Math.Max(0m, Coeff(c, "a") + Coeff(c, "b") / v),
+            FormulaType.Exponential => Math.Max(0m, Coeff(c, "a") * (decimal)Math.Exp((double)Coeff(c, "b") * (double)v)),
             _ => throw new ArgumentOutOfRangeException(nameof(formula.Type)),
         };
     }

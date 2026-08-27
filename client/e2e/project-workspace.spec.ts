@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsAdmin } from './helpers';
+import { loginAsAdmin, actionButton } from './helpers';
 
 test.describe('Project Workspace - WPF Style', () => {
   test.beforeEach(async ({ page }) => {
@@ -16,9 +16,10 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(editSelectedButton).toBeVisible();
     await expect(editSelectedButton).toBeDisabled();
 
-    await expect(page.getByRole('button', { name: 'Экспорт Excel' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Экспорт PDF' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Импорт Excel' })).toHaveCount(0);
+    await expect(actionButton(page, 'exportExcel')).toHaveCount(0);
+    await expect(actionButton(page, 'exportExcelSelected')).toHaveCount(0);
+    await expect(actionButton(page, 'exportPdf')).toHaveCount(0);
+    await expect(actionButton(page, 'importExcel')).toHaveCount(0);
 
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
@@ -152,18 +153,44 @@ test.describe('Project Workspace - WPF Style', () => {
     await page.getByRole('button', { name: 'Закрыть' }).click();
   });
 
-  test('shows main tabs: Прогнозирование, Оценка факта, Сравнение версий, Отчёты', async ({ page }) => {
+  test('shows main tabs: Прогнозирование, Оценка факта, Сравнение версий, Отчет', async ({ page }) => {
     // Navigate to first project
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
 
-    // Check for main tabs (WPF-style)
+    // Check for main tabs (WPF-style + visual report)
     await expect(page.getByRole('tab', { name: 'Прогнозирование' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Оценка факта' })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Сравнение версий' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Отчёты' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Отчет' })).toBeVisible();
+  });
+
+  test('report tab loads summary (new design) and legacy panel', async ({ page }) => {
+    await page.goto('/projects');
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+    await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
+    await page.waitForURL(/\/projects\/\d+/);
+
+    await page.getByRole('tab', { name: 'Отчет' }).click();
+
+    // Дефолт — новый «Сводный вер 1»: блоки план/факт по основным версиям, шкала, динамика.
+    await expect(page.getByText('Трудоёмкость плана')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText('Z-план')).toBeVisible();
+    await expect(page.getByText('Шкала интерпретации Z-оценки')).toBeVisible();
+    await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
+    await expect(page.getByTestId('report-export-pdf')).toBeVisible();
+
+    // «Сводный вер 2» — старый механизм для отката.
+    await page.getByTestId('report-legacy-tab').click();
+    await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Факт:/ })).toHaveCount(0);
+    await expect(actionButton(page, 'exportPdf')).toBeVisible();
+    await expect(page.getByTestId('report-plan-z')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('report-fact-z')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('report-directions-table')).toBeVisible({ timeout: 30_000 });
   });
 
   test('forecast tab shows version selector and import buttons', async ({ page }) => {
@@ -181,8 +208,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByRole('button', { name: /Версия \(план\)/ })).toBeVisible();
 
     // Check for import buttons
-    await expect(page.getByRole('button', { name: 'Импорт ФО' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Импорт оборуд.' })).toBeVisible();
+    await expect(actionButton(page, 'importPhysicalVolumes')).toBeVisible();
+    await expect(actionButton(page, 'importEquipment')).toBeVisible();
   });
 
   test('fact tab shows version selector and more import buttons', async ({ page }) => {
@@ -200,8 +227,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByRole('button', { name: /Версия \(факт\)/ })).toBeVisible();
 
     // Check for import buttons (fact has more options)
-    await expect(page.getByRole('button', { name: 'Импорт ФО' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Импорт оборуд.' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Импорт труд.' })).toBeVisible();
+    await expect(actionButton(page, 'importPhysicalVolumes')).toBeVisible();
+    await expect(actionButton(page, 'importEquipment')).toBeVisible();
+    await expect(actionButton(page, 'importLabor')).toBeVisible();
   });
 });

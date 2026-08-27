@@ -39,5 +39,25 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
             .WithMany(pv => pv.LaborIntensities)
             .HasForeignKey(li => li.PhysicalVolumeBerId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // Covering index for version-scoped LI load (SqlQueryMetrics → 111_SqlMetricsWave2Indexes.sql)
+        builder.HasIndex(li => li.ProjectAnalysisVersionId)
+            .HasDatabaseName("IX_ProjectLaborIntensities_VersionId_Covering")
+            .IncludeProperties(li => new
+            {
+                li.ProjectId,
+                li.DocumentationCode,
+                li.WorkDirectionId,
+                li.PlannedHours,
+                li.ActualHours,
+                li.Notes,
+                li.Brand,
+                li.CreatedAt,
+                li.ModifiedAt,
+                li.PhysicalVolumeKfoId,
+                li.PhysicalVolumeBerId,
+                li.LaborIntensityId,
+                li.ProjectPhysicalVolumeId,
+            });
     }
 }

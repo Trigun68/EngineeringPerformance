@@ -58,4 +58,54 @@ public static class AnalysisVersionSnapshotService
 
         await PopulateSnapshotAsync(context, versionId, versionCreatedAt, cancellationToken);
     }
+
+    /// <summary>
+    /// Копия наследует снимок норм источника, чтобы live N(V)×Z совпадал с оригиналом.
+    /// Если у источника снимка нет — заполняем по дате новой версии.
+    /// </summary>
+    public static async Task CopyFromVersionAsync(
+        AppDbContext context,
+        int sourceVersionId,
+        int targetVersionId,
+        DateTime targetCreatedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var sourceRows = await context.AnalysisVersionSnapshots
+            .AsNoTracking()
+            .Where(s => s.ProjectAnalysisVersionId == sourceVersionId)
+            .Select(s => new { s.WorkDirectionId, s.NormId })
+            .ToListAsync(cancellationToken);
+
+        if (sourceRows.Count == 0)
+        {
+            await PopulateSnapshotAsync(context, targetVersionId, targetCreatedAt, cancellationToken);
+            return;
+        }
+
+        foreach (var row in CreateCopies(sourceRows.Select(s => (s.WorkDirectionId, s.NormId)), targetVersionId))
+            context.AnalysisVersionSnapshots.Add(row);
+    }
+
+    public static IReadOnlyList<AnalysisVersionSnapshot> CreateCopies(
+        IEnumerable<(int WorkDirectionId, int NormId)> source,
+        int targetVersionId) =>
+        source
+            .Select(s => new AnalysisVersionSnapshot
+            {
+                ProjectAnalysisVersionId = targetVersionId,
+                WorkDirectionId = s.WorkDirectionId,
+                NormId = s.NormId,
+            })
+            .ToList();
+
+    /// <summary>Стабильный ключ состава снимка: «wdId:normId» по возрастанию.</summary>
+    public static string? FormatKey(IEnumerable<(int WorkDirectionId, int NormId)> rows)
+    {
+        var parts = rows
+            .OrderBy(r => r.WorkDirectionId)
+            .ThenBy(r => r.NormId)
+            .Select(r => $"{r.WorkDirectionId}:{r.NormId}")
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(",", parts);
+    }
 }

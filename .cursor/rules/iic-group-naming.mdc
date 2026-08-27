@@ -1,0 +1,54 @@
+---
+description: Единый формат имён групп IIC — код — наименование (ед.)
+alwaysApply: true
+---
+
+# Единый формат имён групп IIC
+
+Для **групп IIC** (`IicWorkDirection` / классификатор направления) везде один формат:
+
+`код — наименование (ед. изм.)`
+
+(тире — em-dash `—`; единица — из группы или предка по дереву).
+
+## Канонические хелперы (единственный SoT форматирования)
+
+| Слой | API |
+|------|-----|
+| C# | `IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit` |
+| TS | `formatIisNorm` / `formatAsIisNorm` (`client/src/utils/formatIisNorm.ts`) |
+
+После `CalculatePerformance` на web-пути обязательно `ProjectsPageGridBuilder.ApplyFormattedWorkDirectionNames` (или эквивалент в `PerformanceService`).
+
+## Область
+
+**Применять** к: дерево «Итого» (факт/прогноз), колонка «Группа ФО IIC», анализ версии, нормы ИИС, планирование, отчёты/Excel/PDF по группам IIC.
+
+**Не применять** к: шифр/имя объекта, код/имя позиции ФО или оборудования в каталоге, заголовки проектов.
+
+## Запрещено
+
+```csharp
+// ❌ BAD
+WorkDirectionName = direction.Name;
+IicGroupName = $"{cl.Code} {cl.Name}";
+```
+
+```typescript
+// ❌ BAD
+getDirectionName(id); // только Name
+`${code} ${name}`;   // HierarchicalSelect без formatLabel
+```
+
+```csharp
+// ✅ GOOD
+IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dir, classifierMap);
+```
+
+```typescript
+// ✅ GOOD
+formatIisNorm({ code, name, unitName });
+// или отображать уже отформатированный workDirectionName с API — не перезаписывать getDirectionName
+```
+
+Не дублировать ручную склейку `$"{Code} — {Name} ({Unit})"` вне `IicWorkDirectionDisplayUnit` / `formatIisNorm`.

@@ -29,6 +29,14 @@ public sealed record AssessmentResultDto(
     IReadOnlyList<PerformanceRowDto> Performance,
     AssessmentSummaryDto Summary);
 
+/// <summary>
+/// Результат пакетной оценки версий: успешные по VersionId и ошибки по VersionId.
+/// Версия с ошибкой не срывает остальные (портфельные выборки продолжают работать).
+/// </summary>
+public sealed record BatchAssessmentResult(
+    IReadOnlyDictionary<int, AssessmentResultDto> Results,
+    IReadOnlyDictionary<int, string> Errors);
+
 public static class DocSetProportionalFormula
 {
     public const string Id = "v1-docset-proportional";

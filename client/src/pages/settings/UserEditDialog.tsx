@@ -134,6 +134,17 @@ export function UserEditDialog({
             }
             label="Активный"
           />
+          {!isEditMode && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={form.mustChangePassword}
+                  onChange={(e) => setForm((prev) => ({ ...prev, mustChangePassword: e.target.checked }))}
+                />
+              }
+              label="Сменить пароль при первом входе"
+            />
+          )}
           {error && (
             <Typography color="error" sx={{ mt: 1, fontSize: 14 }}>
               {error}
@@ -161,6 +172,7 @@ export function userToForm(user: AppUser): UserFormData {
     roleId: user.roleId,
     windowsUsername: user.windowsUsername ?? '',
     isActive: user.isActive,
+    mustChangePassword: false,
   };
 }
 
@@ -172,5 +184,6 @@ export function emptyUserForm(defaultRoleId: number | '' = ''): UserFormData {
     roleId: defaultRoleId,
     windowsUsername: '',
     isActive: true,
+    mustChangePassword: false,
   };
 }

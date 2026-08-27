@@ -35,7 +35,7 @@ export function SettingsGuard({ children }: { children: ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const fallbackPath = useFirstAccessiblePath();
 
-  if (!canAccessSettings(user?.permissions, user?.roleName)) {
+  if (!canAccessSettings(user?.permissions, user?.roleName, user?.roleId)) {
     if (fallbackPath) {
       return <Navigate to={fallbackPath} replace />;
     }

@@ -1,0 +1,68 @@
+---
+description: Единый русский шаблон имён файлов экспорта Excel/PDF/CSV
+alwaysApply: true
+---
+
+# Единый формат имён файлов экспорта
+
+Все выгрузки (Excel / PDF / CSV) именуются по одному шаблону. Разделитель блоков — `_`; тире отделяет отчёт от проекта:
+
+```
+{модуль}_{вкладка}[_{уточнение}]_-_{код}_{название}_({версия}).{ext}
+```
+
+Примеры: `прогноз_итого_-_25-310_Реконструкция_НС_(Основная).xlsx`, `факт_детально_выделенные_-_25-310_Реконструкция_НС_(v2).xlsx`, `отчет_-_25-310_Реконструкция_НС_(Основная_Факт_2025).pdf`.
+
+## Канонические хелперы (единственный SoT)
+
+| Слой | API |
+|------|-----|
+| C# | `ExportFileNameBuilder.Build` + `IExportFileNameService` (код/имя проекта, `VersionName`) |
+| HTTP | заголовок `Content-Disposition` (`File(..., fileName)`) |
+| TS | `buildCanonicalExportFileName` / `directoryExportView` (`client/src/utils/exportFileName.ts`) — зеркало для справочников и тестов |
+
+Клиент **не** подменяет имя английским fallback (`ForecastSummary_*`, `Project_{id}_v{vid}`). `downloadBlob` / `downloadBlobPost` читают `Content-Disposition`; английский `defaultFilename` — только если заголовка нет.
+
+## Словарь
+
+| Часть | Значения |
+|-------|----------|
+| модуль | `прогноз` / `факт` / `сравнение` / `отчет` / `справочник` / `аналитика` / `аудит` / `проекты` |
+| вкладка | `итого` / `по_объектам` / `детально`; для отчёта вкладки нет; иначе имя экрана (`группы_IIC`, `журнал_действий`, `каталог`) |
+| уточнение | только чтобы отличить кнопку: `выделенные`, `сводная` |
+| проект | `код` + `название`; без проекта блок `_-_` опускается |
+| версия | `VersionName` в скобках; сравнение и отчёт — две версии через `_` |
+
+«Версия» в имени — это `VersionName`, не отдельная вкладка workspace (прогнозирование / оценка факта / сравнение / отчёт). Модалки «Прогноз» и «Анализ» получают те же имена, что вкладка-источник (`прогноз_итого`, `факт_анализ`).
+
+## Санитизация
+
+- пробелы и `\ / : * ? " < > |` → `_`; схлопнуть повторные `_`;
+- скобки `()` только вокруг блока версии;
+- дефис в шифре (`25-310`) сохранять;
+- длина ≤ 180 символов (обрезать **название** проекта, не модуль/вкладку);
+- timestamp **не** добавлять.
+
+## Запрещено
+
+```csharp
+// ❌ BAD
+return File(bytes, mime, $"ForecastSummary_{projectId}_v{versionId}.xlsx");
+return File(bytes, mime, $"{request.TabName}_{DateTime.Now:yyyyMMdd}.xlsx");
+```
+
+```typescript
+// ❌ BAD
+triggerBrowserDownload(blob, `Project_${id}_v${vid}.xlsx`);
+anchor.download = 'forecast.pdf';
+```
+
+```csharp
+// ✅ GOOD
+var fileName = await fileNames.ForVersionAsync(
+    projectId, versionId, ExportFileNameBuilder.Modules.Forecast, "xlsx",
+    ExportFileNameBuilder.Views.Summary, cancellationToken: ct);
+return File(bytes, excelMime, fileName);
+```
+
+Новый экспорт: расширить словарь в `ExportFileNameBuilder`, вызвать билдер/`IExportFileNameService`, не изобретать английское имя в контроллере или UI.

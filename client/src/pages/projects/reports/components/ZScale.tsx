@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { Box, Card, CardContent, Grid, Stack, Typography } from '@mui/material';
 import { ACCENT_FACT, ACCENT_PLAN, INTERPRETATION_COLOR, percentileFraction } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
@@ -71,16 +72,31 @@ function PercentileGauge({
     </Box>
   );
 }
+=======
+import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
+import { ACCENT_FACT, ACCENT_PLAN, MUTED_COLOR, ZONE_COLOR } from '../reportCalc';
+>>>>>>> origin/master
 
 const MIN = -1.75;
 const MAX = 1.75;
 
+<<<<<<< HEAD
 const ZONES = [
   { from: MIN, to: -1, label: 'Отлично', color: INTERPRETATION_COLOR.Excellent },
   { from: -1, to: -0.5, label: 'Хорошо', color: INTERPRETATION_COLOR.Good },
   { from: -0.5, to: 0.5, label: 'Удовлетв.', color: INTERPRETATION_COLOR.Satisfactory },
   { from: 0.5, to: 1, label: 'Внимание', color: INTERPRETATION_COLOR.NeedsAttention },
   { from: 1, to: MAX, label: 'Критично', color: INTERPRETATION_COLOR.Critical },
+=======
+// Пороги зон — паритет backend PerformanceInterpretationHelper.GetInterpretation.
+// Цвета — пастельная палитра мокапа ReportRedesignMockup.
+const ZONES = [
+  { from: MIN, to: -1, label: 'Отлично', color: ZONE_COLOR.Excellent },
+  { from: -1, to: -0.5, label: 'Хорошо', color: ZONE_COLOR.Good },
+  { from: -0.5, to: 0.5, label: 'Удовл.', color: ZONE_COLOR.Satisfactory },
+  { from: 0.5, to: 1, label: 'Внимание', color: ZONE_COLOR.NeedsAttention },
+  { from: 1, to: MAX, label: 'Критично', color: ZONE_COLOR.Critical },
+>>>>>>> origin/master
 ];
 
 function pct(z: number) {
@@ -91,7 +107,11 @@ function pct(z: number) {
 /**
  * Строка-дорожка с маркером на шкале Z. План и факт рисуются на раздельных дорожках
  * (а не общим слоем над шкалой), чтобы подписи значений не пересекались, даже когда
+<<<<<<< HEAD
  * оба Z близки друг к другу.
+=======
+ * оба Z близки друг к другу. Факт — крупный акцентный маркер с бейджем значения.
+>>>>>>> origin/master
  */
 function MarkerTrack({
   z,
@@ -110,10 +130,16 @@ function MarkerTrack({
       <Box sx={{ width: 46, textAlign: 'right', flexShrink: 0 }}>
         <Typography
           sx={{
+<<<<<<< HEAD
             fontFamily: 'inherit',
             fontSize: emphasized ? 11.5 : 10.5,
             fontWeight: emphasized ? 800 : 700,
             color: emphasized ? color : wpColors.muted,
+=======
+            fontSize: emphasized ? 11.5 : 10.5,
+            fontWeight: emphasized ? 800 : 700,
+            color: emphasized ? color : MUTED_COLOR,
+>>>>>>> origin/master
           }}
         >
           {rowLabel}
@@ -146,11 +172,18 @@ function MarkerTrack({
                 top: '50%',
                 transform: emphasized ? 'translate(14px, -50%)' : 'translate(11px, -50%)',
                 bgcolor: emphasized ? color : 'transparent',
+<<<<<<< HEAD
                 color: emphasized ? '#FFFFFF' : wpColors.muted,
                 px: emphasized ? 0.9 : 0,
                 py: emphasized ? 0.15 : 0,
                 borderRadius: '6px',
                 fontFamily: 'monospace',
+=======
+                color: emphasized ? '#FFFFFF' : MUTED_COLOR,
+                px: emphasized ? 0.9 : 0,
+                py: emphasized ? 0.15 : 0,
+                borderRadius: '6px',
+>>>>>>> origin/master
                 fontSize: emphasized ? 11 : 10,
                 fontWeight: emphasized ? 800 : 600,
                 whiteSpace: 'nowrap',
@@ -169,6 +202,7 @@ function MarkerTrack({
 interface ZScaleProps {
   planZScore: number | null;
   factZScore: number | null;
+<<<<<<< HEAD
   percentile: string | null;
   planPercentile?: string | null;
 }
@@ -178,6 +212,15 @@ export function ZScale({ planZScore, factZScore, percentile, planPercentile }: Z
     <Card variant="outlined">
       <CardContent>
         <Stack spacing={3}>
+=======
+}
+
+export function ZScale({ planZScore, factZScore }: ZScaleProps) {
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={2}>
+>>>>>>> origin/master
           <Stack spacing={0.5}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
               Шкала интерпретации Z-оценки
@@ -195,6 +238,7 @@ export function ZScale({ planZScore, factZScore, percentile, planPercentile }: Z
             </Stack>
 
             <Box sx={{ pl: '58px' }}>
+<<<<<<< HEAD
               <Box sx={{ display: 'flex', height: 28, width: '100%', overflow: 'hidden', borderRadius: 1 }}>
                 {ZONES.map((zone) => (
                   <Box
@@ -229,13 +273,38 @@ export function ZScale({ planZScore, factZScore, percentile, planPercentile }: Z
                 direction="row"
                 justifyContent="space-between"
                 sx={{ mt: 1, fontFamily: 'monospace', fontSize: 11, color: wpColors.muted }}
+=======
+              <Box sx={{ height: 1, bgcolor: '#E4E9ED', mb: 1 }} />
+              <Box sx={{ display: 'flex', height: 14, borderRadius: '7px', overflow: 'hidden' }}>
+                {ZONES.map((zone) => (
+                  <Box key={zone.label} sx={{ flex: zone.to - zone.from, bgcolor: zone.color }} />
+                ))}
+              </Box>
+
+              {/* Подписи зон под полосой — на узких экранах скрыты, дублируются легендой ниже. */}
+              <Stack direction="row" sx={{ mt: 1, display: { xs: 'none', sm: 'flex' } }}>
+                {ZONES.map((zone) => (
+                  <Box key={zone.label} sx={{ flex: zone.to - zone.from, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: 10.5, color: MUTED_COLOR, fontWeight: 600 }}>{zone.label}</Typography>
+                  </Box>
+                ))}
+              </Stack>
+
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                sx={{ mt: 0.5, fontSize: 11, color: MUTED_COLOR }}
+>>>>>>> origin/master
               >
                 {['−1.5', '−1.0', '−0.5', '0', '+0.5', '+1.0', '+1.5'].map((tick) => (
                   <span key={tick}>{tick}</span>
                 ))}
               </Stack>
 
+<<<<<<< HEAD
               {/* На узких экранах полосы зон слишком тонкие для подписей — дублируем их обёртываемой легендой. */}
+=======
+>>>>>>> origin/master
               <Stack
                 direction="row"
                 spacing={1.5}
@@ -246,12 +315,17 @@ export function ZScale({ planZScore, factZScore, percentile, planPercentile }: Z
                 {ZONES.map((zone) => (
                   <Stack key={zone.label} direction="row" spacing={0.5} alignItems="center">
                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: zone.color, flexShrink: 0 }} />
+<<<<<<< HEAD
                     <Typography sx={{ fontSize: 11, color: wpColors.muted }}>{zone.label}</Typography>
+=======
+                    <Typography sx={{ fontSize: 11, color: MUTED_COLOR }}>{zone.label}</Typography>
+>>>>>>> origin/master
                   </Stack>
                 ))}
               </Stack>
             </Box>
           </Box>
+<<<<<<< HEAD
 
           <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 1 }}>
@@ -296,6 +370,8 @@ export function ZScale({ planZScore, factZScore, percentile, planPercentile }: Z
               </Typography>
             </Grid>
           </Grid>
+=======
+>>>>>>> origin/master
         </Stack>
       </CardContent>
     </Card>

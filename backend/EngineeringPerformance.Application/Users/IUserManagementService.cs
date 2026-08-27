@@ -28,4 +28,12 @@ public interface IUserManagementService
         int targetUserId,
         string newPassword,
         CancellationToken cancellationToken = default);
+
+    Task<bool> UnlockAsync(int userId, CancellationToken cancellationToken = default);
+
+    Task<MfaResetStatus> ResetMfaAsync(int userId, CancellationToken cancellationToken = default);
+
+    Task<(string? TemporaryPassword, string? Error)> ResetPasswordAsync(
+        int userId,
+        CancellationToken cancellationToken = default);
 }

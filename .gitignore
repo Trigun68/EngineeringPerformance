@@ -46,6 +46,8 @@ _tmp/
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/**
+!.cursor/skills/
+!.cursor/skills/**
 .playwright-mcp/
 
 # Source research files (исходники, референсы, черновики)
@@ -67,6 +69,9 @@ scripts/*
 
 # Misc artifacts
 backups/
+
+# Локальный архив ненужных данных (мусор, старые логи/бэкапы, мёртвый код)
+archive/
 
 # Frontend
 node_modules/

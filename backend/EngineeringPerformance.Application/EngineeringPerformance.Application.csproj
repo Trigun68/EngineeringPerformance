@@ -2,9 +2,14 @@
   <PropertyGroup>
     <RootNamespace>EngineeringPerformance.Application</RootNamespace>
     <AssemblyName>EngineeringPerformance.Application</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\EngineeringPerformance.Domain\EngineeringPerformance.Domain.csproj" />
     <PackageReference Include="FluentValidation" Version="11.9.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="EngineeringPerformance.Application.Tests" />
   </ItemGroup>
 </Project>

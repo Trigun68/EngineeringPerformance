@@ -2,11 +2,24 @@ namespace EngineeringPerformance.Application.Directories;
 
 public interface IDirectoryFacade
 {
-    Task<IReadOnlyList<DirectoryEntryDto>> ListAsync(string resource, bool includeArchived, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DirectoryEntryDto>> ListAsync(
+        string resource,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null);
 
-    Task<IReadOnlyList<DirectoryEntryDto>> GetChildrenAsync(string resource, int? parentId, bool includeArchived, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DirectoryEntryDto>> GetChildrenAsync(
+        string resource,
+        int? parentId,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null);
 
-    Task<IReadOnlyList<DirectoryTreeNodeDto>> GetTreeAsync(string resource, bool includeArchived, CancellationToken cancellationToken);
+    Task<IReadOnlyList<DirectoryTreeNodeDto>> GetTreeAsync(
+        string resource,
+        bool includeArchived,
+        CancellationToken cancellationToken,
+        int? projectId = null);
 
     Task<DirectoryEntryDto?> GetByIdAsync(string resource, int id, CancellationToken cancellationToken);
 

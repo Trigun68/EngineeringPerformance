@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material';
 import type { ColDef } from 'ag-grid-community';
 import {
   archiveUser,
@@ -7,12 +7,16 @@ import {
   deleteUser,
   fetchRoles,
   fetchUsers,
+  resetUserMfa,
+  resetUserPassword,
+  unlockUser,
   unarchiveUser,
   updateUser,
 } from '../../api/usersApi';
 import { DataTable } from '../../components/DataTable/DataTable';
 import { DirectoryToolbar } from '../references/DirectoryToolbar';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import type { AppUser, RoleOption, UserFormData } from '../../types/user';
 import { emptyUserForm, UserEditDialog, userToForm } from './UserEditDialog';
 
@@ -24,6 +28,7 @@ function boolLabel(value: boolean): string {
 
 export function UsersPage() {
   const { canRead, canEdit } = usePermission(OBJECT_NAME);
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const [rows, setRows] = useState<AppUser[]>([]);
   const [roles, setRoles] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,6 +38,7 @@ export function UsersPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
   const [form, setForm] = useState<UserFormData>(emptyUserForm());
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canRead) return;
@@ -103,7 +109,10 @@ export function UsersPage() {
 
   const handleDelete = async () => {
     if (!selected || !canEdit) return;
-    if (!window.confirm(`Удалить пользователя «${selected.displayName}»?`)) return;
+    if (!(await confirm({
+      title: 'Удалить пользователя?',
+      description: `Удалить пользователя «${selected.displayName}»?`,
+    }))) return;
     try {
       await deleteUser(selected.id);
       setSelected(null);
@@ -135,6 +144,44 @@ export function UsersPage() {
     }
   };
 
+  const handleUnlock = async () => {
+    if (!selected || !canEdit) return;
+    try {
+      await unlockUser(selected.id);
+      setError(null);
+    } catch {
+      setError('Не удалось разблокировать пользователя.');
+    }
+  };
+
+  const handleResetMfa = async () => {
+    if (!selected || !canEdit) return;
+    if (!(await confirm({
+      title: 'Сбросить MFA?',
+      description: `Сбросить MFA для пользователя «${selected.displayName}»?`,
+    }))) return;
+    try {
+      await resetUserMfa(selected.id);
+      setError(null);
+    } catch {
+      setError('Не удалось сбросить MFA. Возможно, MFA отключена.');
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!selected || !canEdit) return;
+    if (!(await confirm({
+      title: 'Сбросить пароль?',
+      description: `Сбросить пароль пользователя «${selected.displayName}»?`,
+    }))) return;
+    try {
+      setTemporaryPassword(await resetUserPassword(selected.id));
+      setError(null);
+    } catch {
+      setError('Не удалось сбросить пароль пользователя.');
+    }
+  };
+
   if (!canRead) {
     return <Alert severity="warning">Недостаточно прав для просмотра пользователей.</Alert>;
   }
@@ -163,6 +210,19 @@ export function UsersPage() {
         onRefresh={() => void load()}
         onExport={() => undefined}
       />
+      {canEdit && (
+        <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+          <Button size="small" variant="outlined" disabled={!selected} onClick={() => void handleUnlock()}>
+            Разблокировать
+          </Button>
+          <Button size="small" variant="outlined" disabled={!selected} onClick={() => void handleResetMfa()}>
+            Сбросить MFA
+          </Button>
+          <Button size="small" variant="outlined" disabled={!selected} onClick={() => void handleResetPassword()}>
+            Сбросить пароль
+          </Button>
+        </Stack>
+      )}
       <DataTable
         gridId="users"
         objectName={OBJECT_NAME}
@@ -181,6 +241,19 @@ export function UsersPage() {
         onClose={() => setModalOpen(false)}
         onSubmit={handleSave}
       />
+      <Dialog open={temporaryPassword !== null} onClose={() => setTemporaryPassword(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Временный пароль</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            Передайте пароль пользователю защищённым способом. При следующем входе он должен будет сменить его.
+          </Typography>
+          <TextField label="Временный пароль" value={temporaryPassword ?? ''} fullWidth InputProps={{ readOnly: true }} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTemporaryPassword(null)}>Закрыть</Button>
+        </DialogActions>
+      </Dialog>
+      {ConfirmDialog}
     </Box>
   );
 }

@@ -25,9 +25,10 @@ const mockMatrix = {
   objects: ['Projects', 'Assessment', 'References', 'Users', 'UserActionLog'],
   objectHierarchy: [],
   roles: [
-    { id: 1, name: 'Administrator' },
-    { id: 2, name: 'ProjectManager' },
-    { id: 3, name: 'Observer' },
+    { id: 1, name: 'SuperAdmin' },
+    { id: 2, name: 'Admin' },
+    { id: 3, name: 'Engineer' },
+    { id: 4, name: 'Gip' },
   ],
   matrix: {
     Projects: { '1': 'Edit', '2': 'Edit', '3': 'Read' },
@@ -43,7 +44,7 @@ const fetchMatrix = vi.fn();
 vi.mock('../../../store/useAuthStore', () => ({
   useAuthStore: Object.assign(
     (selector: (state: { user: { id: number; roleName: string }; refreshUser: () => Promise<void> }) => unknown) =>
-      selector({ user: { id: 1, roleName: 'Administrator' }, refreshUser: vi.fn().mockResolvedValue(undefined) }),
+      selector({ user: { id: 1, roleName: 'SuperAdmin' }, refreshUser: vi.fn().mockResolvedValue(undefined) }),
     {
       getState: () => ({
         refreshUser: vi.fn().mockResolvedValue(undefined),
@@ -130,7 +131,7 @@ describe('PermissionMatrixGrid', () => {
 
     expect(await screen.findByTestId('permission-matrix')).toBeInTheDocument();
     expect(screen.getByTestId('object-column-header')).toHaveTextContent('Объект / Роль');
-    expect(screen.getByTestId('role-headers')).toHaveTextContent('Администратор,Менеджер проекта,Наблюдатель');
+    expect(screen.getByTestId('role-headers')).toHaveTextContent('Суперадминистратор,Администратор,Инженер,Главный инженер проекта');
   });
 
   it('applies indent for child rows by level', async () => {

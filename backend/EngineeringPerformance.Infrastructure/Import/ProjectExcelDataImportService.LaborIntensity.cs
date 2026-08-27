@@ -73,9 +73,10 @@ public sealed partial class ProjectExcelDataImportService
         int versionId,
         string filePath,
         string description,
+        ImportSourceMetadata source,
         bool addMissingToCatalog) =>
         ExecuteWithRetryableTransactionAsync(context =>
-            ImportLaborIntensitiesCoreAsync(context, projectId, versionId, filePath, description, addMissingToCatalog));
+            ImportLaborIntensitiesCoreAsync(context, projectId, versionId, filePath, description, source, addMissingToCatalog));
 
     private async Task<DataImportResultDto> ImportLaborIntensitiesCoreAsync(
         AppDbContext context,
@@ -83,22 +84,19 @@ public sealed partial class ProjectExcelDataImportService
         int versionId,
         string filePath,
         string description,
+        ImportSourceMetadata source,
         bool addMissingToCatalog)
     {
         // Удаляем все предыдущие данные трудоёмкости для этой версии (стратегия: очистка + вставка)
         await ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = new DataImportIteration
-        {
-            ProjectId = projectId,
-            ProjectAnalysisVersionId = versionId,
-            DataType = DataImportType.LaborIntensity,
-            Description = description,
-            SourceFileName = Path.GetFileName(filePath),
-            ImportedAt = DateTime.UtcNow,
-        };
-        context.DataImportIterations.Add(iteration);
-        await context.SaveChangesAsync();
+        var iteration = await CreateIterationAsync(
+            context,
+            projectId,
+            versionId,
+            DataImportType.LaborIntensity,
+            description,
+            source);
 
         // Справочник «Трудоёмкость» — единственный источник связи:
         // (1) DocumentTypeName из Excel-строки проекта → LaborIntensity,

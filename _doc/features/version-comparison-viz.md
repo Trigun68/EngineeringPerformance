@@ -1,6 +1,6 @@
 # Визуализация сравнения версий
 
-**Дата обновления:** 2026-07-13  
+**Дата обновления:** 2026-08-25  
 **Код:** `client/src/features/projects/compare/`, `backend/.../ProjectCompareService.cs`
 
 ## Возможности MVP
@@ -8,11 +8,11 @@
 - Dual picker версий А/Б с сохранением в `UserPreferences`
 - Подвкладки Итого (tree IIC) / По объектам / Детально
 - Фильтр «Показывать различия» (паритет WPF: presence `A+B`, productivityDelta)
-- Режимы отображения: Таблица / График / Split
-- KPI strip: Δ трудоёмкость по объектам, средний Δ Z
-- API: `GET /api/projects/{id}/compare/chart`
+- Всегда таблица; выгрузка Excel/PDF справа у подвкладок
+- Чип «Различия версий»: плановые часы выбранного сценария, B − A, итог текущей подвкладки
 - PDF: `GET /api/projects/{id}/compare/export.pdf` (ScottPlot + QuestPDF)
 
 ## Связанные документы
 
-- [Трендовый анализ](./trend-analysis.md)
+- [Тренд оценки факта (Z)](./trend-analysis.md)
+- [Тренд производительности нормы](./productivity-trend.md)

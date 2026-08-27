@@ -6,11 +6,13 @@ using EngineeringPerformance.Domain.Norms;
 namespace EngineeringPerformance.Application.LaborIntensity;
 
 /// <summary>
-/// Единая агрегация прогнозных часов по PPV и направлениям ИИС (ForecastPanel = отчёт планирования).
+/// Агрегация прогнозных часов по PPV и направлениям ИИС.
+/// Реализация для IPerformanceCalculationEngine; Infrastructure вызывает только через движок.
 /// </summary>
 public static class ForecastHoursAggregator
 {
-    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvHours(
+    // Методы internal: агрегация доступна только через IPerformanceCalculationEngine.
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvHours(
         PlanningScenario scenario,
         IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
@@ -32,7 +34,7 @@ public static class ForecastHoursAggregator
             r => (r.Base, r.Optimistic, r.Pessimistic));
     }
 
-    public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateByDirection(
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateByDirection(
         IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
         IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
         IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
@@ -84,5 +86,39 @@ public static class ForecastHoursAggregator
         return byDirection.ToDictionary(
             kv => kv.Key,
             kv => ((decimal?)kv.Value.Base, (decimal?)kv.Value.Optimistic, (decimal?)kv.Value.Pessimistic));
+    }
+
+    /// <summary>
+    /// Часы оборудования по id строки: N(V_eq)×z на позицию, без группировки сценария ФО.
+    /// </summary>
+    internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentHours(
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
+        IDeviationCalculator calculator)
+    {
+        var result = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>(lines.Count);
+        foreach (var line in lines)
+        {
+            if (!line.IsAssessment
+                || line.ClassifierId is not int dirId
+                || line.VolumeInIicUnits <= 0
+                || !normsByDirection.TryGetValue(dirId, out var snap))
+            {
+                result[line.Id] = (null, null, null);
+                continue;
+            }
+
+            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId);
+            result[line.Id] = ForecastCalculation.ComputeForecastHours(
+                snap.NormFormula,
+                snap.DeviationFormula,
+                line.VolumeInIicUnits,
+                line.VolumeInIicUnits,
+                z,
+                calculator);
+        }
+
+        return result;
     }
 }

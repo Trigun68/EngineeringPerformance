@@ -11,7 +11,16 @@ public sealed record ProjectPhysicalVolumeDto(
     string? FacilityCode,
     string? FacilityName,
     string? WorkName,
-    decimal? LaborHoursPerUnit);
+    decimal? LaborHoursPerUnit,
+    string? BindingType = null,
+    string? DocumentSet = null,
+    string? CatalogId = null,
+    string? Tag = null,
+    string? WorkId = null,
+    string? WorkComment = null,
+    string? EstimationBasis = null,
+    string? CatalogCode = null,
+    string? CatalogName = null);
 
 public sealed record ProjectLaborIntensityDto(
     int Id,
@@ -19,7 +28,11 @@ public sealed record ProjectLaborIntensityDto(
     int ProjectAnalysisVersionId,
     int? LaborIntensityId,
     decimal? PlannedHours,
-    decimal? ActualHours);
+    decimal? ActualHours,
+    string? DocumentationCode = null,
+    string? Brand = null,
+    string? Notes = null,
+    int? WorkDirectionId = null);
 
 public sealed record ProjectEquipmentDto(
     int Id,
@@ -27,22 +40,60 @@ public sealed record ProjectEquipmentDto(
     int ProjectAnalysisVersionId,
     int EquipmentId,
     decimal Quantity,
-    decimal? QuantityInWork);
+    decimal? QuantityInWork,
+    string? PositionNumber = null,
+    string? FacilityCode = null,
+    string? FacilityName = null,
+    string? DocumentSet = null,
+    string? DiagramNumber = null,
+    string? ShortName = null,
+    string? CatalogName = null,
+    string? TypeMark = null,
+    string? CatalogId = null,
+    string? Tag = null,
+    string? FullEquipmentId = null,
+    string? SupplyStandard = null,
+    string? OlReference = null,
+    string? EstimationBasis = null);
 
 public sealed record ProjectPhysicalVolumeWriteRequest(
     int PhysicalVolumeId,
     decimal Quantity,
-    string? FacilityCode,
-    string? FacilityName,
-    string? WorkName,
-    decimal? LaborHoursPerUnit);
+    string? FacilityCode = null,
+    string? FacilityName = null,
+    string? WorkName = null,
+    decimal? LaborHoursPerUnit = null,
+    string? BindingType = null,
+    string? DocumentSet = null,
+    string? CatalogId = null,
+    string? Tag = null,
+    string? WorkId = null,
+    string? WorkComment = null,
+    string? EstimationBasis = null);
 
 public sealed record ProjectLaborIntensityWriteRequest(
     int? LaborIntensityId,
     decimal PlannedHours,
-    decimal ActualHours);
+    decimal ActualHours,
+    string? DocumentationCode = null,
+    string? Brand = null,
+    string? Notes = null);
 
 public sealed record ProjectEquipmentWriteRequest(
     int EquipmentId,
     decimal Quantity,
-    decimal? QuantityInWork);
+    decimal? QuantityInWork = null,
+    string? PositionNumber = null,
+    string? FacilityCode = null,
+    string? FacilityName = null,
+    string? DocumentSet = null,
+    string? DiagramNumber = null,
+    string? ShortName = null,
+    string? CatalogName = null,
+    string? TypeMark = null,
+    string? CatalogId = null,
+    string? Tag = null,
+    string? FullEquipmentId = null,
+    string? SupplyStandard = null,
+    string? OlReference = null,
+    string? EstimationBasis = null);

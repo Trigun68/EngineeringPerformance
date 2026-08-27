@@ -79,6 +79,32 @@ test.describe('Dictionary filtering', () => {
     expect(headerBox!.y).toBeLessThan(viewportBox!.y);
   });
 
+  test('KFO classifier column filter lists formatted labels not raw ids', async ({ page }) => {
+    await page.goto('/references/physical-volumes-kfo');
+    await page.waitForSelector('.ag-root', { timeout: 15_000 });
+
+    const header = page.locator('.ag-header-cell').filter({ hasText: 'Классификатор (КФО)' });
+    await expect(header).toBeVisible();
+    await header.locator('.ag-header-cell-filter-button').click();
+
+    await expect(page.getByPlaceholder('Поиск...')).toBeVisible();
+    const labels = page.locator('.MuiFormControlLabel-label');
+    await expect(labels.first()).toBeVisible({ timeout: 10_000 });
+
+    const texts = await labels.allTextContents();
+    expect(texts.length).toBeGreaterThan(0);
+    // Сырые числовые id классификатора не должны быть единственной подписью пункта
+    const numericOnly = texts.filter((t) => /^\d+$/.test(t.trim()));
+    expect(numericOnly.length).toBe(0);
+
+    // Есть хотя бы одна отформатированная группа IIC или «(Пусто)»
+    expect(
+      texts.some((t) => t.includes('IIC-') || t.includes('(Пусто)') || t.includes('—')),
+    ).toBe(true);
+
+    await page.getByRole('button', { name: 'Сбросить' }).click();
+  });
+
   test('BER tree grid keeps header visible when scrolling body', async ({ page }) => {
     await page.goto('/references/physical-volumes-ber');
     await page.waitForSelector('.ag-body-viewport', { timeout: 15_000 });

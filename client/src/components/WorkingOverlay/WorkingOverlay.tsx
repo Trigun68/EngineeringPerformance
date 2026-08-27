@@ -1,4 +1,5 @@
 import { Backdrop, CircularProgress, Stack, Typography } from '@mui/material';
+import { useDelayedBusy } from '../../hooks/useDelayedBusy';
 
 export interface WorkingOverlayProps {
   open: boolean;
@@ -9,6 +10,11 @@ export interface WorkingOverlayProps {
    * Нужен, когда операция идёт внутри Dialog.
    */
   aboveModals?: boolean;
+  /**
+   * Показывать оверлей только если `open` дольше указанного времени (мс).
+   * 0 — сразу (мутации/экспорт). Для загрузки данных обычно 1000.
+   */
+  delayMs?: number;
 }
 
 /**
@@ -18,10 +24,13 @@ export function WorkingOverlay({
   open,
   message = 'Работаю…',
   aboveModals = true,
+  delayMs = 0,
 }: WorkingOverlayProps) {
+  const visible = useDelayedBusy(open, delayMs);
+
   return (
     <Backdrop
-      open={open}
+      open={visible}
       data-testid="working-overlay"
       sx={{
         color: '#ECF0F1',

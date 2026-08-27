@@ -14,7 +14,12 @@ export interface ProjectVersion {
   isArchived: boolean;
   createdAt?: string;
   planningScenario?: number;
+<<<<<<< HEAD
   isMain: boolean;
+=======
+  zParameterLevel?: number;
+  isPrimary?: boolean;
+>>>>>>> origin/master
 }
 
 export interface ProjectVersionWriteRequest {
@@ -24,8 +29,11 @@ export interface ProjectVersionWriteRequest {
   physicalVolumeTypeId?: number | null;
   name?: string | null;
   planningScenario?: number | null;
+  zParameterLevel?: number | null;
   /** Дата фиксации норм IIC (CreatedAt + AnalysisVersionSnapshot). ISO date или datetime. */
   asOfDate?: string | null;
+  /** Только create: сделать версию основной. */
+  isPrimary?: boolean | null;
 }
 
 export interface CopyVersionRequest {
@@ -46,7 +54,13 @@ const projectVersionSchema = z.object({
   sortOrder: z.number().int(),
   isArchived: z.boolean(),
   createdAt: z.string().optional(),
+<<<<<<< HEAD
   isMain: z.boolean().optional().default(false),
+=======
+  planningScenario: z.number().int().optional(),
+  zParameterLevel: z.number().int().optional(),
+  isPrimary: z.boolean().optional(),
+>>>>>>> origin/master
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 
@@ -89,12 +103,27 @@ export async function deleteProjectVersion(projectId: number, versionId: number)
   await apiClient.delete(`/projects/${projectId}/versions/${versionId}`);
 }
 
+<<<<<<< HEAD
 /** Делает версию основной для её направления (Plan или Fact); Forecast не поддерживается. */
 export async function setMainProjectVersion(projectId: number, versionId: number): Promise<ProjectVersion> {
   const { data } = await apiClient.post<ProjectVersion>(
     `/projects/${projectId}/versions/${versionId}/set-main`,
   );
   return parseApiContract(`/projects/${projectId}/versions/${versionId}/set-main`, projectVersionSchema, data);
+=======
+export async function setPrimaryProjectVersion(
+  projectId: number,
+  versionId: number,
+): Promise<ProjectVersion> {
+  const { data } = await apiClient.post<ProjectVersion>(
+    `/projects/${projectId}/versions/${versionId}/set-primary`,
+  );
+  return parseApiContract(
+    `/projects/${projectId}/versions/${versionId}/set-primary`,
+    projectVersionSchema,
+    data,
+  );
+>>>>>>> origin/master
 }
 
 export async function recalculateLaborIntensities(

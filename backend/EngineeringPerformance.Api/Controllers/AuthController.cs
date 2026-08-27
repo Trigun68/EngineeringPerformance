@@ -2,16 +2,13 @@ using System.Security.Claims;
 using EngineeringPerformance.Api.Auth;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
+using EngineeringPerformance.Api.Metrics;
 using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
-using EngineeringPerformance.Application.Permissions;
-using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
-using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 using EngineeringPerformance.Api.Middleware;
 using Microsoft.Extensions.Options;
 
@@ -21,23 +18,29 @@ namespace EngineeringPerformance.Api.Controllers;
 [Route("api/[controller]")]
 public sealed class AuthController : ControllerBase
 {
-    private readonly AppDbContext _context;
-    private readonly IJwtTokenService _jwtTokenService;
+    private readonly IAuthService _authService;
+    private readonly IRefreshTokenService _refreshTokenService;
+    private readonly IAuthAuditService _authAuditService;
+    private readonly AuthCookieHelper _authCookieHelper;
     private readonly IUserActionLogger _actionLogger;
     private readonly IHostEnvironment _environment;
     private readonly SpnegoOptions _spnegoOptions;
     private readonly DevWindowsAuthOptions _devWindowsAuth;
 
     public AuthController(
-        AppDbContext context,
-        IJwtTokenService jwtTokenService,
+        IAuthService authService,
+        IRefreshTokenService refreshTokenService,
+        IAuthAuditService authAuditService,
+        AuthCookieHelper authCookieHelper,
         IUserActionLogger actionLogger,
         IHostEnvironment environment,
         IOptions<SpnegoOptions> spnegoOptions,
         IOptions<DevWindowsAuthOptions> devWindowsAuth)
     {
-        _context = context;
-        _jwtTokenService = jwtTokenService;
+        _authService = authService;
+        _refreshTokenService = refreshTokenService;
+        _authAuditService = authAuditService;
+        _authCookieHelper = authCookieHelper;
         _actionLogger = actionLogger;
         _environment = environment;
         _spnegoOptions = spnegoOptions.Value;
@@ -46,7 +49,14 @@ public sealed class AuthController : ControllerBase
 
     public sealed record LoginRequest(string Username, string Password);
 
-    public sealed record LoginResponse(DateTime ExpiresAt, UserInfoResponse User);
+    public sealed record LoginResponse(
+        DateTime ExpiresAt,
+        UserInfoResponse User,
+        bool RequiresMfa = false,
+        string? MfaSessionToken = null,
+        bool RequiresMfaSetup = false,
+        string? AccessToken = null,
+        string? TokenType = null);
 
     public sealed record UserInfoResponse(
         int Id,
@@ -56,6 +66,8 @@ public sealed class AuthController : ControllerBase
         string RoleName,
         string? WindowsUsername,
         bool IsActive,
+        bool MfaEnabled,
+        bool MustChangePassword,
         Dictionary<string, int> Permissions);
 
     [HttpPost("login")]
@@ -63,22 +75,34 @@ public sealed class AuthController : ControllerBase
     [EnableRateLimiting("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        var user = await FindUserForLoginAsync(request.Username, cancellationToken);
+        var result = await _authService.LoginAsync(
+            request.Username,
+            request.Password,
+            GetRemoteIpAddress(),
+            GetUserAgent(),
+            cancellationToken);
 
-        if (user is null || string.IsNullOrEmpty(user.PasswordHash))
-            return Unauthorized();
-
-        var passwordOk = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
-        if (!passwordOk)
+        switch (result.Status)
         {
-            await _actionLogger.LogForUserAsync(
-                user.Id,
-                UserActionType.LoginFailed,
-                description: "Invalid password");
-            return Unauthorized();
+            case AuthLoginStatus.Success:
+                AuthMetrics.LoginSuccess.Inc();
+                _authCookieHelper.Append(
+                    Response,
+                    result.Tokens!.AccessToken,
+                    result.Tokens.ExpiresAt,
+                    result.Tokens.RefreshToken);
+                return Ok(ToLoginResponse(result));
+            case AuthLoginStatus.MfaRequired:
+                AuthMetrics.LoginSuccess.Inc();
+                return Ok(new LoginResponse(
+                    result.MfaExpiresAt ?? DateTime.UtcNow,
+                    MapUser(result.User!),
+                    RequiresMfa: true,
+                    MfaSessionToken: result.MfaSessionToken));
+            default:
+                AuthMetrics.LoginFailure.Inc();
+                return Unauthorized();
         }
-
-        return Ok(await CreateLoginResponseAsync(user, $"Manual login: {user.Username}", cancellationToken));
     }
 
     public sealed record WindowsIdentityHintResponse(string? WindowsUsername, string? DisplayName, string Source);
@@ -91,11 +115,7 @@ public sealed class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(hint.Username))
             return Ok(new WindowsIdentityHintResponse(null, null, "none"));
 
-        var user = await FindUserForLoginAsync(hint.Username, cancellationToken);
-        var displayName = !string.IsNullOrWhiteSpace(user?.DisplayName)
-            ? user!.DisplayName
-            : null;
-
+        var displayName = await _authService.GetDisplayNameForLoginIdentityAsync(hint.Username, cancellationToken);
         return Ok(new WindowsIdentityHintResponse(hint.Username, displayName, hint.Source));
     }
 
@@ -130,82 +150,141 @@ public sealed class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Negotiate(CancellationToken cancellationToken)
     {
-        var autoLogin = await TryWindowsAutoLoginAsync(cancellationToken);
-        return autoLogin is null ? Unauthorized() : Ok(autoLogin);
+        if (!_spnegoOptions.Enabled
+            && (!_environment.IsDevelopment() || string.IsNullOrWhiteSpace(_devWindowsAuth.SimulatedWindowsUser)))
+        {
+            return NotFound();
+        }
+
+        var hint = ResolveWindowsIdentityHint();
+        if (string.IsNullOrWhiteSpace(hint.Username))
+            return Unauthorized();
+
+        var result = await _authService.WindowsLoginAsync(
+            hint.Username,
+            GetRemoteIpAddress(),
+            GetUserAgent(),
+            cancellationToken);
+
+        if (result is null)
+            return Unauthorized();
+
+        if (result.Status == AuthLoginStatus.MfaRequired)
+        {
+            return Ok(new LoginResponse(
+                result.MfaExpiresAt ?? DateTime.UtcNow,
+                MapUser(result.User!),
+                RequiresMfa: true,
+                MfaSessionToken: result.MfaSessionToken));
+        }
+
+        _authCookieHelper.Append(
+            Response,
+            result.Tokens!.AccessToken,
+            result.Tokens.ExpiresAt,
+            result.Tokens.RefreshToken);
+        return Ok(ToLoginResponse(result));
     }
 
     [HttpPost("logout")]
     [AllowAnonymous]
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
+        var refreshToken = GetRefreshCookie();
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+            await _refreshTokenService.RevokeAsync(refreshToken, "Logout", cancellationToken);
+
         if (User.FindFirstValue(ClaimTypes.NameIdentifier) is { } userIdRaw
             && int.TryParse(userIdRaw, out var userId))
         {
             await _actionLogger.LogForUserAsync(userId, UserActionType.Logout, cancellationToken: cancellationToken);
+            await _authAuditService.WriteAsync(
+                AuthEventType.Logout,
+                success: true,
+                userId: userId,
+                cancellationToken: cancellationToken);
         }
 
-        Response.Cookies.Delete(AuthCookieConstants.TokenCookieName, new CookieOptions { Path = "/" });
+        _authCookieHelper.Delete(Response);
         return NoContent();
     }
 
     [HttpPost("refresh")]
-    [Authorize]
+    [AllowAnonymous]
     public async Task<ActionResult<LoginResponse>> Refresh(CancellationToken cancellationToken)
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim, out var userId))
+        var refreshToken = GetRefreshCookie();
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            await _authAuditService.WriteAsync(
+                AuthEventType.RefreshFailed,
+                success: false,
+                details: "Refresh cookie is missing",
+                cancellationToken: cancellationToken);
+            return Unauthorized();
+        }
+
+        var result = await _authService.RefreshAsync(
+            refreshToken,
+            GetRemoteIpAddress(),
+            GetUserAgent(),
+            cancellationToken);
+        if (result is null)
+        {
+            _authCookieHelper.Delete(Response);
+            return Unauthorized();
+        }
+
+        _authCookieHelper.Append(
+            Response,
+            result.Tokens.AccessToken,
+            result.Tokens.ExpiresAt,
+            result.Tokens.RefreshToken);
+
+        AuthMetrics.TokenRefresh.Inc();
+        return Ok(new LoginResponse(
+            result.Tokens.ExpiresAt,
+            MapUser(result.User),
+            AccessToken: result.Tokens.AccessToken,
+            TokenType: "Bearer"));
+    }
+
+    [HttpPost("logout-all")]
+    [Authorize]
+    public async Task<IActionResult> LogoutAll(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
             return Unauthorized();
 
-        var user = await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
+        await _refreshTokenService.RevokeAllAsync(userId, "Logout all devices", cancellationToken);
+        await _authAuditService.WriteAsync(
+            AuthEventType.LogoutAllDevices,
+            success: true,
+            userId: userId,
+            cancellationToken: cancellationToken);
+        _authCookieHelper.Delete(Response);
+        return NoContent();
+    }
 
-        if (user is null)
+    [HttpGet("sessions")]
+    [Authorize]
+    public async Task<ActionResult<IReadOnlyList<RefreshSession>>> GetSessions(CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
             return Unauthorized();
 
-        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
-        var token = _jwtTokenService.GenerateToken(user);
-        var expires = _jwtTokenService.GetExpiration();
-        AppendAuthCookie(token, expires);
-
-        return Ok(new LoginResponse(expires, MapUser(user, permissions)));
+        return Ok(await _refreshTokenService.GetSessionsAsync(userId, cancellationToken));
     }
 
     [HttpGet("me")]
     [Authorize]
     public async Task<ActionResult<UserInfoResponse>> Me(CancellationToken cancellationToken)
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!int.TryParse(userIdClaim, out var userId))
+        if (!TryGetCurrentUserId(out var userId))
             return Unauthorized();
 
-        var user = await _context.Users
-            .AsNoTracking()
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
-
-        if (user is null)
-            return Unauthorized();
-
-        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
-        return Ok(MapUser(user, permissions));
-    }
-
-    private async Task<LoginResponse?> TryWindowsAutoLoginAsync(CancellationToken cancellationToken)
-    {
-        var hint = ResolveWindowsIdentityHint();
-        if (string.IsNullOrWhiteSpace(hint.Username))
-            return null;
-
-        var user = await FindUserForLoginAsync(hint.Username, cancellationToken);
-        if (user is null)
-            return null;
-
-        return await CreateLoginResponseAsync(
-            user,
-            $"Auto-login: {hint.Username}",
-            cancellationToken);
+        var info = await _authService.GetUserInfoAsync(userId, cancellationToken);
+        return info is null ? Unauthorized() : Ok(MapUser(info));
     }
 
     private (string? Username, string Source) ResolveWindowsIdentityHintForDisplay()
@@ -241,36 +320,6 @@ public sealed class AuthController : ControllerBase
         return (null, "none");
     }
 
-    private async Task<User?> FindUserForLoginAsync(string input, CancellationToken cancellationToken)
-    {
-        var users = await _context.Users
-            .Include(u => u.Role)
-            .Where(u => u.IsActive)
-            .ToListAsync(cancellationToken);
-
-        return users.FirstOrDefault(u => LoginIdentityMatcher.Matches(u, input));
-    }
-
-    private async Task<LoginResponse> CreateLoginResponseAsync(
-        User user,
-        string logDescription,
-        CancellationToken cancellationToken)
-    {
-        var permissions = await LoadPermissionsAsync(user.RoleId, user.Role.Name, cancellationToken);
-        var token = _jwtTokenService.GenerateToken(user);
-        var expires = _jwtTokenService.GetExpiration();
-
-        AppendAuthCookie(token, expires);
-
-        await _actionLogger.LogForUserAsync(
-            user.Id,
-            UserActionType.Login,
-            description: logDescription,
-            cancellationToken: cancellationToken);
-
-        return new LoginResponse(expires, MapUser(user, permissions));
-    }
-
     private bool IsTrustedProxyRequest()
     {
         if (string.IsNullOrWhiteSpace(_spnegoOptions.TrustedProxySecret))
@@ -284,45 +333,34 @@ public sealed class AuthController : ControllerBase
             && string.Equals(provided, _spnegoOptions.TrustedProxySecret, StringComparison.Ordinal);
     }
 
-    private void AppendAuthCookie(string token, DateTime expires)
-    {
-        Response.Cookies.Append(AuthCookieConstants.TokenCookieName, token, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = _environment.IsProduction() || Request.IsHttps,
-            // Strict ломает cookie jar HttpClient в интеграционных тестах (WebApplicationFactory).
-            SameSite = _environment.IsEnvironment("Development") || _environment.IsEnvironment("Testing")
-                ? SameSiteMode.Lax
-                : SameSiteMode.Strict,
-            Expires = expires,
-            Path = "/",
-        });
-    }
+    private string? GetRefreshCookie() =>
+        Request.Cookies.TryGetValue(AuthCookieConstants.RefreshCookieName, out var token) ? token : null;
 
-    private async Task<Dictionary<string, int>> LoadPermissionsAsync(int roleId, string roleName, CancellationToken cancellationToken)
-    {
-        if (string.Equals(roleName, nameof(UserRole.Administrator), StringComparison.Ordinal))
-        {
-            return PermissionObjectCatalog.AllObjectNames
-                .ToDictionary(name => name, _ => (int)AccessLevel.Edit);
-        }
+    private string? GetRemoteIpAddress() => HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        var rights = await _context.AccessRights
-            .AsNoTracking()
-            .Where(r => r.RoleId == roleId)
-            .ToListAsync(cancellationToken);
+    private string? GetUserAgent() => Request.Headers.UserAgent.ToString();
 
-        return rights.ToDictionary(r => r.ObjectName, r => (int)r.AccessLevel);
-    }
+    private bool TryGetCurrentUserId(out int userId) =>
+        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
 
-    private static UserInfoResponse MapUser(Domain.Entities.User user, Dictionary<string, int> permissions) =>
+    internal static LoginResponse ToLoginResponse(AuthLoginResult result) =>
+        new(
+            result.Tokens!.ExpiresAt,
+            MapUser(result.User!),
+            RequiresMfaSetup: result.RequiresMfaSetup,
+            AccessToken: result.Tokens.AccessToken,
+            TokenType: "Bearer");
+
+    internal static UserInfoResponse MapUser(AuthUserInfo user) =>
         new(
             user.Id,
             user.Username,
             user.DisplayName,
             user.RoleId,
-            user.Role.Name,
+            user.RoleName,
             user.WindowsUsername,
             user.IsActive,
-            permissions);
+            user.MfaEnabled,
+            user.MustChangePassword,
+            user.Permissions);
 }

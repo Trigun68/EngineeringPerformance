@@ -14,6 +14,8 @@ import {
   Typography,
 } from '@mui/material';
 import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
+import { ExportActionButton } from '../export/ExportActionButton';
+import { ToolbarActionButton } from '../export/ToolbarActionButton';
 import { AgGridReact } from 'ag-grid-react';
 import type {
   ColDef,
@@ -30,7 +32,11 @@ import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
-import { agGridLocaleRu } from '../../utils/agGridLocaleRu';
+import {
+  agGridLocaleRu,
+  GRID_OVERLAY_LOADING_TEMPLATE,
+  GRID_OVERLAY_NO_ROWS_TEMPLATE,
+} from '../DataTable/gridDefaults';
 import {
   filterPrefKey,
   loadGridLayout,
@@ -280,6 +286,12 @@ function DictionaryGridInternal<T extends { id: number }>({
   const onGridReady = useCallback(
     (event: GridReadyEvent<T>) => {
       gridApiRef.current = event.api;
+      // E2E: ensureColumnVisible через window.__epGridApis[gridId]
+      if (typeof window !== 'undefined' && gridId) {
+        const w = window as Window & { __epGridApis?: Record<string, GridApi> };
+        w.__epGridApis = w.__epGridApis ?? {};
+        w.__epGridApis[gridId] = event.api as GridApi;
+      }
       onGridApiReady?.(event.api);
       void applySavedLayout(event.api).then(() => {
         syncColumnVisibilityState(event.api);
@@ -289,7 +301,7 @@ function DictionaryGridInternal<T extends { id: number }>({
         }, 500);
       });
     },
-    [applySavedLayout, onGridApiReady, syncColumnVisibilityState],
+    [applySavedLayout, gridId, onGridApiReady, syncColumnVisibilityState],
   );
 
   useEffect(() => () => {
@@ -459,24 +471,18 @@ function DictionaryGridInternal<T extends { id: number }>({
       <Stack direction="row" spacing={0.5} sx={{ mb: 1, justifyContent: 'space-between', flexShrink: 0 }}>
         {treeData ? (
           <Stack direction="row" spacing={0.5}>
-            <Button
-              size="small"
-              variant="outlined"
+            <ToolbarActionButton
               onClick={() => gridApiRef.current?.expandAll()}
-              sx={{ textTransform: 'none' }}
               aria-label="Развернуть всё"
             >
               Развернуть всё
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
+            </ToolbarActionButton>
+            <ToolbarActionButton
               onClick={() => gridApiRef.current?.collapseAll()}
-              sx={{ textTransform: 'none' }}
               aria-label="Свернуть всё"
             >
               Свернуть всё
-            </Button>
+            </ToolbarActionButton>
           </Stack>
         ) : (
           <Box />
@@ -488,14 +494,7 @@ function DictionaryGridInternal<T extends { id: number }>({
           </IconButton>
         </Tooltip>
         {showExportButton && onExportExcel && (
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={onExportExcel}
-            sx={{ textTransform: 'none' }}
-          >
-            Выгрузить в Excel
-          </Button>
+          <ExportActionButton kind="excel" onClick={onExportExcel} />
         )}
         </Stack>
       </Stack>
@@ -539,8 +538,8 @@ function DictionaryGridInternal<T extends { id: number }>({
           onRowDoubleClicked={(event) => {
             if (event.data && onRowDoubleClicked) onRowDoubleClicked(event.data);
           }}
-          overlayLoadingTemplate='<span class="ag-overlay-loading-center">Загрузка...</span>'
-          overlayNoRowsTemplate='<span class="ag-overlay-loading-center">Нет данных</span>'
+          overlayLoadingTemplate={GRID_OVERLAY_LOADING_TEMPLATE}
+          overlayNoRowsTemplate={GRID_OVERLAY_NO_ROWS_TEMPLATE}
         />
       </GridViewport>
 

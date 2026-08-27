@@ -18,6 +18,7 @@ const OBJECT_NAME_RU: Record<string, string> = {
   Assessment: 'Оценка',
   Planning: 'Планирование',
   VersionComparison: 'Сравнение версий',
+  Reports: 'Отчёты',
   GroupAnalysis: 'Анализ по группам',
   GroupTrend: 'Тренд по группам',
   References: 'Справочники',

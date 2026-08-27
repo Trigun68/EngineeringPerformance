@@ -21,6 +21,7 @@ import {
   rollbackImportIteration,
 } from '../../api/importApi';
 import { usePermission } from '../../hooks/usePermission';
+import { useConfirmation } from '../../hooks/useConfirmation';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { FileUploader } from '../FileUploader/FileUploader';
 
@@ -42,6 +43,7 @@ function formatRowError(error: ImportRowError): string {
 
 export function ImportWizard({ projectId, versionId, onImported }: ImportWizardProps) {
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
+  const { confirm, Dialog: ConfirmDialog } = useConfirmation();
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
   const getDirectionName = useDictionaryStore((s) => s.getDirectionName);
   const dictionariesLoading = useDictionaryStore((s) => s.isLoading);
@@ -123,7 +125,10 @@ export function ImportWizard({ projectId, versionId, onImported }: ImportWizardP
     if (!versionId || !canImport) {
       return;
     }
-    if (!window.confirm('Откатить эту итерацию импорта?')) {
+    if (!(await confirm({
+      title: 'Откатить итерацию?',
+      description: 'Откатить эту итерацию импорта?',
+    }))) {
       return;
     }
     const deleted = await rollbackImportIteration(projectId, versionId, dataType, importedAt);
@@ -252,6 +257,7 @@ export function ImportWizard({ projectId, versionId, onImported }: ImportWizardP
           ))}
         </ul>
       )}
+      {ConfirmDialog}
     </Stack>
   );
 }

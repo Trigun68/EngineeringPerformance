@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
@@ -17,10 +18,12 @@ public sealed class ProjectVisibilityService : IProjectVisibilityService
 
     public async Task<bool> IsAdministratorAsync(int userId, CancellationToken cancellationToken = default)
     {
-        return await _context.Users.AsNoTracking()
+        var role = await _context.Users.AsNoTracking()
             .Where(u => u.Id == userId)
-            .Select(u => u.Role.Name == nameof(UserRole.Administrator))
+            .Select(u => new { u.RoleId, RoleName = u.Role.Name })
             .FirstOrDefaultAsync(cancellationToken);
+
+        return role is not null && PermissionObjectCatalog.IsSuperAdmin(role.RoleName, role.RoleId);
     }
 
     public async Task<bool> CanAccessProjectAsync(int userId, int projectId, AccessLevel requiredLevel, CancellationToken cancellationToken = default)

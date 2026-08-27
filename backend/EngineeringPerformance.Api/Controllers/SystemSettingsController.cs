@@ -6,7 +6,7 @@ namespace EngineeringPerformance.Api.Controllers;
 
 [ApiController]
 [Route("api/admin/system-settings")]
-[Authorize(Roles = "Administrator")]
+[Authorize(Roles = "SuperAdmin,Administrator")]
 public sealed class SystemSettingsController : ControllerBase
 {
     private readonly ISystemSettingsService _settings;

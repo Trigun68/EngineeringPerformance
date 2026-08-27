@@ -15,7 +15,13 @@ public sealed record ProjectVersionDto(
     bool IsArchived,
     DateTime CreatedAt,
     PlanningScenario PlanningScenario = PlanningScenario.ByEachValue,
+<<<<<<< HEAD
     bool IsMain = false);
+=======
+    ZParameterLevel ZParameterLevel = ZParameterLevel.EachElement,
+    bool IsPrimary = false,
+    int RecalculatedVersionCount = 0);
+>>>>>>> origin/master
 
 public sealed record ProjectVersionWriteRequest(
     string VersionName,
@@ -24,8 +30,11 @@ public sealed record ProjectVersionWriteRequest(
     int? PhysicalVolumeTypeId,
     string? Name = null,
     PlanningScenario? PlanningScenario = null,
+    ZParameterLevel? ZParameterLevel = null,
     /// <summary>
     /// Дата фиксации норм (снимок IIC). При создании задаёт <c>CreatedAt</c>;
     /// при обновлении — меняет <c>CreatedAt</c> и пересоздаёт снимок.
     /// </summary>
-    DateTime? AsOfDate = null);
+    DateTime? AsOfDate = null,
+    /// <summary>Только Create: сделать версию основной (сбросит предыдущую того же Direction).</summary>
+    bool? IsPrimary = null);

@@ -1,4 +1,5 @@
 import apiClient from '../services/apiClient';
+import type { LoginResponse, MfaSetupResponse, MfaStatus } from '../types/auth';
 
 export interface WindowsIdentityHint {
   windowsUsername: string | null;
@@ -33,4 +34,23 @@ export async function refreshAuthSession(): Promise<void> {
       'X-Skip-Auth-Refresh': '1',
     },
   });
+}
+
+export async function verifyMfa(code: string, mfaSessionToken: string): Promise<LoginResponse> {
+  const { data } = await apiClient.post<LoginResponse>('/auth/mfa/verify', { code, mfaSessionToken });
+  return data;
+}
+
+export async function beginMfaSetup(): Promise<MfaSetupResponse> {
+  const { data } = await apiClient.post<MfaSetupResponse>('/auth/mfa/setup');
+  return data;
+}
+
+export async function completeMfaSetup(code: string, secret: string): Promise<void> {
+  await apiClient.post('/auth/mfa/verify-setup', { code, secret });
+}
+
+export async function getMfaStatus(): Promise<MfaStatus> {
+  const { data } = await apiClient.get<MfaStatus>('/auth/mfa/status');
+  return data;
 }

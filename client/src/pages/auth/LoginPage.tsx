@@ -9,6 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { fetchWindowsIdentityHint } from '../../api/authApi';
+import { MfaVerifyModal } from '../../components/auth/MfaVerifyModal';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const LOGO_SRC = '/assets/logo.png';
@@ -19,6 +20,8 @@ export function LoginPage() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const error = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
+  const authStatus = useAuthStore((state) => state.status);
+  const verifyMfa = useAuthStore((state) => state.verifyMfa);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -174,6 +177,12 @@ export function LoginPage() {
           </Box>
         </Box>
       </Paper>
+      <MfaVerifyModal
+        open={authStatus === 'mfa_required'}
+        isLoading={isLoading}
+        error={error}
+        onVerify={verifyMfa}
+      />
     </Box>
   );
 }

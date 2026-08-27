@@ -29,8 +29,8 @@ docker run --rm --network host \
 ### Полная сборка solution (если `dotnet` на хосте)
 
 ```bash
-dotnet build EngineeringPerformance.slnx
-dotnet test EngineeringPerformance.slnx
+dotnet build EngineeringPerformance.Legacy.slnx
+dotnet test EngineeringPerformance.Legacy.slnx
 ```
 
 ## Правила поведения

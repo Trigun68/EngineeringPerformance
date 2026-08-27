@@ -1,5 +1,4 @@
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
-import { buildExportFileName } from '../utils/directoryExport';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
 
 export interface DirectoryEntry {
   id: number;
@@ -96,9 +95,16 @@ export function flattenDirectoryTree(
   return rows;
 }
 
-export async function fetchDirectoryTree(resource: string, includeArchived = false): Promise<DirectoryTreeNode[]> {
+export async function fetchDirectoryTree(
+  resource: string,
+  includeArchived = false,
+  projectId?: number | null,
+): Promise<DirectoryTreeNode[]> {
   const { data } = await apiClient.get<DirectoryTreeNode[]>(`/directories/${resource}/tree`, {
-    params: { includeArchived },
+    params: {
+      includeArchived,
+      ...(projectId != null ? { projectId } : {}),
+    },
   });
   return data.map(normalizeTreeNode);
 }
@@ -115,9 +121,15 @@ export async function fetchDirectory(
   includeArchived = false,
   page = 1,
   pageSize = 100,
+  projectId?: number | null,
 ): Promise<PagedDirectoryResponse> {
   const { data } = await apiClient.get<PagedDirectoryResponse>(`/directories/${resource}`, {
-    params: { includeArchived, page, pageSize },
+    params: {
+      includeArchived,
+      page,
+      pageSize,
+      ...(projectId != null ? { projectId } : {}),
+    },
   });
   return {
     ...data,
@@ -195,20 +207,14 @@ export async function exportDirectoryExcel(
   headers: string[],
   rows: string[][],
 ): Promise<void> {
-  const { data } = await apiClient.post<ArrayBuffer>(
+  const { blob, filename } = await downloadBlobPost(
     `/directories/${resource}/export`,
     { tabName, headers, rows },
-    { responseType: 'arraybuffer' },
   );
-
-  const filename = buildExportFileName(tabName);
-  const blob = new Blob([data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
   triggerBrowserDownload(blob, filename);
 }
 
 export async function exportDirectoryExcelLegacy(resource: string): Promise<void> {
-  const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`, undefined, `${resource}.xlsx`);
+  const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`);
   triggerBrowserDownload(blob, filename);
 }

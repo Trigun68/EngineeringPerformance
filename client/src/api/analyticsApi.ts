@@ -1,4 +1,5 @@
-import apiClient, { downloadBlob, triggerBrowserDownload } from '../services/apiClient';
+import apiClient, { downloadBlob, downloadBlobPost, triggerBrowserDownload } from '../services/apiClient';
+import { decodeEncodedGrid, type EncodedGrid } from './decodeEncodedGrid';
 
 export interface PerformanceRow {
   workDirectionId: number;
@@ -17,6 +18,11 @@ export interface PerformanceRow {
   zScore: number | null;
   interpretation: string | null;
   subtreeHours: number | null;
+  isTotal?: boolean;
+  factPhysicalVolumeDisplay?: string | null;
+  pessimisticHours?: number | null;
+  baseHours?: number | null;
+  optimisticHours?: number | null;
 }
 
 export interface ProjectVersionAnalysis {
@@ -28,6 +34,15 @@ export interface ProjectVersionAnalysis {
   summary: ProjectVersionAnalysisSummary;
 }
 
+export interface ProjectVersionPhysicalVolumeItem {
+  code: string;
+  name: string;
+  unitName: string | null;
+  quantity: number;
+  coefficient: number;
+  total: number;
+}
+
 export interface ProjectVersionDirection {
   id: number;
   parentId: number | null;
@@ -37,6 +52,9 @@ export interface ProjectVersionDirection {
   unitName: string | null;
   factPhysicalVolume: number | null;
   factLaborHours: number | null;
+  pessimisticHours?: number | null;
+  baseHours?: number | null;
+  optimisticHours?: number | null;
   factProductivity: number | null;
   factEstimate: number | null;
   normProductivity: number | null;
@@ -44,6 +62,16 @@ export interface ProjectVersionDirection {
   normStdDev: number | null;
   zScore: number | null;
   interpretation: string | null;
+  physicalVolumes?: ProjectVersionPhysicalVolumeItem[];
+  equipmentVolumes?: ProjectVersionPhysicalVolumeItem[];
+  directionLaborIntensities?: ProjectVersionDirectionLaborRow[];
+}
+
+export interface ProjectVersionDirectionLaborRow {
+  documentationCode: string;
+  plannedHours: number;
+  actualHours: number;
+  brand?: string | null;
 }
 
 export interface ProjectVersionLaborRow {
@@ -66,6 +94,7 @@ export interface ProjectVersionAnalysisSummary {
   weightedZScoreInterpretation: string | null;
   physicalVolumeTotalsByUnit: PhysicalVolumeTotalByUnit[];
   unallocatedLaborHours: number | null;
+  physicalVolumeTotalsByUnit: PhysicalVolumeTotalByUnit[];
 }
 
 export async function fetchPerformance(
@@ -273,19 +302,64 @@ export interface VersionCompareRow {
   workDirectionId: number;
   parentId: number | null;
   name: string;
-  zScoreA: number | null;
-  zScoreB: number | null;
-  zDelta: number | null;
+  factZScoreA: number | null;
+  factZScoreB: number | null;
+  factZDelta: number | null;
   interpretationA: string;
   interpretationB: string;
+  factPhysicalVolumeA?: number | null;
+  factPhysicalVolumeB?: number | null;
+  factPhysicalVolumeDisplayA?: string | null;
+  factPhysicalVolumeDisplayB?: string | null;
+  plannedLaborHoursA?: number | null;
+  plannedLaborHoursB?: number | null;
+  plannedLaborHoursOptimisticA?: number | null;
+  plannedLaborHoursOptimisticB?: number | null;
+  plannedLaborHoursPessimisticA?: number | null;
+  plannedLaborHoursPessimisticB?: number | null;
+  plannedProductivityA?: number | null;
+  plannedProductivityB?: number | null;
+  plannedProductivityOptimisticA?: number | null;
+  plannedProductivityOptimisticB?: number | null;
+  plannedProductivityPessimisticA?: number | null;
+  plannedProductivityPessimisticB?: number | null;
+  factLaborHoursA?: number | null;
+  factLaborHoursB?: number | null;
+  factProductivityA?: number | null;
+  factProductivityB?: number | null;
+  planZScoreA?: number | null;
+  planZScoreB?: number | null;
+  planZDelta?: number | null;
+  planZScoreOptimisticA?: number | null;
+  planZScoreOptimisticB?: number | null;
+  planZScorePessimisticA?: number | null;
+  planZScorePessimisticB?: number | null;
+  isTotal?: boolean;
+  level?: number;
 }
 
 export interface VersionCompareFacilityRow {
   facilityCode: string;
   facilityName: string;
+  factPhysicalVolumeA: number | null;
+  factPhysicalVolumeB: number | null;
+  plannedLaborHoursA: number | null;
+  plannedLaborHoursB: number | null;
+  plannedLaborHoursOptimisticA: number | null;
+  plannedLaborHoursOptimisticB: number | null;
+  plannedLaborHoursPessimisticA: number | null;
+  plannedLaborHoursPessimisticB: number | null;
   factLaborHoursA: number | null;
   factLaborHoursB: number | null;
   hoursDelta: number | null;
+  plannedProductivityA: number | null;
+  plannedProductivityB: number | null;
+  plannedProductivityOptimisticA: number | null;
+  plannedProductivityOptimisticB: number | null;
+  plannedProductivityPessimisticA: number | null;
+  plannedProductivityPessimisticB: number | null;
+  factProductivityA: number | null;
+  factProductivityB: number | null;
   zScoreA: number | null;
   zScoreB: number | null;
   zDelta: number | null;
@@ -304,15 +378,41 @@ export interface VersionCompareDetailRow {
   quantityA: number | null;
   quantityB: number | null;
   quantityDelta: number | null;
+  plannedLaborHoursA: number | null;
+  plannedLaborHoursB: number | null;
+  plannedLaborHoursOptimisticA: number | null;
+  plannedLaborHoursOptimisticB: number | null;
+  plannedLaborHoursPessimisticA: number | null;
+  plannedLaborHoursPessimisticB: number | null;
   factLaborHoursA: number | null;
   factLaborHoursB: number | null;
   hoursDelta: number | null;
+  plannedProductivityA: number | null;
+  plannedProductivityB: number | null;
+  plannedProductivityOptimisticA: number | null;
+  plannedProductivityOptimisticB: number | null;
+  plannedProductivityPessimisticA: number | null;
+  plannedProductivityPessimisticB: number | null;
   factProductivityA: number | null;
   factProductivityB: number | null;
   productivityDelta: number | null;
+  zScoreA: number | null;
+  zScoreB: number | null;
+  zDelta: number | null;
   iicGroupName: string;
   iicUnitName: string;
   presence: string;
+  bindingType: string;
+  catalogId: string;
+  tag: string;
+  itemName: string;
+  workComment: string;
+  estimationBasis: string;
+  isAssessment: string;
+  coefficient: number | null;
+  normProductivity: number | null;
+  normStdDev: number | null;
+  isEquipment: boolean;
 }
 
 export interface VersionCompareResult {
@@ -325,11 +425,79 @@ export async function fetchVersionCompare(
   projectId: number,
   versionA: number,
   versionB: number,
+  signal?: AbortSignal,
 ): Promise<VersionCompareResult> {
-  const { data } = await apiClient.get<VersionCompareResult>(`/projects/${projectId}/compare`, {
+  const { data } = await apiClient.get<Omit<VersionCompareResult, 'detail'> & { detail: EncodedGrid }>(
+    `/projects/${projectId}/compare`,
+    {
+      params: { versionA, versionB },
+      timeout: 300_000,
+      signal,
+    },
+  );
+  return {
+    ...data,
+    detail: decodeEncodedGrid<VersionCompareDetailRow>(data.detail),
+  };
+}
+
+export async function fetchVersionCompareDetail(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+  signal?: AbortSignal,
+): Promise<VersionCompareDetailRow[]> {
+  const { data } = await apiClient.get<EncodedGrid>(`/projects/${projectId}/compare/detail`, {
     params: { versionA, versionB },
+    timeout: 300_000,
+    signal,
   });
-  return data;
+  return decodeEncodedGrid<VersionCompareDetailRow>(data);
+}
+
+export type CompareExportSection = 'summary' | 'facility' | 'detail';
+
+export async function exportCompareExcelVisible(
+  projectId: number,
+  section: CompareExportSection,
+  tabName: string,
+  headers: string[],
+  rows: string[][],
+  versionA: number,
+  versionB: number,
+  visibleOnly = false,
+): Promise<void> {
+  const { blob, filename } = await downloadBlobPost(
+    `/projects/${projectId}/compare/export/${section}/excel-visible`,
+    { tabName, headers, rows },
+    'download',
+    { versionA, versionB, visibleOnly },
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportCompareDetailExcel(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/compare/export/detail/excel`,
+    { versionA, versionB },
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportCompareDetailSummaryTable(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/compare/export/detail/summary-table`,
+    { versionA, versionB },
+  );
+  triggerBrowserDownload(blob, filename);
 }
 
 export interface CompareChartPoint {
@@ -463,8 +631,6 @@ export async function fetchGroupTrend(projectId: number): Promise<GroupTrendInfo
 export async function exportAnalysisExcel(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/analysis.xlsx`,
-    undefined,
-    'analysis.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -472,8 +638,6 @@ export async function exportAnalysisExcel(projectId: number, versionId: number):
 export async function exportAnalysisPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/analysis.pdf`,
-    undefined,
-    'analysis.pdf',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -481,8 +645,6 @@ export async function exportAnalysisPdf(projectId: number, versionId: number): P
 export async function exportForecastExcel(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast.xlsx`,
-    undefined,
-    'forecast.xlsx',
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -490,8 +652,6 @@ export async function exportForecastExcel(projectId: number, versionId: number):
 export async function exportForecastPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/forecast.pdf`,
-    undefined,
-    'forecast.pdf',
   );
   triggerBrowserDownload(blob, filename);
 }

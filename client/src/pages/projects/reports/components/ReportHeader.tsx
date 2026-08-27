@@ -1,11 +1,21 @@
+<<<<<<< HEAD
 import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
+=======
+import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
+>>>>>>> origin/master
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+<<<<<<< HEAD
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import type { Project } from '../../../../types/project';
 import type { ProjectVersion } from '../../../../api/projectVersionsApi';
+=======
+import type { Project } from '../../../../types/project';
+import type { ProjectVersion } from '../../../../api/projectVersionsApi';
+import { ExportActionButton } from '../../../../components/export/ExportActionButton';
+>>>>>>> origin/master
 import { DIRECTION_LABEL } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
@@ -52,6 +62,7 @@ export function ReportHeader({ project, version, onExportPdf, exporting }: Repor
             </Typography>
           </Box>
           {onExportPdf && (
+<<<<<<< HEAD
             <Button
               variant="outlined"
               size="small"
@@ -62,6 +73,15 @@ export function ReportHeader({ project, version, onExportPdf, exporting }: Repor
             >
               Экспорт PDF
             </Button>
+=======
+            <ExportActionButton
+              kind="pdf"
+              loading={exporting}
+              onClick={onExportPdf}
+              disabled={exporting}
+              data-testid="report-export-pdf"
+            />
+>>>>>>> origin/master
           )}
         </Stack>
 

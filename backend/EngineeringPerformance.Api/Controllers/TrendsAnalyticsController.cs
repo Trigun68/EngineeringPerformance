@@ -4,6 +4,7 @@ using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EngineeringPerformance.Api.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -13,12 +14,26 @@ namespace EngineeringPerformance.Api.Controllers;
 public sealed class TrendsAnalyticsController : ControllerBase
 {
     private readonly ITrendAnalyticsService _trends;
+    private readonly IZTrendAnalyticsService _zTrends;
+    private readonly IProductivityTrendAnalyticsService _productivityTrends;
+    private readonly IProductivityIndexTrendService _productivityIndexTrends;
     private readonly IVisualReportService _visualReports;
+    private readonly IExportFileNameService _fileNames;
 
-    public TrendsAnalyticsController(ITrendAnalyticsService trends, IVisualReportService visualReports)
+    public TrendsAnalyticsController(
+        ITrendAnalyticsService trends,
+        IZTrendAnalyticsService zTrends,
+        IProductivityTrendAnalyticsService productivityTrends,
+        IProductivityIndexTrendService productivityIndexTrends,
+        IVisualReportService visualReports,
+        IExportFileNameService fileNames)
     {
         _trends = trends;
+        _zTrends = zTrends;
+        _productivityTrends = productivityTrends;
+        _productivityIndexTrends = productivityIndexTrends;
         _visualReports = visualReports;
+        _fileNames = fileNames;
     }
 
     [HttpGet("formulas")]
@@ -27,6 +42,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
         Ok(_trends.ListFormulas());
 
     [HttpGet]
+    [RequireProjectAccess]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
     public Task<TrendAnalyticsResultDto> GetTrends(
         [FromQuery] int projectId,
@@ -38,6 +54,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
         _trends.GetTrendsAsync(projectId, dateFrom, dateTo, granularity, formulaId, cancellationToken);
 
     [HttpGet("detail")]
+    [RequireProjectAccess]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
     public Task<IReadOnlyList<TrendDetailRowDto>> GetDetail(
         [FromQuery] int projectId,
@@ -46,8 +63,57 @@ public sealed class TrendsAnalyticsController : ControllerBase
         CancellationToken cancellationToken = default) =>
         _trends.GetDetailAsync(projectId, versionId, formulaId, cancellationToken);
 
-    [HttpGet("export.pdf")]
+    /// <summary>Трендовый анализ средневзвешенного Z (план/факт, сегментация по нормам).</summary>
+    [HttpPost("z-score")]
     [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ZTrendResponse>> GetZTrends(
+        [FromBody] ZTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _zTrends.GetZTrendsAsync(request ?? new ZTrendRequest(), cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("z-score/filters")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public Task<ZTrendFiltersDto> GetZTrendFilters(CancellationToken cancellationToken) =>
+        _zTrends.GetFiltersAsync(cancellationToken);
+
+    /// <summary>
+    /// Тренд производительности нормы: часы N(V*) через ComputeForecastHours, без сравнения коэффициентов a/b.
+    /// </summary>
+    [HttpPost("productivity")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ProductivityTrendResponse>> GetProductivityTrend(
+        [FromBody] ProductivityTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _productivityTrends.GetProductivityTrendAsync(
+            request ?? new ProductivityTrendRequest(),
+            cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Тренд индекса производительности (% к норме) по основным версиям: Σ(V×N)/Σ(часы)×100
+    /// через PerformanceCalculationEngine.ComputeProductivityIndex.
+    /// </summary>
+    [HttpPost("productivity-index")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ProductivityIndexTrendResponse>> GetProductivityIndexTrend(
+        [FromBody] ProductivityIndexTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _productivityIndexTrends.GetProductivityIndexTrendAsync(
+            request ?? new ProductivityIndexTrendRequest(),
+            cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("export.pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportTrendsPdf(
         [FromQuery] int projectId,
         [FromQuery] DateTime? dateFrom,
@@ -56,6 +122,12 @@ public sealed class TrendsAnalyticsController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var bytes = await _visualReports.ExportTrendsPdfAsync(projectId, dateFrom, dateTo, formulaId, cancellationToken);
-        return File(bytes, "application/pdf", $"Trends_{projectId}.pdf");
+        var fileName = await _fileNames.ForProjectAsync(
+            projectId,
+            ExportFileNameBuilder.Modules.Analytics,
+            "pdf",
+            ExportFileNameBuilder.Views.Trends,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 }

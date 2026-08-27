@@ -13,32 +13,34 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 public sealed partial class ProjectExcelDataImportService
 {
-    private Task<DataImportResultDto> ImportPhysicalVolumesAsync(int projectId, int versionId, string filePath, string description) =>
+    private Task<DataImportResultDto> ImportPhysicalVolumesAsync(
+        int projectId,
+        int versionId,
+        string filePath,
+        string description,
+        ImportSourceMetadata source) =>
         ExecuteWithRetryableTransactionAsync(context =>
-            ImportPhysicalVolumesCoreAsync(context, projectId, versionId, filePath, description));
+            ImportPhysicalVolumesCoreAsync(context, projectId, versionId, filePath, description, source));
 
     private async Task<DataImportResultDto> ImportPhysicalVolumesCoreAsync(
         AppDbContext context,
         int projectId,
         int versionId,
         string filePath,
-        string description)
+        string description,
+        ImportSourceMetadata source)
     {
         // Режим «замена»: удаляем все предыдущие данные ФО для данной версии проекта,
         // чтобы каждый импорт был полным пересозданием без дублей и без сворачивания строк.
         await ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = new DataImportIteration
-        {
-            ProjectId = projectId,
-            ProjectAnalysisVersionId = versionId,
-            DataType = DataImportType.PhysicalVolume,
-            Description = description,
-            SourceFileName = Path.GetFileName(filePath),
-            ImportedAt = DateTime.UtcNow,
-        };
-        context.DataImportIterations.Add(iteration);
-        await context.SaveChangesAsync();
+        var iteration = await CreateIterationAsync(
+            context,
+            projectId,
+            versionId,
+            DataImportType.PhysicalVolume,
+            description,
+            source);
 
         await PhysicalVolumeCatalogBinding.EnsureCatalogTypeConfiguredAsync(context, versionId);
 

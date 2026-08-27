@@ -11,13 +11,17 @@ BEGIN TRANSACTION;
 -- ============================================================================
 -- 1. Roles
 -- ============================================================================
-IF NOT EXISTS (SELECT 1 FROM [Roles] WHERE [Name] = N'Administrator')
+IF NOT EXISTS (SELECT 1 FROM [Roles] WHERE [Name] = N'SuperAdmin')
 BEGIN
-    INSERT INTO [Roles] ([Name], [Description], [IsArchived], [CreatedAt])
+    SET IDENTITY_INSERT [Roles] ON;
+
+    INSERT INTO [Roles] ([Id], [Name], [Description], [IsArchived], [CreatedAt])
     VALUES
-        (N'Administrator', N'Полный доступ ко всем функциям системы', 0, SYSUTCDATETIME()),
-        (N'ProjectManager', N'Управление проектами и данными', 0, SYSUTCDATETIME()),
-        (N'Observer', N'Только чтение', 0, SYSUTCDATETIME());
+        (1, N'SuperAdmin', N'Полный доступ ко всем функциям системы', 0, SYSUTCDATETIME()),
+        (2, N'Admin', N'Управление пользователями и настройками', 0, SYSUTCDATETIME()),
+        (3, N'Engineer', N'Работа с проектами и данными', 0, SYSUTCDATETIME());
+
+    SET IDENTITY_INSERT [Roles] OFF;
 END;
 
 -- ============================================================================
@@ -28,9 +32,9 @@ END;
 -- ============================================================================
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Username] = N'admin')
 BEGIN
-    DECLARE @AdminRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Administrator');
-    DECLARE @ManagerRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'ProjectManager');
-    DECLARE @ObserverRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Observer');
+    DECLARE @AdminRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'SuperAdmin');
+    DECLARE @ManagerRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Admin');
+    DECLARE @ObserverRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Engineer');
 
     INSERT INTO [Users] ([Username], [DisplayName], [PasswordHash], [RoleId], [IsActive], [Name], [IsArchived], [CreatedAt])
     VALUES
@@ -41,7 +45,7 @@ END;
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Username] = N'eliseev')
 BEGIN
-    DECLARE @EliseevRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Administrator');
+    DECLARE @EliseevRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'SuperAdmin');
 
     INSERT INTO [Users] ([Username], [DisplayName], [PasswordHash], [RoleId], [WindowsUsername], [IsActive], [Name], [IsArchived], [CreatedAt])
     VALUES
@@ -96,10 +100,10 @@ END;
 -- ============================================================================
 -- 8. Access Rights
 -- ============================================================================
-IF NOT EXISTS (SELECT 1 FROM [AccessRights] WHERE [RoleId] = (SELECT [Id] FROM [Roles] WHERE [Name] = N'ProjectManager'))
+IF NOT EXISTS (SELECT 1 FROM [AccessRights] WHERE [RoleId] = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Admin'))
 BEGIN
-    DECLARE @PmRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'ProjectManager');
-    DECLARE @ObsRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Observer');
+    DECLARE @PmRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Admin');
+    DECLARE @ObsRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Engineer');
 
     DECLARE @Objects TABLE ([Name] NVARCHAR(100));
     INSERT INTO @Objects ([Name])
@@ -117,6 +121,28 @@ BEGIN
 
     INSERT INTO [AccessRights] ([RoleId], [ObjectName], [AccessLevel])
     SELECT @ObsRoleId, [Name], 1 FROM @Objects;  -- 1 = Read
+END;
+
+DECLARE @GipRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Gip');
+
+IF @GipRoleId IS NOT NULL
+BEGIN
+    INSERT INTO [AccessRights] ([RoleId], [ObjectName], [AccessLevel])
+    SELECT @GipRoleId, source.[ObjectName], source.[AccessLevel]
+    FROM [AccessRights] source
+    WHERE source.[RoleId] = 3
+      AND NOT EXISTS (
+          SELECT 1
+          FROM [AccessRights] target
+          WHERE target.[RoleId] = @GipRoleId
+            AND target.[ObjectName] = source.[ObjectName]
+      );
+
+    UPDATE [AccessRights]
+    SET [AccessLevel] = 2
+    WHERE [RoleId] = @GipRoleId
+      AND [ObjectName] IN (N'Projects', N'Planning', N'Assessment', N'ProjectDataUpload')
+      AND [AccessLevel] <> 2;
 END;
 
 COMMIT;

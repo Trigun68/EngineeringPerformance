@@ -1959,7 +1959,13 @@ BEGIN
 END;
 
 -- 2. Archive equipment removed from source
-UPDATE [Equipments] SET [IsArchived] = 1, [ModifiedAt] = SYSUTCDATETIME() WHERE [IsArchived] = 0 AND [CatalogKeyHash] NOT IN (
+UPDATE [Equipments] SET [IsArchived] = 1, [ModifiedAt] = SYSUTCDATETIME()
+WHERE [IsArchived] = 0
+  -- Только legacy/номенклатура (без проекта). Проектные строки — через импорт/UI.
+  AND [ProjectId] IS NULL
+  -- Не архивировать позиции, уже привязанные к данным проектов (автосозданные импортом).
+  AND NOT EXISTS (SELECT 1 FROM [ProjectEquipments] pe WHERE pe.[EquipmentId] = [Equipments].[Id])
+  AND [CatalogKeyHash] NOT IN (
 LOWER(CONVERT(varchar(64), HASHBYTES('SHA2_256', CONCAT(N'Блочно-модульная насосная станция водоснабжения производительностью18-54 м3/ч, напор 30 м', CHAR(0), COALESCE(CAST((SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'шт') AS nvarchar(20)), N''))), 2)),
 LOWER(CONVERT(varchar(64), HASHBYTES('SHA2_256', CONCAT(N'Блочно-модульная станция водяного/пенного пожаротушения', CHAR(0), COALESCE(CAST((SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'шт') AS nvarchar(20)), N''))), 2)),
 LOWER(CONVERT(varchar(64), HASHBYTES('SHA2_256', CONCAT(N'Блочный тепловой пункт с зависимой схемой отопления', CHAR(0), COALESCE(CAST((SELECT [Id] FROM [UnitsOfMeasurement] WHERE [Name] = N'шт') AS nvarchar(20)), N''))), 2)),

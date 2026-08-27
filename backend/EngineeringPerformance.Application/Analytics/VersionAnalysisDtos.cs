@@ -50,12 +50,17 @@ public sealed record ProjectVersionDirectionDto(
     PerformanceInterpretation? Interpretation,
     IReadOnlyList<ProjectVersionPhysicalVolumeDto> PhysicalVolumes,
     IReadOnlyList<ProjectVersionPhysicalVolumeDto> EquipmentVolumes,
-    IReadOnlyList<ProjectVersionDirectionLaborDto> DirectionLaborIntensities);
+    IReadOnlyList<ProjectVersionDirectionLaborDto> DirectionLaborIntensities,
+    decimal? PessimisticHours = null,
+    decimal? BaseHours = null,
+    decimal? OptimisticHours = null);
 
 /// <summary>Запись трудоёмкости проекта, привязанная к конкретному направлению IIC.</summary>
 public sealed record ProjectVersionDirectionLaborDto(
     string DocumentationCode,
-    decimal PlannedHours);
+    decimal PlannedHours,
+    decimal ActualHours = 0m,
+    string? Brand = null);
 
 /// <summary>Ненулевая позиция физ. объёма проекта в составе направления IIC.</summary>
 public sealed record ProjectVersionPhysicalVolumeDto(

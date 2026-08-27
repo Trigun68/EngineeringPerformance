@@ -15,18 +15,19 @@ export function useAccessibleNavigation() {
   const user = useAuthStore((s) => s.user);
   const permissions = user?.permissions;
   const roleName = user?.roleName;
+  const roleId = user?.roleId;
 
   const visibleItems = useMemo(
     () =>
-      MAIN_NAV_ITEMS.filter((item) => isMainNavItemVisible(item, permissions, roleName)).map(
+      MAIN_NAV_ITEMS.filter((item) => isMainNavItemVisible(item, permissions, roleName, roleId)).map(
         (item) => ({ ...item }),
       ),
-    [permissions, roleName],
+    [permissions, roleName, roleId],
   );
 
   const firstAccessiblePath = useMemo(
-    () => getFirstAccessiblePath(permissions, roleName),
-    [permissions, roleName],
+    () => getFirstAccessiblePath(permissions, roleName, roleId),
+    [permissions, roleName, roleId],
   );
 
   return { visibleItems, firstAccessiblePath };

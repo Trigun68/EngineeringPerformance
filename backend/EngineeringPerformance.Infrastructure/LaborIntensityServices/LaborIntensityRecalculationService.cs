@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,29 +15,37 @@ public interface ILaborIntensityRecalculationService
 
 public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalculationService
 {
-    private readonly AppDbContext _context;
-    private readonly IDeviationCalculator _deviationCalculator;
+    private readonly IAnalyticsDbContextFactory _analyticsDb;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
-    public LaborIntensityRecalculationService(AppDbContext context, IDeviationCalculator deviationCalculator)
+    public LaborIntensityRecalculationService(
+        IAnalyticsDbContextFactory analyticsDb,
+        IPerformanceCalculationEngine calculationEngine)
     {
-        _context = context;
-        _deviationCalculator = deviationCalculator;
+        _analyticsDb = analyticsDb;
+        _calculationEngine = calculationEngine;
     }
 
     public async Task<int> RecalculateAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var version = await _context.ProjectAnalysisVersions
+        await using var context = await _analyticsDb.CreateDbContextAsync(cancellationToken);
+        var version = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken)
             ?? throw new InvalidOperationException("Version not found.");
 
-        var ppvs = await _context.ProjectPhysicalVolumes
+        var ppvs = await context.ProjectPhysicalVolumes
             .Include(x => x.PhysicalVolumeKfo)
             .Include(x => x.PhysicalVolumeBer)
             .Where(pv => pv.ProjectId == projectId && pv.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
 
-        var snapshots = await _context.AnalysisVersionSnapshots
+        var equipment = await context.ProjectEquipments
+            .Include(e => e.Equipment)
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync(cancellationToken);
+
+        var snapshots = await context.AnalysisVersionSnapshots
             .AsNoTracking()
             .Where(s => s.ProjectAnalysisVersionId == versionId)
             .Include(s => s.Norm)
@@ -46,7 +56,7 @@ public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalcul
             .GroupBy(s => s.WorkDirectionId)
             .ToDictionary(g => g.Key, g => NormSnapshotFactory.FromEntity(g.First().Norm!));
 
-        var zRows = await _context.ProjectVersionPlanningParameters
+        var zRows = await context.ProjectVersionPlanningParameters
             .AsNoTracking()
             .Where(p => p.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
@@ -63,22 +73,56 @@ public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalcul
             pv.GetCoefficient(),
             pv.GetIsAssessment() == true)).ToList();
 
-        var results = LaborIntensityCalculator.Recalculate(
+        var results = _calculationEngine.RecalculateLaborIntensities(
             version.PlanningScenario,
             lines,
             norms,
-            zParams,
-            _deviationCalculator);
+            zParams);
 
         var byId = results.ToDictionary(r => r.PpvId);
         foreach (var pv in ppvs)
         {
-            if (!byId.TryGetValue(pv.Id, out var r)) continue;
-            pv.LaborIntensityBase = r.Base;
-            pv.LaborIntensityPessimistic = r.Pessimistic;
-            pv.LaborIntensityOptimistic = r.Optimistic;
+            if (byId.TryGetValue(pv.Id, out var r))
+            {
+                pv.LaborIntensityBase = r.Base;
+                pv.LaborIntensityPessimistic = r.Pessimistic;
+                pv.LaborIntensityOptimistic = r.Optimistic;
+            }
+            else
+            {
+                pv.LaborIntensityBase = null;
+                pv.LaborIntensityPessimistic = null;
+                pv.LaborIntensityOptimistic = null;
+            }
         }
 
-        return await _context.SaveChangesAsync(cancellationToken);
+        var equipmentLines = equipment.Select(eq => new LaborIntensityCalculator.EquipmentLine(
+            eq.Id,
+            eq.Equipment?.ClassifierId,
+            eq.QuantityInIicGroupUnits(),
+            eq.Equipment?.IsAssessment == true)).ToList();
+
+        var equipmentHours = _calculationEngine.ComputeEquipmentForecastHours(
+            equipmentLines,
+            norms,
+            zParams);
+
+        foreach (var eq in equipment)
+        {
+            if (equipmentHours.TryGetValue(eq.Id, out var hours))
+            {
+                eq.LaborIntensityBase = hours.Base;
+                eq.LaborIntensityPessimistic = hours.Pessimistic;
+                eq.LaborIntensityOptimistic = hours.Optimistic;
+            }
+            else
+            {
+                eq.LaborIntensityBase = null;
+                eq.LaborIntensityPessimistic = null;
+                eq.LaborIntensityOptimistic = null;
+            }
+        }
+
+        return await context.SaveChangesAsync(cancellationToken);
     }
 }

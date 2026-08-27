@@ -26,7 +26,8 @@ env:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # ~120 serial Playwright tests × ~30–35s ≈ 60–70 min; keep headroom for retries/build.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
 
@@ -55,6 +56,8 @@ jobs:
           sed -i 's/^SQL_SA_PASSWORD=.*/SQL_SA_PASSWORD=Test_SA_password1!/' .env
           sed -i 's/^JWT_SECRET=.*/JWT_SECRET=test-jwt-secret-minimum-32-characters-long/' .env
           echo "WEB_PORT=8081" >> .env
+          # Drop stale CI networks that may collide with compose IPAM pools.
+          docker network rm ep-ci-edge 2>/dev/null || true
           docker compose up -d --build --wait || {
             echo "=== ep-db-init logs ==="
             docker logs ep-db-init || true
@@ -69,14 +72,27 @@ jobs:
             "SET NOCOUNT ON; SELECT 'KFO' t, COUNT(*) c FROM PhysicalVolumesKfo UNION ALL SELECT 'Projects', COUNT(*) FROM Projects;"
 
       # Не run-e2e-docker.sh: nested `docker run` на GHA зависает на npm ci.
+      #
+      # apt внутри `--with-deps` умеет вставать на зеркале Ubuntu: прогон 32171476941
+      # простоял так 1.5 ч и был отменён по timeout-minutes job — E2E не запустился вообще.
+      # Таймауты acquire (их наследует и внутренний apt-get у playwright) плюс повтор
+      # превращают заминку зеркала в минуты вместо потерянного прогона.
       - name: Install Playwright browsers
         working-directory: client
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 20
+        run: |
+          sudo tee /etc/apt/apt.conf.d/99-ci-timeouts >/dev/null <<'EOF'
+          Acquire::Retries "3";
+          Acquire::http::Timeout "30";
+          Acquire::https::Timeout "30";
+          EOF
+          npx playwright install --with-deps chromium ||
+            npx playwright install --with-deps chromium
 
       - name: Playwright E2E
         working-directory: client
         run: E2E_BASE_URL=http://127.0.0.1:8081 npx playwright test
-        timeout-minutes: 30
+        timeout-minutes: 90
 
       - name: Upload Playwright report
         if: failure()

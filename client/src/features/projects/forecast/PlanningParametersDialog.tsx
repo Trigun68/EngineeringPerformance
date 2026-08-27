@@ -9,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  MenuItem,
   Paper,
   Table,
   TableBody,
@@ -24,19 +25,35 @@ import {
   savePlanningParameters,
   type ProjectVersionPlanningParameter,
 } from '../../../api/planningParametersApi';
-import { recalculateLaborIntensities, fetchProjectVersions, updateProjectVersion, type ProjectVersion } from '../../../api/projectVersionsApi';
+import { fetchPerformance } from '../../../api/analyticsApi';
+import { fetchProjectVersions, updateProjectVersion, type ProjectVersion } from '../../../api/projectVersionsApi';
 import { PlanningScenarioSelector } from '../../norms/PlanningScenarioSelector';
 import { ZParametersCaption } from './ZParametersCaption';
 import type { PlanningScenario } from '../../../types/norms';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { usePermission } from '../../../hooks/usePermission';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
+import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
+import {
+  cascadeZ,
+  filterVisibleRows,
+  isDirectionEditable,
+  isProjectRowEditable,
+  projectRollup,
+  weightedFactZ,
+  Z_PARAMETER_LEVEL,
+  Z_PARAMETER_LEVEL_LABELS,
+  type ZParameterLevel,
+  type ZTriple,
+} from './planningZLevels';
 
 export interface PlanningParametersDialogProps {
   open: boolean;
   projectId: number;
   versionId: number | null;
   planningScenario?: PlanningScenario;
+  /** Read-only столбец «Факт» (Z из performance текущей версии) — для вкладки «Оценка факта». */
+  showFactColumn?: boolean;
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -45,6 +62,8 @@ interface PlanningTreeRow extends ProjectVersionPlanningParameter {
   depth: number;
   hasChildren: boolean;
 }
+
+type ZField = 'zPessimistic' | 'zBase' | 'zOptimistic';
 
 function buildPlanningTreeRows(rows: ProjectVersionPlanningParameter[]): PlanningTreeRow[] {
   const parentIds = new Set(rows.map((r) => r.parentId).filter((id): id is number => id != null));
@@ -75,15 +94,38 @@ function buildPlanningTreeRows(rows: ProjectVersionPlanningParameter[]): Plannin
   return result;
 }
 
-function formatZDisplay(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(2) : '0.00';
+export function formatZDisplay(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(2).replace('.', ',') : '0,00';
 }
 
-function parseZInput(raw: string): number | null {
-  const normalized = raw.trim().replace(',', '.');
-  if (normalized === '' || normalized === '-' || normalized === '.') return null;
+/** Парсит Z с точки или запятой; незавершённый ввод («», «-», «,») → null. */
+export function parseZInput(raw: string): number | null {
+  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.');
+  if (
+    normalized === ''
+    || normalized === '-'
+    || normalized === '.'
+    || normalized === '-.'
+  ) {
+    return null;
+  }
   const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
+}
+
+function draftsFromRows(
+  rows: ProjectVersionPlanningParameter[],
+): Record<number, { zPessimistic: string; zBase: string; zOptimistic: string }> {
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.iicWorkDirectionId,
+      {
+        zPessimistic: formatZDisplay(row.zPessimistic),
+        zBase: formatZDisplay(row.zBase),
+        zOptimistic: formatZDisplay(row.zOptimistic),
+      },
+    ]),
+  );
 }
 
 export function PlanningParametersDialog({
@@ -91,17 +133,29 @@ export function PlanningParametersDialog({
   projectId,
   versionId,
   planningScenario = 1,
+  showFactColumn = false,
   onClose,
   onSaved,
 }: PlanningParametersDialogProps) {
   const { canEdit } = usePermission('Planning');
   const [rows, setRows] = useState<ProjectVersionPlanningParameter[]>([]);
   const [scenario, setScenario] = useState<PlanningScenario>(planningScenario);
+  const [zLevel, setZLevel] = useState<ZParameterLevel>(Z_PARAMETER_LEVEL.EachElement);
   const [versionMeta, setVersionMeta] = useState<ProjectVersion | null>(null);
-  const [zDrafts, setZDrafts] = useState<Record<number, { zPessimistic: string; zBase: string; zOptimistic: string }>>({});
+  /** Черновики полей по iicWorkDirectionId; ключ 0 — виртуальная строка «По проекту». */
+  const [zDrafts, setZDrafts] = useState<
+    Record<number, { zPessimistic: string; zBase: string; zOptimistic: string }>
+  >({});
+  const [projectDraft, setProjectDraft] = useState<ZTriple>({
+    zPessimistic: 0,
+    zBase: 0,
+    zOptimistic: 0,
+  });
+  /** Fact Z по IIC — из performance текущей версии (трудоёмкость / ФО). */
+  const [factZByDirection, setFactZByDirection] = useState<Map<number, number | null>>(new Map());
+  const [factHoursByDirection, setFactHoursByDirection] = useState<Map<number, number | null>>(new Map());
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -109,40 +163,89 @@ export function PlanningParametersDialog({
   }, [planningScenario, open]);
 
   const treeRows = useMemo(() => buildPlanningTreeRows(rows), [rows]);
+  const visibleRows = useMemo(() => filterVisibleRows(treeRows, zLevel), [treeRows, zLevel]);
+
+  const projectDisplay = useMemo((): ZTriple => {
+    if (isProjectRowEditable(zLevel)) {
+      return projectDraft;
+    }
+    return projectRollup(rows);
+  }, [zLevel, projectDraft, rows]);
+
+  const projectFactZ = useMemo(
+    () => (showFactColumn ? weightedFactZ(rows, factZByDirection, factHoursByDirection) : null),
+    [showFactColumn, rows, factZByDirection, factHoursByDirection],
+  );
+
+  const syncProjectDraftDisplay = useCallback((triple: ZTriple) => {
+    setZDrafts((prev) => ({
+      ...prev,
+      0: {
+        zPessimistic: formatZDisplay(triple.zPessimistic),
+        zBase: formatZDisplay(triple.zBase),
+        zOptimistic: formatZDisplay(triple.zOptimistic),
+      },
+    }));
+  }, []);
 
   const load = useCallback(async () => {
     if (!versionId) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPlanningParameters(projectId, versionId);
+      const [data, versions] = await Promise.all([
+        fetchPlanningParameters(projectId, versionId),
+        fetchProjectVersions(projectId),
+      ]);
       setRows(data);
-      const versions = await fetchProjectVersions(projectId);
       const version = versions.find((v) => v.id === versionId) ?? null;
       setVersionMeta(version);
       if (version?.planningScenario) {
         setScenario(version.planningScenario as PlanningScenario);
       }
-      setZDrafts(
-        Object.fromEntries(
-          data.map((row) => [
-            row.id,
-            {
-              zPessimistic: formatZDisplay(row.zPessimistic),
-              zBase: formatZDisplay(row.zBase),
-              zOptimistic: formatZDisplay(row.zOptimistic),
-            },
-          ]),
-        ),
-      );
+      const level = (version?.zParameterLevel ?? Z_PARAMETER_LEVEL.EachElement) as ZParameterLevel;
+      setZLevel(level);
+      const rollup = projectRollup(data);
+      setProjectDraft(rollup);
+      setZDrafts({
+        ...draftsFromRows(data),
+        0: {
+          zPessimistic: formatZDisplay(rollup.zPessimistic),
+          zBase: formatZDisplay(rollup.zBase),
+          zOptimistic: formatZDisplay(rollup.zOptimistic),
+        },
+      });
+
+      if (showFactColumn) {
+        try {
+          const performance = await fetchPerformance(projectId, versionId);
+          const zMap = new Map<number, number | null>();
+          const hoursMap = new Map<number, number | null>();
+          for (const row of performance) {
+            if (row.isTotal) continue;
+            zMap.set(row.workDirectionId, row.zScore);
+            hoursMap.set(row.workDirectionId, row.factLaborHours);
+          }
+          setFactZByDirection(zMap);
+          setFactHoursByDirection(hoursMap);
+        } catch {
+          setFactZByDirection(new Map());
+          setFactHoursByDirection(new Map());
+        }
+      } else {
+        setFactZByDirection(new Map());
+        setFactHoursByDirection(new Map());
+      }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось загрузить параметры планирования.'));
       setRows([]);
       setZDrafts({});
+      setFactZByDirection(new Map());
+      setFactHoursByDirection(new Map());
     } finally {
       setLoading(false);
     }
-  }, [projectId, versionId]);
+  }, [projectId, versionId, showFactColumn]);
 
   useEffect(() => {
     if (open && versionId) {
@@ -150,69 +253,218 @@ export function PlanningParametersDialog({
     }
   }, [open, versionId, load]);
 
-  const updateRow = (id: number, field: 'zPessimistic' | 'zBase' | 'zOptimistic', raw: string) => {
+  // При не-ByProject обновляем отображение rollup «по проекту» из листьев.
+  useEffect(() => {
+    if (isProjectRowEditable(zLevel)) return;
+    syncProjectDraftDisplay(projectRollup(rows));
+  }, [rows, zLevel, syncProjectDraftDisplay]);
+
+  const applyCascade = (source: 'project' | number, z: ZTriple) => {
+    setRows((prev) => {
+      const next = cascadeZ(prev, source, z);
+      // Не затирать строку, которую сейчас редактируют (иначе «1» → «1,00» и нельзя ввести дробь).
+      setZDrafts((drafts) => {
+        const formatted = draftsFromRows(next);
+        const nextDrafts: Record<number, { zPessimistic: string; zBase: string; zOptimistic: string }> = {
+          ...formatted,
+        };
+        if (source === 'project') {
+          if (drafts[0]) nextDrafts[0] = drafts[0];
+        } else {
+          if (drafts[source]) nextDrafts[source] = drafts[source];
+          if (drafts[0]) nextDrafts[0] = drafts[0];
+        }
+        return nextDrafts;
+      });
+      return next;
+    });
+  };
+
+  const updateDirectionField = (directionId: number, field: ZField, raw: string) => {
     setZDrafts((prev) => ({
       ...prev,
-      [id]: { ...prev[id], [field]: raw },
+      [directionId]: { ...(prev[directionId] ?? {
+        zPessimistic: formatZDisplay(0),
+        zBase: formatZDisplay(0),
+        zOptimistic: formatZDisplay(0),
+      }), [field]: raw },
     }));
     const value = parseZInput(raw);
     if (value === null) return;
-    setRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)),
-    );
+
+    const current = rows.find((r) => r.iicWorkDirectionId === directionId);
+    if (!current) return;
+    const nextZ: ZTriple = {
+      zPessimistic: field === 'zPessimistic' ? value : current.zPessimistic,
+      zBase: field === 'zBase' ? value : current.zBase,
+      zOptimistic: field === 'zOptimistic' ? value : current.zOptimistic,
+    };
+
+    // На уровнях L1/L2 правка узла каскадирует в потомков; на EachElement — только сам узел.
+    if (zLevel === Z_PARAMETER_LEVEL.EachElement) {
+      setRows((prev) =>
+        prev.map((row) =>
+          row.iicWorkDirectionId === directionId ? { ...row, [field]: value } : row,
+        ),
+      );
+    } else {
+      applyCascade(directionId, nextZ);
+    }
   };
 
-  const blurRow = (id: number, field: 'zPessimistic' | 'zBase' | 'zOptimistic') => {
+  const updateProjectField = (field: ZField, raw: string) => {
+    setZDrafts((prev) => ({
+      ...prev,
+      0: { ...(prev[0] ?? {
+        zPessimistic: formatZDisplay(0),
+        zBase: formatZDisplay(0),
+        zOptimistic: formatZDisplay(0),
+      }), [field]: raw },
+    }));
+    const value = parseZInput(raw);
+    if (value === null) return;
+
+    const next: ZTriple = {
+      zPessimistic: field === 'zPessimistic' ? value : projectDraft.zPessimistic,
+      zBase: field === 'zBase' ? value : projectDraft.zBase,
+      zOptimistic: field === 'zOptimistic' ? value : projectDraft.zOptimistic,
+    };
+    setProjectDraft(next);
+    applyCascade('project', next);
+  };
+
+  const blurDirection = (directionId: number, field: ZField) => {
     setZDrafts((prev) => {
-      const draft = prev[id];
+      const draft = prev[directionId];
       if (!draft) return prev;
       const value = parseZInput(draft[field]);
       if (value === null) return prev;
       return {
         ...prev,
-        [id]: { ...draft, [field]: formatZDisplay(value) },
+        [directionId]: { ...draft, [field]: formatZDisplay(value) },
       };
     });
   };
+
+  const blurProject = (field: ZField) => {
+    setZDrafts((prev) => {
+      const draft = prev[0];
+      if (!draft) return prev;
+      const value = parseZInput(draft[field]);
+      if (value === null) return prev;
+      return {
+        ...prev,
+        0: { ...draft, [field]: formatZDisplay(value) },
+      };
+    });
+  };
+
+  const handleZLevelChange = (next: ZParameterLevel) => {
+    setZLevel(next);
+    if (!isProjectRowEditable(next)) {
+      const rollup = projectRollup(rows);
+      setProjectDraft(rollup);
+      syncProjectDraftDisplay(rollup);
+    } else {
+      // Переход на «по проекту»: показываем текущий rollup как стартовые editable значения.
+      const rollup = projectRollup(rows);
+      setProjectDraft(rollup);
+      syncProjectDraftDisplay(rollup);
+    }
+  };
+
+  /** Перед сохранением: перенести черновики полей в rows (и каскад «по проекту»). */
+  const commitDraftsToRows = useCallback((): ProjectVersionPlanningParameter[] => {
+    let merged = rows.map((row) => {
+      const draft = zDrafts[row.iicWorkDirectionId];
+      if (!draft) return row;
+      return {
+        ...row,
+        zPessimistic: parseZInput(draft.zPessimistic) ?? row.zPessimistic,
+        zBase: parseZInput(draft.zBase) ?? row.zBase,
+        zOptimistic: parseZInput(draft.zOptimistic) ?? row.zOptimistic,
+      };
+    });
+
+    if (isProjectRowEditable(zLevel)) {
+      const pd = zDrafts[0];
+      const z: ZTriple = {
+        zPessimistic: (pd ? parseZInput(pd.zPessimistic) : null) ?? projectDraft.zPessimistic,
+        zBase: (pd ? parseZInput(pd.zBase) : null) ?? projectDraft.zBase,
+        zOptimistic: (pd ? parseZInput(pd.zOptimistic) : null) ?? projectDraft.zOptimistic,
+      };
+      merged = cascadeZ(merged, 'project', z);
+    }
+
+    return merged;
+  }, [rows, zDrafts, zLevel, projectDraft]);
 
   const handleSave = async () => {
     if (!versionId || !canEdit) return;
     setSaving(true);
     setError(null);
     try {
+      const committed = commitDraftsToRows();
+      setRows(committed);
+      setZDrafts({
+        ...draftsFromRows(committed),
+        0: zDrafts[0]
+          ? {
+              zPessimistic: formatZDisplay(parseZInput(zDrafts[0].zPessimistic) ?? projectDraft.zPessimistic),
+              zBase: formatZDisplay(parseZInput(zDrafts[0].zBase) ?? projectDraft.zBase),
+              zOptimistic: formatZDisplay(parseZInput(zDrafts[0].zOptimistic) ?? projectDraft.zOptimistic),
+            }
+          : {
+              zPessimistic: formatZDisplay(projectDraft.zPessimistic),
+              zBase: formatZDisplay(projectDraft.zBase),
+              zOptimistic: formatZDisplay(projectDraft.zOptimistic),
+            },
+      });
+
       await savePlanningParameters(
         projectId,
         versionId,
-        rows.map((row) => ({
+        committed.map((row) => ({
           iicWorkDirectionId: row.iicWorkDirectionId,
           zPessimistic: row.zPessimistic,
           zBase: row.zBase,
           zOptimistic: row.zOptimistic,
         })),
       );
-      if (versionMeta) {
-        await updateProjectVersion(projectId, versionId, {
-          versionName: versionMeta.versionName,
-          description: versionMeta.description ?? null,
-          direction: versionMeta.direction,
-          physicalVolumeTypeId: versionMeta.physicalVolumeTypeId ?? null,
-          planningScenario: scenario,
-        });
+
+      let meta = versionMeta;
+      if (!meta) {
+        const versions = await fetchProjectVersions(projectId);
+        meta = versions.find((v) => v.id === versionId) ?? null;
+        setVersionMeta(meta);
       }
-      setRecalculating(true);
-      await recalculateLaborIntensities(projectId, versionId);
+      if (!meta) {
+        throw new Error('Не удалось загрузить карточку версии для сохранения сценария и уровня Z.');
+      }
+
+      await updateProjectVersion(projectId, versionId, {
+        versionName: meta.versionName,
+        description: meta.description ?? null,
+        direction: meta.direction,
+        physicalVolumeTypeId: meta.physicalVolumeTypeId ?? null,
+        planningScenario: scenario,
+        zParameterLevel: zLevel,
+      });
+
       onSaved?.();
       onClose();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось сохранить параметры планирования.'));
     } finally {
       setSaving(false);
-      setRecalculating(false);
     }
   };
 
+  const projectEditable = canEdit && isProjectRowEditable(zLevel);
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth data-testid="planning-parameters-dialog">
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth data-testid="planning-parameters-dialog">
+      <WorkingOverlay open={saving || loading} delayMs={saving ? 0 : 1000} />
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}>
         Параметры планирования
         <IconButton aria-label="Закрыть" onClick={onClose} size="small">
@@ -220,11 +472,34 @@ export function PlanningParametersDialog({
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <ZParametersCaption planVersionSelected={Boolean(versionId)} />
-        <Box sx={{ mb: 2, maxWidth: 420 }}>
+        <ZParametersCaption
+          variant={showFactColumn ? 'fact' : 'plan'}
+          planVersionSelected={Boolean(versionId)}
+        />
+        <Box sx={{ mb: 2, maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <PlanningScenarioSelector value={scenario} onChange={setScenario} disabled={!canEdit || saving} />
+          <TextField
+            select
+            size="small"
+            fullWidth
+            label="Уровень параметров Z-оценки"
+            value={zLevel}
+            disabled={!canEdit || saving}
+            onChange={(e) => handleZLevelChange(Number(e.target.value) as ZParameterLevel)}
+            data-testid="z-parameter-level-selector"
+          >
+            {(Object.entries(Z_PARAMETER_LEVEL_LABELS) as Array<[string, string]>).map(([k, label]) => (
+              <MenuItem key={k} value={Number(k)}>
+                {label}
+              </MenuItem>
+            ))}
+          </TextField>
         </Box>
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress size={28} />
@@ -235,33 +510,116 @@ export function PlanningParametersDialog({
               <TableHead>
                 <TableRow>
                   <TableCell>Группа физ. объёмов IIC</TableCell>
-                  <TableCell align="right" sx={{ width: 120 }}>Пессимист.</TableCell>
-                  <TableCell align="right" sx={{ width: 120 }}>Базовый</TableCell>
-                  <TableCell align="right" sx={{ width: 120 }}>Оптимист.</TableCell>
+                  <TableCell align="right" sx={{ width: 120 }}>
+                    Пессимист.
+                  </TableCell>
+                  <TableCell align="right" sx={{ width: 120 }}>
+                    Базовый
+                  </TableCell>
+                  <TableCell align="right" sx={{ width: 120 }}>
+                    Оптимист.
+                  </TableCell>
+                  {showFactColumn && (
+                    <TableCell align="right" sx={{ width: 120 }}>
+                      Факт
+                    </TableCell>
+                  )}
                 </TableRow>
               </TableHead>
               <TableBody>
-                {treeRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell sx={{ pl: 2 + row.depth * 2.5 }}>
-                      {formatIisNorm({ code: row.code, name: row.name, unitName: row.unitName })}
+                <TableRow data-testid="z-project-row">
+                  <TableCell sx={{ fontWeight: 600 }}>По проекту</TableCell>
+                  {(['zPessimistic', 'zBase', 'zOptimistic'] as const).map((field) => (
+                    <TableCell key={field} align="right">
+                      <TextField
+                        size="small"
+                        type="text"
+                        inputMode="decimal"
+                        value={
+                          zDrafts[0]?.[field] ?? formatZDisplay(projectDisplay[field])
+                        }
+                        disabled={!projectEditable}
+                        onChange={(e) => updateProjectField(field, e.target.value)}
+                        onBlur={() => blurProject(field)}
+                        inputProps={{
+                          style: { textAlign: 'right' },
+                          readOnly: !projectEditable,
+                          'aria-label': `Z ${field} по проекту`,
+                        }}
+                        sx={{ width: 96 }}
+                      />
                     </TableCell>
-                    {(['zPessimistic', 'zBase', 'zOptimistic'] as const).map((field) => (
-                      <TableCell key={field} align="right">
-                        <TextField
-                          size="small"
-                          type="number"
-                          value={zDrafts[row.id]?.[field] ?? formatZDisplay(row[field])}
-                          disabled={!canEdit}
-                          onChange={(e) => updateRow(row.id, field, e.target.value)}
-                          onBlur={() => blurRow(row.id, field)}
-                          inputProps={{ style: { textAlign: 'right' }, step: '0.01' }}
-                          sx={{ width: 96 }}
-                        />
+                  ))}
+                  {showFactColumn && (
+                    <TableCell align="right" data-testid="z-project-fact">
+                      <TextField
+                        size="small"
+                        value={projectFactZ != null ? formatZDisplay(projectFactZ) : '—'}
+                        disabled
+                        inputProps={{
+                          style: { textAlign: 'right' },
+                          readOnly: true,
+                          'aria-label': 'Факт Z по проекту',
+                        }}
+                        sx={{ width: 96 }}
+                      />
+                    </TableCell>
+                  )}
+                </TableRow>
+                {visibleRows.map((row) => {
+                  const editable = canEdit && isDirectionEditable(zLevel, row.depth);
+                  const factZ = factZByDirection.get(row.iicWorkDirectionId);
+                  const factDisplay =
+                    factZ != null && Number.isFinite(factZ)
+                      ? formatZDisplay(factZ)
+                      : row.zActual != null
+                        ? formatZDisplay(row.zActual)
+                        : '—';
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell sx={{ pl: 2 + row.depth * 2.5 }}>
+                        {formatIisNorm({ code: row.code, name: row.name, unitName: row.unitName })}
                       </TableCell>
-                    ))}
-                  </TableRow>
-                ))}
+                      {(['zPessimistic', 'zBase', 'zOptimistic'] as const).map((field) => (
+                        <TableCell key={field} align="right">
+                          <TextField
+                            size="small"
+                            type="text"
+                            inputMode="decimal"
+                            value={
+                              zDrafts[row.iicWorkDirectionId]?.[field] ?? formatZDisplay(row[field])
+                            }
+                            disabled={!editable}
+                            onChange={(e) =>
+                              updateDirectionField(row.iicWorkDirectionId, field, e.target.value)
+                            }
+                            onBlur={() => blurDirection(row.iicWorkDirectionId, field)}
+                            inputProps={{
+                              style: { textAlign: 'right' },
+                              'aria-label': `Z ${field} ${row.code}`,
+                            }}
+                            sx={{ width: 96 }}
+                          />
+                        </TableCell>
+                      ))}
+                      {showFactColumn && (
+                        <TableCell align="right">
+                          <TextField
+                            size="small"
+                            value={factDisplay}
+                            disabled
+                            inputProps={{
+                              style: { textAlign: 'right' },
+                              readOnly: true,
+                              'aria-label': `Факт Z ${row.name}`,
+                            }}
+                            sx={{ width: 96 }}
+                          />
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
@@ -270,8 +628,8 @@ export function PlanningParametersDialog({
       <DialogActions>
         <Button onClick={onClose}>Закрыть</Button>
         {canEdit && (
-          <Button variant="contained" onClick={() => void handleSave()} disabled={saving || recalculating || loading || !versionId}>
-            {recalculating ? 'Пересчёт…' : saving ? 'Сохранение…' : 'Сохранить'}
+          <Button variant="contained" onClick={() => void handleSave()} disabled={saving || loading || !versionId}>
+            {saving ? 'Сохранение…' : 'Сохранить'}
           </Button>
         )}
       </DialogActions>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Export;
@@ -23,37 +24,12 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public async Task<byte[]> ExportAnalysisExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _analysisService.GenerateReportAsync(projectId, versionId);
-
-        using var workbook = new XLWorkbook();
-        var sheet = workbook.Worksheets.Add("Analysis");
-
-        sheet.Cell(1, 1).Value = "Project";
-        sheet.Cell(1, 2).Value = report.ProjectName;
-        sheet.Cell(2, 1).Value = "Version";
-        sheet.Cell(2, 2).Value = report.VersionName;
-
-        var headerRow = 4;
-        sheet.Cell(headerRow, 1).Value = "Code";
-        sheet.Cell(headerRow, 2).Value = "Name";
-        sheet.Cell(headerRow, 3).Value = "Fact Labor Hours";
-        sheet.Cell(headerRow, 4).Value = "Z-Score";
-        sheet.Cell(headerRow, 5).Value = "Interpretation";
-
-        var row = headerRow + 1;
-        foreach (var direction in report.Directions)
+        var report = await _analysisService.GenerateReportAsync(projectId, versionId, cancellationToken);
+        var document = FactTableDocumentBuilder.BuildAnalysis(report) with
         {
-            sheet.Cell(row, 1).Value = direction.Code;
-            sheet.Cell(row, 2).Value = direction.Name;
-            sheet.Cell(row, 3).Value = direction.FactLaborHours;
-            sheet.Cell(row, 4).Value = direction.ZScore;
-            sheet.Cell(row, 5).Value = direction.Interpretation?.ToRussian() ?? string.Empty;
-            row++;
-        }
-
-        using var stream = new MemoryStream();
-        workbook.SaveAs(stream);
-        return stream.ToArray();
+            HeaderLines = TabularReportBanner.Lines(report.ProjectCode ?? string.Empty, report.ProjectName, report.VersionName),
+        };
+        return ForecastTableRenderers.ToExcel(document);
     }
 
     public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
@@ -61,8 +37,9 @@ public sealed class AnalyticsExportService : IAnalyticsExportService
 
     public async Task<byte[]> ExportForecastExcelAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
-        var report = await _forecastService.GenerateForecastAsync(projectId, versionId);
+        var report = await _forecastService.GenerateForecastAsync(projectId, versionId, cancellationToken: cancellationToken);
 
+        using var culture = new TemporaryCulture(CultureInfo.GetCultureInfo("ru-RU"));
         using var workbook = new XLWorkbook();
         var sheet = workbook.Worksheets.Add("Прогноз");
         sheet.Cell(1, 1).Value = $"Прогноз трудозатрат: {report.ProjectName} ({report.VersionName})";

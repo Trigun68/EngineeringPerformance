@@ -1,4 +1,5 @@
 import { test, expect, type Route } from '@playwright/test';
+import { ACTION_LABELS } from '../../src/constants/actionLabels';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,7 +13,7 @@ const mockUser = {
   username: 'pm',
   displayName: 'Project Manager',
   roleId: 2,
-  roleName: 'ProjectManager',
+  roleName: 'Admin',
   isActive: true,
   permissions: {
     Dashboard: 1,
@@ -43,6 +44,13 @@ test.describe('ProjectsPage 9 grids E2E', () => {
         { id: 2, projectId: 1, versionName: 'v2', name: 'Версия 2', direction: 0, isArchived: false },
       ]),
     );
+    await page.route('**/api/projects/1/versions/1/page-data/detail**', (route) =>
+      json(route, {
+        forecastDetail: gridData.forecast.detail,
+        factDetail: gridData.fact.detail,
+        compareDetail: gridData.compare?.detail ?? [],
+      }),
+    );
     await page.route('**/api/projects/1/versions/1/page-data**', (route) => json(route, gridData));
   });
 
@@ -53,8 +61,8 @@ test.describe('ProjectsPage 9 grids E2E', () => {
 
     const row = page.locator('.ag-center-cols-container .ag-row').first();
     await row.click({ button: 'right' });
-    await expect(page.getByText('Экспорт Excel')).toBeVisible();
-    await expect(page.getByText('Импорт Excel')).toBeVisible();
+    await expect(page.getByText(ACTION_LABELS.exportExcel)).toBeVisible();
+    await expect(page.getByText(ACTION_LABELS.importExcel)).toBeVisible();
   });
 
   test('export excel triggers download', async ({ page }) => {
@@ -62,7 +70,7 @@ test.describe('ProjectsPage 9 grids E2E', () => {
       await route.fulfill({
         status: 200,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        headers: { 'Content-Disposition': 'attachment; filename="Project_1_v1.xlsx"' },
+        headers: { 'Content-Disposition': 'attachment; filename="отчет_версия_-_P1_Проект_(v1).xlsx"' },
         body: Buffer.from('PK-fake-xlsx'),
       });
     });
@@ -77,7 +85,7 @@ test.describe('ProjectsPage 9 grids E2E', () => {
 
     const row = page.locator('.ag-center-cols-container .ag-row').first();
     await row.click({ button: 'right' });
-    await page.getByText('Экспорт Excel').click();
+    await page.getByText(ACTION_LABELS.exportExcel).click();
 
     await expect.poll(() => downloadStarted).toBe(true);
   });

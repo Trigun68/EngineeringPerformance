@@ -1,8 +1,10 @@
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -16,19 +18,22 @@ public sealed class ProjectAnalyticsController : ControllerBase
     private readonly IProjectForecastService _forecast;
     private readonly IForecastPlannedVolumePersistenceService _plannedVolumePersistence;
     private readonly IAnalyticsExportService _export;
+    private readonly IExportFileNameService _fileNames;
 
     public ProjectAnalyticsController(
         IPerformanceService performance,
         IProjectVersionAnalysisService analysis,
         IProjectForecastService forecast,
         IForecastPlannedVolumePersistenceService plannedVolumePersistence,
-        IAnalyticsExportService export)
+        IAnalyticsExportService export,
+        IExportFileNameService fileNames)
     {
         _performance = performance;
         _analysis = analysis;
         _forecast = forecast;
         _plannedVolumePersistence = plannedVolumePersistence;
         _export = export;
+        _fileNames = fileNames;
     }
 
     [HttpGet("performance")]
@@ -36,14 +41,14 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
     public Task<IReadOnlyList<PerformanceRowDto>> Performance(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _performance.GetPerformanceDataAsync(projectId, versionId);
+        _performance.GetPerformanceDataAsync(projectId, versionId, cancellationToken);
 
     [HttpGet("analysis")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
     public Task<ProjectVersionAnalysisDto> Analysis(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _analysis.GenerateReportAsync(projectId, versionId);
+        _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
 
     [HttpGet("forecast")]
     [RequireProjectAccess]
@@ -59,7 +64,8 @@ public sealed class ProjectAnalyticsController : ControllerBase
         _forecast.GenerateForecastAsync(
             projectId,
             versionId,
-            calculation: BuildCalculationOptions(method, zOptimistic, zBase, zPessimistic));
+            calculation: BuildCalculationOptions(method, zOptimistic, zBase, zPessimistic),
+            cancellationToken: cancellationToken);
 
     [HttpPost("forecast/preview")]
     [RequireProjectAccess]
@@ -73,7 +79,8 @@ public sealed class ProjectAnalyticsController : ControllerBase
             projectId,
             versionId,
             request?.NodePlannedTotals,
-            request?.Calculation);
+            request?.Calculation,
+            cancellationToken);
 
     [HttpPost("forecast/calculate")]
     [RequireProjectAccess]
@@ -87,14 +94,15 @@ public sealed class ProjectAnalyticsController : ControllerBase
             projectId,
             versionId,
             request?.NodePlannedTotals,
-            request?.Calculation);
+            request?.Calculation,
+            cancellationToken);
 
     [HttpGet("forecast/assessment-volumes")]
     [RequireProjectAccess]
-    [HasPermission(PermissionType.Projects, AccessLevel.Read)]
+    [HasPermission(PermissionType.Planning, AccessLevel.Read)]
     public Task<ProjectForecastAssessmentVolumesDto> ForecastAssessmentVolumes(
         int projectId, int versionId, CancellationToken cancellationToken = default) =>
-        _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId);
+        _forecast.GetAssessmentVolumesByDirectionAsync(projectId, versionId, cancellationToken);
 
     [HttpPut("forecast/planned-volumes")]
     [RequireProjectAccess(AccessLevel.Edit)]
@@ -121,47 +129,73 @@ public sealed class ProjectAnalyticsController : ControllerBase
     [HttpGet("export/analysis.xlsx")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAnalysisExcel(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportAnalysisExcelAsync(projectId, versionId, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"analysis-{projectId}-{versionId}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Fact,
+            "xlsx",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/analysis.pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportAnalysisPdf(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportAnalysisPdfAsync(projectId, versionId, cancellationToken);
-        return File(bytes, "application/pdf", $"analysis-{projectId}-{versionId}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Fact,
+            "pdf",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("export/forecast.xlsx")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportForecastExcel(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportForecastExcelAsync(projectId, versionId, cancellationToken);
-        return File(
-            bytes,
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            $"forecast-{projectId}-{versionId}.xlsx");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Forecast,
+            "xlsx",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("export/forecast.pdf")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Planning, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportForecastPdf(
         int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var bytes = await _export.ExportForecastPdfAsync(projectId, versionId, cancellationToken);
-        return File(bytes, "application/pdf", $"forecast-{projectId}-{versionId}.pdf");
+        var fileName = await _fileNames.ForVersionAsync(
+            projectId,
+            versionId,
+            ExportFileNameBuilder.Modules.Forecast,
+            "pdf",
+            ExportFileNameBuilder.Views.Analysis,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
     }
 
     private static ForecastCalculationOptionsDto BuildCalculationOptions(
