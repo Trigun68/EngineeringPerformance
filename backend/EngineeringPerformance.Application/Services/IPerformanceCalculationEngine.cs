@@ -84,4 +84,13 @@ public interface IPerformanceCalculationEngine
     PlanningZParameters ResolvePlanningZ(
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
         int workDirectionId);
+
+    /// <summary>
+    /// Индекс производительности, % к норме: Σ(объём × норматив) / Σ(часы) × 100.
+    /// Учитываются только строки, где одновременно известны объём, норма и часы
+    /// (нулевые/отсутствующие часы исключают строку из обеих сумм — иначе объём без
+    /// трудоёмкости завышал бы индекс). &gt;100 — быстрее нормы, &lt;100 — медленнее.
+    /// null — нет ни одной полностью покрытой строки.
+    /// </summary>
+    decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows);
 }

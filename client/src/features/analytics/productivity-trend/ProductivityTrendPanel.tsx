@@ -4,6 +4,7 @@ import {
   Box,
   Chip,
   CircularProgress,
+  Divider,
   Grid,
   LinearProgress,
   Paper,
@@ -23,6 +24,19 @@ import {
   type ProductivityTrendTransition,
   type ProductivityVolumeMode,
 } from '../../../api/productivityTrendApi';
+import {
+  fetchProductivityIndexTrend,
+  type ProductivityIndexPoint,
+  type ProductivityIndexTrendResponse,
+} from '../../../api/productivityIndexTrendApi';
+import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
+import type { FactPlanMode } from '../shared/FactPlanToggle';
+import { TrendDetailView, type TrendDetailMetricConfig } from '../shared/TrendDetailView';
+import type {
+  GroupTrendLike,
+  TrendPointLike,
+  TrendVersionRow,
+} from '../shared/trendDetailCalc';
 import { FormulaTypeLegend } from './FormulaTypeLegend';
 import { ProductivityTrendChart } from './ProductivityTrendChart';
 
@@ -30,6 +44,46 @@ interface Props {
   dateFrom: string;
   dateTo: string;
   volumeMode: ProductivityVolumeMode;
+}
+
+const PRODUCTIVITY_INDEX_METRIC: TrendDetailMetricConfig = {
+  yAxisTitle: 'Индекс производительности, % к норме',
+  unit: ' %',
+  digits: 1,
+  zeroLine: false,
+  // Индекс выше 100% — быстрее нормы, рост — улучшение.
+  goodDirection: 'positive',
+  factColor: FACT_ACCENT_COLOR,
+  planColor: PLAN_ACCENT_COLOR,
+};
+
+function formatPeriodChip(dateFrom: string, dateTo: string): string {
+  const fmt = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isFinite(d.getTime())
+      ? d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      : '';
+  };
+  const from = dateFrom ? fmt(dateFrom) : '';
+  const to = dateTo ? fmt(dateTo) : '';
+  if (from && to) return `Период: ${from} – ${to}`;
+  if (from) return `Период: с ${from}`;
+  if (to) return `Период: по ${to}`;
+  return 'Весь период';
+}
+
+function toTrendPoint(p: ProductivityIndexPoint): TrendPointLike {
+  return { date: p.date, value: p.index, weight: p.weightHours };
+}
+
+function toVersionRow(p: ProductivityIndexPoint): TrendVersionRow {
+  return {
+    projectCode: p.projectCode,
+    projectName: p.projectName,
+    versionName: p.versionName,
+    date: p.date,
+    value: p.index,
+  };
 }
 
 const VERDICT_LABEL: Record<string, string> = {
@@ -100,6 +154,13 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Первичный блок (мокап TrendDetailMockup): индекс производительности по основным версиям.
+  const [indexResult, setIndexResult] = useState<ProductivityIndexTrendResponse | null>(null);
+  const [indexLoading, setIndexLoading] = useState(false);
+  const [indexError, setIndexError] = useState<string | null>(null);
+  const [mode, setMode] = useState<FactPlanMode>('fact');
+  const indexAbortRef = useRef<AbortController | null>(null);
+
   const load = useCallback(() => {
     abortRef.current?.abort();
     const ac = new AbortController();
@@ -136,6 +197,71 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
       abortRef.current?.abort();
     };
   }, [load]);
+
+  const loadIndex = useCallback(() => {
+    indexAbortRef.current?.abort();
+    const ac = new AbortController();
+    indexAbortRef.current = ac;
+    setIndexLoading(true);
+    setIndexError(null);
+
+    void fetchProductivityIndexTrend(
+      {
+        periodStart: dateFrom || null,
+        periodEnd: dateTo || null,
+      },
+      ac.signal,
+    )
+      .then((data) => {
+        if (ac.signal.aborted) return;
+        setIndexResult(data);
+        setIndexLoading(false);
+      })
+      .catch((err: unknown) => {
+        if (ac.signal.aborted) return;
+        const message =
+          err instanceof Error ? err.message : 'Не удалось загрузить индекс производительности';
+        setIndexError(message);
+        setIndexLoading(false);
+      });
+  }, [dateFrom, dateTo]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => loadIndex(), 400);
+    return () => {
+      clearTimeout(timer);
+      indexAbortRef.current?.abort();
+    };
+  }, [loadIndex]);
+
+  const indexPoints = useMemo(
+    () => ({
+      plan: (indexResult?.overall.plan ?? []).map(toTrendPoint),
+      fact: (indexResult?.overall.fact ?? []).map(toTrendPoint),
+    }),
+    [indexResult],
+  );
+
+  const indexVersions = useMemo(
+    () => ({
+      plan: (indexResult?.overall.plan ?? []).map(toVersionRow),
+      fact: (indexResult?.overall.fact ?? []).map(toVersionRow),
+    }),
+    [indexResult],
+  );
+
+  const indexWaterfallGroups = useMemo<GroupTrendLike[]>(
+    () =>
+      (indexResult?.byGroup ?? []).map((g) => ({
+        groupId: g.groupId,
+        // Имя группы уже отформатировано backend (код — наименование (ед.)) — не переформатируем.
+        groupName: g.groupName,
+        points: g.fact.map(toTrendPoint),
+      })),
+    [indexResult],
+  );
+
+  const hasIndexPoints = indexPoints.plan.length > 0 || indexPoints.fact.length > 0;
 
   const columnDefs = useMemo<ColDef<ProductivityTrendTransition>[]>(
     () => [
@@ -269,7 +395,72 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   ];
 
   return (
-    <Stack spacing={2} data-testid="prod-trend-panel">
+    <Stack spacing={2.5} data-testid="prod-trend-panel">
+      {indexLoading && !indexResult && (
+        <Box data-testid="prod-index-loading" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                height={96}
+                sx={{ flex: '1 1 200px', minWidth: 200, borderRadius: 2.5 }}
+              />
+            ))}
+          </Box>
+          <Skeleton variant="rounded" height={360} sx={{ borderRadius: 2.5 }} />
+        </Box>
+      )}
+
+      {indexLoading && indexResult ? (
+        <LinearProgress sx={{ borderRadius: 1 }} data-testid="prod-index-refresh-progress" />
+      ) : null}
+
+      {indexError && (
+        <Alert severity="error" data-testid="prod-index-error">
+          {indexError}
+        </Alert>
+      )}
+
+      {indexResult && indexResult.warnings.length > 0 && (
+        <Alert severity="info" data-testid="prod-index-warnings" sx={{ py: 0.5 }}>
+          {indexResult.warnings.slice(0, 3).join(' ')}
+        </Alert>
+      )}
+
+      {indexResult && !hasIndexPoints && !indexLoading && (
+        <Alert severity="info" data-testid="prod-index-empty">
+          Нет основных версий (isPrimary) с рассчитанным индексом производительности в выбранном
+          периоде.
+        </Alert>
+      )}
+
+      {indexResult && hasIndexPoints && (
+        <TrendDetailView
+          mode={mode}
+          onModeChange={setMode}
+          config={PRODUCTIVITY_INDEX_METRIC}
+          periodLabel={formatPeriodChip(dateFrom, dateTo)}
+          planPoints={indexPoints.plan}
+          factPoints={indexPoints.fact}
+          planVersions={indexVersions.plan}
+          factVersions={indexVersions.fact}
+          waterfallGroups={indexWaterfallGroups}
+          testId="prod-trend-detail"
+        />
+      )}
+
+      <Divider sx={{ my: 1 }} />
+
+      <Box>
+        <Typography variant="h6" component="h2">
+          Нормы IIC: смена формул и часов при опорном объёме
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          Как менялась сама норма: часы N(V*) при опорном объёме и смены формул расчёта за период.
+        </Typography>
+      </Box>
+
       {loading && !result && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress size={32} data-testid="prod-trend-loading" />
