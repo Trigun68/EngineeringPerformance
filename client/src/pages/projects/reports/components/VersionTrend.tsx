@@ -1,22 +1,29 @@
 import { useMemo } from 'react';
-import { Box, Card, CardContent, Grid, Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import type { VersionTrendPoint } from '../reportCalc';
-import { ACCENT_FACT, ACCENT_PLAN, DIRECTION_FACT, DIRECTION_PLAN, fmt } from '../reportCalc';
-import { wpColors } from '../../../../theme/wpColors';
+import {
+  ACCENT_FACT,
+  ACCENT_PLAN,
+  DIRECTION_FACT,
+  DIRECTION_PLAN,
+  formatTrendPointLabel,
+  formatTrendScenarioTooltipHtml,
+  MUTED_COLOR,
+} from '../reportCalc';
+import { PRIMARY_TEXT, ReportMockupCard, SectionLabel } from './reportChrome';
 
 interface VersionTrendProps {
   points: VersionTrendPoint[];
 }
 
 export function VersionTrend({ points }: VersionTrendProps) {
-  // Единая хронологическая шкала X по дате создания версии — план и факт совмещены на ней.
   const chronological = useMemo(
-    () => [...points].filter((p) => p.weightedZScore !== null).sort((a, b) => a.sortDate - b.sortDate),
+    () => [...points].filter((p) => p.weightedZScore !== null).sort((a, b) => a.sortDate - b.sortDate || a.versionId - b.versionId),
     [points],
   );
-  const categories = chronological.map((p) => p.versionName);
+  const categories = chronological.map((p) => p.date ?? p.versionName);
 
   const planIndices = useMemo(
     () =>
@@ -35,25 +42,65 @@ export function VersionTrend({ points }: VersionTrendProps) {
 
   const options = useMemo<Highcharts.Options>(
     () => ({
-      chart: { height: 240, style: { fontFamily: 'inherit' } },
+      chart: {
+        height: 240,
+        spacingTop: 28,
+        style: { fontFamily: 'inherit' },
+        backgroundColor: 'transparent',
+      },
       title: { text: undefined },
       credits: { enabled: false },
       xAxis: {
         categories,
-        lineColor: wpColors.cardBorder,
+        lineColor: '#E4E9ED',
+        tickLength: 0,
+        labels: {
+          style: { color: MUTED_COLOR, fontSize: '10px' },
+          formatter() {
+            const index = this.pos;
+            const p = chronological[index];
+            const label = String(this.value ?? '');
+            return p?.direction === DIRECTION_FACT
+              ? `<span style="font-weight:700;color:${PRIMARY_TEXT}">${label}</span>`
+              : label;
+          },
+        },
       },
       yAxis: {
-        title: { text: 'Z-оценка' },
-        plotLines: [
-          { value: 0, color: wpColors.muted, dashStyle: 'ShortDash', width: 1, label: { text: 'норма (Z = 0)' } },
-        ],
+        title: { text: undefined },
+        gridLineColor: '#EEF1F4',
+        labels: { style: { color: MUTED_COLOR, fontSize: '9.5px' } },
+        plotLines: [{ value: 0, color: '#E4E9ED', dashStyle: 'ShortDash', width: 1 }],
       },
-      legend: { enabled: true },
+      legend: { enabled: false },
       tooltip: {
+        useHTML: true,
         formatter() {
-          const point = this as unknown as { x: number; y: number };
+          const point = this as unknown as { x: number };
           const p = chronological[point.x];
-          return `<b>${p?.versionName ?? ''}</b><br/>Z = ${fmt(point.y, 2)}<br/>${fmt(p?.totalHours ?? null, 0)} ч`;
+          return p ? formatTrendScenarioTooltipHtml(p) : undefined;
+        },
+      },
+      plotOptions: {
+        series: {
+          dataLabels: {
+            enabled: true,
+            allowOverlap: true,
+            crop: false,
+            overflow: 'allow',
+            y: -10,
+            style: {
+              fontSize: '9px',
+              fontWeight: '600',
+              color: MUTED_COLOR,
+              textOutline: 'none',
+            },
+            formatter() {
+              const point = this as unknown as { x: number };
+              const p = chronological[point.x];
+              return p ? formatTrendPointLabel(p.weightedZScore, p.totalHours) : '';
+            },
+          },
         },
       },
       series: [
@@ -66,7 +113,6 @@ export function VersionTrend({ points }: VersionTrendProps) {
           data: planIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
         },
         {
-          // Гало под основным маркером факта — акцент по мокапу ReportRedesignMockup.
           type: 'scatter',
           name: 'Факт (гало)',
           color: ACCENT_FACT,
@@ -90,45 +136,43 @@ export function VersionTrend({ points }: VersionTrendProps) {
   );
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={0.5} sx={{ mb: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-            Динамика Z-оценки по версиям
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Средневзвешенная Z-оценка по версиям плана (хронологически) и основной версии факта.
-          </Typography>
+    <ReportMockupCard testId="report-v1-version-trend">
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
+        <SectionLabel>Динамика Z-оценки по версиям</SectionLabel>
+        <Stack direction="row" spacing={2.5}>
+          <Stack direction="row" alignItems="center" spacing={0.7}>
+            <Box sx={{ width: 20, height: 2.5, bgcolor: ACCENT_PLAN, borderRadius: 2 }} />
+            <Typography sx={{ fontSize: 11.5, color: MUTED_COLOR, fontWeight: 600 }}>План (по версиям)</Typography>
+          </Stack>
+          <Stack direction="row" alignItems="center" spacing={0.7}>
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: ACCENT_FACT,
+                border: '2px solid #FFFFFF',
+                boxShadow: `0 0 0 1.5px ${ACCENT_FACT}`,
+              }}
+            />
+            <Typography sx={{ fontSize: 11.5, color: MUTED_COLOR, fontWeight: 600 }}>Факт (основная версия)</Typography>
+          </Stack>
         </Stack>
+      </Stack>
 
-        {chronological.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Недостаточно данных для построения динамики.
+      {chronological.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" data-testid="report-version-trend-empty">
+          Недостаточно данных для построения динамики.
+        </Typography>
+      ) : (
+        <>
+          <HighchartsReact highcharts={Highcharts} options={options} />
+          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mt: 0.5 }}>
+            Версии отсортированы по дате создания (хронологически) — план показывает эволюцию по всем версиям плана,
+            факт — единственная точка по основной версии факта.
           </Typography>
-        ) : (
-          <>
-            <HighchartsReact highcharts={Highcharts} options={options} />
-
-            <Grid container spacing={2} sx={{ borderTop: 1, borderColor: 'divider', pt: 2, mt: 1 }}>
-              {chronological.map((p) => (
-                <Grid item xs={6} sm={3} key={p.versionId}>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      {p.date ?? '—'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {p.versionName}
-                    </Typography>
-                    <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                      {fmt(p.totalHours, 0)} ч
-                    </Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      )}
+    </ReportMockupCard>
   );
 }

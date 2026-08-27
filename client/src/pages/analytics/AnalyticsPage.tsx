@@ -37,13 +37,13 @@ const TRENDS_PREF_KEY = 'analytics.trends.v1';
 const PROD_TREND_PREF_KEY = 'analytics.productivityTrend.v1';
 
 const MAIN_TABS: { value: AnalyticsMainTab; label: string; testId: string }[] = [
-  { value: 'trends', label: 'Анализ тренда оценки факта', testId: 'analytics-tab-trends' },
+  { value: 'trends', label: 'Тренд оценки', testId: 'analytics-tab-trends' },
   {
     value: 'productivity-trend',
-    label: 'Анализ тренда производительности',
+    label: 'Тренд оценки производительности',
     testId: 'analytics-tab-productivity-trend',
   },
-  { value: 'fact-norms', label: 'Сравнение факта и норм', testId: 'analytics-tab-fact-norms' },
+  { value: 'fact-norms', label: 'Анализ факта и норм', testId: 'analytics-tab-fact-norms' },
   { value: 'norm-analysis', label: 'Анализ норм', testId: 'analytics-tab-norm-analysis' },
 ];
 
@@ -64,11 +64,13 @@ interface SavedProdTrendPrefs {
 }
 
 const TAB_BLURB: Record<AnalyticsMainTab, string> = {
-  trends: 'Динамика средневзвешенного Z по основным версиям плана и факта относительно нормы на дату версии.',
+  trends:
+    'Портфель: динамика Z по датам, мост часов (объём / производительность), Z групп IIC относительно нормы и накопительные часы факта. Разбор ΔZ и сегменты норм — в «Дополнительно».',
   'productivity-trend':
-    'Динамика индекса производительности (% к норме) по основным версиям проектов и смена норм IIC за период.',
-  'fact-norms': 'Сверка фактической производительности с действующими нормами IIC.',
-  'norm-analysis': 'Реестр норм IIC, таймлайн действия и проверка здоровья.',
+    'Соотношение факта и плана с нормативной выработкой по основным версиям проектов — на сколько процентов быстрее или медленнее нормы выполняется работа.',
+  'fact-norms': 'Сверка фактической производительности с действующими нормами IIC: серьёзность отклонений и вердикт по группе.',
+  'norm-analysis':
+    'Покрытие направлений нормами, достоверность, дрейф-спарклайны, тепловая карта и симулятор «что если» без публикации нормы.',
 };
 
 export function AnalyticsPage() {
@@ -83,6 +85,7 @@ export function AnalyticsPage() {
   const [showFact, setShowFact] = useState(true);
   const [volumeMode, setVolumeMode] = useState<ProductivityVolumeMode>('median');
   const [factNormToolbarExtras, setFactNormToolbarExtras] = useState<ReactNode>(null);
+  const [factNormDirectionIds, setFactNormDirectionIds] = useState<number[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -359,11 +362,19 @@ export function AnalyticsPage() {
             dateFrom={dateFrom}
             dateTo={dateTo}
             onToolbarExtras={setFactNormToolbarExtras}
+            workDirectionIds={factNormDirectionIds}
           />
         ) : null}
 
         {mainTab === 'norm-analysis' && prefsLoaded ? (
-          <NormAnalysisPanel dateFrom={dateFrom} dateTo={dateTo} />
+          <NormAnalysisPanel
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onOpenFactNorms={(groupId) => {
+              setFactNormDirectionIds([groupId]);
+              setMainTab('fact-norms');
+            }}
+          />
         ) : null}
       </Box>
     </AnalyticsChromeProvider>

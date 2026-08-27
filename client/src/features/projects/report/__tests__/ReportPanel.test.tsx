@@ -1,7 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportPanel } from '../ReportPanel';
 import type { PerformanceReportDto } from '../../../../api/performanceReportApi';
+import type { ProjectVersion } from '../../../../api/projectVersionsApi';
+import type { Project } from '../../../../types/project';
 
 const fetchPerformanceReport = vi.fn();
 
@@ -21,6 +23,14 @@ vi.mock('../../../../api/userPreferencesApi', () => ({
 
 vi.mock('../../shared/WorkspaceChromeToggleRow', () => ({
   WorkspaceChromeToggleRow: () => null,
+}));
+
+vi.mock('../../../../pages/projects/reports/ReportsTab', () => ({
+  ReportsTab: () => <div data-testid="reports-tab-stub" />,
+}));
+
+vi.mock('../ProjectTrendPanel', () => ({
+  ProjectTrendPanel: () => <div data-testid="project-trend-stub" />,
 }));
 
 const report: PerformanceReportDto = {
@@ -75,7 +85,34 @@ describe('ReportPanel', () => {
   });
 
   it('shows plan and fact version names and does not fall back fact hours to plan', async () => {
-    render(<ReportPanel projectId={1} />);
+    const project = report.project as Project;
+    const versions: ProjectVersion[] = [
+      {
+        id: 2,
+        projectId: 1,
+        name: '30.06.26',
+        versionName: '30.06.26',
+        direction: 1,
+        sortOrder: 0,
+        isArchived: false,
+        createdAt: '2026-06-30T00:00:00Z',
+        isPrimary: true,
+      },
+      {
+        id: 3,
+        projectId: 1,
+        name: '30.06.26 (факт)',
+        versionName: '30.06.26 (факт)',
+        direction: 2,
+        sortOrder: 1,
+        isArchived: false,
+        createdAt: '2026-06-30T00:00:00Z',
+        isPrimary: true,
+      },
+    ];
+    render(<ReportPanel projectId={1} project={project} versions={versions} />);
+    expect(screen.getByTestId('report-trend-tab')).toHaveTextContent('Тренд');
+    fireEvent.click(screen.getByTestId('report-legacy-tab'));
     await waitFor(() => {
       expect(screen.getByTestId('report-plan-version')).toHaveTextContent('План: 30.06.26');
     });

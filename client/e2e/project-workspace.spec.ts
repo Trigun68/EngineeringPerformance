@@ -175,12 +175,26 @@ test.describe('Project Workspace - WPF Style', () => {
 
     await page.getByRole('tab', { name: 'Отчет' }).click();
 
-    // Дефолт — новый «Сводный вер 1»: блоки план/факт по основным версиям, шкала, динамика.
-    await expect(page.getByText('Трудоёмкость плана')).toBeVisible({ timeout: 40_000 });
-    await expect(page.getByText('Z-план')).toBeVisible();
-    await expect(page.getByText('Шкала интерпретации Z-оценки')).toBeVisible();
+    // Дефолт — новый «Сводный вер 1»: блоки план/факт по мокапу, шкала, динамика.
+    await expect(page.getByTestId('report-v1-page')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByText('Сводка по проекту')).toBeVisible();
+    await expect(page.getByText('Трудоёмкость').first()).toBeVisible();
+    await expect(page.getByText('Z-оценка').first()).toBeVisible();
+    await expect(page.getByTestId('report-v1-z-scale')).toBeVisible();
+    await expect(page.getByTestId('report-z-zone-Critical')).toBeVisible();
+    await expect(page.getByTestId('report-z-zone-Excellent')).toBeVisible();
+    await expect(page.getByTestId('report-v1-z-tick').first()).toHaveText('+3');
+    await expect(page.getByTestId('report-v1-z-tick').last()).toHaveText('−3');
     await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
     await expect(page.getByTestId('report-export-pdf')).toBeVisible();
+    await expect(page.getByTestId('report-v1-more-toggle')).toBeVisible();
+    await expect(page.getByText('Анализ версии проекта')).toHaveCount(0);
+
+    // «Тренд» — история версий проекта, мост часов, Z от 0, S-curve.
+    await page.getByTestId('report-trend-tab').click();
+    await expect(page.getByTestId('project-trend-panel')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByRole('heading', { name: 'Динамика Z по датам' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Отклонения по дисциплинам' })).toBeVisible();
 
     // «Сводный вер 2» — старый механизм для отката.
     await page.getByTestId('report-legacy-tab').click();

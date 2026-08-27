@@ -51,27 +51,27 @@ export function ForecastTable({ rows }: ForecastTableProps) {
                 <TableCell sx={{ fontWeight: 500 }}>{row.name}</TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                    {fmt(row.plannedVolume, 0)} {row.unitName ?? ''}
+                    {fmt(row.plannedVolume, 1)} {row.unitName ?? ''}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', color: INTERPRETATION_COLOR.Excellent }}>
-                    {fmt(row.optimisticHours, 0)}
+                    {fmt(row.optimisticHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                    {fmt(row.baseHours, 0)}
+                    {fmt(row.baseHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', color: INTERPRETATION_COLOR.Critical }}>
-                    {fmt(row.pessimisticHours, 0)}
+                    {fmt(row.pessimisticHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary' }}>
-                    {fmt((row.pessimisticHours ?? 0) - (row.optimisticHours ?? 0), 0)}
+                    {fmt((row.pessimisticHours ?? 0) - (row.optimisticHours ?? 0), 1)}
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -83,22 +83,22 @@ export function ForecastTable({ rows }: ForecastTableProps) {
               <TableCell />
               <TableCell align="right">
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                  {fmt(sum('optimisticHours'), 0)}
+                  {fmt(sum('optimisticHours'), 1)}
                 </Typography>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                  {fmt(sum('baseHours'), 0)}
+                  {fmt(sum('baseHours'), 1)}
                 </Typography>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                  {fmt(sum('pessimisticHours'), 0)}
+                  {fmt(sum('pessimisticHours'), 1)}
                 </Typography>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
-                  {fmt(sum('pessimisticHours') - sum('optimisticHours'), 0)}
+                  {fmt(sum('pessimisticHours') - sum('optimisticHours'), 1)}
                 </Typography>
               </TableCell>
             </TableRow>

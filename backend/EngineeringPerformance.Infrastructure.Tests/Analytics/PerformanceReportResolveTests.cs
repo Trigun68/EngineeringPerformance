@@ -171,6 +171,59 @@ public sealed class PerformanceReportResolveTests
     }
 
     [Fact]
+    public void MapPlanDirectionRows_UsesZBaseStamp_NotLivePerformanceZ()
+    {
+        var engine = new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
+        const int dirId = 2;
+        var classifier = new IicWorkDirection
+        {
+            Id = dirId,
+            Code = "IIC-2",
+            Name = "Лист",
+            Unit = new UnitOfMeasurement { Id = 1, Name = "шт" },
+        };
+        var bundle = new ProjectsPageVersionBundle
+        {
+            VersionExists = true,
+            WorkDirections = [classifier],
+            PhysicalVolumes = [],
+            Equipment = [],
+            LaborIntensities = [],
+            NormsByDirection = new Dictionary<int, NormCalculationSnapshot>(),
+            ClassifierMap = new Dictionary<int, IicWorkDirection> { [dirId] = classifier },
+            PlanningZByDirection = new Dictionary<int, PlanningZParameters>
+            {
+                [dirId] = new(0.5m, -0.86m, -0.5m),
+            },
+            NormIdByDirection = new Dictionary<int, int>(),
+        };
+        var liveRows = new List<PerformanceRowDto>
+        {
+            new(
+                WorkDirectionId: dirId,
+                WorkDirectionName: "Лист",
+                WorkDirectionCode: "IIC-2",
+                ParentId: null,
+                Level: 0,
+                NormUnitName: "шт",
+                FactPhysicalVolume: 10m,
+                FactLaborHours: 10m,
+                FactProductivity: 1m,
+                FactEstimate: null,
+                NormProductivity: 10m,
+                NormEstimate: null,
+                NormStdDev: 1m,
+                ZScore: 1.23m,
+                Interpretation: null),
+        };
+
+        var mapped = PerformanceReportService.MapPlanDirectionRows(engine, bundle, liveRows);
+        mapped.Should().ContainSingle();
+        mapped[0].ZScore.Should().Be(-0.86m);
+        mapped[0].ZScore.Should().NotBe(1.23m);
+    }
+
+    [Fact]
     public void FormatNormSnapshotKey_SortsPairs()
     {
         AnalysisVersionSnapshotService.FormatKey([(20, 2), (10, 5), (10, 1)])

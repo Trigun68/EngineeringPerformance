@@ -48,8 +48,8 @@ export function DirectionBars({ rows, title, description }: DirectionBarsProps) 
                   >
                     {row.workDirectionName}
                   </Typography>
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                    {row.workDirectionCode} · {fmt(row.subtreeHours, 0)} ч
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
+                    {fmt(row.subtreeHours, 1)} ч
                   </Typography>
                 </Box>
 
@@ -91,7 +91,7 @@ export function DirectionBars({ rows, title, description }: DirectionBarsProps) 
             color="text.secondary"
             sx={{ mt: 'auto', pt: 1.5, borderTop: 1, borderColor: 'divider' }}
           >
-            Ширина полосы — величина отклонения от нормы ИИЦ; влево от осевой линии — опережение нормы, вправо —
+            Ширина полосы — величина отклонения от нормы IIC; влево от осевой линии — опережение нормы, вправо —
             перерасход трудозатрат.
           </Typography>
         </Stack>

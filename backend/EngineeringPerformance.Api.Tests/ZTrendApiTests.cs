@@ -52,6 +52,9 @@ public sealed class ZTrendApiTests : IClassFixture<ApiWebApplicationFactory>
         root.TryGetProperty("byGroup", out _).Should().BeTrue();
         root.TryGetProperty("legend", out _).Should().BeTrue();
         root.TryGetProperty("warnings", out _).Should().BeTrue();
+        root.TryGetProperty("disciplineBridge", out _).Should().BeTrue();
+        root.TryGetProperty("groupZeroBars", out _).Should().BeTrue();
+        root.TryGetProperty("portfolioSCurve", out _).Should().BeTrue();
     }
 
     [Fact]

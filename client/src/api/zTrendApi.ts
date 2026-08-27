@@ -1,4 +1,12 @@
 import apiClient from '../services/apiClient';
+import type { TrendDetailAggregation } from '../features/analytics/shared/trendDetailCalc';
+import { normalizeTrendDetailAggregation } from '../features/analytics/shared/trendDetailCalc';
+import {
+  normalizeHoursBridge,
+  normalizeSCurve,
+  type HoursBridgeResultDto,
+  type CumulativeHoursPointDto,
+} from './projectTrendApi';
 
 export type ZTrendFlag = 'ok' | 'sigma_zero' | 'no_norm' | 'clipped';
 export type ZTrendWeightMode = 'basisHours';
@@ -58,11 +66,21 @@ export interface ZTrendLegendItem {
   effectiveTo: string | null;
 }
 
+export interface GroupZeroBaseline {
+  groupId: number;
+  groupName: string;
+  bars: { name: string; zScore: number }[];
+}
+
 export interface ZTrendResponse {
   overall: ZTrendGroup;
   byGroup: ZTrendGroup[];
   legend: ZTrendLegendItem[];
   warnings: string[];
+  detail: TrendDetailAggregation | null;
+  disciplineBridge: HoursBridgeResultDto;
+  groupZeroBars: GroupZeroBaseline[];
+  portfolioSCurve: CumulativeHoursPointDto[];
 }
 
 export interface ZTrendRequest {
@@ -193,5 +211,20 @@ export async function fetchZTrends(
       effectiveTo: (l.effectiveTo ?? l.EffectiveTo ?? null) as string | null,
     })),
     warnings: (data.warnings ?? data.Warnings ?? []) as string[],
+    detail: normalizeTrendDetailAggregation(
+      (data.detail ?? data.Detail ?? null) as Record<string, unknown> | null,
+    ),
+    disciplineBridge: normalizeHoursBridge(data.disciplineBridge ?? data.DisciplineBridge),
+    groupZeroBars: ((data.groupZeroBars ?? data.GroupZeroBars ?? []) as Array<Record<string, unknown>>).map(
+      (g) => ({
+        groupId: Number(g.groupId ?? g.GroupId ?? 0),
+        groupName: String(g.groupName ?? g.GroupName ?? ''),
+        bars: ((g.bars ?? g.Bars ?? []) as Array<Record<string, unknown>>).map((b) => ({
+          name: String(b.name ?? b.Name ?? ''),
+          zScore: Number(b.zScore ?? b.ZScore ?? 0),
+        })),
+      }),
+    ),
+    portfolioSCurve: normalizeSCurve(data.portfolioSCurve ?? data.PortfolioSCurve),
   };
 }

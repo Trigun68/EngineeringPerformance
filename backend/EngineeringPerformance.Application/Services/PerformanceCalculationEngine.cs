@@ -477,4 +477,256 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 
         return Math.Round(normHours / hours * 100m, 1, MidpointRounding.ToEven);
     }
+
+    public IReadOnlyList<MonthlyTrendBucketDto> BucketTrendPointsByMonth(IEnumerable<TrendPointSample> points)
+    {
+        var buckets = new Dictionary<(int Year, int Month), (decimal WeightedSum, decimal WeightSum, decimal ValueSum, int Count)>();
+        foreach (var point in points)
+        {
+            if (point.Value is null)
+                continue;
+
+            var key = (point.Date.Year, point.Date.Month);
+            var weight = point.Weight > 0m ? point.Weight : 0m;
+            if (!buckets.TryGetValue(key, out var bucket))
+                bucket = (0m, 0m, 0m, 0);
+
+            buckets[key] = (
+                bucket.WeightedSum + point.Value.Value * weight,
+                bucket.WeightSum + weight,
+                bucket.ValueSum + point.Value.Value,
+                bucket.Count + 1);
+        }
+
+        return buckets
+            .OrderBy(kv => kv.Key.Year)
+            .ThenBy(kv => kv.Key.Month)
+            .Select(kv =>
+            {
+                var date = new DateTime(kv.Key.Year, kv.Key.Month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+                decimal? value = kv.Value.WeightSum > 0m
+                    ? kv.Value.WeightedSum / kv.Value.WeightSum
+                    : kv.Value.ValueSum / kv.Value.Count;
+                return new MonthlyTrendBucketDto(date, value);
+            })
+            .ToList();
+    }
+
+    public PeriodKpiDto ComputePeriodKpi(IReadOnlyList<MonthlyTrendBucketDto> buckets)
+    {
+        var valid = buckets.Where(b => b.Value is not null).ToList();
+        if (valid.Count == 0)
+            return new PeriodKpiDto(null, null, null);
+
+        var initial = valid[0].Value;
+        var current = valid[^1].Value;
+        decimal? delta = current is not null && initial is not null ? current - initial : null;
+        return new PeriodKpiDto(current, initial, delta);
+    }
+
+    public IReadOnlyList<WaterfallStepDto>? BuildFactorWaterfall(
+        IReadOnlyList<TrendGroupSample> groups,
+        decimal? overallDelta,
+        int topCount = 3)
+    {
+        if (overallDelta is null || groups.Count == 0)
+            return null;
+
+        var totalWeight = groups.Sum(g => g.Points.Sum(p => p.Weight > 0m ? p.Weight : 0m));
+        if (totalWeight <= 0m)
+            return null;
+
+        var contributions = new List<(string Name, decimal Value)>();
+        foreach (var group in groups)
+        {
+            var kpi = ComputePeriodKpi(BucketTrendPointsByMonth(group.Points));
+            if (kpi.Delta is null)
+                continue;
+
+            var weight = group.Points.Sum(p => p.Weight > 0m ? p.Weight : 0m);
+            contributions.Add((group.GroupName, kpi.Delta.Value * (weight / totalWeight)));
+        }
+
+        if (contributions.Count == 0)
+            return null;
+
+        var ordered = contributions.OrderByDescending(c => Math.Abs(c.Value)).ToList();
+        var top = ordered.Take(Math.Max(1, topCount)).ToList();
+        var topSum = top.Sum(c => c.Value);
+        var rest = overallDelta.Value - topSum;
+
+        var steps = top.Select(c => new WaterfallStepDto(c.Name, c.Value)).ToList();
+        if (ordered.Count > topCount || Math.Abs(rest) > 1e-9m)
+            steps.Add(new WaterfallStepDto("Прочие направления", rest));
+
+        return steps;
+    }
+
+    public TrendDetailAggregationDto BuildTrendDetailAggregation(
+        IReadOnlyList<TrendPointSample> planPoints,
+        IReadOnlyList<TrendPointSample> factPoints,
+        IReadOnlyList<TrendGroupSample> factGroups,
+        int waterfallTopCount = 3)
+    {
+        var planMonthly = BucketTrendPointsByMonth(planPoints);
+        var factMonthly = BucketTrendPointsByMonth(factPoints);
+        var planKpi = ComputePeriodKpi(planMonthly);
+        var factKpi = ComputePeriodKpi(factMonthly);
+        var waterfall = BuildFactorWaterfall(factGroups, factKpi.Delta, waterfallTopCount);
+        return new TrendDetailAggregationDto(planMonthly, factMonthly, planKpi, factKpi, waterfall);
+    }
+
+    public HoursBridgeResultDto ComputeHoursBridge(
+        IReadOnlyList<PerformanceRowDto> planRows,
+        IReadOnlyList<PerformanceRowDto> factRows)
+    {
+        var planById = IndexEligible(planRows);
+        var factById = IndexEligible(factRows);
+        var parentById = new Dictionary<int, int?>();
+        var nameById = new Dictionary<int, string>();
+        CollectMeta(planRows, parentById, nameById);
+        CollectMeta(factRows, parentById, nameById);
+
+        var acc = new Dictionary<int, (decimal Volume, decimal Productivity)>();
+        foreach (var (id, plan) in planById)
+        {
+            if (plan.Volume <= 0m || !factById.TryGetValue(id, out var fact) || fact.Volume <= 0m)
+                continue;
+
+            var hoursAtPlanRate = plan.Hours * (fact.Volume / plan.Volume);
+            var volumeEffect = hoursAtPlanRate - plan.Hours;
+            var productivityEffect = fact.Hours - hoursAtPlanRate;
+            var rootId = FindRoot(id, parentById);
+            if (!acc.TryGetValue(rootId, out var cur))
+                cur = (0m, 0m);
+            acc[rootId] = (cur.Volume + volumeEffect, cur.Productivity + productivityEffect);
+        }
+
+        if (acc.Count == 0)
+            return HoursBridgeResultDto.Empty;
+
+        var lines = acc
+            .OrderBy(kv => kv.Key)
+            .Select(kv => new HoursBridgeLineDto(
+                kv.Key,
+                nameById.GetValueOrDefault(kv.Key, $"Группа {kv.Key}"),
+                Math.Round(kv.Value.Volume, 2, MidpointRounding.ToEven),
+                Math.Round(kv.Value.Productivity, 2, MidpointRounding.ToEven)))
+            .ToList();
+
+        return new HoursBridgeResultDto(
+            lines,
+            lines.Sum(l => l.VolumeEffect),
+            lines.Sum(l => l.ProductivityEffect));
+    }
+
+    public HoursBridgeResultDto CombineHoursBridges(IEnumerable<HoursBridgeResultDto> parts)
+    {
+        var acc = new Dictionary<int, (string Name, decimal Volume, decimal Productivity)>();
+        foreach (var part in parts)
+        {
+            foreach (var line in part.Lines)
+            {
+                if (!acc.TryGetValue(line.GroupId, out var cur))
+                    cur = (line.GroupName, 0m, 0m);
+                acc[line.GroupId] = (
+                    string.IsNullOrWhiteSpace(cur.Name) ? line.GroupName : cur.Name,
+                    cur.Volume + line.VolumeEffect,
+                    cur.Productivity + line.ProductivityEffect);
+            }
+        }
+
+        if (acc.Count == 0)
+            return HoursBridgeResultDto.Empty;
+
+        var lines = acc
+            .OrderBy(kv => kv.Key)
+            .Select(kv => new HoursBridgeLineDto(
+                kv.Key,
+                kv.Value.Name,
+                Math.Round(kv.Value.Volume, 2, MidpointRounding.ToEven),
+                Math.Round(kv.Value.Productivity, 2, MidpointRounding.ToEven)))
+            .ToList();
+        return new HoursBridgeResultDto(lines, lines.Sum(l => l.VolumeEffect), lines.Sum(l => l.ProductivityEffect));
+    }
+
+    public IReadOnlyList<CumulativeHoursPointDto> ComputeCumulativeHours(IEnumerable<HoursAtDateSample> points)
+    {
+        decimal running = 0m;
+        return points
+            .OrderBy(p => p.Date)
+            .Select(p =>
+            {
+                running += p.Hours > 0m ? p.Hours : 0m;
+                return new CumulativeHoursPointDto(p.Date, Math.Round(running, 2, MidpointRounding.ToEven), p.Label);
+            })
+            .ToList();
+    }
+
+    public IReadOnlyList<ZeroBaselineBarDto> BuildZeroBaselineBars(
+        IReadOnlyList<ZeroBaselineSample> samples,
+        int topCount = 12)
+    {
+        var valid = samples
+            .Where(s => s.ZScore is not null)
+            .Select(s => (s.Name, Z: s.ZScore!.Value, s.Weight))
+            .OrderByDescending(s => Math.Abs(s.Z))
+            .ToList();
+        if (valid.Count == 0)
+            return [];
+
+        var take = Math.Max(1, topCount);
+        var top = valid.Take(take).Select(s => new ZeroBaselineBarDto(s.Name, s.Z, s.Weight)).ToList();
+        var rest = valid.Skip(take).ToList();
+        if (rest.Count == 0)
+            return top;
+
+        var otherZ = ComputeWeightedZ(rest.Select(s => ((decimal?)s.Z, (decimal?)s.Weight)), decimalPlaces: 2)
+            ?? rest.Average(s => s.Z);
+        top.Add(new ZeroBaselineBarDto("Прочие", Math.Round(otherZ, 2, MidpointRounding.ToEven), rest.Sum(s => s.Weight)));
+        return top;
+    }
+
+    private static Dictionary<int, (decimal Volume, decimal Hours)> IndexEligible(IReadOnlyList<PerformanceRowDto> rows)
+    {
+        var map = new Dictionary<int, (decimal Volume, decimal Hours)>();
+        foreach (var row in rows)
+        {
+            if (row.IsTotal || row.WorkDirectionId < 0)
+                continue;
+            if (row.FactPhysicalVolume is not > 0m || row.FactLaborHours is not decimal hours)
+                continue;
+            map[row.WorkDirectionId] = (row.FactPhysicalVolume.Value, hours);
+        }
+
+        return map;
+    }
+
+    private static void CollectMeta(
+        IReadOnlyList<PerformanceRowDto> rows,
+        Dictionary<int, int?> parentById,
+        Dictionary<int, string> nameById)
+    {
+        foreach (var row in rows)
+        {
+            if (row.IsTotal || row.WorkDirectionId < 0)
+                continue;
+            parentById[row.WorkDirectionId] = row.ParentId;
+            if (!string.IsNullOrWhiteSpace(row.WorkDirectionName))
+                nameById.TryAdd(row.WorkDirectionId, row.WorkDirectionName);
+        }
+    }
+
+    private static int FindRoot(int id, IReadOnlyDictionary<int, int?> parentById)
+    {
+        var current = id;
+        for (var i = 0; i < 64; i++)
+        {
+            if (!parentById.TryGetValue(current, out var parent) || parent is null)
+                return current;
+            current = parent.Value;
+        }
+
+        return current;
+    }
 }

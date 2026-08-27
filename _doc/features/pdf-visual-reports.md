@@ -1,7 +1,8 @@
 # PDF-отчёты с графиками
 
-**Дата обновления:** 2026-08-25  
-**Код:** `VisualReportService.cs`, `QuestPdfReportComposer.cs`, `ScottPlotChartRenderer.cs`, `ReportVisualTheme.cs`, `PdfInsightBuilder.cs`, `client/src/api/visualReportsApi.ts`
+**Дата обновления:** 2026-08-27  
+**Код:** `VisualReportService.cs`, `QuestPdfReportComposer.cs`, `ScottPlotChartRenderer.cs`, `ReportVisualTheme.cs`, `PdfNumberFormat.cs`, `PdfScenarioLabels.cs`, `PdfTableColumn.cs`, `PdfInsightBuilder.cs`, `client/src/api/visualReportsApi.ts`  
+**Правило для агентов:** [`.cursor/rules/pdf-visual-design.mdc`](../../.cursor/rules/pdf-visual-design.mdc)
 
 ## Дизайн-система «Executive Technical»
 
@@ -12,11 +13,34 @@
 Серверный pipeline: данные → **ScottPlot** (PNG, палитра темы, без заголовка в самом графике) →
 **QuestPDF** (обложка + контентные страницы с хедером/футером).
 
+### Сценарии трудоёмкости
+
+Порядок **всегда** Оптимистичный → Базовый → Пессимистичный (KPI, графики, таблицы). Полные названия,
+без `Опт.` / `База` / `Пессим.`. Сравнение версий: `Оптимистичный (версия А)`.
+
+Заливка столбцов — как в гриде страницы (`#e3f2fd` / `#e8f5e9` / `#ffebee`). Столбики графиков —
+насыщенные пары `#2E86C1` / `#27AE60` / `#E74C3C`.
+
+### Шрифт
+
+Контентные страницы: тёмный текст (`Primary` / `ContentSecondary` `#2C3E50`). Бледно-серый `Muted` на
+контенте не используется. Белый текст — только титульная страница (инверсия на тёмном фоне).
+
+### Числа
+
+`PdfNumberFormat`: ru-RU (пробел групп, запятая), физобъём и трудоёмкость — 1 знак, производительность и Z — 2 знака.
+Числовые колонки выровнены вправо (`PdfTableColumn.Numeric`).
+
+### Названия IIC
+
+Только SoT `код — наименование (ед.)`. Отдельную колонку «Код» у направления не выводить. Аббревиатура **IIC**.
+
 ### Титульная страница
 
 Каждый PDF начинает с полноценной обложки `ComposeCoverPage`: тёмный фон (сплошной `CoverGradientBottom` —
 QuestPDF 2024.12 не поддерживает градиентные заливки), бейдж типа отчёта (`PdfReportKind`), метаданные
-(проект/версия/дата формирования, время московское), 2–4 тизер-KPI.
+(проект/версия/дата формирования, время московское), 2–4 тизер-KPI. Прогноз «По объектам» получает те же три
+KPI сценариев, что «Итого».
 
 ### Хедер / футер контентных страниц
 
@@ -28,35 +52,31 @@ QuestPDF 2024.12 не поддерживает градиентные залив
 - `ComposeKpiStrip` / `ComposeProjectAssessmentKpis` — карточки с акцентной полосой и статус-точкой.
 - `ComposeZScoreScaleLegend(container, currentZ?)` — шкала Excellent…Critical с маркером текущего значения.
 - `ComposeCalloutBlock` / `ComposeCalloutList` — краткие авто-выводы (риск/внимание/сильная сторона/данные),
-  максимум 3 на отчёт. Логика построения — `PdfInsightBuilder` (порт `reportCalc.ts::buildInsights` для
-  отчёта «Оценка факта»; для прогноза/сравнения/трендов — единичные авто-фразы по числам). Расчётная логика
-  (Z-score, перцентили) не меняется — только текстовая интерпретация уже посчитанных значений.
+  максимум 3 на отчёт. Логика построения — `PdfInsightBuilder`.
 
-**Иерархия:** `ComposeHierarchicalTable` — отступ по `Level` визуальным маркером-линией в ячейке
-(`ComposeIndentedLabel`), зебра-строки, чипы интерпретации вместо текста в последней колонке.
+**Иерархия:** `ComposeHierarchicalTable` — отступ по `Level`, зебра-строки, заливка сценариев, чипы интерпретации.
 
 Modal `export/forecast.pdf` делегирует в visual `forecast-summary/pdf`.
 
-Дизайн-превью без запуска PDF: dev-страница `/dev/pdf-mockups` (`client/src/pages/dev/PdfDesignMockups.tsx`) —
-зеркало токенов `ReportVisualTheme` и раскладок обложки/хедера/KPI/шкалы/callout.
+Дизайн-превью без запуска PDF: dev-страница `/dev/pdf-mockups` (`client/src/pages/dev/PdfDesignMockups.tsx`).
 
 ## Endpoints
 
-> PDF для вкладок «Детально» (прогноз и факт) **отключён** (2026-08-26): полная детализация на десятки
-> тысяч строк давала файл в 13k+ страниц / ~100 МБ, который ронял вкладку браузера. Детальные данные
-> выгружаются только в Excel (`export/forecast-detail/excel`, `export/fact-detail/excel`).
+> PDF для вкладок «Детально» (прогноз, факт, сравнение) **отключён**: детализация на десятки тысяч строк
+> непригодна для PDF. Детальные данные выгружаются только в Excel.
 
 | Endpoint | Вкладка | Графики |
 |----------|---------|---------|
-| `.../export/forecast-summary/pdf` | Прогноз Итого | Сценарии + top IIC + callout разброса |
-| `.../export/forecast-facility/pdf` | Прогноз По объектам | Bar по объектам |
-| `.../export/fact-summary/pdf` | Факт Итого | Z-bar + KPI + шкала + callouts; таблица: ФО, факт.часы, **План.Труд.Оптим./Баз./Песс.**, Z |
-| `.../export/fact-facility/pdf` | Факт По объектам | Column hours; те же три план. колонки после факт. часов |
+| `.../export/forecast-summary/pdf` | Прогноз Итого | Сценарии Opt→Base→Pes + top IIC |
+| `.../export/forecast-facility/pdf` | Прогноз По объектам | KPI трёх сценариев + bar по объектам |
+| `.../export/fact-summary/pdf` | Факт Итого | Z-bar + KPI; таблица: ФО, факт.часы, три сценария, Z; без колонки кода IIC |
+| `.../export/fact-facility/pdf` | Факт По объектам | «Фактические часы по объектам»; те же три план. колонки |
 | `.../export/analysis.pdf` | Анализ версии | Делегирует fact-summary |
-| `.../compare/export.pdf` | Сравнение | Waterfall Δ Z + KPI + callout; таблицы: **шесть** план. часов (опт./баз./песс. × A/B) |
-| `/api/analytics/trends/export.pdf` | Тренды | Line + column + area + callout отклонения |
-| `/api/projects/{id}/export/combined.pdf` | Отчёты | 4 key charts + шкала + callouts |
-| `/api/projects/{id}/performance-report/export.pdf` | Отчёт производительности | KPI план/факт + история версий + выводы |
+| `.../compare/export.pdf` | Сравнение (Итого / По объектам) | Waterfall Δ Z; полные имена сценариев × A/B |
+| `/api/analytics/trends/export.pdf` | Тренды | Line + column + area |
+| `/api/projects/{id}/export/combined.pdf` | Сводный | 4 key charts |
+| `/api/projects/{id}/performance-report/export.pdf` | Сводный вер 2 | KPI план/факт + история + направления |
+| `.../export/report/pdf` | Сводный вер 1 | План/факт, топ-5 IIC, группы физобъёмов |
 
 ## Права
 
@@ -65,4 +85,4 @@ Modal `export/forecast.pdf` делегирует в visual `forecast-summary/pdf
 - VersionComparison — compare PDF
 - GroupTrend — trends PDF
 - Projects — combined PDF
-- Reports — performance-report PDF
+- Reports — performance-report PDF / report PDF

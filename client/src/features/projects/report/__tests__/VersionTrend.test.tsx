@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { VersionTrend } from '../VersionTrend';
 import type { PerformanceReportHistoryPoint } from '../../../../api/performanceReportApi';
@@ -100,5 +100,34 @@ describe('VersionTrend', () => {
       .getAllByTestId('report-version-trend-date')
       .map((el) => el.textContent);
     expect(dates).toEqual(['01.01.2026', '01.03.2026', '01.06.2026']);
+  });
+
+  it('labels points with hours and shows three scenarios on hover', () => {
+    render(
+      <VersionTrend
+        points={[
+          point({
+            versionId: 7,
+            direction: 1,
+            createdAt: '2026-07-27T00:00:00Z',
+            versionName: '27.07.26',
+            weightedZScore: -0.86,
+            totalLaborHours: 1881170,
+            optimisticZScore: -1.06,
+            optimisticLaborHours: 1700000,
+            baseZScore: -0.86,
+            baseLaborHours: 1881170,
+            pessimisticZScore: -0.66,
+            pessimisticLaborHours: 2000000,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('report-version-trend-point-hours')).toHaveTextContent('ч');
+    fireEvent.mouseEnter(screen.getByTestId('report-version-trend-point'));
+    const tip = screen.getByTestId('report-version-trend-tooltip');
+    expect(tip).toHaveTextContent('Оптимистичный');
+    expect(tip).toHaveTextContent('Базовый');
+    expect(tip).toHaveTextContent('Пессимистичный');
   });
 });

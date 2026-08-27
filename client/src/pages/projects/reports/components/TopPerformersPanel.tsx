@@ -90,8 +90,8 @@ function RankedList({
                     <Typography variant="body2" noWrap title={row.workDirectionName} sx={{ fontWeight: 500 }}>
                       {row.workDirectionName}
                     </Typography>
-                    <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                      {row.workDirectionCode} · {fmt(row.subtreeHours ?? row.factLaborHours, 0)} ч
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
+                      {fmt(row.subtreeHours ?? row.factLaborHours, 1)} ч
                     </Typography>
                   </Box>
                   <Typography
@@ -113,34 +113,38 @@ function RankedList({
 /**
  * Компактный ориентир перед подробной диаграммой DirectionBars: явный топ-5 лучших
  * (наименьший Z — опережение нормы) и топ-5 худших (наибольший Z — перерасход) листовых
- * направлений работ (групп физобъёмов ИИЦ), отсортированных по Z-оценке.
+ * направлений работ (групп физобъёмов IIC), отсортированных по Z-оценке.
  */
+export function rankBestAndWorst<T>(
+  scored: T[],
+  getZ: (row: T) => number,
+  topCount = TOP_COUNT,
+): { best: T[]; worst: T[] } {
+  const best = [...scored].sort((a, b) => getZ(a) - getZ(b)).slice(0, topCount);
+  const worst = [...scored].sort((a, b) => getZ(b) - getZ(a)).slice(0, topCount);
+  return { best, worst };
+}
+
 export function TopPerformersPanel({ leaves }: TopPerformersPanelProps) {
   const scored = leaves.filter((r) => r.zScore !== null);
-  const best = rank([...scored].sort((a, b) => a.zScore! - b.zScore!).slice(0, TOP_COUNT));
-  const worst = rank(
-    [...scored]
-      .sort((a, b) => b.zScore! - a.zScore!)
-      .slice(0, TOP_COUNT)
-      .filter((r) => !best.some((b) => b.row.workDirectionId === r.workDirectionId)),
-  );
+  const { best, worst } = rankBestAndWorst(scored, (r) => r.zScore!);
 
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
       <RankedList
         title="Топ-5 лучших направлений"
-        description="Наибольшее опережение нормы ИИЦ — наименьшая Z-оценка."
+        description="Наибольшее опережение нормы IIC — наименьшая Z-оценка."
         icon={<ArrowDownwardIcon sx={{ fontSize: 18, color: '#1E8449' }} />}
         accentColor="#1E8449"
-        rows={best}
+        rows={rank(best)}
         emptyLabel="Недостаточно данных для оценки."
       />
       <RankedList
         title="Топ-5 худших направлений"
-        description="Наибольший перерасход трудозатрат относительно нормы ИИЦ."
+        description="Наибольший перерасход трудозатрат относительно нормы IIC."
         icon={<ArrowUpwardIcon sx={{ fontSize: 18, color: '#B5544C' }} />}
         accentColor="#B5544C"
-        rows={worst}
+        rows={rank(worst)}
         emptyLabel="Недостаточно данных для оценки."
       />
     </Box>

@@ -93,4 +93,48 @@ public interface IPerformanceCalculationEngine
     /// null — нет ни одной полностью покрытой строки.
     /// </summary>
     decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows);
+
+    /// <summary>
+    /// Помесячные бакеты тренда: взвешенное среднее значения по часам версий.
+    /// Точки без значения не участвуют; при нулевом суммарном весе — арифметическое среднее.
+    /// </summary>
+    IReadOnlyList<MonthlyTrendBucketDto> BucketTrendPointsByMonth(IEnumerable<TrendPointSample> points);
+
+    /// <summary>KPI периода по помесячным бакетам: текущее / стартовое / изменение.</summary>
+    PeriodKpiDto ComputePeriodKpi(IReadOnlyList<MonthlyTrendBucketDto> buckets);
+
+    /// <summary>
+    /// Вклад направлений в изменение общего показателя: Δгруппы × доля веса;
+    /// топ-N по модулю + «Прочие направления» поглощают остаток до фактического Δ.
+    /// </summary>
+    IReadOnlyList<WaterfallStepDto>? BuildFactorWaterfall(
+        IReadOnlyList<TrendGroupSample> groups,
+        decimal? overallDelta,
+        int topCount = 3);
+
+    /// <summary>Полная агрегация детализированной тренд-вкладки (план/факт бакеты, KPI, водопад факта).</summary>
+    TrendDetailAggregationDto BuildTrendDetailAggregation(
+        IReadOnlyList<TrendPointSample> planPoints,
+        IReadOnlyList<TrendPointSample> factPoints,
+        IReadOnlyList<TrendGroupSample> factGroups,
+        int waterfallTopCount = 3);
+
+    /// <summary>
+    /// Мост часов факт vs план: эффект объёма + эффект производительности.
+    /// Листья с V_plan&gt;0 сворачиваются в корни (ParentId == null).
+    /// </summary>
+    HoursBridgeResultDto ComputeHoursBridge(
+        IReadOnlyList<PerformanceRowDto> planRows,
+        IReadOnlyList<PerformanceRowDto> factRows);
+
+    /// <summary>Сумма уже посчитанных мостов по GroupId (портфель).</summary>
+    HoursBridgeResultDto CombineHoursBridges(IEnumerable<HoursBridgeResultDto> parts);
+
+    /// <summary>Накопительные часы по дате (S-curve), вход сортируется.</summary>
+    IReadOnlyList<CumulativeHoursPointDto> ComputeCumulativeHours(IEnumerable<HoursAtDateSample> points);
+
+    /// <summary>Столбцы Z от 0: топ-N по |Z| + «Прочие» (взвешенный Z остатка).</summary>
+    IReadOnlyList<ZeroBaselineBarDto> BuildZeroBaselineBars(
+        IReadOnlyList<ZeroBaselineSample> samples,
+        int topCount = 12);
 }

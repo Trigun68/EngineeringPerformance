@@ -10,6 +10,8 @@ import {
   buildWaterfallSteps,
   computePeriodKpi,
   type GroupTrendLike,
+  type PeriodKpi,
+  type TrendDetailAggregation,
   type TrendPointLike,
   type TrendVersionRow,
 } from './trendDetailCalc';
@@ -45,6 +47,8 @@ interface Props {
   factVersions: TrendVersionRow[];
   /** Группы факта для водопада «Разбор изменения по факторам». */
   waterfallGroups: GroupTrendLike[];
+  /** Готовая агрегация с API (движок). Если нет — клиентский зеркальный расчёт. */
+  aggregation?: TrendDetailAggregation | null;
   /** Дополнительные чипы/контролы рядом с чипом периода (например, режим взвешивания). */
   headerExtras?: ReactNode;
   testId: string;
@@ -133,17 +137,33 @@ export function TrendDetailView({
   planVersions,
   factVersions,
   waterfallGroups,
+  aggregation,
   headerExtras,
   testId,
 }: Props) {
-  const planBuckets = useMemo(() => bucketPointsByMonth(planPoints), [planPoints]);
-  const factBuckets = useMemo(() => bucketPointsByMonth(factPoints), [factPoints]);
+  const planBuckets = useMemo(
+    () => aggregation?.planMonthly ?? bucketPointsByMonth(planPoints),
+    [aggregation, planPoints],
+  );
+  const factBuckets = useMemo(
+    () => aggregation?.factMonthly ?? bucketPointsByMonth(factPoints),
+    [aggregation, factPoints],
+  );
 
   const kpiItems = useMemo<KpiItem[]>(() => {
-    const primary = mode === 'plan' ? planBuckets : factBuckets;
-    const secondary = mode === 'plan' ? factBuckets : planBuckets;
-    const kpi = computePeriodKpi(primary);
-    const secondaryKpi = computePeriodKpi(secondary);
+    const primaryKpi: PeriodKpi =
+      aggregation != null
+        ? mode === 'plan'
+          ? aggregation.planKpi
+          : aggregation.factKpi
+        : computePeriodKpi(mode === 'plan' ? planBuckets : factBuckets);
+    const secondaryKpi: PeriodKpi =
+      aggregation != null
+        ? mode === 'plan'
+          ? aggregation.factKpi
+          : aggregation.planKpi
+        : computePeriodKpi(mode === 'plan' ? factBuckets : planBuckets);
+    const kpi = primaryKpi;
     const versions = mode === 'plan' ? planVersions : factVersions;
     const projectCount = new Set(versions.map((v) => v.projectCode)).size;
 
@@ -192,7 +212,7 @@ export function TrendDetailView({
         tone: 'neutral',
       },
     ];
-  }, [mode, planBuckets, factBuckets, planVersions, factVersions, config]);
+  }, [mode, planBuckets, factBuckets, planVersions, factVersions, config, aggregation]);
 
   const dynamicsSeries = useMemo<DynamicsSeries[]>(() => {
     const series: DynamicsSeries[] = [];
@@ -218,11 +238,14 @@ export function TrendDetailView({
 
   const waterfall = useMemo(() => {
     if (mode === 'plan') return null;
-    const kpi = computePeriodKpi(factBuckets);
-    const steps = buildWaterfallSteps(waterfallGroups, kpi.delta);
+    const kpi = aggregation?.factKpi ?? computePeriodKpi(factBuckets);
+    const steps =
+      aggregation !== undefined && aggregation !== null
+        ? aggregation.factWaterfall
+        : buildWaterfallSteps(waterfallGroups, kpi.delta);
     if (!steps || kpi.initial === null) return null;
     return { steps, startValue: kpi.initial };
-  }, [mode, factBuckets, waterfallGroups]);
+  }, [mode, factBuckets, waterfallGroups, aggregation]);
 
   const versions = mode === 'plan' ? planVersions : factVersions;
 

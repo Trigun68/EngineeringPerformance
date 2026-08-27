@@ -6,10 +6,10 @@ test.describe('Analytics page — trends', () => {
     await loginAsAdmin(page);
   });
 
-  test('trends tab shows detail view with fact/plan toggle and KPI row', async ({ page }) => {
+  test('trends tab shows portfolio blocks, fact/plan toggle and extra accordion', async ({ page }) => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('analytics-tab-trends')).toHaveText('Анализ тренда оценки факта');
+    await expect(page.getByTestId('analytics-tab-trends')).toHaveText('Тренд оценки');
     await page.getByTestId('analytics-tab-trends').click();
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
     await expect(page.getByTestId('ztrend-panel')).toBeVisible({ timeout: 20_000 });
@@ -17,23 +17,21 @@ test.describe('Analytics page — trends', () => {
 
     await expect(page.getByTestId('analytics-placeholder')).toHaveCount(0);
     await expect(
-      page.getByTestId('ztrend-detail')
+      page.getByTestId('ztrend-period-chip')
         .or(page.getByTestId('ztrend-empty'))
         .or(page.getByTestId('ztrend-error')),
     ).toBeVisible({ timeout: 60_000 });
 
-    if (await page.getByTestId('ztrend-detail').isVisible()) {
-      await expect(page.getByTestId('ztrend-detail-period-chip')).toBeVisible();
-      await expect(page.getByTestId('ztrend-detail-fact-plan-toggle')).toBeVisible();
-      await expect(page.getByTestId('ztrend-weight-chip')).toBeVisible();
-      await expect(page.getByTestId('ztrend-detail-kpi')).toBeVisible();
-      await expect(page.getByTestId('ztrend-detail-kpi-current')).toBeVisible();
-      await expect(page.getByTestId('ztrend-detail-kpi-delta')).toBeVisible();
-      await expect(page.getByTestId('ztrend-detail-dynamics-chart')).toBeVisible();
-      // Переключатель режимов перестраивает KPI и график.
-      await page.getByTestId('ztrend-detail-fact-plan-toggle-both').click();
-      await expect(page.getByTestId('ztrend-detail-kpi')).toBeVisible();
-      // Секция нормативных режимов сохраняется ниже.
+    if (await page.getByTestId('ztrend-period-chip').isVisible()) {
+      await expect(page.getByTestId('ztrend-fact-plan-toggle')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Динамика Z по датам' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Отклонения по дисциплинам' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Z по группам IIC относительно нормы' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'S-curve часов факта' })).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-kpi')).toHaveCount(0);
+      await expect(page.getByTestId('ztrend-detail-versions-table')).toHaveCount(0);
+      await page.getByTestId('ztrend-fact-plan-toggle-both').click();
+      await page.getByTestId('ztrend-extra-summary').click();
       await expect(page.getByTestId('ztrend-overall-chart')).toBeVisible();
     }
   });
@@ -58,13 +56,13 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
   });
 
-  test('versions table is present in the tab body', async ({ page }) => {
+  test('hours bridge or empty state is on the first screen', async ({ page }) => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-trends').click();
     await expect(
       page
-        .getByTestId('ztrend-detail-versions-table')
-        .or(page.getByTestId('ztrend-detail-versions-empty'))
+        .getByTestId('ztrend-hours-bridge')
+        .or(page.getByText('Нет пары план/факт с объёмом и часами для моста.'))
         .or(page.getByTestId('ztrend-empty')),
     ).toBeVisible({ timeout: 60_000 });
   });
@@ -79,7 +77,7 @@ test.describe('Analytics page — trends', () => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('analytics-tab-productivity-trend')).toHaveText(
-      'Анализ тренда производительности',
+      'Тренд оценки производительности',
     );
     await page.getByTestId('analytics-tab-productivity-trend').click();
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
@@ -101,7 +99,8 @@ test.describe('Analytics page — trends', () => {
       await expect(page.getByTestId('prod-trend-detail-dynamics-chart')).toBeVisible();
     }
 
-    // Вторичная секция норм IIC сохраняется.
+    // Вторичная секция норм IIC — в «Дополнительно».
+    await page.getByTestId('prod-trend-extra-summary').click();
     await expect(
       page.getByTestId('prod-trend-overall-chart')
         .or(page.getByTestId('prod-trend-empty'))

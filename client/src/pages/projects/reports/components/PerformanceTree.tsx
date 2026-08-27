@@ -77,41 +77,38 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
                     <Typography variant="body2" sx={{ fontWeight: row.level === 0 ? 600 : 400 }}>
                       {row.workDirectionName}
                     </Typography>
-                    <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                      {row.workDirectionCode}
-                    </Typography>
                   </Box>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
                     {row.factPhysicalVolume === null
                       ? '—'
-                      : `${fmt(row.factPhysicalVolume)} ${row.normUnitName ?? ''}`.trim()}
+                      : `${fmt(row.factPhysicalVolume, 1)} ${row.normUnitName ?? ''}`.trim()}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                    {fmt(row.factLaborHours)}
+                    {fmt(row.factLaborHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                    {fmt(row.subtreeHours)}
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
+                    {fmt(row.subtreeHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                    {fmt(row.factProductivity, 4)}
+                    {fmt(row.factProductivity, 2)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                    {fmt(row.normProductivity, 4)}
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
+                    {fmt(row.normProductivity, 2)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.muted }}>
-                    {fmt(row.normStdDev, 4)}
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
+                    {fmt(row.normStdDev, 2)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">

@@ -1,4 +1,6 @@
 import apiClient from '../services/apiClient';
+import type { TrendDetailAggregation } from '../features/analytics/shared/trendDetailCalc';
+import { normalizeTrendDetailAggregation } from '../features/analytics/shared/trendDetailCalc';
 
 /**
  * Тренд индекса производительности (% к норме) по основным версиям проектов.
@@ -31,6 +33,7 @@ export interface ProductivityIndexTrendResponse {
   overall: ProductivityIndexGroup;
   byGroup: ProductivityIndexGroup[];
   warnings: string[];
+  detail: TrendDetailAggregation | null;
 }
 
 export interface ProductivityIndexTrendRequest {
@@ -78,5 +81,8 @@ export async function fetchProductivityIndexTrend(
     overall: normalizeGroup((data.overall ?? data.Overall ?? {}) as Record<string, unknown>),
     byGroup: byGroup.map(normalizeGroup),
     warnings: (data.warnings ?? data.Warnings ?? []) as string[],
+    detail: normalizeTrendDetailAggregation(
+      (data.detail ?? data.Detail ?? null) as Record<string, unknown> | null,
+    ),
   };
 }

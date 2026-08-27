@@ -7,6 +7,8 @@ import {
   ACCENT_PLAN,
   fmt,
   fmtSigned,
+  formatFactSourceLabel,
+  formatPlanSourceLabel,
   getInterpretation,
   hoursDeltaPct,
   INTERPRETATION_BG,
@@ -15,22 +17,7 @@ import {
   MUTED_COLOR,
   type Interpretation,
 } from '../reportCalc';
-
-// Дизайн-константы мокапа ReportRedesignMockup (ветка v0)
-const SECTION_BG = '#F4F6F8';
-const CARD_BG = '#FFFFFF';
-const PRIMARY_TEXT = '#1B2A38';
-const BORDER = '#E4E9ED';
-
-function SectionLabel({ children }: { children: string }) {
-  return (
-    <Typography
-      sx={{ fontSize: 11, fontWeight: 700, color: MUTED_COLOR, letterSpacing: 0.6, textTransform: 'uppercase' }}
-    >
-      {children}
-    </Typography>
-  );
-}
+import { BORDER, CARD_BG, PRIMARY_TEXT, SECTION_BG, SectionLabel } from './reportChrome';
 
 /** Чип отклонения факта от плана в процентах: перерасход (>0) — красный, экономия — зелёный. */
 function DeltaChip({ deltaPct }: { deltaPct: number }) {
@@ -72,7 +59,8 @@ function PlanFactBlock({
   return (
     <Box
       sx={{
-        flex: 1,
+        flex: '1 1 280px',
+        minWidth: 0,
         bgcolor: CARD_BG,
         borderRadius: '12px',
         border: `1px solid ${BORDER}`,
@@ -82,28 +70,24 @@ function PlanFactBlock({
       }}
     >
       <Box sx={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', bgcolor: accent }} />
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+      <Stack spacing={0.4} sx={{ mb: 1.5 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: accent }} />
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: accent, flexShrink: 0 }} />
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: PRIMARY_TEXT }}>
             {kind === 'plan' ? 'План' : 'Факт'}
           </Typography>
         </Stack>
-        <Typography sx={{ fontSize: 11, color: MUTED_COLOR }}>{sourceLabel}</Typography>
+        <Typography sx={{ fontSize: 11, color: MUTED_COLOR, pl: 2.25 }}>{sourceLabel}</Typography>
       </Stack>
-      <Stack direction="row" spacing={4}>
+      <Stack direction="row" spacing={4} flexWrap="wrap" useFlexGap>
         <Box>
-          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>
-            {kind === 'plan' ? 'Трудоёмкость плана' : 'Трудоёмкость факта'}
-          </Typography>
+          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>Трудоёмкость</Typography>
           <Typography sx={{ fontSize: 26, fontWeight: 800, color: PRIMARY_TEXT, lineHeight: 1.1 }}>
-            {hours === null ? '—' : `${fmt(hours, 0)} ч`}
+            {hours === null ? '—' : `${fmt(hours, 1)} ч`}
           </Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>
-            {kind === 'plan' ? 'Z-план' : 'Z-факт'}
-          </Typography>
+          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>Z-оценка</Typography>
           <Typography sx={{ fontSize: 26, fontWeight: 800, color: zColor, lineHeight: 1.1 }}>
             {fmtSigned(z)}
           </Typography>
@@ -144,12 +128,12 @@ export function PlanFactSummary({ summary, accuracyScore }: PlanFactSummaryProps
   const deltaPct = hasFact ? hoursDeltaPct(summary.planHours, summary.factHours) : null;
 
   return (
-    <Box sx={{ bgcolor: SECTION_BG, borderRadius: '16px', p: 3 }}>
+    <Box data-testid="report-summary-section" sx={{ bgcolor: SECTION_BG, borderRadius: '16px', p: 3 }}>
       <SectionLabel>Сводка по проекту</SectionLabel>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mt: 1.5, mb: 2 }}>
+      <Stack direction="row" spacing={2} sx={{ mt: 1.5, mb: 2 }} flexWrap="wrap" useFlexGap>
         <PlanFactBlock
           kind="plan"
-          sourceLabel={summary.planVersionName ?? 'Нет версии плана'}
+          sourceLabel={formatPlanSourceLabel(summary.planVersionName, summary.planIsPrimary)}
           hours={summary.planHours}
           z={summary.planWeightedZScore}
           interpretation={planInterpretation}
@@ -157,7 +141,7 @@ export function PlanFactSummary({ summary, accuracyScore }: PlanFactSummaryProps
         {hasFact ? (
           <PlanFactBlock
             kind="fact"
-            sourceLabel={summary.factVersionName ?? ''}
+            sourceLabel={formatFactSourceLabel(summary.factVersionName, summary.factIsPrimary)}
             hours={summary.factHours}
             z={summary.factWeightedZScore}
             interpretation={factInterpretation}
@@ -165,7 +149,7 @@ export function PlanFactSummary({ summary, accuracyScore }: PlanFactSummaryProps
         ) : (
           <Box
             sx={{
-              flex: 1,
+              flex: '1 1 280px',
               bgcolor: CARD_BG,
               borderRadius: '12px',
               border: `1px solid ${BORDER}`,

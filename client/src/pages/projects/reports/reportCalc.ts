@@ -25,11 +25,12 @@ export const INTERPRETATION_RU: Record<Interpretation, string> = {
   Critical: 'Критически низкая производительность',
 };
 
+/** Короткие подписи чипов (мокап ReportRedesignMockup). */
 export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
   Excellent: 'Отлично',
   Good: 'Хорошо',
-  Satisfactory: 'Удовлетв.',
-  NeedsAttention: 'Внимание',
+  Satisfactory: 'Удовлетворительно',
+  NeedsAttention: 'Требует внимания',
   Critical: 'Критично',
 };
 
@@ -133,7 +134,7 @@ export function buildInsights(
     insights.push({
       kind: 'risk',
       title: `${row.workDirectionName}: Z = ${fmtSigned(row.zScore)}`,
-      detail: `Перерасход относительно нормы ИИЦ${
+      detail: `Перерасход относительно нормы IIC${
         overrun !== null ? ` составляет ${fmt(overrun, 0)} ч` : ''
       }. Требуется разбор причин: пересмотреть состав работ и проверить полноту исходных данных.`,
     });
@@ -177,7 +178,7 @@ export function buildInsights(
       kind: 'data',
       title: `Точность сравнения: ${fmt(accuracyScore, 1)}%`,
       detail:
-        'Часть характеристик проекта слабо представлена в выборке ИИЦ. Итоговую Z-оценку следует трактовать как ориентир, а не как приговор по производительности.',
+        'Часть характеристик проекта слабо представлена в выборке IIC. Итоговую Z-оценку следует трактовать как ориентир, а не как приговор по производительности.',
     });
   }
 
@@ -199,6 +200,12 @@ export interface VersionTrendPoint {
   sortDate: number;
   weightedZScore: number | null;
   totalHours: number | null;
+  optimisticZScore: number | null;
+  optimisticHours: number | null;
+  baseZScore: number | null;
+  baseHours: number | null;
+  pessimisticZScore: number | null;
+  pessimisticHours: number | null;
 }
 
 export const DIRECTION_LABEL: Record<number, string> = {
@@ -223,4 +230,137 @@ export function hoursDeltaPct(planHours: number | null, factHours: number | null
   if (planHours === null || planHours === undefined || planHours === 0) return null;
   if (factHours === null || factHours === undefined) return null;
   return ((factHours - planHours) / planHours) * 100;
+}
+
+/** Диапазон полосы Z (мокап и «Сводный вер 2»). */
+export const Z_SCALE_MIN = -3;
+export const Z_SCALE_MAX = 3;
+
+/**
+ * Позиция маркера на шкале: слева плохо (больший Z), справа хорошо (меньший Z).
+ * left% = (MAX − z) / (MAX − MIN).
+ */
+export function zScaleVisualPct(z: number, min = Z_SCALE_MIN, max = Z_SCALE_MAX): number {
+  const clamped = Math.min(max, Math.max(min, z));
+  return ((max - clamped) / (max - min)) * 100;
+}
+
+/** Зоны слева направо: Критично → Отлично. Ширины — реальные пороги ±1 / ±0.5. */
+export const Z_SCALE_ZONES: ReadonlyArray<{
+  from: number;
+  to: number;
+  label: string;
+  interpretation: Interpretation;
+}> = [
+  { from: 1, to: Z_SCALE_MAX, label: 'Критично', interpretation: 'Critical' },
+  { from: 0.5, to: 1, label: 'Внимание', interpretation: 'NeedsAttention' },
+  { from: -0.5, to: 0.5, label: 'Удовл.', interpretation: 'Satisfactory' },
+  { from: -1, to: -0.5, label: 'Хорошо', interpretation: 'Good' },
+  { from: Z_SCALE_MIN, to: -1, label: 'Отлично', interpretation: 'Excellent' },
+];
+
+/** Подпись источника карточки «План»: «из версии {name} (основная)». */
+export function formatPlanSourceLabel(
+  versionName: string | null | undefined,
+  isPrimary: boolean | null | undefined,
+): string {
+  if (!versionName) return 'Нет версии плана';
+  return isPrimary === false ? `из версии ${versionName}` : `из версии ${versionName} (основная)`;
+}
+
+/** Подпись источника карточки «Факт»: «{name} (основная)». */
+export function formatFactSourceLabel(
+  versionName: string | null | undefined,
+  isPrimary: boolean | null | undefined,
+): string {
+  if (!versionName) return '';
+  return isPrimary === false ? versionName : `${versionName} (основная)`;
+}
+
+export interface VersionHistoryLike {
+  versionId: number;
+  versionName: string;
+  createdAt: string;
+  direction: number;
+  weightedZScore: number | null;
+  totalLaborHours: number | null;
+  optimisticZScore?: number | null;
+  optimisticLaborHours?: number | null;
+  baseZScore?: number | null;
+  baseLaborHours?: number | null;
+  pessimisticZScore?: number | null;
+  pessimisticLaborHours?: number | null;
+}
+
+/** Дата оси динамики: «10 фев», «4 мар». */
+export function formatTrendAxisDate(date: Date): string {
+  return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }).replaceAll('.', '');
+}
+
+export function historyToTrendPoints(history: VersionHistoryLike[]): VersionTrendPoint[] {
+  return history.map((h) => {
+    const createdAt = h.createdAt ? new Date(h.createdAt) : null;
+    return {
+      versionId: h.versionId,
+      versionName: h.versionName,
+      direction: h.direction,
+      date: createdAt && !Number.isNaN(createdAt.getTime()) ? formatTrendAxisDate(createdAt) : null,
+      sortDate: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt.getTime() : 0,
+      weightedZScore: h.weightedZScore,
+      totalHours: h.totalLaborHours,
+      optimisticZScore: h.optimisticZScore ?? null,
+      optimisticHours: h.optimisticLaborHours ?? null,
+      baseZScore: h.baseZScore ?? null,
+      baseHours: h.baseLaborHours ?? null,
+      pessimisticZScore: h.pessimisticZScore ?? null,
+      pessimisticHours: h.pessimisticLaborHours ?? null,
+    };
+  });
+}
+
+/** Подпись точки графика динамики: Z и трудоёмкость. */
+export function formatTrendPointLabel(z: number | null | undefined, hours: number | null | undefined): string {
+  return `${fmtSigned(z)} · ${fmt(hours, 0)} ч`;
+}
+
+function scenarioTooltipLine(label: string, z: number | null | undefined, hours: number | null | undefined): string {
+  return `${label}: Z ${fmtSigned(z)} · ${fmt(hours, 0)} ч`;
+}
+
+/** Строки подсказки: три сценария планирования (оптимист / база / пессимист). */
+export function formatTrendScenarioTooltipLines(point: Pick<
+  VersionTrendPoint,
+  'versionName' | 'optimisticZScore' | 'optimisticHours' | 'baseZScore' | 'baseHours' | 'pessimisticZScore' | 'pessimisticHours'
+>): string[] {
+  return [
+    point.versionName,
+    scenarioTooltipLine('Оптимистичный', point.optimisticZScore, point.optimisticHours),
+    scenarioTooltipLine('Базовый', point.baseZScore, point.baseHours),
+    scenarioTooltipLine('Пессимистичный', point.pessimisticZScore, point.pessimisticHours),
+  ];
+}
+
+export function formatTrendScenarioTooltipHtml(point: VersionTrendPoint): string {
+  const [title, ...lines] = formatTrendScenarioTooltipLines(point);
+  return [`<b>${title}</b>`, ...lines].join('<br/>');
+}
+
+/**
+ * Точки графика мокапа: все Plan с Z, из Fact — только основная версия.
+ * Сортировка по дате создания, затем по id.
+ */
+export function selectVersionTrendPoints(
+  points: VersionTrendPoint[],
+  primaryFactVersionId: number | null,
+): VersionTrendPoint[] {
+  return points
+    .filter((p) => {
+      if (p.weightedZScore === null) return false;
+      if (p.direction === DIRECTION_PLAN) return true;
+      if (p.direction === DIRECTION_FACT) {
+        return primaryFactVersionId !== null && p.versionId === primaryFactVersionId;
+      }
+      return false;
+    })
+    .sort((a, b) => a.sortDate - b.sortDate || a.versionId - b.versionId);
 }

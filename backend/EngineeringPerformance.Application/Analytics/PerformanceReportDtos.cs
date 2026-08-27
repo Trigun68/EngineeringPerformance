@@ -83,7 +83,13 @@ public sealed record PerformanceReportVersionHistoryPointDto(
     AnalysisDirection Direction,
     decimal? WeightedZScore,
     decimal? TotalLaborHours,
-    string? NormSnapshotKey = null);
+    string? NormSnapshotKey = null,
+    decimal? OptimisticZScore = null,
+    decimal? OptimisticLaborHours = null,
+    decimal? BaseZScore = null,
+    decimal? BaseLaborHours = null,
+    decimal? PessimisticZScore = null,
+    decimal? PessimisticLaborHours = null);
 
 public sealed record PerformanceReportAccuracyDto(
     decimal? AveragePercent,

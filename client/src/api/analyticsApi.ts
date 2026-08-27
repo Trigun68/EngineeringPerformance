@@ -120,12 +120,15 @@ export async function fetchVersionAnalysis(
 export interface ProjectReportSummary {
   planVersionId: number | null;
   planVersionName: string | null;
+  planSourceDirection: number | null;
+  planIsPrimary: boolean;
   planHours: number | null;
   planWeightedZScore: number | null;
   planPercentile: string | null;
   planInterpretation: string | null;
   factVersionId: number | null;
   factVersionName: string | null;
+  factIsPrimary: boolean;
   factHours: number | null;
   factWeightedZScore: number | null;
   factPercentile: string | null;

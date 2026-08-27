@@ -14,9 +14,7 @@ import {
 
 interface PhysicalVolumeGroupsRow {
   id: number;
-  code: string;
   name: string;
-  unit: string;
   physicalVolume: number | null;
   laborHours: number | null;
   productivity: number | null;
@@ -40,7 +38,7 @@ function numberFormatter(digits: number) {
 }
 
 /**
- * Плоская таблица всех групп физобъёмов ИИЦ (листовые направления работ) — дополняет
+ * Плоская таблица всех групп физобъёмов IIC (листовые направления работ) — дополняет
  * иерархическое дерево PerformanceTree, но допускает сортировку и фильтрацию по любому
  * столбцу и быстрый поиск по коду/наименованию, что в дереве неудобно на крупных проектах.
  */
@@ -52,9 +50,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
     () =>
       leaves.map((row) => ({
         id: row.workDirectionId,
-        code: row.workDirectionCode,
         name: row.workDirectionName,
-        unit: row.normUnitName ?? '—',
         physicalVolume: row.factPhysicalVolume,
         laborHours: row.factLaborHours,
         productivity: row.factProductivity,
@@ -70,41 +66,39 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
     return rows.filter((row) => {
       if (activeFilter && row.interpretation !== activeFilter) return false;
       if (!term) return true;
-      return row.code.toLowerCase().includes(term) || row.name.toLowerCase().includes(term);
+      return row.name.toLowerCase().includes(term);
     });
   }, [rows, search, activeFilter]);
 
   const columnDefs = useMemo<ColDef<PhysicalVolumeGroupsRow>[]>(
     () => [
-      { field: 'code', headerName: 'Код', width: 110, pinned: 'left' },
-      { field: 'name', headerName: 'Направление ИИЦ', flex: 1, minWidth: 220 },
-      { field: 'unit', headerName: 'Ед. изм.', width: 100 },
+      { field: 'name', headerName: 'Направление IIC', flex: 1, minWidth: 280 },
       {
         field: 'physicalVolume',
         headerName: 'Факт. объём',
         width: 130,
-        valueFormatter: numberFormatter(2),
+        valueFormatter: numberFormatter(1),
         type: 'rightAligned',
       },
       {
         field: 'laborHours',
         headerName: 'Часы',
         width: 110,
-        valueFormatter: numberFormatter(0),
+        valueFormatter: numberFormatter(1),
         type: 'rightAligned',
       },
       {
         field: 'productivity',
         headerName: 'Произв. (факт)',
         width: 130,
-        valueFormatter: numberFormatter(3),
+        valueFormatter: numberFormatter(2),
         type: 'rightAligned',
       },
       {
         field: 'normProductivity',
-        headerName: 'Норма ИИЦ',
+        headerName: 'Норма IIC',
         width: 120,
-        valueFormatter: numberFormatter(3),
+        valueFormatter: numberFormatter(2),
         type: 'rightAligned',
       },
       {
@@ -138,7 +132,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
         <TextField
           size="small"
-          placeholder="Поиск по коду или наименованию"
+          placeholder="Поиск по наименованию"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{ width: { xs: '100%', sm: 320 } }}

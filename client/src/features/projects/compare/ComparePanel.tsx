@@ -170,10 +170,10 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
         return v ? buildVersionLabel(v) : '';
       })();
   const handleExportPdf = useCallback(async () => {
-    if (!versionAId || !versionBId) return;
+    if (!versionAId || !versionBId || subTab === 'compare-detail') return;
     setExportingPdf(true);
     try {
-      const section: ComparePdfSection = subTab === 'compare-facility' ? 'facility' : subTab === 'compare-detail' ? 'detail' : 'summary';
+      const section: ComparePdfSection = subTab === 'compare-facility' ? 'facility' : 'summary';
       await exportComparePdf(projectId, versionAId, versionBId, {
         section,
         showOnlyDifferences,
@@ -656,12 +656,14 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
                 loading={exporting}
                 onClick={() => void handleExportVisibleExcel()}
               />
-              <ExportActionButton
-                kind="pdf"
-                disabled={!hasCompareData}
-                loading={exportingPdf}
-                onClick={() => void handleExportPdf()}
-              />
+              {subTab !== 'compare-detail' ? (
+                <ExportActionButton
+                  kind="pdf"
+                  disabled={!hasCompareData}
+                  loading={exportingPdf}
+                  onClick={() => void handleExportPdf()}
+                />
+              ) : null}
               {subTab === 'compare-detail' && (
                 <ExportActionButton
                   kind="excelSummary"

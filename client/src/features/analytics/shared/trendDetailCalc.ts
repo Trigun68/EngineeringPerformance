@@ -130,3 +130,67 @@ export function buildWaterfallSteps(
   }
   return steps;
 }
+
+export interface TrendDetailAggregation {
+  planMonthly: DynamicsPoint[];
+  factMonthly: DynamicsPoint[];
+  planKpi: PeriodKpi;
+  factKpi: PeriodKpi;
+  factWaterfall: WaterfallStep[] | null;
+}
+
+function toIsoDate(raw: unknown): string {
+  const s = String(raw ?? '');
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function toNullableNumber(raw: unknown): number | null {
+  if (raw == null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeMonthly(raw: unknown): DynamicsPoint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = item as Record<string, unknown>;
+    return {
+      date: toIsoDate(row.date ?? row.Date),
+      value: toNullableNumber(row.value ?? row.Value),
+    };
+  });
+}
+
+function normalizeKpi(raw: unknown): PeriodKpi {
+  const row = (raw ?? {}) as Record<string, unknown>;
+  return {
+    current: toNullableNumber(row.current ?? row.Current),
+    initial: toNullableNumber(row.initial ?? row.Initial),
+    delta: toNullableNumber(row.delta ?? row.Delta),
+  };
+}
+
+/** Нормализация агрегации тренда с API (PerformanceCalculationEngine). */
+export function normalizeTrendDetailAggregation(
+  raw: Record<string, unknown> | null | undefined,
+): TrendDetailAggregation | null {
+  if (!raw) return null;
+  const waterfallRaw = raw.factWaterfall ?? raw.FactWaterfall;
+  let factWaterfall: WaterfallStep[] | null = null;
+  if (Array.isArray(waterfallRaw) && waterfallRaw.length > 0) {
+    factWaterfall = waterfallRaw.map((item) => {
+      const row = item as Record<string, unknown>;
+      return {
+        name: String(row.name ?? row.Name ?? ''),
+        value: Number(row.value ?? row.Value ?? 0),
+      };
+    });
+  }
+  return {
+    planMonthly: normalizeMonthly(raw.planMonthly ?? raw.PlanMonthly),
+    factMonthly: normalizeMonthly(raw.factMonthly ?? raw.FactMonthly),
+    planKpi: normalizeKpi(raw.planKpi ?? raw.PlanKpi),
+    factKpi: normalizeKpi(raw.factKpi ?? raw.FactKpi),
+    factWaterfall,
+  };
+}

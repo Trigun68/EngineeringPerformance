@@ -87,16 +87,18 @@ Z = (ln(hours / volume) − Estimate) / σ
 
 Свёртка **всегда** по часам: `Σ(Z × hours) / Σ(hours)` через `ComputeWeightedZ` / `ComputeWeightedZFromPerformanceRows` / `WeightedZAggregator`.
 
-Запрещено:
+Запрещено на **гридах** прогноза, факта и сравнения:
 
 - штамповать `ZBase` как «оценку» плана;
 - среднее арифметическое Z;
 - режим тренда `uniform`.
 
-План: `BuildPlanPerformance(bundle, engine, PlanHourKind)` → те же `CalculatePerformance`, что факт с PLI, от **сохранённых** часов (без группировки сценария на чтении).  
+План (грид): `BuildPlanPerformance(bundle, engine, PlanHourKind)` → те же `CalculatePerformance`, что факт с PLI, от **сохранённых** часов.  
 Факт: `BuildPerformance` / `GetPerformanceDataAsync(..., LaborHoursKind.Planned)`.
 
-Одинаковые часы, объём и норма → одинаковый Z на прогнозе, факте, сравнении, отчёте и аналитике.
+Одинаковые часы, объём и норма → одинаковый Z на прогнозе, факте и сравнении.
+
+**Исключение — вкладка «Отчёт»:** KPI и колонка «Z план» показывают заложенный `zBase` параметров планирования (`IPerformanceCalculationEngine.ResolvePlanningZ` / `PlanningScenarioReportMetrics`), а не live Z грида. Грид прогноза по-прежнему считает Z от сохранённых часов.
 
 ---
 
@@ -110,7 +112,7 @@ Z = (ln(hours / volume) − Estimate) / σ
 | Оценка факта | overlay из тех же колонок (три варианта) | `PlannedHours` | — | `CalculatePerformance(PLI)` |
 | Сравнение «Итого» | stored × 3 варианта; ИТОГО = `SumAllForecastScenarioHours` | PLI (own+потомки на итогах) | Z песс/баз/опт от stored | факт Z |
 | Сравнение «По объектам» | stored с `BuildFactGrids` + pinned ИТОГО | PLI + pinned ИТОГО | — | факт Z объекта |
-| Отчёт | stored Base + GrandTotals | allocated `PlannedHours` | `BuildPlanPerformance` | PLI Planned |
+| Отчёт | stored Base + GrandTotals | allocated `PlannedHours` | `zBase` планирования (`ResolvePlanningZ`) | PLI Planned |
 | Аналитика тренд Z | pipeline: Plan/Forecast = stored | Fact = PLI | часы-вес | часы-вес |
 | Аналитика тренд производительности | `ComputeForecastHours` при V* (медиана/P10/P90 факта) | — | — | — |
 | Групповой анализ | — | pipeline факт | — | `ComputeWeightedZ` по проектам |

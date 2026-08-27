@@ -1,38 +1,44 @@
 # Отчёт производительности проекта (вкладка «Отчет»)
 
-**Дата:** 2026-08-24  
-**Код:** `PerformanceReportService`, `PerformanceReportController`, `client/src/features/projects/report/`
+**Дата обновления:** 2026-08-27  
+**Код:** `PerformanceReportService`, `ProjectReportSummaryService`, `PlanningScenarioReportMetrics`, `client/src/features/projects/report/`, `client/src/pages/projects/reports/`
 
 ## Назначение
 
-Визуальный отчёт по инженерной производительности проекта: средневзвешенный Z плана и факта, шкала интерпретации, динамика по версиям, top-3 ± дисциплин, дерево «Направление», PDF.
+Визуальный отчёт по инженерной производительности проекта: план/факт по основным версиям, шкала Z, динамика, направления IIC, PDF.
 
-Архитектура часов и Z: [_doc/architecture/hours-and-z-ssot.md](../../_doc/architecture/hours-and-z-ssot.md).
+Часы и Z на гридах прогноза/факта/сравнения: [hours-and-z-ssot.md](../architecture/hours-and-z-ssot.md).  
+Визуальные PDF: [pdf-visual-reports.md](./pdf-visual-reports.md).
 
-## Резолв версий (внутреннее правило)
+## Резолв версий
 
 1. **План-метрики:** версия факта с `IsPrimary`; если нет — версия плана с `IsPrimary`; иначе latest Fact → latest Plan.
-2. **Факт-метрики:** только Fact-direction (`IsPrimary` → latest). Часы — **Σ PlannedHours только по строкам с `WorkDirectionId`**. `ActualHours` в KPI и Z не входит. Неотнесённые не входят в выделенные часы; 100% неотнесённых → «—».
-3. Объём в дереве: факт, иначе план (в UI не комментируется).
-4. Трудоёмкость плана = GrandTotals прогноза (сохранённые `LaborIntensity*` ФО и оборудования). Z плана = `BuildPlanPerformance` → `CalculatePerformance` (не штамп ZBase). Свёртка KPI — `ComputeWeightedZFromPerformanceRows`.
+2. **Факт-метрики:** только Fact-direction (`IsPrimary` → latest). Часы — **Σ PlannedHours только по строкам с `WorkDirectionId`**. `ActualHours` в KPI и Z не входит.
+3. Объём в дереве: факт, иначе план.
+4. **Трудоёмкость плана** = GrandTotals прогноза (BaseHours).
+5. **Z плана на вкладке «Отчёт»** — заложенный параметр планирования (`ResolvePlanningZ` → `ZBase`), тот же rollup, что в диалоге «Параметры планирования» (`PlanningScenarioReportMetrics`). Это **не** live Z грида прогноза (`BuildPlanPerformance` → `CalculatePerformance`); грид не менялся.
+6. **Z факта** — `ComputeWeightedZFromPerformanceRows` по allocated PlannedHours.
 
-UI не передаёт `planVersionId` / `factVersionId`.
+UI не передаёт `planVersionId` / `factVersionId`. Кэш отчёта: `report:v5`.
 
 ## API
 
 | Метод | Путь | Право |
 |-------|------|--------|
+| GET | `/api/projects/{projectId}/report-summary` | `Reports` Read |
 | GET | `/api/projects/{projectId}/performance-report` | `Reports` Read |
+| GET | `/api/projects/{projectId}/export/report/pdf` | `Reports` Read |
 | GET | `/api/projects/{projectId}/performance-report/export.pdf` | `Reports` Read |
 
-Ответ: блоки `plan` / `fact`, `versionHistory`, `accuracy`, `insights`, merged `directions`, `normSourcesUsed`.
-
-Z-математика только через `IPerformanceCalculationEngine`. Факт: `LaborHoursKind.Planned`.
+`report-summary` — сводный вер 1 (KPI план/факт).  
+`performance-report` — сводный вер 2 (дерево направлений, `PlanZScore` = zBase).  
+PDF: визуальный движок, правила в [pdf-visual-reports.md](./pdf-visual-reports.md).
 
 ## UI
 
-- 5 KPI: крупные заголовки, значения тёмно-синие (`--ep-report-metric`).
-- Шкала: план сверху, факт снизу.
-- Дерево «Направление»: тёмная шапка; объём целым без ед.; произв. план/факт — 1 знак после запятой.
-- Insights: top-3 по |Z| × subtree hours. Доля бара — только факт. часы (без fallback на план).
-- Шапка: имена версий плана и факта. Шкала −3…+3 жирнее. График динамики: ось X = `createdAt`, план синий / факт красный, смена `normSnapshotKey` светлее.
+Подвкладки: **Сводный вер 1** (по умолчанию), **Тренд**, **Сводный вер 2**. Стили выбранного таба — `projectsPageSubTabsSx` (тёмный текст на `#D6EAF8`).
+
+- Имена групп IIC только SoT `код — наименование (ед.)`; отдельную колонку «Код» и подпись «ИИЦ» не показывать.
+- Числа ru-RU, вправо: объём/часы — 1 знак, производительность и Z — 2 знака.
+- «Сводный вер 1»: на всю ширину панели; «Дополнительно» раскрыто; Top-5 лучших и худших независимо (худшие не вычитают лучших).
+- PDF на «Детально» (прогноз, факт, сравнение) нет — только Excel.

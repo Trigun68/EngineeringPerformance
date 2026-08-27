@@ -33,8 +33,33 @@ public static class ReportVisualTheme
     public const string Negative = "#C0392B";
     public const string Neutral = "#B9770E";
 
-    /// <summary>Приглушённый серо-синий для второстепенного текста.</summary>
+    /// <summary>
+    /// Устаревший бледно-серый. На контентных страницах не использовать —
+    /// только <see cref="Primary"/> / <see cref="ContentSecondary"/>.
+    /// Оставлен для неизвестной интерпретации и обратной совместимости тестов.
+    /// </summary>
     public const string Muted = "#7B8794";
+
+    /// <summary>Второстепенный текст контентных страниц — тёмный, читаемый.</summary>
+    public const string ContentSecondary = "#2C3E50";
+
+    // Заливки сценариев — паритет client gridColumns PLAN_HOUR_COLORS.
+    public const string ScenarioOptimisticFill = "#e3f2fd";
+    public const string ScenarioBaseFill = "#e8f5e9";
+    public const string ScenarioPessimisticFill = "#ffebee";
+
+    // Насыщенные пары той же семьи — столбики графиков (тинты на барах не читаются).
+    public const string ScenarioOptimisticBar = AccentA;
+    public const string ScenarioBaseBar = "#27AE60";
+    public const string ScenarioPessimisticBar = "#E74C3C";
+
+    public static string ScenarioFill(PdfScenarioTone tone) => tone switch
+    {
+        PdfScenarioTone.Optimistic => ScenarioOptimisticFill,
+        PdfScenarioTone.Base => ScenarioBaseFill,
+        PdfScenarioTone.Pessimistic => ScenarioPessimisticFill,
+        _ => string.Empty,
+    };
 
     /// <summary>Светлая карточка KPI.</summary>
     public const string CardBg = "#EBF5FB";

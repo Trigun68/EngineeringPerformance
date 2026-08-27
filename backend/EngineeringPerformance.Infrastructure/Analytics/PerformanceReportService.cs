@@ -24,8 +24,8 @@ public sealed class PerformanceReportService(
         int? factVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        // v3: план = BuildPlanPerformance (сценарий версии); факт = PLI.PlannedHours.
-        var cacheKey = $"report:v3:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
+        // v5: Z плана в таблице направлений = zBase параметров планирования; факт = PLI.PlannedHours.
+        var cacheKey = $"report:v5:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
         var cached = await cache.GetAsync<PerformanceReportDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -234,15 +234,14 @@ public sealed class PerformanceReportService(
         var bundle = await GetBundleAsync(projectId, versionId, bundleCache, cancellationToken);
         var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance, calculationEngine);
+        var scenarios = PlanningScenarioReportMetrics.Compute(bundle, calculationEngine, forecast.GrandTotals);
 
         // Часы уже в bundle — повторный запрос LI не нужен.
         var labor = bundle.LaborIntensities;
 
-        var directions = MapDirectionRows(planPerformance);
-        var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
-            planPerformance,
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-        var totalHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
+        var directions = MapPlanDirectionRows(calculationEngine, bundle, planPerformance);
+        var weightedZ = scenarios.ZBase;
+        var totalHours = scenarios.HoursBase;
         var unallocated = FactLaborHoursTotals.UnallocatedPlannedHours(labor);
         var summary = ProjectVersionAnalysisTotalsCalculator.Calculate(
             planPerformance,
@@ -302,6 +301,37 @@ public sealed class PerformanceReportService(
             PhysicalVolumeTotalsByUnit: summary.PhysicalVolumeTotalsByUnit,
             Directions: directions);
 
+    /// <summary>
+    /// Z плана в таблице направлений — заложенный zBase параметров планирования,
+    /// не live Z от часов/нормы (тот остаётся в гриде прогноза).
+    /// </summary>
+    internal static List<PerformanceReportDirectionRowDto> MapPlanDirectionRows(
+        IPerformanceCalculationEngine engine,
+        ProjectsPageVersionBundle bundle,
+        IReadOnlyList<PerformanceRowDto> performance) =>
+        performance
+            .Where(r => r.WorkDirectionId >= 0 && !r.IsTotal)
+            .Select(r =>
+            {
+                var zBase = engine.ResolvePlanningZ(bundle.PlanningZByDirection, r.WorkDirectionId).ZBase;
+                return new PerformanceReportDirectionRowDto(
+                    WorkDirectionId: r.WorkDirectionId,
+                    ParentId: r.ParentId,
+                    Level: r.Level,
+                    Code: r.WorkDirectionCode,
+                    Name: r.WorkDirectionName,
+                    UnitName: r.NormUnitName,
+                    FactPhysicalVolume: r.FactPhysicalVolume,
+                    FactLaborHours: r.FactLaborHours,
+                    SubtreeHours: r.SubtreeHours,
+                    FactProductivity: r.FactProductivity,
+                    NormProductivity: r.NormProductivity,
+                    NormStdDev: r.NormStdDev,
+                    ZScore: zBase,
+                    Interpretation: PerformanceInterpretationHelper.GetInterpretation(zBase)?.ToRussian());
+            })
+            .ToList();
+
     private static List<PerformanceReportDirectionRowDto> MapDirectionRows(
         IReadOnlyList<PerformanceRowDto> performance) =>
         performance
@@ -350,47 +380,53 @@ public sealed class PerformanceReportService(
         Dictionary<int, ProjectsPageVersionBundle> bundleCache,
         CancellationToken cancellationToken)
     {
-        if (version.Direction == AnalysisDirection.Fact)
-        {
-            var factBundle = await GetBundleAsync(projectId, version.Id, bundleCache, cancellationToken);
-            var labor = factBundle.LaborIntensities;
-            var allocated = FactLaborHoursTotals.FromAllocatedPlannedHours(labor);
-            decimal? weightedZ = null;
-            if (allocated is > 0)
-            {
-                var performance = ProjectsPageGridBuilder.BuildPerformance(factBundle, calculationEngine);
-                weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
-                    performance,
-                    decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-            }
-
-            return new PerformanceReportVersionHistoryPointDto(
-                VersionId: version.Id,
-                VersionName: version.VersionName,
-                CreatedAt: version.CreatedAt,
-                Direction: version.Direction,
-                WeightedZScore: weightedZ,
-                TotalLaborHours: allocated,
-                NormSnapshotKey: normSnapshotKey);
-        }
-
         var bundle = await GetBundleAsync(projectId, version.Id, bundleCache, cancellationToken);
         var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(
             bundle, planPerformance, calculationEngine);
-        var planHours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
+        var scenarios = PlanningScenarioReportMetrics.Compute(bundle, calculationEngine, forecast.GrandTotals);
 
-        return new PerformanceReportVersionHistoryPointDto(
+        decimal? plottedZ;
+        decimal? plottedHours;
+        if (version.Direction == AnalysisDirection.Fact)
+        {
+            var allocated = FactLaborHoursTotals.FromAllocatedPlannedHours(bundle.LaborIntensities);
+            plottedHours = allocated;
+            plottedZ = allocated is > 0
+                ? calculationEngine.ComputeWeightedZFromPerformanceRows(
+                    ProjectsPageGridBuilder.BuildPerformance(bundle, calculationEngine),
+                    decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces)
+                : null;
+        }
+        else
+        {
+            plottedZ = scenarios.ZBase;
+            plottedHours = scenarios.HoursBase;
+        }
+
+        return ToHistoryPoint(version, plottedZ, plottedHours, normSnapshotKey, scenarios);
+    }
+
+    private static PerformanceReportVersionHistoryPointDto ToHistoryPoint(
+        Domain.Entities.ProjectAnalysisVersion version,
+        decimal? plottedZ,
+        decimal? plottedHours,
+        string? normSnapshotKey,
+        PlanningScenarioReportMetrics.Result scenarios) =>
+        new(
             VersionId: version.Id,
             VersionName: version.VersionName,
             CreatedAt: version.CreatedAt,
             Direction: version.Direction,
-            WeightedZScore: calculationEngine.ComputeWeightedZFromPerformanceRows(
-                planPerformance,
-                decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces),
-            TotalLaborHours: planHours,
-            NormSnapshotKey: normSnapshotKey);
-    }
+            WeightedZScore: plottedZ,
+            TotalLaborHours: plottedHours,
+            NormSnapshotKey: normSnapshotKey,
+            OptimisticZScore: scenarios.ZOptimistic,
+            OptimisticLaborHours: scenarios.HoursOptimistic,
+            BaseZScore: scenarios.ZBase,
+            BaseLaborHours: scenarios.HoursBase,
+            PessimisticZScore: scenarios.ZPessimistic,
+            PessimisticLaborHours: scenarios.HoursPessimistic);
 
     private async Task<PerformanceReportAccuracyDto> BuildAccuracyAsync(
         int projectId,

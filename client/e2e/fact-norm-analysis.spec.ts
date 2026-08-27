@@ -13,6 +13,7 @@ test.describe('Fact–norm analysis', () => {
     await expect(page.getByTestId('fact-norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('analytics-period-select')).toBeVisible();
     await expect(page.getByTestId('fact-norm-accuracy-badge')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('fact-norm-kpi')).toBeVisible();
     await expect(page.getByTestId('fact-norm-project-scope')).toBeVisible();
 
     await page.getByTestId('fact-norm-project-scope').click();
@@ -27,6 +28,7 @@ test.describe('Fact–norm analysis', () => {
     await page.getByTestId('analytics-tab-fact-norms').click();
     await expect(page.getByTestId('fact-norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText('Сравнение по группам IIC')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Серьёзность')).toBeVisible();
     await expect(
       page.getByTestId('fact-vs-norm-chart').or(page.getByTestId('fact-vs-norm-empty')).or(page.getByTestId('fact-norm-empty')),
     ).toBeVisible({ timeout: 60_000 });

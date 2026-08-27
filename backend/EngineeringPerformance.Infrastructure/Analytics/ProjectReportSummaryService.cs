@@ -10,8 +10,9 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 /// Сводка «план/факт» проекта: план берётся из основной версии Fact (её сценарные BaseHours),
 /// либо, если основной Fact-версии нет, из основной версии Plan; факт — из основной версии Fact
 /// (allocated PlannedHours), либо пуст, если версий Fact нет.
-/// Выбор версий и часы — та же семантика, что у <see cref="PerformanceReportService"/> (v3);
-/// вся математика Z — только через <see cref="IPerformanceCalculationEngine"/>.
+/// Выбор версий и часы — та же семантика, что у <see cref="PerformanceReportService"/> (v4);
+/// Z плана — заложенный средневзвешенный Z параметров планирования (как в диалоге).
+/// Вся математика Z — только через <see cref="IPerformanceCalculationEngine"/>.
 /// </summary>
 public sealed class ProjectReportSummaryService(
     AppDbContext context,
@@ -19,7 +20,7 @@ public sealed class ProjectReportSummaryService(
     IProjectAnalyticsCache cache,
     ProjectsPageRawDataLoader rawLoader) : IProjectReportSummaryService
 {
-    private const string CacheKey = "report-summary:v1";
+    private const string CacheKey = "report-summary:v3";
 
     public async Task<ProjectReportSummaryDto> GetSummaryAsync(int projectId, CancellationToken cancellationToken = default)
     {
@@ -41,31 +42,42 @@ public sealed class ProjectReportSummaryService(
 
         ProjectReportSummaryBlock? planBlock = null;
         string? planVersionName = null;
+        int? planSourceDirection = null;
+        var planIsPrimary = false;
         if (planSourceId is int pid)
         {
             var bundle = await rawLoader.LoadAsync(projectId, pid, cancellationToken);
             planBlock = BuildPlanBlock(bundle);
-            planVersionName = versions.First(v => v.Id == pid).VersionName;
+            var planVersion = versions.First(v => v.Id == pid);
+            planVersionName = planVersion.VersionName;
+            planSourceDirection = (int)planVersion.Direction;
+            planIsPrimary = planVersion.IsPrimary;
         }
 
         ProjectReportSummaryBlock? factBlock = null;
         string? factVersionName = null;
+        var factIsPrimary = false;
         if (factId is int fid)
         {
             var bundle = await rawLoader.LoadAsync(projectId, fid, cancellationToken);
             factBlock = BuildFactBlock(bundle);
-            factVersionName = versions.First(v => v.Id == fid).VersionName;
+            var factVersion = versions.First(v => v.Id == fid);
+            factVersionName = factVersion.VersionName;
+            factIsPrimary = factVersion.IsPrimary;
         }
 
         var dto = new ProjectReportSummaryDto(
             PlanVersionId: planSourceId,
             PlanVersionName: planVersionName,
+            PlanSourceDirection: planSourceDirection,
+            PlanIsPrimary: planIsPrimary,
             PlanHours: planBlock?.Hours,
             PlanWeightedZScore: planBlock?.WeightedZScore,
             PlanPercentile: planBlock?.Percentile,
             PlanInterpretation: planBlock?.Interpretation?.ToRussian(),
             FactVersionId: factId,
             FactVersionName: factVersionName,
+            FactIsPrimary: factIsPrimary,
             FactHours: factBlock?.Hours,
             FactWeightedZScore: factBlock?.WeightedZScore,
             FactPercentile: factBlock?.Percentile,
@@ -75,18 +87,17 @@ public sealed class ProjectReportSummaryService(
         return dto;
     }
 
-    /// <summary>План: производительность по сценарию версии; часы = BaseHours прогноза (GrandTotals).</summary>
+    /// <summary>
+    /// План: часы = BaseHours прогноза (GrandTotals);
+    /// Z = средневзвешенный заложенный zBase листьев (параметры планирования).
+    /// </summary>
     private ProjectReportSummaryBlock BuildPlanBlock(ProjectsPageVersionBundle bundle)
     {
         var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance, calculationEngine);
+        var scenarios = PlanningScenarioReportMetrics.Compute(bundle, calculationEngine, forecast.GrandTotals);
 
-        var hours = forecast.GrandTotals.BaseHours > 0 ? forecast.GrandTotals.BaseHours : (decimal?)null;
-        var weightedZ = calculationEngine.ComputeWeightedZFromPerformanceRows(
-            planPerformance,
-            decimalPlaces: FactLaborHoursTotals.WeightedZDecimalPlaces);
-
-        return ToBlock(hours, weightedZ);
+        return ToBlock(scenarios.HoursBase, scenarios.ZBase);
     }
 
     /// <summary>Факт: часы = allocated PlannedHours (ActualHours хранится, в Z/KPI не входит).</summary>

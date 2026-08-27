@@ -23,6 +23,7 @@ import {
 } from '../../../api/normRegistryApi';
 import { previewNormCurve, type NormPreviewPoint } from '../../../api/normsApi';
 import { NormBandChart } from '../../norms/NormBandChart';
+import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { formatDate } from '../../../utils/formatDateTime';
 import type { DeviationFormulaDto, FormulaType, NormFormulaDto } from '../../../types/norms';
 import { ConfirmArchiveDialog } from './ConfirmArchiveDialog';
@@ -33,6 +34,8 @@ interface Props {
   canEdit: boolean;
   onClose: () => void;
   onArchived: () => void;
+  variant?: 'dialog' | 'inline';
+  onOpenFactNorms?: (groupId: number) => void;
 }
 
 const STATUS_RU: Record<string, string> = {
@@ -62,7 +65,15 @@ function resolveFormulaType(raw: string): FormulaType {
   return 1;
 }
 
-export function NormCard({ open, normId, canEdit, onClose, onArchived }: Props) {
+export function NormCard({
+  open,
+  normId,
+  canEdit,
+  onClose,
+  onArchived,
+  variant = 'dialog',
+  onOpenFactNorms,
+}: Props) {
   const navigate = useNavigate();
   const [details, setDetails] = useState<NormDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,117 +148,154 @@ export function NormCard({ open, normId, canEdit, onClose, onArchived }: Props) 
     }
   };
 
+  const title = (
+    <>
+      Норма #{norm?.id ?? '…'}
+      {norm ? (
+        <Chip size="small" sx={{ ml: 1 }} label={STATUS_RU[norm.status] ?? norm.status} />
+      ) : null}
+    </>
+  );
+
+  const content = (
+    <>
+      {loading && <Typography color="text.secondary">Загрузка…</Typography>}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      {details && norm ? (
+        <Stack spacing={2}>
+          <Typography>
+            <strong>Группа:</strong>{' '}
+            {formatIisNorm({
+              code: norm.groupCode,
+              name: norm.groupName,
+              unitName: details.unitName,
+            })}
+          </Typography>
+          <Typography>
+            <strong>Формула:</strong> {norm.formulaType} — {norm.formulaDisplay}
+          </Typography>
+          <Typography>
+            <strong>Период:</strong> {formatDate(norm.effectiveFrom)} —{' '}
+            {norm.effectiveTo ? formatDate(norm.effectiveTo) : '∞'}
+          </Typography>
+          <Typography>
+            <strong>Использование:</strong> {details.usage.totalVersions} версий (план{' '}
+            {details.usage.planVersions}, факт {details.usage.factVersions}, основных{' '}
+            {details.usage.primaryVersions})
+          </Typography>
+
+          {band.length > 0 && (
+            <Box data-testid="norm-analysis-band-chart">
+              <NormBandChart
+                band={band}
+                deviationRatio={norm.stdDeviation ?? 0.1}
+                chartVisible={open}
+              />
+            </Box>
+          )}
+
+          {(details.issues?.length ?? 0) > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Проблемы health-check
+              </Typography>
+              <List dense>
+                {details.issues.map((i) => (
+                  <ListItem key={i.id}>
+                    <ListItemText
+                      primary={`${i.severity}: ${i.ruleCode}`}
+                      secondary={i.message}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+
+          {details.auditHistory.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Аудит
+              </Typography>
+              <List dense>
+                {details.auditHistory.slice(0, 10).map((a) => (
+                  <ListItem key={a.id}>
+                    <ListItemText
+                      primary={`${formatDate(a.timestamp)} — ${a.changedBy}`}
+                      secondary={a.newValue ?? a.action}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+        </Stack>
+      ) : null}
+    </>
+  );
+
+  const actions = (
+    <>
+      {variant === 'dialog' ? <Button onClick={onClose}>Закрыть</Button> : null}
+      {onOpenFactNorms && norm ? (
+        <Button
+          onClick={() => onOpenFactNorms(norm.groupId)}
+          data-testid="norm-card-open-fact-norms"
+        >
+          Открыть в анализе факта и норм
+        </Button>
+      ) : null}
+      <Button onClick={handleEdit} disabled={!norm} data-testid="norm-card-edit">
+        Открыть в справочнике
+      </Button>
+      {canArchive && (
+        <Button
+          color="warning"
+          variant="contained"
+          onClick={() => setArchiveOpen(true)}
+          data-testid="norm-card-archive"
+        >
+          Закрыть период
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <>
-      <Dialog
-        open={open}
-        onClose={onClose}
-        maxWidth="md"
-        fullWidth
-        data-testid="norm-analysis-card"
-      >
-        <DialogTitle>
-          Норма #{norm?.id ?? '…'}
-          {norm && (
-            <Chip
-              size="small"
-              sx={{ ml: 1 }}
-              label={STATUS_RU[norm.status] ?? norm.status}
-            />
-          )}
-        </DialogTitle>
-        <DialogContent dividers>
-          {loading && <Typography color="text.secondary">Загрузка…</Typography>}
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-          {details && norm && (
-            <Stack spacing={2}>
-              <Typography>
-                <strong>Группа:</strong> {norm.groupCode ? `${norm.groupCode} — ` : ''}
-                {norm.groupName}
-                {details.unitName ? ` (${details.unitName})` : ''}
-              </Typography>
-              <Typography>
-                <strong>Формула:</strong> {norm.formulaType} — {norm.formulaDisplay}
-              </Typography>
-              <Typography>
-                <strong>Период:</strong> {formatDate(norm.effectiveFrom)} —{' '}
-                {norm.effectiveTo ? formatDate(norm.effectiveTo) : '∞'}
-              </Typography>
-              <Typography>
-                <strong>Использование:</strong> {details.usage.totalVersions} версий (план{' '}
-                {details.usage.planVersions}, факт {details.usage.factVersions}, основных{' '}
-                {details.usage.primaryVersions})
-              </Typography>
-
-              {band.length > 0 && (
-                <Box data-testid="norm-analysis-band-chart">
-                  <NormBandChart
-                    band={band}
-                    deviationRatio={norm.stdDeviation ?? 0.1}
-                    chartVisible={open}
-                  />
-                </Box>
-              )}
-
-              {(details.issues?.length ?? 0) > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Проблемы health-check
-                  </Typography>
-                  <List dense>
-                    {details.issues.map((i) => (
-                      <ListItem key={i.id}>
-                        <ListItemText
-                          primary={`${i.severity}: ${i.ruleCode}`}
-                          secondary={i.message}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
-
-              {details.auditHistory.length > 0 && (
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Аудит
-                  </Typography>
-                  <List dense>
-                    {details.auditHistory.slice(0, 10).map((a) => (
-                      <ListItem key={a.id}>
-                        <ListItemText
-                          primary={`${formatDate(a.timestamp)} — ${a.changedBy}`}
-                          secondary={a.newValue ?? a.action}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Box>
-              )}
+      {variant === 'inline' ? (
+        open ? (
+          <Box
+            component="section"
+            data-testid="norm-analysis-card"
+            sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}
+          >
+            <Typography variant="h6" sx={{ mb: 1.5 }}>
+              {title}
+            </Typography>
+            {content}
+            <Stack direction="row" spacing={1} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+              {actions}
             </Stack>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose}>Закрыть</Button>
-          <Button onClick={handleEdit} disabled={!norm} data-testid="norm-card-edit">
-            Открыть в справочнике
-          </Button>
-          {canArchive && (
-            <Button
-              color="warning"
-              variant="contained"
-              onClick={() => setArchiveOpen(true)}
-              data-testid="norm-card-archive"
-            >
-              Закрыть период
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
+          </Box>
+        ) : null
+      ) : (
+        <Dialog
+          open={open}
+          onClose={onClose}
+          maxWidth="md"
+          fullWidth
+          data-testid="norm-analysis-card"
+        >
+          <DialogTitle>{title}</DialogTitle>
+          <DialogContent dividers>{content}</DialogContent>
+          <DialogActions>{actions}</DialogActions>
+        </Dialog>
+      )}
 
       <ConfirmArchiveDialog
         open={archiveOpen}

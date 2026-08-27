@@ -21,17 +21,19 @@ import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { getApiErrorMessage } from '../../../services/apiError';
 import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
+import { projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
 import { ReportsTab } from '../../../pages/projects/reports/ReportsTab';
 import { DIRECTION_FACT, DIRECTION_PLAN } from '../../../pages/projects/reports/reportCalc';
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
+import { ProjectTrendPanel } from './ProjectTrendPanel';
 import './report-theme.css';
 import { SummaryCards } from './SummaryCards';
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 import { VersionTrend } from './VersionTrend';
 import { ZScale } from './ZScale';
 
-type ReportSubTab = 'summary' | 'legacy';
+type ReportSubTab = 'summary' | 'legacy' | 'trend';
 
 /**
  * Версия для детальных секций «Сводного» — зеркало backend
@@ -167,20 +169,15 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
         <Tabs
           value={subTab}
           onChange={(_, v: ReportSubTab) => setSubTab(v)}
-          sx={{
-            minHeight: 36,
-            borderBottom: 1,
-            borderColor: 'divider',
-            mb: 1.5,
-            '& .MuiTab-root': { minHeight: 36, textTransform: 'none' },
-          }}
+          sx={{ ...projectsPageSubTabsSx, mb: 1.5, width: 'auto', flex: '0 1 auto' }}
         >
           <Tab value="summary" label="Сводный вер 1" data-testid="report-summary-tab" />
+          <Tab value="trend" label="Тренд" data-testid="report-trend-tab" />
           <Tab value="legacy" label="Сводный вер 2" data-testid="report-legacy-tab" />
         </Tabs>
       ) : null}
 
-      {subTab !== 'legacy' && project && versions && versions.length > 0 ? (
+      {subTab === 'summary' && project && versions && versions.length > 0 ? (
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
           <ReportsTab
             key={refreshNonce}
@@ -190,7 +187,15 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
             versionId={summaryVersionId ?? versions[0].id}
           />
         </Box>
-      ) : (
+      ) : null}
+
+      {subTab === 'trend' && project && versions && versions.length > 0 ? (
+        <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+          <ProjectTrendPanel projectId={projectId} refreshNonce={refreshNonce} />
+        </Box>
+      ) : null}
+
+      {subTab === 'legacy' ? (
       <Box
         className={`ep-report-root${dark ? ' dark' : ''}`}
         data-testid="performance-report-panel"
@@ -207,7 +212,7 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
             <Typography color="text.secondary">Нет данных отчёта.</Typography>
           </Box>
         ) : report ? (
-          <div className="mx-auto flex max-w-[1400px] flex-col gap-6 px-4 py-6 md:px-8">
+          <div className="flex w-full max-w-none flex-col gap-6 px-4 py-6 md:px-8">
             <header className="flex flex-col gap-4 border-b border-border pb-6">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex size-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -270,7 +275,7 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
           </div>
         ) : null}
       </Box>
-      )}
+      ) : null}
     </>
   );
 }

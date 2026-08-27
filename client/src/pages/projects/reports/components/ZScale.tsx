@@ -1,28 +1,17 @@
-import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
-import { ACCENT_FACT, ACCENT_PLAN, MUTED_COLOR, ZONE_COLOR } from '../reportCalc';
-
-const MIN = -1.75;
-const MAX = 1.75;
-
-// Пороги зон — паритет backend PerformanceInterpretationHelper.GetInterpretation.
-// Цвета — пастельная палитра мокапа ReportRedesignMockup.
-const ZONES = [
-  { from: MIN, to: -1, label: 'Отлично', color: ZONE_COLOR.Excellent },
-  { from: -1, to: -0.5, label: 'Хорошо', color: ZONE_COLOR.Good },
-  { from: -0.5, to: 0.5, label: 'Удовл.', color: ZONE_COLOR.Satisfactory },
-  { from: 0.5, to: 1, label: 'Внимание', color: ZONE_COLOR.NeedsAttention },
-  { from: 1, to: MAX, label: 'Критично', color: ZONE_COLOR.Critical },
-];
-
-function pct(z: number) {
-  const clamped = Math.min(MAX, Math.max(MIN, z));
-  return ((clamped - MIN) / (MAX - MIN)) * 100;
-}
+import { Box, Stack, Typography } from '@mui/material';
+import {
+  ACCENT_FACT,
+  ACCENT_PLAN,
+  MUTED_COLOR,
+  ZONE_COLOR,
+  Z_SCALE_ZONES,
+  zScaleVisualPct,
+} from '../reportCalc';
+import { BORDER, ReportMockupCard, SectionLabel } from './reportChrome';
 
 /**
- * Строка-дорожка с маркером на шкале Z. План и факт рисуются на раздельных дорожках
- * (а не общим слоем над шкалой), чтобы подписи значений не пересекались, даже когда
- * оба Z близки друг к другу. Факт — крупный акцентный маркер с бейджем значения.
+ * Строка-дорожка с маркером на шкале Z. План и факт на раздельных дорожках,
+ * чтобы подписи не пересекались. Факт — крупный акцентный маркер с бейджем.
  */
 function MarkerTrack({
   z,
@@ -36,6 +25,7 @@ function MarkerTrack({
   emphasized?: boolean;
 }) {
   const dim = emphasized ? 20 : 13;
+  const left = z === null ? null : zScaleVisualPct(z);
   return (
     <Stack direction="row" alignItems="center" spacing={1.2} sx={{ height: emphasized ? 30 : 22 }}>
       <Box sx={{ width: 46, textAlign: 'right', flexShrink: 0 }}>
@@ -50,12 +40,12 @@ function MarkerTrack({
         </Typography>
       </Box>
       <Box sx={{ flex: 1, position: 'relative', height: '100%' }}>
-        {z !== null && (
+        {z !== null && left !== null && (
           <>
             <Box
               sx={{
                 position: 'absolute',
-                left: `${pct(z)}%`,
+                left: `${left}%`,
                 top: '50%',
                 transform: 'translate(-50%, -50%)',
                 width: dim,
@@ -72,7 +62,7 @@ function MarkerTrack({
             <Box
               sx={{
                 position: 'absolute',
-                left: `${pct(z)}%`,
+                left: `${left}%`,
                 top: '50%',
                 transform: emphasized ? 'translate(14px, -50%)' : 'translate(11px, -50%)',
                 bgcolor: emphasized ? color : 'transparent',
@@ -102,70 +92,74 @@ interface ZScaleProps {
 
 export function ZScale({ planZScore, factZScore }: ZScaleProps) {
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={2}>
-          <Stack spacing={0.5}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              Шкала интерпретации Z-оценки
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Z рассчитывается в лог-пространстве: z = (ln(факт. производительность) − ln(норма)) / σ. Меньшая
-              Z означает меньше часов на единицу объёма, то есть более высокую производительность.
-            </Typography>
+    <ReportMockupCard testId="report-v1-z-scale">
+      <SectionLabel>Шкала интерпретации Z-оценки</SectionLabel>
+      <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mt: 0.5, mb: 1.5 }}>
+        Меньший Z — выше производительность; справа лучше.
+      </Typography>
+
+      <Box>
+        <Stack spacing={0.5} sx={{ mb: 1 }}>
+          <MarkerTrack z={planZScore} rowLabel="План" color={ACCENT_PLAN} />
+          <MarkerTrack z={factZScore} rowLabel="Факт" color={ACCENT_FACT} emphasized />
+        </Stack>
+
+        <Box sx={{ pl: '58px' }}>
+          <Box sx={{ height: 1, bgcolor: BORDER, mb: 1 }} />
+          <Box sx={{ display: 'flex', height: 14, borderRadius: '7px', overflow: 'hidden' }}>
+            {Z_SCALE_ZONES.map((zone) => (
+              <Box
+                key={zone.label}
+                data-testid={`report-z-zone-${zone.interpretation}`}
+                sx={{ flex: zone.to - zone.from, bgcolor: ZONE_COLOR[zone.interpretation] }}
+              />
+            ))}
+          </Box>
+
+          <Stack direction="row" sx={{ mt: 1, display: { xs: 'none', sm: 'flex' } }}>
+            {Z_SCALE_ZONES.map((zone) => (
+              <Box key={zone.label} sx={{ flex: zone.to - zone.from, textAlign: 'center' }}>
+                <Typography sx={{ fontSize: 10.5, color: MUTED_COLOR, fontWeight: 600 }}>{zone.label}</Typography>
+              </Box>
+            ))}
           </Stack>
 
-          <Box>
-            <Stack spacing={0.5} sx={{ mb: 1 }}>
-              <MarkerTrack z={planZScore} rowLabel="План" color={ACCENT_PLAN} />
-              <MarkerTrack z={factZScore} rowLabel="Факт" color={ACCENT_FACT} emphasized />
-            </Stack>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            sx={{ mt: 0.5, fontSize: 11, color: MUTED_COLOR }}
+          >
+            {['+3', '0', '−3'].map((tick) => (
+              <span key={tick} data-testid="report-v1-z-tick">
+                {tick}
+              </span>
+            ))}
+          </Stack>
 
-            <Box sx={{ pl: '58px' }}>
-              <Box sx={{ height: 1, bgcolor: '#E4E9ED', mb: 1 }} />
-              <Box sx={{ display: 'flex', height: 14, borderRadius: '7px', overflow: 'hidden' }}>
-                {ZONES.map((zone) => (
-                  <Box key={zone.label} sx={{ flex: zone.to - zone.from, bgcolor: zone.color }} />
-                ))}
-              </Box>
-
-              {/* Подписи зон под полосой — на узких экранах скрыты, дублируются легендой ниже. */}
-              <Stack direction="row" sx={{ mt: 1, display: { xs: 'none', sm: 'flex' } }}>
-                {ZONES.map((zone) => (
-                  <Box key={zone.label} sx={{ flex: zone.to - zone.from, textAlign: 'center' }}>
-                    <Typography sx={{ fontSize: 10.5, color: MUTED_COLOR, fontWeight: 600 }}>{zone.label}</Typography>
-                  </Box>
-                ))}
+          <Stack
+            direction="row"
+            spacing={1.5}
+            useFlexGap
+            flexWrap="wrap"
+            sx={{ display: { xs: 'flex', sm: 'none' }, mt: 1 }}
+          >
+            {Z_SCALE_ZONES.map((zone) => (
+              <Stack key={zone.label} direction="row" spacing={0.5} alignItems="center">
+                <Box
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    bgcolor: ZONE_COLOR[zone.interpretation],
+                    flexShrink: 0,
+                  }}
+                />
+                <Typography sx={{ fontSize: 11, color: MUTED_COLOR }}>{zone.label}</Typography>
               </Stack>
-
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                sx={{ mt: 0.5, fontSize: 11, color: MUTED_COLOR }}
-              >
-                {['−1.5', '−1.0', '−0.5', '0', '+0.5', '+1.0', '+1.5'].map((tick) => (
-                  <span key={tick}>{tick}</span>
-                ))}
-              </Stack>
-
-              <Stack
-                direction="row"
-                spacing={1.5}
-                useFlexGap
-                flexWrap="wrap"
-                sx={{ display: { xs: 'flex', sm: 'none' }, mt: 1 }}
-              >
-                {ZONES.map((zone) => (
-                  <Stack key={zone.label} direction="row" spacing={0.5} alignItems="center">
-                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: zone.color, flexShrink: 0 }} />
-                    <Typography sx={{ fontSize: 11, color: MUTED_COLOR }}>{zone.label}</Typography>
-                  </Stack>
-                ))}
-              </Stack>
-            </Box>
-          </Box>
-        </Stack>
-      </CardContent>
-    </Card>
+            ))}
+          </Stack>
+        </Box>
+      </Box>
+    </ReportMockupCard>
   );
 }

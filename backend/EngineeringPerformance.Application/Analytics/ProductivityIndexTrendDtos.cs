@@ -30,7 +30,8 @@ public sealed record ProductivityIndexGroupDto(
 public sealed record ProductivityIndexTrendResponse(
     ProductivityIndexGroupDto Overall,
     IReadOnlyList<ProductivityIndexGroupDto> ByGroup,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    TrendDetailAggregationDto? Detail = null);
 
 public interface IProductivityIndexTrendService
 {

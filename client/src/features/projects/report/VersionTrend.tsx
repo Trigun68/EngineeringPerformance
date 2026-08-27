@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { PerformanceReportHistoryPoint } from '../../../api/performanceReportApi';
 import { fmt, fmtSigned } from './reportFormat';
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
@@ -5,7 +6,7 @@ import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from
 const W = 640;
 const H = 220;
 const PAD_X = 32;
-const PAD_Y = 28;
+const PAD_Y = 36;
 
 const PLAN = 1;
 const FACT = 2;
@@ -53,7 +54,19 @@ function byChronology(a: PerformanceReportHistoryPoint, b: PerformanceReportHist
   return dt !== 0 ? dt : a.versionId - b.versionId;
 }
 
+function scenarioTooltipLines(p: PerformanceReportHistoryPoint): string[] {
+  const line = (label: string, z: number | null | undefined, hours: number | null | undefined) =>
+    `${label}: Z ${fmtSigned(z)} · ${fmt(hours, 0)} ч`;
+  return [
+    p.versionName,
+    line('Оптимистичный', p.optimisticZScore, p.optimisticLaborHours),
+    line('Базовый', p.baseZScore, p.baseLaborHours),
+    line('Пессимистичный', p.pessimisticZScore, p.pessimisticLaborHours),
+  ];
+}
+
 export function VersionTrend({ points }: Props) {
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   // Ось X — категориальная, точки отсортированы по дате: порядок всегда хронологический,
   // даже когда у версий совпадают даты (time-scale схлопывал бы их в одну координату).
   const sortedPoints = [...points].sort(byChronology);
@@ -89,6 +102,7 @@ export function VersionTrend({ points }: Props) {
   const y = (v: number) => PAD_Y + ((max - v) / span) * (H - PAD_Y * 2);
 
   const keyOf = (p: PerformanceReportHistoryPoint) => `${p.versionId}-${p.direction}`;
+  const hovered = hoveredKey ? withZ.find((x) => keyOf(x.p) === hoveredKey)?.p : undefined;
   const planSeries = withZ
     .filter((x) => x.p.direction === PLAN)
     .map((x) => ({ cx: xIndex(keyOf(x.p)), z: x.z }));
@@ -106,6 +120,7 @@ export function VersionTrend({ points }: Props) {
         </p>
       </ReportCardHeader>
       <ReportCardContent className="flex flex-col gap-4">
+        <div className="relative">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="h-56 w-full"
@@ -156,8 +171,16 @@ export function VersionTrend({ points }: Props) {
             const color = isFact ? FACT_COLOR : PLAN_COLOR;
             const cx = xIndex(keyOf(p));
             const cy = y(z);
+            const pointKey = keyOf(p);
+            const tooltipLines = scenarioTooltipLines(p);
             return (
-              <g key={keyOf(p)}>
+              <g
+                key={pointKey}
+                data-testid="report-version-trend-point"
+                onMouseEnter={() => setHoveredKey(pointKey)}
+                onMouseLeave={() => setHoveredKey((current) => (current === pointKey ? null : current))}
+              >
+                <title>{tooltipLines.join('\n')}</title>
                 {isFact ? (
                   <circle
                     cx={cx}
@@ -181,11 +204,21 @@ export function VersionTrend({ points }: Props) {
                 />
                 <text
                   x={cx}
-                  y={cy - 13}
+                  y={cy - 22}
                   textAnchor="middle"
                   className="fill-[var(--ep-report-foreground)] font-mono text-[10px] font-semibold"
+                  data-testid="report-version-trend-point-label"
                 >
                   {fmtSigned(z)}
+                </text>
+                <text
+                  x={cx}
+                  y={cy - 10}
+                  textAnchor="middle"
+                  className="fill-[var(--ep-report-muted-foreground)] font-mono text-[9px]"
+                  data-testid="report-version-trend-point-hours"
+                >
+                  {fmt(p.totalLaborHours, 0)} ч
                 </text>
                 <text
                   x={cx}
@@ -208,6 +241,19 @@ export function VersionTrend({ points }: Props) {
             );
           })}
         </svg>
+        {hovered ? (
+          <div
+            data-testid="report-version-trend-tooltip"
+            className="pointer-events-none absolute right-2 top-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] leading-4 text-foreground shadow-sm"
+          >
+            {scenarioTooltipLines(hovered).map((line, index) => (
+              <div key={line} className={index === 0 ? 'font-semibold' : undefined}>
+                {line}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        </div>
 
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">

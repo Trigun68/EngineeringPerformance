@@ -3,46 +3,30 @@ import {
   Alert,
   Box,
   Chip,
-  Divider,
   Grid,
   LinearProgress,
+  Paper,
   Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
-import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import {
   fetchZTrends,
   type ZTrendResponse,
-  type ZTrendSeries,
   type ZTrendWeightMode,
 } from '../../../api/zTrendApi';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
-import type { FactPlanMode } from '../shared/FactPlanToggle';
-import { TrendDetailView, type TrendDetailMetricConfig } from '../shared/TrendDetailView';
-import type {
-  GroupTrendLike,
-  TrendPointLike,
-  TrendVersionRow,
-} from '../shared/trendDetailCalc';
+import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
+import { FactPlanToggle, type FactPlanMode } from '../shared/FactPlanToggle';
+import { FactorWaterfallChart } from '../shared/FactorWaterfallChart';
+import { HoursBridgeChart } from '../shared/HoursBridgeChart';
+import { PeriodDynamicsChart, type DynamicsSeries } from '../shared/PeriodDynamicsChart';
+import { SCurveChart } from '../shared/SCurveChart';
+import { ZeroBaselineChart } from '../shared/ZeroBaselineChart';
 import { NormLegend } from './NormLegend';
 import { ZTrendChart } from './ZTrendChart';
-
-const WEIGHT_MODE_LABEL: Record<ZTrendWeightMode, string> = {
-  basisHours: 'Нормативные часы (basisHours)',
-};
-
-const Z_TREND_METRIC: TrendDetailMetricConfig = {
-  yAxisTitle: 'Средневзвешенная Z-оценка',
-  unit: '',
-  digits: 2,
-  zeroLine: true,
-  // Для Z-оценки снижение (ближе к норме и ниже) — улучшение.
-  goodDirection: 'negative',
-  factColor: FACT_ACCENT_COLOR,
-  planColor: PLAN_ACCENT_COLOR,
-};
 
 function formatPeriodChip(dateFrom: string, dateTo: string): string {
   const fmt = (iso: string) => {
@@ -65,41 +49,6 @@ interface Props {
   weightMode: ZTrendWeightMode;
   mode: FactPlanMode;
   onModeChange: (mode: FactPlanMode) => void;
-}
-
-/** Плоский список точек серии (сегменты нормативных режимов схлопываются в хронологию). */
-function flattenSeriesPoints(series: ZTrendSeries | undefined): TrendPointLike[] {
-  if (!series) return [];
-  const points: TrendPointLike[] = [];
-  for (const seg of series.segments) {
-    for (const p of seg.points) {
-      points.push({ date: p.date, value: p.zScore, weight: p.weight });
-    }
-  }
-  return points.sort((a, b) => (a.date < b.date ? -1 : 1));
-}
-
-/** Версии выборки из contributions точек серии; свежие сверху. */
-function collectVersionRows(series: ZTrendSeries | undefined): TrendVersionRow[] {
-  if (!series) return [];
-  const map = new Map<string, TrendVersionRow>();
-  for (const seg of series.segments) {
-    for (const p of seg.points) {
-      for (const c of p.contributions ?? []) {
-        const key = `${c.projectId}-${c.versionId}`;
-        if (!map.has(key)) {
-          map.set(key, {
-            projectCode: c.projectCode,
-            projectName: c.projectName,
-            versionName: c.versionName,
-            date: p.date,
-            value: c.zScore,
-          });
-        }
-      }
-    }
-  }
-  return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeChange }: Props) {
@@ -153,39 +102,56 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
     return o.plan.segments.length > 0 || o.fact.segments.length > 0 || result.byGroup.length > 0;
   }, [result]);
 
-  const planPoints = useMemo(() => flattenSeriesPoints(result?.overall.plan), [result]);
-  const factPoints = useMemo(() => flattenSeriesPoints(result?.overall.fact), [result]);
-  const planVersions = useMemo(() => collectVersionRows(result?.overall.plan), [result]);
-  const factVersions = useMemo(() => collectVersionRows(result?.overall.fact), [result]);
+  const hasContent = useMemo(() => {
+    if (!result) return false;
+    return (
+      hasSegments ||
+      result.disciplineBridge.lines.length > 0 ||
+      result.groupZeroBars.length > 0 ||
+      result.portfolioSCurve.length > 0 ||
+      (result.detail?.planMonthly.length ?? 0) > 0 ||
+      (result.detail?.factMonthly.length ?? 0) > 0
+    );
+  }, [result, hasSegments]);
 
-  const waterfallGroups = useMemo<GroupTrendLike[]>(() => {
-    if (!result) return [];
-    return result.byGroup.map((g) => ({
-      groupId: g.groupId,
-      groupName: formatIisNorm({ name: g.groupName }),
-      points: flattenSeriesPoints(g.fact),
-    }));
-  }, [result]);
-
-  // Вторичные графики нормативных режимов следуют режиму переключателя.
   const showPlan = mode !== 'fact';
   const showFact = mode !== 'plan';
+
+  const zSeries = useMemo<DynamicsSeries[]>(() => {
+    if (!result) return [];
+    const series: DynamicsSeries[] = [];
+    const planMonthly = result.detail?.planMonthly ?? [];
+    const factMonthly = result.detail?.factMonthly ?? [];
+    if (showPlan && planMonthly.some((p) => p.value !== null)) {
+      series.push({
+        id: 'plan',
+        name: 'План (основные версии)',
+        color: PLAN_ACCENT_COLOR,
+        dashStyle: 'Dash',
+        points: planMonthly,
+      });
+    }
+    if (showFact && factMonthly.some((p) => p.value !== null)) {
+      series.push({
+        id: 'fact',
+        name: 'Факт (основные версии)',
+        color: FACT_ACCENT_COLOR,
+        points: factMonthly,
+      });
+    }
+    return series;
+  }, [result, showPlan, showFact]);
+
+  const deltaWaterfall = result?.detail?.factWaterfall ?? null;
+  const deltaStart = result?.detail?.factKpi.initial ?? null;
 
   return (
     <Stack spacing={2.5} data-testid="ztrend-panel">
       {loading && !result && (
         <Box data-testid="ztrend-loading" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton
-                key={i}
-                variant="rounded"
-                height={96}
-                sx={{ flex: '1 1 200px', minWidth: 200, borderRadius: 2.5 }}
-              />
-            ))}
-          </Box>
-          <Skeleton variant="rounded" height={360} sx={{ borderRadius: 2.5 }} />
+          <Skeleton variant="rounded" height={40} sx={{ borderRadius: 2 }} />
+          <Skeleton variant="rounded" height={320} sx={{ borderRadius: 2.5 }} />
+          <Skeleton variant="rounded" height={280} sx={{ borderRadius: 2.5 }} />
         </Box>
       )}
 
@@ -205,80 +171,166 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
         </Alert>
       )}
 
-      {result && !hasSegments && (
+      {result && !hasContent && (
         <Alert severity="info" data-testid="ztrend-empty">
           Нет основных версий (isPrimary) с рассчитанным Z в выбранном периоде.
         </Alert>
       )}
 
-      {result && hasSegments && (
+      {result && hasContent && (
         <>
-          <TrendDetailView
-            mode={mode}
-            onModeChange={onModeChange}
-            config={Z_TREND_METRIC}
-            periodLabel={formatPeriodChip(dateFrom, dateTo)}
-            planPoints={planPoints}
-            factPoints={factPoints}
-            planVersions={planVersions}
-            factVersions={factVersions}
-            waterfallGroups={waterfallGroups}
-            headerExtras={
-              <Chip
-                size="small"
-                icon={<FunctionsOutlinedIcon sx={{ fontSize: 15 }} />}
-                label={`Вес: ${WEIGHT_MODE_LABEL[weightMode] ?? weightMode}`}
-                data-testid="ztrend-weight-chip"
-                sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
-              />
-            }
-            testId="ztrend-detail"
-          />
-
-          <Divider sx={{ my: 1 }} />
-
-          <Box>
-            <Typography variant="h6" component="h2">
-              Динамика по нормативным режимам
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              Тот же тренд с разбивкой на сегменты действия норм IIC — видно, где смена нормы
-              изменила оценку.
-            </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 1.5,
+            }}
+          >
+            <Chip
+              icon={<CalendarMonthOutlinedIcon fontSize="small" />}
+              label={formatPeriodChip(dateFrom, dateTo)}
+              variant="outlined"
+              data-testid="ztrend-period-chip"
+            />
+            <FactPlanToggle value={mode} onChange={onModeChange} testId="ztrend-fact-plan-toggle" />
           </Box>
-          <NormLegend legend={result.legend} />
-          <ZTrendChart
-            group={result.overall}
-            showPlan={showPlan}
-            showFact={showFact}
-            height={360}
-            title="Средневзвешенный Z по проектам"
-            testId="ztrend-overall-chart"
-          />
 
-          {result.byGroup.length > 0 && (
-            <>
-              <Typography variant="h6" component="h2" sx={{ mt: 1 }}>
-                По направлениям IIC
+          <Typography variant="h6" component="h2">
+            Динамика Z по датам
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            {zSeries.length > 0 ? (
+              <PeriodDynamicsChart
+                series={zSeries}
+                yAxisTitle="Средневзвешенная Z-оценка"
+                zeroLine
+                testId="ztrend-dynamics"
+              />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Нет точек Z основных версий в выбранном режиме.
               </Typography>
-              <Grid container spacing={2} data-testid="ztrend-groups-grid">
-                {result.byGroup.map((g) => (
-                  <Grid item xs={12} md={6} lg={4} key={g.groupId}>
-                    <ZTrendChart
-                      group={{
-                        ...g,
-                        groupName: formatIisNorm({ name: g.groupName }),
-                      }}
-                      showPlan={showPlan}
-                      showFact={showFact}
-                      height={260}
-                      testId={`ztrend-group-${g.groupId}`}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </>
+            )}
+          </Paper>
+
+          <Typography variant="h6" component="h2">
+            Отклонения по дисциплинам
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            {result.disciplineBridge.lines.length > 0 ? (
+              <HoursBridgeChart lines={result.disciplineBridge.lines} testId="ztrend-hours-bridge" />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Нет пары план/факт с объёмом и часами для моста.
+              </Typography>
+            )}
+          </Paper>
+
+          <Typography variant="h6" component="h2">
+            Z по группам IIC относительно нормы
+          </Typography>
+          {result.groupZeroBars.length > 0 ? (
+            <Grid container spacing={2} data-testid="ztrend-group-zero">
+              {result.groupZeroBars.map((g) => (
+                <Grid item xs={12} md={6} key={g.groupId}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    {formatIisNorm({ name: g.groupName })}
+                  </Typography>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <ZeroBaselineChart bars={g.bars} height={260} testId={`ztrend-group-zero-${g.groupId}`} />
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          ) : (
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Нет вкладов проектов по группам IIC.
+              </Typography>
+            </Paper>
           )}
+
+          <Typography variant="h6" component="h2">
+            S-curve часов факта
+          </Typography>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            {result.portfolioSCurve.length > 0 ? (
+              <SCurveChart points={result.portfolioSCurve} testId="ztrend-scurve" />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Нет факт-версий с часами.
+              </Typography>
+            )}
+          </Paper>
+
+          <AnalyticsExtraAccordion testId="ztrend-extra">
+            {deltaWaterfall && deltaStart != null ? (
+              <>
+                <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+                  Изменение Z за период по группам
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <FactorWaterfallChart
+                    startLabel="Было"
+                    startValue={deltaStart}
+                    endLabel="Стало"
+                    steps={deltaWaterfall}
+                    goodDirection="positive"
+                    testId="ztrend-delta-waterfall"
+                  />
+                </Paper>
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Недостаточно истории факта для разбора ΔZ.
+              </Typography>
+            )}
+
+            <Box>
+              <Typography variant="h6" component="h2">
+                Динамика по нормативным режимам
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.5 }}>
+                Тот же тренд с разбивкой на сегменты действия норм IIC — видно, где смена нормы
+                изменила оценку.
+              </Typography>
+            </Box>
+            <NormLegend legend={result.legend} />
+            <ZTrendChart
+              group={result.overall}
+              showPlan={showPlan}
+              showFact={showFact}
+              height={360}
+              title="Средневзвешенный Z по проектам"
+              testId="ztrend-overall-chart"
+            />
+
+            {result.byGroup.length > 0 && (
+              <>
+                <Typography variant="h6" component="h2" sx={{ mt: 1 }}>
+                  По направлениям IIC
+                </Typography>
+                <Grid container spacing={2} data-testid="ztrend-groups-grid">
+                  {result.byGroup.map((g) => (
+                    <Grid item xs={12} md={6} lg={4} key={g.groupId}>
+                      <ZTrendChart
+                        group={{
+                          ...g,
+                          groupName: formatIisNorm({ name: g.groupName }),
+                        }}
+                        showPlan={showPlan}
+                        showFact={showFact}
+                        height={260}
+                        testId={`ztrend-group-${g.groupId}`}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </>
+            )}
+          </AnalyticsExtraAccordion>
         </>
       )}
     </Stack>

@@ -20,6 +20,7 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IDirectoryExportService _directoryExport;
     private readonly IExportFileNameService _fileNames;
     private readonly IProjectReportSummaryService _reportSummary;
+    private readonly IProjectTrendService _projectTrend;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
@@ -28,7 +29,8 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         IProjectExportService projectExport,
         IDirectoryExportService directoryExport,
         IExportFileNameService fileNames,
-        IProjectReportSummaryService reportSummary)
+        IProjectReportSummaryService reportSummary,
+        IProjectTrendService projectTrend)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
@@ -37,6 +39,7 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         _directoryExport = directoryExport;
         _fileNames = fileNames;
         _reportSummary = reportSummary;
+        _projectTrend = projectTrend;
     }
 
     /// <summary>Сводка «план/факт» по основным версиям проекта для вкладки «Отчёт».</summary>
@@ -47,6 +50,15 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         int projectId,
         CancellationToken cancellationToken = default) =>
         _reportSummary.GetSummaryAsync(projectId, cancellationToken);
+
+    /// <summary>Вкладка «Тренд» отчёта проекта: Z по датам, мост часов, Z от 0, S-curve.</summary>
+    [HttpGet("report-trend")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Reports, AccessLevel.Read)]
+    public Task<ProjectTrendDto> ReportTrend(
+        int projectId,
+        CancellationToken cancellationToken = default) =>
+        _projectTrend.GetAsync(projectId, cancellationToken);
 
     [HttpGet("compare")]
     [RequireProjectAccess]

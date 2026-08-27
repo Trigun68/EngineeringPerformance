@@ -31,7 +31,7 @@ public static class PdfInsightBuilder
             result.Add(new PdfCallout(
                 PdfCalloutKind.Risk,
                 $"{worst.WorkDirectionName}: Z = {FormatSigned(worst.ZScore)}",
-                $"Наибольший перерасход относительно нормы ИИЦ{(overrun is null ? "" : $" — {overrun:N0} ч")}.{extra} Требуется разбор причин: пересмотреть состав работ и проверить полноту исходных данных."));
+                $"Наибольший перерасход относительно нормы IIC{(overrun is null ? "" : $" — {PdfNumberFormat.HoursWithUnit(overrun)}")}.{extra} Требуется разбор причин: пересмотреть состав работ и проверить полноту исходных данных."));
         }
 
         var attentionRows = scored.Where(r => r.ZScore!.Value > 0.5m && r.ZScore!.Value <= 1m).ToList();
@@ -80,8 +80,8 @@ public static class PdfInsightBuilder
         var sharePct = baseHours > 0m ? spread / baseHours * 100m : 0m;
         return new PdfCallout(
             PdfCalloutKind.Data,
-            $"Разброс сценариев: {spread:N0} ч ({sharePct:N1}% от базового)",
-            $"Диапазон между оптимистичным и пессимистичным сценарием составляет {spread:N0} ч при базовом объёме {baseHours:N0} ч. Используйте пессимистичный сценарий как верхнюю границу риска при планировании ресурсов.");
+            $"Разброс сценариев: {PdfNumberFormat.HoursWithUnit(spread)} ({sharePct.ToString("N1", System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))}% от базового)",
+            $"Диапазон между оптимистичным и пессимистичным сценарием составляет {PdfNumberFormat.HoursWithUnit(spread)} при базовом объёме {PdfNumberFormat.HoursWithUnit(baseHours)}. Используйте пессимистичный сценарий как верхнюю границу риска при планировании ресурсов.");
     }
 
     /// <summary>Сравнение версий — одна авто-фраза о наибольшем отклонении.</summary>

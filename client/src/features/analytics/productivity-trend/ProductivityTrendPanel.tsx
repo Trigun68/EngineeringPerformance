@@ -4,7 +4,6 @@ import {
   Box,
   Chip,
   CircularProgress,
-  Divider,
   Grid,
   LinearProgress,
   Paper,
@@ -37,6 +36,7 @@ import type {
   TrendPointLike,
   TrendVersionRow,
 } from '../shared/trendDetailCalc';
+import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
 import { FormulaTypeLegend } from './FormulaTypeLegend';
 import { ProductivityTrendChart } from './ProductivityTrendChart';
 
@@ -446,12 +446,12 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
           planVersions={indexVersions.plan}
           factVersions={indexVersions.fact}
           waterfallGroups={indexWaterfallGroups}
+          aggregation={indexResult.detail}
           testId="prod-trend-detail"
         />
       )}
 
-      <Divider sx={{ my: 1 }} />
-
+      <AnalyticsExtraAccordion testId="prod-trend-extra">
       <Box>
         <Typography variant="h6" component="h2">
           Нормы IIC: смена формул и часов при опорном объёме
@@ -578,6 +578,7 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
           </Box>
         </>
       )}
+      </AnalyticsExtraAccordion>
     </Stack>
   );
 }

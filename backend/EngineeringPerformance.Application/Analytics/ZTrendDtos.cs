@@ -69,7 +69,11 @@ public sealed record ZTrendResponse(
     ZTrendGroupDto Overall,
     IReadOnlyList<ZTrendGroupDto> ByGroup,
     IReadOnlyList<ZTrendLegendDto> Legend,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    TrendDetailAggregationDto? Detail = null,
+    HoursBridgeResultDto? DisciplineBridge = null,
+    IReadOnlyList<GroupZeroBaselineDto>? GroupZeroBars = null,
+    IReadOnlyList<CumulativeHoursPointDto>? PortfolioSCurve = null);
 
 /// <summary>Сырая точка версии до агрегации/сегментации (вход TrendEngine).</summary>
 public sealed record ZTrendRawPoint(

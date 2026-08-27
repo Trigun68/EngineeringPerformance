@@ -12,12 +12,26 @@ test.describe('Norm analysis registry', () => {
     await page.getByTestId('analytics-tab-norm-analysis').click();
     await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('analytics-period-select')).toBeVisible();
-    await expect(page.getByTestId('norm-analysis-filters')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-health-summary')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('norm-analysis-badge-errors')).toBeVisible();
+    await expect(page.getByTestId('norm-analysis-view-toggle')).toBeVisible();
+    await expect(page.getByTestId('norm-analysis-view-table')).toContainText('Таблица');
+    await expect(page.getByTestId('norm-analysis-view-heatmap')).toContainText('Тепловая карта');
+    await page.getByTestId('norm-analysis-view-heatmap').click();
+    await expect(
+      page.getByTestId('norm-analysis-heatmap').or(page.getByTestId('norm-analysis-heatmap-empty')),
+    ).toBeVisible();
+    await page.getByTestId('norm-analysis-view-table').click();
     await expect(
       page.getByTestId('norm-analysis-timeline').or(page.getByTestId('norm-analysis-timeline-empty')),
     ).toBeVisible();
+    const timeline = page.getByTestId('norm-analysis-timeline');
+    if (await timeline.isVisible()) {
+      const groupTestIds = await page.locator('[data-testid^="norm-timeline-group-"]').evaluateAll((els) =>
+        els.map((el) => el.getAttribute('data-testid')),
+      );
+      expect(new Set(groupTestIds).size).toBe(groupTestIds.length);
+    }
     await expect(
       page.getByTestId('norm-analysis-table').or(page.getByTestId('norm-analysis-empty')),
     ).toBeVisible({ timeout: 60_000 });
@@ -27,20 +41,19 @@ test.describe('Norm analysis registry', () => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-norm-analysis').click();
     await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('norm-analysis-filters-extra-summary').click();
+    await expect(page.getByTestId('norm-analysis-filters')).toBeVisible();
     await page.getByTestId('norm-analysis-only-issues').check();
     await expect(
       page.getByTestId('norm-analysis-table').or(page.getByTestId('norm-analysis-empty')),
     ).toBeVisible({ timeout: 60_000 });
 
-    const grid = page.getByTestId('norm-analysis-grid');
-    if (await grid.isVisible()) {
-      const firstRow = grid.locator('.ag-row').first();
-      if (await firstRow.isVisible()) {
-        await firstRow.click();
-        await expect(page.getByTestId('norm-analysis-card')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('norm-card-edit')).toBeVisible();
-        await page.getByRole('button', { name: 'Закрыть' }).first().click();
-      }
+    const firstRow = page.locator('[data-testid^="norm-analysis-table-row-"]').first();
+    if (await firstRow.isVisible()) {
+      await firstRow.click();
+      await expect(page.getByTestId('norm-analysis-card')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('norm-card-edit')).toBeVisible();
+      await expect(page.getByTestId('norm-analysis-simulator')).toBeVisible();
     }
   });
 
@@ -48,6 +61,7 @@ test.describe('Norm analysis registry', () => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-norm-analysis').click();
     await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('norm-analysis-filters-extra-summary').click();
     await expect(page.getByTestId('norm-analysis-export-xlsx')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('norm-analysis-export-csv')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-export-health')).toBeVisible();

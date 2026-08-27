@@ -17,7 +17,16 @@ test.describe('PDF visual reports export', () => {
     await openFirstProject(page);
     await page.getByRole('tab', { name: 'Сравнение версий' }).click();
     await expect(page.getByRole('button', { name: /Версия А/ })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Итого', exact: true }).click();
     await expect(actionButton(page, 'exportPdf')).toBeVisible({ timeout: 15_000 });
+  });
+
+  test('compare detail tab has no PDF button', async ({ page }) => {
+    await openFirstProject(page);
+    await page.getByRole('tab', { name: 'Сравнение версий' }).click();
+    await expect(page.getByRole('button', { name: /Версия А/ })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('tab', { name: 'Детально' }).click();
+    await expect(actionButton(page, 'exportPdf')).toHaveCount(0);
   });
 
   test('report tab has PDF export for performance report', async ({ page }) => {

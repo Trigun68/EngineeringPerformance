@@ -248,11 +248,13 @@ Persist (не GET): импорт/CRUD ФО и оборудования, смен
 ### 5.5. Поток отчёта планирования
 
 ```
-1. PerformanceReportService.BuildPlanBlock: BuildPlanPerformance (сохранённые часы, Base)
-2. Часы KPI = Forecast GrandTotals.BaseHours (SUM колонок БД)
-3. Z KPI = ComputeWeightedZFromPerformanceRows(planPerformance)
-4. IProjectForecastService.GenerateForecastAsync: суммы stored часов по направлениям; без live N(V) на листьях
+1. PerformanceReportService.BuildPlanBlock: BuildPlanPerformance (часы грида) + PlanningScenarioReportMetrics
+2. Часы KPI = Forecast GrandTotals.BaseHours
+3. Z KPI и PlanZScore направлений = заложенный zBase (ResolvePlanningZ), не live Z грида
+4. Факт: allocated PlannedHours + ComputeWeightedZFromPerformanceRows
 ```
+
+Подробности вкладки: [_doc/features/performance-report.md](../features/performance-report.md).
 
 ### 5.6. Редактирование плановых объёмов
 

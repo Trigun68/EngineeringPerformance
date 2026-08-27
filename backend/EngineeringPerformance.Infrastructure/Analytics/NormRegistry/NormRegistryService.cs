@@ -176,6 +176,12 @@ public sealed class NormRegistryService(
         var health = await HealthCheckAsync(null, cancellationToken);
         var issueNormIds = health.Issues.SelectMany(i => i.NormIds).ToHashSet();
 
+        // Полный справочник нужен, чтобы единица измерения резолвилась с предка по дереву IIC.
+        var directions = await db.IicWorkDirections
+            .AsNoTracking()
+            .Include(d => d.Unit)
+            .ToDictionaryAsync(d => d.Id, cancellationToken);
+
         var norms = await db.IicWorkDirectionNorms
             .AsNoTracking()
             .Include(n => n.WorkDirection)
@@ -193,15 +199,15 @@ public sealed class NormRegistryService(
             if (!includeFuture && status == NormDerivedStatus.Future) continue;
 
             var color = Palette[Math.Abs(n.WorkDirectionId) % Palette.Length];
-            groups[n.WorkDirectionId] = new TimelineGroupDto(
-                n.WorkDirectionId,
-                n.WorkDirection?.Name ?? $"#{n.WorkDirectionId}",
-                color);
+            var groupName = directions.TryGetValue(n.WorkDirectionId, out var dir)
+                ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(dir, directions)
+                : $"#{n.WorkDirectionId}";
+            groups[n.WorkDirectionId] = new TimelineGroupDto(n.WorkDirectionId, groupName, color);
 
             bars.Add(new TimelineBarDto(
                 n.Id,
                 n.WorkDirectionId,
-                n.WorkDirection?.Name ?? $"#{n.WorkDirectionId}",
+                groupName,
                 $"#{n.Id} {n.FormulaType}",
                 color,
                 status,

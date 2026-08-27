@@ -35,7 +35,7 @@ public sealed class ProductivityIndexTrendService(
             : accessible;
 
         var cacheKey =
-            $"prod-index-trend:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:" +
+            $"prod-index-trend:v2:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:" +
             string.Join(',', projectIds.OrderBy(x => x));
 
         var cached = await cache.GetPortfolioAsync<ProductivityIndexTrendResponse>(cacheKey, cancellationToken);
@@ -185,7 +185,11 @@ public sealed class ProductivityIndexTrendService(
         var response = new ProductivityIndexTrendResponse(
             overall,
             byGroup,
-            warnings.Distinct().Take(50).ToList());
+            warnings.Distinct().Take(50).ToList(),
+            calculationEngine.BuildTrendDetailAggregation(
+                ToSamples(overall.Plan),
+                ToSamples(overall.Fact),
+                byGroup.Select(g => new TrendGroupSample(g.GroupId, g.GroupName, ToSamples(g.Fact))).ToList()));
         await cache.SetPortfolioAsync(cacheKey, response, cancellationToken);
         return response;
     }
@@ -196,6 +200,10 @@ public sealed class ProductivityIndexTrendService(
         return new ProductivityIndexTrendResponse(
             new ProductivityIndexGroupDto(0, "Все направления", [], []),
             [],
-            warnings.Distinct().ToList());
+            warnings.Distinct().ToList(),
+            TrendDetailAggregationDto.Empty);
     }
+
+    private static IReadOnlyList<TrendPointSample> ToSamples(IReadOnlyList<ProductivityIndexPointDto> points) =>
+        points.Select(p => new TrendPointSample(p.Date, p.Index, p.WeightHours)).ToList();
 }

@@ -306,7 +306,7 @@ describe('ComparePanel detail load', () => {
       <ComparePanel
         projectId={1}
         workspaceVersions={versions}
-        workspaceCompareVersionAId={7176}
+        workspaceCompareVersionAId={2}
         workspaceCompareVersionBId={3013}
       />,
     );
@@ -318,6 +318,9 @@ describe('ComparePanel detail load', () => {
 
     releaseDetail([detailRow]);
 
+    await waitFor(() => {
+      expect(screen.getByTestId('compare-detail')).toHaveAttribute('data-rows', '1');
+    });
     await waitFor(() => {
       expect(screen.getByTestId('compare-version-differences')).toHaveTextContent(
         'Различия версий: 2,00 ч',

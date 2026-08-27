@@ -173,13 +173,13 @@ public static class QuestPdfReportComposer
                 {
                     c.Item().Text(title).SemiBold().FontSize(ReportVisualTheme.FontH1).FontColor(ReportVisualTheme.Primary);
                     c.Item().PaddingTop(1).Text($"{project} · {versionLabel}")
-                        .FontSize(8.5f).FontColor(ReportVisualTheme.Muted);
+                        .FontSize(8.5f).FontColor(ReportVisualTheme.ContentSecondary);
                 });
                 row.ConstantItem(150).AlignRight().AlignMiddle().Element(e => ComposeKindBadge(e, kind));
             });
             if (extraMeta is { Count: > 0 })
                 col.Item().PaddingTop(2).Text(string.Join("   ·   ", extraMeta.Where(m => !string.IsNullOrWhiteSpace(m))))
-                    .FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    .FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
             col.Item().PaddingTop(6).Height(2).Background(ReportVisualTheme.AccentA);
         });
     }
@@ -192,16 +192,16 @@ public static class QuestPdfReportComposer
             col.Item().PaddingTop(5).Row(row =>
             {
                 row.RelativeItem().Text("Engineering Performance · Confidential")
-                    .FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    .FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
                 row.RelativeItem().AlignCenter().Text(t =>
                 {
-                    t.DefaultTextStyle(x => x.FontSize(7.5f).FontColor(ReportVisualTheme.Muted));
+                    t.DefaultTextStyle(x => x.FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary));
                     t.CurrentPageNumber();
                     t.Span(" / ");
                     t.TotalPages();
                 });
                 row.RelativeItem().AlignRight().Text($"{generatedAtUtc:yyyy-MM-dd HH:mm} MSK")
-                    .FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    .FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
             });
         });
     }
@@ -223,7 +223,7 @@ public static class QuestPdfReportComposer
                     || item.Label.Contains("Интерпрет", StringComparison.OrdinalIgnoreCase);
                 row.RelativeItem().Background(Colors.White).Padding(10).Column(c =>
                 {
-                    c.Item().Text(item.Label.ToUpperInvariant()).FontSize(ReportVisualTheme.FontKpiLabel).FontColor(ReportVisualTheme.Muted);
+                    c.Item().Text(item.Label.ToUpperInvariant()).FontSize(ReportVisualTheme.FontKpiLabel).FontColor(ReportVisualTheme.ContentSecondary);
                     c.Item().PaddingTop(3).Row(r =>
                     {
                         if (isStatus)
@@ -275,7 +275,7 @@ public static class QuestPdfReportComposer
             row.Spacing(10);
             row.RelativeItem().Element(e => ComposePlanFactColumn(e, "ПЛАН", PlanAccent, plan, null));
             row.RelativeItem().Element(e => ComposePlanFactColumn(
-                e, "ФАКТ", fact is null ? ReportVisualTheme.Muted : FactAccent,
+                e, "ФАКТ", fact is null ? ReportVisualTheme.ContentSecondary : FactAccent,
                 fact ?? new PdfPlanFactColumn("Основная версия факта не назначена", "—", "—", "—", "Н/Д"),
                 fact is null ? null : deltaCaption));
         });
@@ -290,18 +290,18 @@ public static class QuestPdfReportComposer
             col.Item().Row(r =>
             {
                 r.RelativeItem().Text(kicker).SemiBold().FontSize(9).FontColor(accentColor);
-                r.RelativeItem().AlignRight().Text(column.VersionLabel).FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                r.RelativeItem().AlignRight().Text(column.VersionLabel).FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
             });
             col.Item().Row(r =>
             {
                 r.RelativeItem().Column(c =>
                 {
-                    c.Item().Text("Трудоёмкость").FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    c.Item().Text("Трудоёмкость").FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
                     c.Item().Text($"{column.Hours} ч").SemiBold().FontSize(17).FontColor(ReportVisualTheme.Primary);
                 });
                 r.RelativeItem().Column(c =>
                 {
-                    c.Item().Text("Z-оценка").FontSize(7.5f).FontColor(ReportVisualTheme.Muted);
+                    c.Item().Text("Z-оценка").FontSize(7.5f).FontColor(ReportVisualTheme.ContentSecondary);
                     c.Item().Text(column.ZScore).SemiBold().FontSize(17)
                         .FontColor(ReportVisualTheme.InterpretationColor(column.Interpretation));
                 });
@@ -309,7 +309,7 @@ public static class QuestPdfReportComposer
             col.Item().Text($"{column.Interpretation}{(string.IsNullOrWhiteSpace(column.Percentile) ? "" : $" · перцентиль {column.Percentile}")}")
                 .FontSize(8.5f).FontColor(ReportVisualTheme.InterpretationColor(column.Interpretation));
             if (!string.IsNullOrWhiteSpace(deltaCaption))
-                col.Item().Text(deltaCaption).FontSize(8).FontColor(ReportVisualTheme.Muted);
+                col.Item().Text(deltaCaption).FontSize(8).FontColor(ReportVisualTheme.ContentSecondary);
         });
     }
 
@@ -364,7 +364,7 @@ public static class QuestPdfReportComposer
             row.ConstantItem(36).AlignCenter().Column(c =>
             {
                 c.Item().AlignCenter().Text(ReportVisualTheme.GlyphUp).FontSize(10).FontColor(ReportVisualTheme.Primary);
-                c.Item().AlignCenter().Text($"Z = {z:N2}").FontSize(7).FontColor(ReportVisualTheme.Muted);
+                c.Item().AlignCenter().Text($"Z = {PdfNumberFormat.Z(z)}").FontSize(7).FontColor(ReportVisualTheme.ContentSecondary);
             });
             row.RelativeItem((float)right);
         });
@@ -391,7 +391,7 @@ public static class QuestPdfReportComposer
             {
                 row.Spacing(2);
                 foreach (var (_, range, _, _) in ZScoreBands)
-                    row.RelativeItem().AlignCenter().Text(range).FontSize(7).FontColor(ReportVisualTheme.Muted);
+                    row.RelativeItem().AlignCenter().Text(range).FontSize(7).FontColor(ReportVisualTheme.ContentSecondary);
             });
         });
     }
@@ -432,9 +432,9 @@ public static class QuestPdfReportComposer
             if (pngBytes is { Length: > 0 })
                 col.Item().Image(pngBytes).FitWidth();
             else
-                col.Item().Text("Нет данных для графика").Italic().FontColor(ReportVisualTheme.Muted);
+                col.Item().Text("Нет данных для графика").Italic().FontColor(ReportVisualTheme.ContentSecondary);
             if (!string.IsNullOrWhiteSpace(caption))
-                col.Item().Text(caption).FontSize(ReportVisualTheme.FontCaption).FontColor(ReportVisualTheme.Muted);
+                col.Item().Text(caption).FontSize(ReportVisualTheme.FontCaption).FontColor(ReportVisualTheme.ContentSecondary);
         });
     }
 
@@ -447,7 +447,7 @@ public static class QuestPdfReportComposer
         PdfCalloutKind.Risk => (ReportVisualTheme.Negative, ReportVisualTheme.RiskBg, ReportVisualTheme.GlyphWarning),
         PdfCalloutKind.Attention => (ReportVisualTheme.Neutral, ReportVisualTheme.AttentionBg, ReportVisualTheme.GlyphWarning),
         PdfCalloutKind.Strength => (ReportVisualTheme.Positive, ReportVisualTheme.StrengthBg, ReportVisualTheme.GlyphCheck),
-        _ => (ReportVisualTheme.Muted, ReportVisualTheme.DataBg, ReportVisualTheme.GlyphDot),
+        _ => (ReportVisualTheme.ContentSecondary, ReportVisualTheme.DataBg, ReportVisualTheme.GlyphDot),
     };
 
     public static void ComposeCalloutBlock(IContainer container, PdfCallout callout)
@@ -459,7 +459,7 @@ public static class QuestPdfReportComposer
             row.RelativeItem().Column(col =>
             {
                 col.Item().Text(callout.Title).SemiBold().FontSize(9.5f).FontColor(ReportVisualTheme.Primary);
-                col.Item().PaddingTop(2).Text(callout.Detail).FontSize(8.5f).FontColor(ReportVisualTheme.Muted);
+                col.Item().PaddingTop(2).Text(callout.Detail).FontSize(8.5f).FontColor(ReportVisualTheme.ContentSecondary);
             });
         });
     }
@@ -485,16 +485,46 @@ public static class QuestPdfReportComposer
         string[] headers,
         IEnumerable<string[]> rows,
         int maxRows = ReportVisualTheme.TableMaxRowsUnlimited,
+        int? interpretationColumnIndex = null) =>
+        ComposeTable(
+            container,
+            sectionTitle,
+            headers.Select(h => PdfTableColumn.Text(h)).ToArray(),
+            rows,
+            maxRows,
+            interpretationColumnIndex);
+
+    public static void ComposeTable(
+        IContainer container,
+        string sectionTitle,
+        IReadOnlyList<PdfTableColumn> columns,
+        IEnumerable<string[]> rows,
+        int maxRows = ReportVisualTheme.TableMaxRowsUnlimited,
         int? interpretationColumnIndex = null)
     {
         var allRows = rows.Select(r => new HierarchicalPdfRow(0, r)).ToList();
-        ComposeHierarchicalTable(container, sectionTitle, headers, allRows, maxRows, interpretationColumnIndex);
+        ComposeHierarchicalTable(container, sectionTitle, columns, allRows, maxRows, interpretationColumnIndex);
     }
 
     public static void ComposeHierarchicalTable(
         IContainer container,
         string sectionTitle,
         string[] headers,
+        IEnumerable<HierarchicalPdfRow> rows,
+        int maxRows = ReportVisualTheme.TableMaxRowsUnlimited,
+        int? interpretationColumnIndex = null) =>
+        ComposeHierarchicalTable(
+            container,
+            sectionTitle,
+            headers.Select(h => PdfTableColumn.Text(h)).ToArray(),
+            rows,
+            maxRows,
+            interpretationColumnIndex);
+
+    public static void ComposeHierarchicalTable(
+        IContainer container,
+        string sectionTitle,
+        IReadOnlyList<PdfTableColumn> columns,
         IEnumerable<HierarchicalPdfRow> rows,
         int maxRows = ReportVisualTheme.TableMaxRowsUnlimited,
         int? interpretationColumnIndex = null)
@@ -510,27 +540,37 @@ public static class QuestPdfReportComposer
             {
                 table.ColumnsDefinition(cols =>
                 {
-                    foreach (var _ in headers)
-                        cols.RelativeColumn();
+                    foreach (var column in columns)
+                        cols.RelativeColumn(column.RelativeWidth);
                 });
                 table.Header(header =>
                 {
-                    foreach (var h in headers)
-                        header.Cell().Background(Colors.White).BorderBottom(2).BorderColor(ReportVisualTheme.AccentA)
-                            .PaddingVertical(5).PaddingHorizontal(4)
-                            .Text(h).SemiBold().FontSize(8).FontColor(ReportVisualTheme.Primary);
+                    foreach (var column in columns)
+                    {
+                        var fill = ReportVisualTheme.ScenarioFill(column.Tone);
+                        var cell = header.Cell()
+                            .Background(string.IsNullOrEmpty(fill) ? Colors.White : fill)
+                            .BorderBottom(2).BorderColor(ReportVisualTheme.AccentA)
+                            .PaddingVertical(5).PaddingHorizontal(4);
+                        if (column.Numeric)
+                            cell = cell.AlignRight();
+                        cell.Text(column.Header).SemiBold().FontSize(8).FontColor(ReportVisualTheme.Primary);
+                    }
                 });
                 for (var rowIndex = 0; rowIndex < data.Count; rowIndex++)
                 {
                     var row = data[rowIndex];
                     var rowBg = rowIndex % 2 == 1 ? Color.FromHex(ReportVisualTheme.SectionBg) : Colors.White;
-                    for (var i = 0; i < headers.Length; i++)
+                    for (var i = 0; i < columns.Count; i++)
                     {
+                        var column = columns[i];
                         var raw = i < row.Cells.Length ? row.Cells[i] ?? "—" : "—";
-                        var cell = table.Cell().Background(rowBg).BorderBottom(0.5f).BorderColor(ReportVisualTheme.RuleColor)
+                        var toneFill = ReportVisualTheme.ScenarioFill(column.Tone);
+                        var bg = string.IsNullOrEmpty(toneFill) ? rowBg : Color.FromHex(toneFill);
+                        var cell = table.Cell().Background(bg).BorderBottom(0.5f).BorderColor(ReportVisualTheme.RuleColor)
                             .PaddingVertical(4).PaddingHorizontal(4);
                         var isInterp = interpretationColumnIndex == i
-                            || (row.InterpretationText is not null && i == headers.Length - 1 && interpretationColumnIndex is null);
+                            || (row.InterpretationText is not null && i == columns.Count - 1 && interpretationColumnIndex is null);
 
                         if (i == 0 && row.Level > 0)
                         {
@@ -541,6 +581,10 @@ public static class QuestPdfReportComposer
                             var color = ReportVisualTheme.InterpretationColor(row.InterpretationText ?? raw);
                             cell.Element(e => ComposeInterpretationChip(e, raw, color));
                         }
+                        else if (column.Numeric)
+                        {
+                            cell.AlignRight().Text(raw).FontSize(8).FontColor(ReportVisualTheme.Primary);
+                        }
                         else
                         {
                             cell.Text(raw).FontSize(8).FontColor(ReportVisualTheme.Primary);
@@ -549,9 +593,10 @@ public static class QuestPdfReportComposer
                 }
             });
             if (maxRows > 0 && allRows.Count > maxRows)
-                col.Item().Text($"Показаны первые {maxRows} из {allRows.Count} строк.").FontSize(7).Italic();
+                col.Item().Text($"Показаны первые {maxRows} из {allRows.Count} строк.").FontSize(7).Italic()
+                    .FontColor(ReportVisualTheme.ContentSecondary);
             else if (allRows.Count > 0)
-                col.Item().Text($"Всего строк: {allRows.Count}.").FontSize(7).FontColor(ReportVisualTheme.Muted);
+                col.Item().Text($"Всего строк: {allRows.Count}.").FontSize(7).FontColor(ReportVisualTheme.ContentSecondary);
         });
     }
 

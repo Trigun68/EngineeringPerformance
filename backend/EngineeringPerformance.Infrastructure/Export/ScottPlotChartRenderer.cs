@@ -55,8 +55,8 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
         plot.Axes.Left.Label.FontSize = 10.5f;
         plot.Axes.Bottom.TickLabelStyle.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
         plot.Axes.Left.TickLabelStyle.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
-        plot.Axes.Bottom.Label.ForeColor = Color.FromHex(ReportVisualTheme.Muted);
-        plot.Axes.Left.Label.ForeColor = Color.FromHex(ReportVisualTheme.Muted);
+        plot.Axes.Bottom.Label.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
+        plot.Axes.Left.Label.ForeColor = Color.FromHex(ReportVisualTheme.Primary);
         plot.Axes.Color(Color.FromHex(ReportVisualTheme.RuleColor));
 
         if (!string.IsNullOrWhiteSpace(opts.XAxisLabel))
@@ -328,9 +328,9 @@ public sealed class ScottPlotChartRenderer : IChartImageRenderer
     {
         var items = new[]
         {
-            new ChartBarItem("Базовый", baseHours, ReportVisualTheme.AccentA),
-            new ChartBarItem("Оптимист.", optimisticHours, ReportVisualTheme.Positive),
-            new ChartBarItem("Пессимист.", pessimisticHours, ReportVisualTheme.Negative),
+            new ChartBarItem(PdfScenarioLabels.Optimistic, optimisticHours, ReportVisualTheme.ScenarioOptimisticBar),
+            new ChartBarItem(PdfScenarioLabels.Base, baseHours, ReportVisualTheme.ScenarioBaseBar),
+            new ChartBarItem(PdfScenarioLabels.Pessimistic, pessimisticHours, ReportVisualTheme.ScenarioPessimisticBar),
         };
         return RenderVerticalBarChart(
             title,

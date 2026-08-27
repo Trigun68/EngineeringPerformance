@@ -93,6 +93,12 @@ export interface PerformanceReportHistoryPoint {
   weightedZScore: number | null;
   totalLaborHours: number | null;
   normSnapshotKey?: string | null;
+  optimisticZScore?: number | null;
+  optimisticLaborHours?: number | null;
+  baseZScore?: number | null;
+  baseLaborHours?: number | null;
+  pessimisticZScore?: number | null;
+  pessimisticLaborHours?: number | null;
 }
 
 export interface PerformanceReportKeyDiscipline {

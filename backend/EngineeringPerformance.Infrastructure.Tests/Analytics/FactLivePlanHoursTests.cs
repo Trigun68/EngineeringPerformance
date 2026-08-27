@@ -391,5 +391,43 @@ public sealed class FactLivePlanHoursTests
         public PlanningZParameters ResolvePlanningZ(
             IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection, int workDirectionId) =>
             inner.ResolvePlanningZ(planningZByDirection, workDirectionId);
+
+        public decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows) =>
+            inner.ComputeProductivityIndex(performanceRows);
+
+        public IReadOnlyList<MonthlyTrendBucketDto> BucketTrendPointsByMonth(IEnumerable<TrendPointSample> points) =>
+            inner.BucketTrendPointsByMonth(points);
+
+        public PeriodKpiDto ComputePeriodKpi(IReadOnlyList<MonthlyTrendBucketDto> buckets) =>
+            inner.ComputePeriodKpi(buckets);
+
+        public IReadOnlyList<WaterfallStepDto>? BuildFactorWaterfall(
+            IReadOnlyList<TrendGroupSample> groups,
+            decimal? overallDelta,
+            int topCount = 3) =>
+            inner.BuildFactorWaterfall(groups, overallDelta, topCount);
+
+        public TrendDetailAggregationDto BuildTrendDetailAggregation(
+            IReadOnlyList<TrendPointSample> planPoints,
+            IReadOnlyList<TrendPointSample> factPoints,
+            IReadOnlyList<TrendGroupSample> factGroups,
+            int waterfallTopCount = 3) =>
+            inner.BuildTrendDetailAggregation(planPoints, factPoints, factGroups, waterfallTopCount);
+
+        public HoursBridgeResultDto ComputeHoursBridge(
+            IReadOnlyList<PerformanceRowDto> planRows,
+            IReadOnlyList<PerformanceRowDto> factRows) =>
+            inner.ComputeHoursBridge(planRows, factRows);
+
+        public HoursBridgeResultDto CombineHoursBridges(IEnumerable<HoursBridgeResultDto> parts) =>
+            inner.CombineHoursBridges(parts);
+
+        public IReadOnlyList<CumulativeHoursPointDto> ComputeCumulativeHours(IEnumerable<HoursAtDateSample> points) =>
+            inner.ComputeCumulativeHours(points);
+
+        public IReadOnlyList<ZeroBaselineBarDto> BuildZeroBaselineBars(
+            IReadOnlyList<ZeroBaselineSample> samples,
+            int topCount = 12) =>
+            inner.BuildZeroBaselineBars(samples, topCount);
     }
 }

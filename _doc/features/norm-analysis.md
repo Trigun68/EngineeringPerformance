@@ -1,6 +1,6 @@
 # Анализ норм — реестр и health-check
 
-**Дата:** 2026-08-04  
+**Дата:** 2026-08-27  
 **Код:** `backend/.../Analytics/NormRegistry/*`, `client/src/features/analytics/norm-analysis/*`
 
 ## Назначение
@@ -50,7 +50,10 @@ Redis (`IDistributedCache`): ключи с маркером инвалидаци
 
 ## UI
 
-- Фильтры (debounce 400 ms), бейджи Error/Warning/Info, SVG-таймлайн, AG Grid (`DataTable`), карточка с превью кривой (`NormBandChart`).
+- Фильтры (debounce 400 ms), бейджи Error/Warning/Info, таймлайн Ганта (одна строка на группу IIC: слева `код — наименование (ед.)`, справа периоды с зазором; тёмная обводка только у блока периода), MUI-таблица / heatmap, карточка с превью кривой (`NormBandChart`).
+- Ось таймлайна = выбранный период «Отчёт за»; сегменты обрезаются по его границам.
+- Маркер «Сегодня» рисуется только на колонке дорожек и только если дата внутри диапазона оси (не на краю). Подписи оси — начало / конец / «сегодня».
+- `GET /timeline` отдаёт `groupName` уже в каноническом формате (`IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit`).
 - «Открыть в справочнике» → `/references/iic-norms?workDirectionId=&normId=`.
 - «Закрыть период» → confirm → POST archive.
 

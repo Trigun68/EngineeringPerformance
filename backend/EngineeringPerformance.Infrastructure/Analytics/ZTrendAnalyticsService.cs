@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Projects;
+using EngineeringPerformance.Application.Services;
+using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +17,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
     private readonly IProjectVisibilityService _visibility;
     private readonly IFactAssessmentPipeline _pipeline;
     private readonly IZTrendEngine _engine;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
     private readonly IProjectAnalyticsCache _cache;
     private readonly AnalyticsTrendsOptions _options;
 
@@ -24,6 +27,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         IProjectVisibilityService visibility,
         IFactAssessmentPipeline pipeline,
         IZTrendEngine engine,
+        IPerformanceCalculationEngine calculationEngine,
         IProjectAnalyticsCache cache,
         IOptions<AnalyticsTrendsOptions> options)
     {
@@ -32,6 +36,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         _visibility = visibility;
         _pipeline = pipeline;
         _engine = engine;
+        _calculationEngine = calculationEngine;
         _cache = cache;
         _options = options.Value;
     }
@@ -72,7 +77,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
 
         // Портфельное поколение в ключе: мутация любого проекта сбрасывает выборку без TTL.
         var cacheKey =
-            $"ztrends:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
+            $"ztrends:v3:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
             $"{string.Join(',', projectIds.OrderBy(x => x))}:" +
             $"{string.Join(',', (request.WorkDirectionIds ?? []).OrderBy(x => x))}";
 
@@ -152,6 +157,9 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var overallFact = new List<ZTrendRawPoint>();
         var byGroupPlan = new Dictionary<int, List<ZTrendRawPoint>>();
         var byGroupFact = new Dictionary<int, List<ZTrendRawPoint>>();
+        var planPerfByProject = new Dictionary<int, IReadOnlyList<PerformanceRowDto>>();
+        var factPerfByProject = new Dictionary<int, IReadOnlyList<PerformanceRowDto>>();
+        var factHoursSamples = new List<HoursAtDateSample>();
 
         var directionFilter = request.WorkDirectionIds is { Length: > 0 }
             ? request.WorkDirectionIds.ToHashSet()
@@ -176,6 +184,16 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 : string.Join('-', versionSnaps.OrderBy(s => s.WorkDirectionId).Select(s => s.NormId));
 
             var weight = Math.Max(0m, assessment.Summary.TotalFactLaborHours ?? 0m);
+
+            if (version.Direction == AnalysisDirection.Fact)
+            {
+                factPerfByProject[version.ProjectId] = assessment.Performance;
+                factHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, weight, version.VersionName));
+            }
+            else if (version.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast)
+            {
+                planPerfByProject[version.ProjectId] = assessment.Performance;
+            }
 
             var clippedOverall = _engine.ClipZ(assessment.Summary.WeightedZScore, _options.ZClipMax, out var overallFlag);
             if (assessment.Summary.WeightedZScore is null)
@@ -326,9 +344,84 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 kv.Value.WorkDirectionId)));
 
         var distinctWarnings = warnings.Distinct().Take(50).ToList();
-        var response = new ZTrendResponse(overall, byGroup, legend, distinctWarnings);
+        var detail = _calculationEngine.BuildTrendDetailAggregation(
+            ToSamples(overall.Plan),
+            ToSamples(overall.Fact),
+            byGroup.Select(g => new TrendGroupSample(g.GroupId, g.GroupName, ToSamples(g.Fact))).ToList());
+
+        var disciplineBridge = BuildDisciplineBridge(planPerfByProject, factPerfByProject, directionById);
+        var groupZeroBars = BuildGroupZeroBars(byGroup);
+        var sCurve = _calculationEngine.ComputeCumulativeHours(factHoursSamples);
+        var response = new ZTrendResponse(
+            overall,
+            byGroup,
+            legend,
+            distinctWarnings,
+            detail,
+            disciplineBridge,
+            groupZeroBars,
+            sCurve);
         await CacheAsync(cacheKey, response, cancellationToken);
         return response;
+    }
+
+    private HoursBridgeResultDto BuildDisciplineBridge(
+        IReadOnlyDictionary<int, IReadOnlyList<PerformanceRowDto>> planByProject,
+        IReadOnlyDictionary<int, IReadOnlyList<PerformanceRowDto>> factByProject,
+        IReadOnlyDictionary<int, IicWorkDirection> directionById)
+    {
+        var parts = new List<HoursBridgeResultDto>();
+        foreach (var projectId in planByProject.Keys)
+        {
+            if (!factByProject.TryGetValue(projectId, out var factRows))
+                continue;
+            parts.Add(_calculationEngine.ComputeHoursBridge(planByProject[projectId], factRows));
+        }
+
+        var combined = _calculationEngine.CombineHoursBridges(parts);
+        if (combined.Lines.Count == 0)
+            return combined;
+
+        var lines = combined.Lines
+            .Select(l => l with
+            {
+                GroupName = directionById.TryGetValue(l.GroupId, out var d)
+                    ? IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit(d, directionById)
+                    : l.GroupName,
+            })
+            .ToList();
+        return new HoursBridgeResultDto(lines, combined.TotalVolumeEffect, combined.TotalProductivityEffect);
+    }
+
+    private IReadOnlyList<GroupZeroBaselineDto> BuildGroupZeroBars(IReadOnlyList<ZTrendGroupDto> byGroup)
+    {
+        var result = new List<GroupZeroBaselineDto>();
+        foreach (var group in byGroup)
+        {
+            var points = group.Fact.Segments
+                .SelectMany(s => s.Points)
+                .OrderBy(p => p.Date)
+                .ToList();
+            var last = points.LastOrDefault(p => p.Contributions is { Count: > 0 });
+            last ??= points.LastOrDefault();
+            if (last?.Contributions is null || last.Contributions.Count == 0)
+                continue;
+
+            var samples = last.Contributions
+                .Select(c => new ZeroBaselineSample(
+                    string.IsNullOrWhiteSpace(c.ProjectName)
+                        ? c.ProjectCode
+                        : $"{c.ProjectCode} — {c.ProjectName}",
+                    c.ZScore is null ? null : (decimal)c.ZScore.Value,
+                    (decimal)c.Weight))
+                .ToList();
+            var bars = _calculationEngine.BuildZeroBaselineBars(samples);
+            if (bars.Count == 0)
+                continue;
+            result.Add(new GroupZeroBaselineDto(group.GroupId, group.GroupName, bars));
+        }
+
+        return result;
     }
 
     private Dictionary<string, string> BuildColorMap(IReadOnlyList<ZTrendRawPoint> allPoints)
@@ -417,8 +510,18 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             new ZTrendGroupDto(0, "Общий тренд", emptySeries, emptyFact),
             [],
             [],
-            warnings.Distinct().ToList());
+            warnings.Distinct().ToList(),
+            TrendDetailAggregationDto.Empty);
     }
+
+    private static IReadOnlyList<TrendPointSample> ToSamples(ZTrendSeriesDto series) =>
+        series.Segments
+            .SelectMany(seg => seg.Points)
+            .Select(p => new TrendPointSample(
+                p.Date,
+                p.ZScore is null ? null : (decimal)p.ZScore.Value,
+                (decimal)p.Weight))
+            .ToList();
 
     private Task CacheAsync(string key, ZTrendResponse response, CancellationToken cancellationToken) =>
         _cache.SetPortfolioAsync(key, response, cancellationToken);

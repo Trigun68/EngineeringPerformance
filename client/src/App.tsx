@@ -45,8 +45,11 @@ const AccessRightsPage = lazy(() =>
 const SystemSettingsPage = lazy(() =>
   import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
 );
-// Дизайн-превью PDF-отчётов — только для администраторов, без AppLayout.
+// Дизайн-превью — только для администраторов, без AppLayout.
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
+const TrendDetailMockup = lazy(() => import('./pages/dev/TrendDetailMockup'));
+const FactNormAnalysisMockup = lazy(() => import('./pages/dev/FactNormAnalysisMockup'));
+const NormAnalysisMockup = lazy(() => import('./pages/dev/NormAnalysisMockup'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -129,6 +132,36 @@ export default function App() {
               <AdminRouteGuard>
                 <Suspense fallback={null}>
                   <PdfDesignMockups />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trend-detail-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendDetailMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/fact-norm-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <FactNormAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/norm-analysis-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <NormAnalysisMockup />
                 </Suspense>
               </AdminRouteGuard>
             )}
