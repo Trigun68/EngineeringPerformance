@@ -76,6 +76,8 @@ function PageFrame({
   );
 }
 
+<<<<<<< HEAD
+=======
 // Точное зеркало ReportVisualTheme.ReportKindLabel / ReportKindColor.
 const KIND_META = {
   forecast: { label: 'ПРОГНОЗ', color: theme.accentA },
@@ -85,6 +87,7 @@ const KIND_META = {
   combined: { label: 'СВОДНЫЙ ОТЧЁТ', color: theme.accentDark },
 } as const;
 
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 function KindBadge({ label, color }: { label: string; color: string }) {
   return (
     <Box
@@ -558,6 +561,8 @@ function ChartPlaceholder({ title }: { title: string }) {
   );
 }
 
+<<<<<<< HEAD
+=======
 function ChartLinePlaceholder({
   title,
   caption,
@@ -731,6 +736,7 @@ function CombinedContentPageMockup() {
   );
 }
 
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 function CompareContentPageMockup() {
   return (
     <PageFrame width={PAGE_W_L} height={PAGE_H_L} label="Контентная страница · Сравнение версий · A4 ландшафт">
@@ -800,6 +806,11 @@ function Swatch({ label, hex }: { label: string; hex: string }) {
   );
 }
 
+<<<<<<< HEAD
+export default function PdfDesignMockups() {
+  return (
+    <Box sx={{ bgcolor: '#F1F4F7', minHeight: '100vh', py: 6 }}>
+=======
 function TabSection({
   tabName,
   reportNames,
@@ -836,16 +847,25 @@ export default function PdfDesignMockups() {
         py: 6,
       }}
     >
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       <Box sx={{ maxWidth: 1300, mx: 'auto', px: 3 }}>
         <Typography sx={{ fontFamily: FONT, fontSize: 26, fontWeight: 700, color: '#1B2A38' }}>
           Дизайн-система PDF-отчётов — «Executive Technical»
         </Typography>
+<<<<<<< HEAD
+        <Typography sx={{ fontFamily: FONT, fontSize: 14, color: '#7B8794', mt: 0.5, maxWidth: 720 }}>
+          Единый визуальный стиль для всех 10 PDF-отчётов: глубокий графитовый + инженерный синий акцент,
+          полноценная обложка, структурированный хедер/футер, KPI-карточки, шкала Z-score с маркером, краткие
+          авто-выводы (callout) и стилизованные иерархические таблицы. Ниже — статичные макеты в масштабе, точно
+          повторяющие композицию QuestPDF-документа.
+=======
         <Typography sx={{ fontFamily: FONT, fontSize: 14, color: '#7B8794', mt: 0.5, maxWidth: 780 }}>
           Единый визуальный стиль для всех 10 PDF-отчётов, доступных на вкладках страницы «Проекты»: глубокий
           графитовый + инженерный синий акцент, полноценная обложка, структурированный хедер/футер, KPI-карточки,
           шкала Z-score с маркером, краткие авто-выводы (callout) и стилизованные иерархические таблицы. Ниже —
           статичные макеты в масштабе, точно повторяющие композицию QuestPDF-документа; обложка и хедер/футер
           общие для всех типов — различается только бейдж, заголовок и содержимое страницы.
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         </Typography>
 
         <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '10px', p: 2.5, mt: 4, boxShadow: '0 1px 0 rgba(16,24,31,0.06)' }}>
@@ -863,6 +883,21 @@ export default function PdfDesignMockups() {
           </Stack>
         </Box>
 
+<<<<<<< HEAD
+        <Stack
+          direction="row"
+          spacing={5}
+          sx={{ mt: 5, flexWrap: 'wrap', justifyContent: 'center' }}
+          useFlexGap
+        >
+          <CoverPageMockup />
+          <FactContentPageMockup />
+        </Stack>
+
+        <Stack sx={{ mt: 5, alignItems: 'center' }}>
+          <CompareContentPageMockup />
+        </Stack>
+=======
         <Box sx={{ bgcolor: '#FFFFFF', borderRadius: '10px', p: 2.5, mt: 3, boxShadow: '0 1px 0 rgba(16,24,31,0.06)' }}>
           <Typography sx={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#1B2A38', letterSpacing: 0.5, mb: 1.5 }}>
             БЕЙДЖИ ТИПОВ ОТЧЁТА (обложка и хедер каждой страницы)
@@ -907,6 +942,7 @@ export default function PdfDesignMockups() {
         <TabSection tabName="Проекты → Сводный отчёт PDF" reportNames="Сводный отчёт (прогноз + факт + сравнение + тренд)">
           <CombinedContentPageMockup />
         </TabSection>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       </Box>
     </Box>
   );

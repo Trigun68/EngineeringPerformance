@@ -19,6 +19,8 @@ export async function exportFactSummaryPdf(projectId: number, versionId: number)
 export async function exportFactFacilityPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/fact-facility/pdf`,
+<<<<<<< HEAD
+=======
   );
   triggerBrowserDownload(blob, filename);
 }
@@ -27,6 +29,7 @@ export async function exportFactFacilityPdf(projectId: number, versionId: number
 export async function exportProjectReportPdf(projectId: number, versionId: number): Promise<void> {
   const { blob, filename } = await downloadBlob(
     `/projects/${projectId}/versions/${versionId}/export/report/pdf`,
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   );
   triggerBrowserDownload(blob, filename);
 }

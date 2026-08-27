@@ -64,13 +64,20 @@ describe('VersionTrend', () => {
     const fact = svg.querySelectorAll('circle[data-series="fact"]');
     expect(plan).toHaveLength(2);
     expect(fact).toHaveLength(1);
+<<<<<<< HEAD
+    expect(plan[0].getAttribute('fill')).toBe('var(--ep-report-primary)');
+    expect(fact[0].getAttribute('fill')).toBe('var(--ep-report-perf-critical)');
+=======
     expect(plan[0].getAttribute('fill')).toBe('var(--ep-report-accent-plan)');
     expect(fact[0].getAttribute('fill')).toBe('var(--ep-report-accent-fact)');
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     expect(plan[1].getAttribute('data-snapshot-changed')).toBe('true');
     const x1 = Number(plan[0].getAttribute('cx'));
     const x2 = Number(plan[1].getAttribute('cx'));
     expect(x2).toBeGreaterThan(x1);
   });
+<<<<<<< HEAD
+=======
 
   it('renders X-axis dates in strict chronological order', () => {
     render(
@@ -101,4 +108,5 @@ describe('VersionTrend', () => {
       .map((el) => el.textContent);
     expect(dates).toEqual(['01.01.2026', '01.03.2026', '01.06.2026']);
   });
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 });

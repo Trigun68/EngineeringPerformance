@@ -5,18 +5,27 @@ import BusinessIcon from '@mui/icons-material/Business';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import type { Project } from '../../../../types/project';
 import type { ProjectVersion } from '../../../../api/projectVersionsApi';
+<<<<<<< HEAD
+=======
 import { ExportActionButton } from '../../../../components/export/ExportActionButton';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { DIRECTION_LABEL } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
 interface ReportHeaderProps {
   project: Project;
   version: ProjectVersion;
+<<<<<<< HEAD
+}
+
+export function ReportHeader({ project, version }: ReportHeaderProps) {
+=======
   onExportPdf?: () => void;
   exporting?: boolean;
 }
 
 export function ReportHeader({ project, version, onExportPdf, exporting }: ReportHeaderProps) {
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const versionDate = version.createdAt
     ? new Date(version.createdAt).toLocaleDateString('ru-RU')
     : null;
@@ -40,7 +49,11 @@ export function ReportHeader({ project, version, onExportPdf, exporting }: Repor
           >
             <AssessmentIcon fontSize="small" />
           </Box>
+<<<<<<< HEAD
+          <Box>
+=======
           <Box sx={{ flex: 1, minWidth: 0 }}>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
             <Typography
               variant="caption"
               sx={{ color: wpColors.muted, letterSpacing: 0.4, textTransform: 'uppercase', fontWeight: 600 }}
@@ -51,6 +64,8 @@ export function ReportHeader({ project, version, onExportPdf, exporting }: Repor
               Отчёт по инженерной производительности
             </Typography>
           </Box>
+<<<<<<< HEAD
+=======
           {onExportPdf && (
             <ExportActionButton
               kind="pdf"
@@ -60,6 +75,7 @@ export function ReportHeader({ project, version, onExportPdf, exporting }: Repor
               data-testid="report-export-pdf"
             />
           )}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         </Stack>
 
         <Stack

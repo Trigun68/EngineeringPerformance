@@ -12,11 +12,14 @@ async function openReportTab(page: import('@playwright/test').Page) {
   await expect(reportTab).toBeVisible({ timeout: 15_000 });
   await reportTab.click();
 
+<<<<<<< HEAD
+=======
   // Прежняя сводная живёт на третьей под-вкладке (оставлена для отката).
   const legacyTab = page.getByTestId('report-legacy-tab');
   await expect(legacyTab).toBeVisible({ timeout: 15_000 });
   await legacyTab.click();
 
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const panel = page.getByTestId('performance-report-panel');
   await expect(panel).toBeVisible({ timeout: 40_000 });
   // Данные отчёта подгрузились — PDF активен.

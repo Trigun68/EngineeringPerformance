@@ -3,9 +3,25 @@ import {
   Alert,
   Box,
   Chip,
+<<<<<<< HEAD
+  IconButton,
+  LinearProgress,
+  Paper,
+  Skeleton,
+  Stack,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+=======
   Stack,
   Typography,
 } from '@mui/material';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import type { ColDef } from 'ag-grid-community';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { ACTION_LABELS } from '../../../constants/actionLabels';
@@ -17,6 +33,10 @@ import {
   fetchReferenceFormulas,
   runFactNormAnalysis,
   type Accuracy,
+<<<<<<< HEAD
+  type Confidence,
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   type FactNormAnalysisResponse,
   type NormComparison,
   type NormSuggestion,
@@ -26,9 +46,16 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { AccuracyBadge } from './AccuracyBadge';
+<<<<<<< HEAD
+import { NormRevisionDialog } from './NormRevisionDialog';
+import { FactVsNormChart } from './FactVsNormChart';
+import { ProjectPickerDialog } from './ProjectPickerDialog';
+import { deltaHeatBackground, severityColor, severityLabel, severityRatio } from './severity';
+=======
 import { CreateNormFromSuggestionDialog } from './CreateNormFromSuggestionDialog';
 import { FactVsNormChart } from './FactVsNormChart';
 import { ProjectPickerDialog } from './ProjectPickerDialog';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   ChangeFormulaType: 'Сменить формулу',
@@ -44,6 +71,27 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
   InsufficientData: 'default',
 };
 
+<<<<<<< HEAD
+const CONFIDENCE_LABEL: Record<Confidence, string> = {
+  Low: 'Низкая',
+  Medium: 'Средняя',
+  High: 'Высокая',
+};
+
+// Требующие внимания вердикты идут первыми, чтобы аналитик сразу видел проблемные группы.
+const VERDICT_PRIORITY: Record<Verdict, number> = {
+  ChangeFormulaType: 0,
+  AdjustParameters: 1,
+  InsufficientData: 2,
+  NormIsActual: 3,
+};
+
+function sortByAttention(comparisons: NormComparison[]): NormComparison[] {
+  return [...comparisons].sort((a, b) => VERDICT_PRIORITY[a.verdict] - VERDICT_PRIORITY[b.verdict]);
+}
+
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 const FACT_NORM_PROJECTS_PREF_KEY = 'analytics.factNorm.projectIds.v1';
 
 interface Props {
@@ -63,7 +111,14 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
   const [selected, setSelected] = useState<NormComparison | null>(null);
   const [formulas, setFormulas] = useState<ReferenceFormula[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+<<<<<<< HEAD
+  const [dialogRow, setDialogRow] = useState<NormComparison | null>(null);
   const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
+  // Клик по KPI-карточке фильтрует таблицу; 'all' — фильтр не применён.
+  const [kpiFilter, setKpiFilter] = useState<'all' | 'actual' | 'attention' | 'insufficient'>('all');
+=======
+  const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -122,7 +177,11 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         ac.signal,
       );
       setResult(data);
+<<<<<<< HEAD
+      setSelected(sortByAttention(data.comparisons)[0] ?? null);
+=======
       setSelected(data.comparisons[0] ?? null);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     } catch (e) {
       if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') {
         return;
@@ -206,12 +265,93 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     return map;
   }, [result]);
 
+<<<<<<< HEAD
+  const sortedComparisons = useMemo(
+    () => sortByAttention(result?.comparisons ?? []),
+    [result],
+  );
+
+  const filteredComparisons = useMemo(() => {
+    if (kpiFilter === 'all') return sortedComparisons;
+    if (kpiFilter === 'actual') return sortedComparisons.filter((c) => c.verdict === 'NormIsActual');
+    if (kpiFilter === 'insufficient') {
+      return sortedComparisons.filter((c) => c.verdict === 'InsufficientData');
+    }
+    return sortedComparisons.filter(
+      (c) => c.verdict === 'ChangeFormulaType' || c.verdict === 'AdjustParameters',
+    );
+  }, [sortedComparisons, kpiFilter]);
+
+  const summary = useMemo(() => {
+    const comparisons = result?.comparisons ?? [];
+    const total = comparisons.length;
+    const actual = comparisons.filter((c) => c.verdict === 'NormIsActual').length;
+    const attention = comparisons.filter(
+      (c) => c.verdict === 'ChangeFormulaType' || c.verdict === 'AdjustParameters',
+    ).length;
+    const insufficient = comparisons.filter((c) => c.verdict === 'InsufficientData').length;
+    const hasCriticalAttention = comparisons.some((c) => c.verdict === 'ChangeFormulaType');
+    return { total, actual, attention, insufficient, hasCriticalAttention };
+  }, [result]);
+
+  const kpiCards: Array<{
+    key: string;
+    filterKey: 'all' | 'actual' | 'attention' | 'insufficient';
+    label: string;
+    value: number;
+    icon: ReactNode;
+    color: string;
+  }> = [
+    {
+      key: 'total',
+      filterKey: 'all',
+      label: 'Групп проверено',
+      value: summary.total,
+      icon: <AssessmentOutlinedIcon fontSize="small" />,
+      color: 'text.secondary',
+    },
+    {
+      key: 'actual',
+      filterKey: 'actual',
+      label: 'Норма актуальна',
+      value: summary.actual,
+      icon: <CheckCircleOutlineIcon fontSize="small" />,
+      color: 'success.main',
+    },
+    {
+      key: 'attention',
+      filterKey: 'attention',
+      label: 'Требуют внимания',
+      value: summary.attention,
+      icon: <WarningAmberOutlinedIcon fontSize="small" />,
+      color: summary.hasCriticalAttention ? 'error.main' : 'warning.main',
+    },
+    {
+      key: 'insufficient',
+      filterKey: 'insufficient',
+      label: 'Недостаточно данных',
+      value: summary.insufficient,
+      icon: <HelpOutlineOutlinedIcon fontSize="small" />,
+      color: 'text.secondary',
+    },
+  ];
+
+  // Изменить норму можно для любой строки — в т.ч. для «Норма актуальна», на случай
+  // ручной коррекции по мнению аналитика. Если у строки есть suggestion — предзаполняем
+  // диалог им; иначе открываем ручной редактор формулы реестра норм.
+  const openRevisionDialog = useCallback(
+    (row: NormComparison | undefined) => {
+      if (!row || !canEditNorms) return;
+      const s = row.suggestionId ? suggestionById.get(row.suggestionId) ?? null : null;
+      setDialogRow(row);
+=======
   const openCreateDialog = useCallback(
     (row: NormComparison | undefined) => {
       if (!row?.suggestionId || !canEditNorms) return;
       if (row.verdict === 'NormIsActual') return;
       const s = suggestionById.get(row.suggestionId);
       if (!s) return;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       setDialogSuggestion(s);
       setDialogOpen(true);
     },
@@ -222,6 +362,13 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     if (!canEditNorms) return [];
     return [
       {
+<<<<<<< HEAD
+        name: 'Изменить норму',
+        action: openRevisionDialog,
+      },
+    ];
+  }, [canEditNorms, openRevisionDialog]);
+=======
         name: 'Создать норму',
         action: openCreateDialog,
         disabled: (row) =>
@@ -231,11 +378,41 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       },
     ];
   }, [canEditNorms, openCreateDialog]);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   const columnDefs = useMemo<ColDef<NormComparison>[]>(
     () => [
       { field: 'groupName', headerName: 'Группа IIC', flex: 1.6, minWidth: 200 },
       {
+<<<<<<< HEAD
+        colId: 'severity',
+        headerName: 'Серьёзность',
+        width: 150,
+        valueGetter: (p) => (p.data ? severityRatio(p.data) : 0),
+        cellRenderer: (p: { data?: NormComparison }) => {
+          if (!p.data) return null;
+          const ratio = severityRatio(p.data);
+          return (
+            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ height: '100%' }}>
+              <Box
+                sx={{
+                  width: 9,
+                  height: 9,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  bgcolor: severityColor(ratio),
+                }}
+              />
+              <Typography variant="body2" noWrap>
+                {severityLabel(ratio)}
+              </Typography>
+            </Stack>
+          );
+        },
+      },
+      {
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         field: 'normMeanPerformance',
         headerName: 'μ нормы',
         width: 100,
@@ -250,8 +427,16 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       {
         field: 'deltaMean',
         headerName: 'Δμ (факт−норма)',
+<<<<<<< HEAD
+        width: 140,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+        cellStyle: (p) => ({
+          backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || p.data?.factStdDeviation || 1),
+        }),
+=======
         width: 130,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'normStdDeviation',
@@ -270,12 +455,22 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         headerName: 'Δσ',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+<<<<<<< HEAD
+        cellStyle: (p) => ({
+          backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || 1),
+        }),
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'deltaR2',
         headerName: 'ΔR²',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+<<<<<<< HEAD
+        cellStyle: (p) => ({ backgroundColor: deltaHeatBackground(p.value, 0.3) }),
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'verdict',
@@ -293,8 +488,39 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
           );
         },
       },
+<<<<<<< HEAD
+      {
+        colId: 'actions',
+        headerName: '',
+        width: 56,
+        pinned: 'right' as const,
+        sortable: false,
+        filter: false,
+        resizable: false,
+        cellRenderer: (p: { data?: NormComparison }) => {
+          if (!p.data || !canEditNorms) return null;
+          return (
+            <Tooltip title="Изменить норму">
+              <IconButton
+                size="small"
+                aria-label={`Изменить норму: ${p.data.groupName}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openRevisionDialog(p.data);
+                }}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          );
+        },
+      },
+    ],
+    [canEditNorms, openRevisionDialog],
+=======
     ],
     [],
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   );
 
   return (
@@ -307,6 +533,72 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         участвует. Таблица — полный список направлений; график — динамика объём → производительность.
       </Typography>
 
+<<<<<<< HEAD
+      {loading && result ? <LinearProgress sx={{ borderRadius: 1 }} data-testid="fact-norm-refresh-progress" /> : null}
+
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }} data-testid="fact-norm-kpi-row">
+        {loading && !result
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton
+                key={i}
+                variant="rounded"
+                sx={{ flex: '1 1 220px', minWidth: 200 }}
+                height={80}
+              />
+            ))
+          : result && result.comparisons.length > 0
+            ? kpiCards.map((card) => {
+                const active = kpiFilter === card.filterKey;
+                return (
+                  <Paper
+                    key={card.key}
+                    component="button"
+                    type="button"
+                    variant="outlined"
+                    onClick={() => setKpiFilter(active ? 'all' : card.filterKey)}
+                    aria-pressed={active}
+                    data-testid={`fact-norm-kpi-${card.filterKey}`}
+                    sx={{
+                      flex: '1 1 220px',
+                      minWidth: 200,
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1.5,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      borderColor: active ? 'primary.main' : undefined,
+                      borderWidth: active ? 2 : 1,
+                      backgroundColor: active ? 'action.selected' : 'background.paper',
+                      transition: 'background-color 0.15s, border-color 0.15s',
+                      '&:hover': { backgroundColor: 'action.hover' },
+                    }}
+                  >
+                    <Box sx={{ color: card.color, display: 'flex' }}>{card.icon}</Box>
+                    <Box>
+                      <Typography variant="h6" component="div" sx={{ color: card.color, lineHeight: 1.2 }}>
+                        {card.value}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {card.label}
+                      </Typography>
+                    </Box>
+                  </Paper>
+                );
+              })
+            : null}
+        </Box>
+
+      {kpiFilter !== 'all' && (
+        <Alert severity="info" onClose={() => setKpiFilter('all')} sx={{ py: 0 }}>
+          Показаны только строки: {kpiCards.find((c) => c.filterKey === kpiFilter)?.label}. Нажмите
+          на карточку ещё раз или на крестик, чтобы вернуться к полному списку.
+        </Alert>
+      )}
+
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       {error && <Alert severity="error">{error}</Alert>}
 
       {result?.warnings?.length ? (
@@ -323,6 +615,83 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       <Typography variant="subtitle1" component="h2">
         Сравнение по группам IIC
       </Typography>
+<<<<<<< HEAD
+      <Box
+        sx={{
+          '& .fact-norm-row-selected': {
+            backgroundColor: 'rgba(41, 128, 185, 0.12) !important',
+            fontWeight: 600,
+          },
+        }}
+      >
+        <DataTable<NormComparison>
+          rowData={filteredComparisons}
+          columnDefs={columnDefs}
+          objectName="GroupTrend"
+          gridId="fact-norm-suggestions"
+          loading={loading}
+          height={Math.max(280, Math.min(560, 48 + filteredComparisons.length * 42))}
+          contextMenuItems={contextMenuItems}
+          onRowClicked={(row) => setSelected(row)}
+          getRowIdValue={(row) => String(row.normId)}
+          getRowClass={(p) =>
+            p.data && selected && p.data.normId === selected.normId
+              ? 'fact-norm-row-selected'
+              : undefined
+          }
+        />
+      </Box>
+
+      {selected && (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Chip
+              size="small"
+              color={VERDICT_COLOR[selected.verdict]}
+              label={VERDICT_LABEL[selected.verdict]}
+              data-testid="fact-norm-selected-verdict"
+            />
+            <Chip
+              size="small"
+              variant="outlined"
+              label={`Отклонение: ${severityLabel(severityRatio(selected))}`}
+              sx={{ borderColor: severityColor(severityRatio(selected)), color: severityColor(severityRatio(selected)) }}
+              data-testid="fact-norm-selected-severity"
+            />
+            {selected.suggestionId && suggestionById.get(selected.suggestionId) ? (
+              <Chip
+                size="small"
+                variant="outlined"
+                label={`Уверенность предложения: ${
+                  CONFIDENCE_LABEL[suggestionById.get(selected.suggestionId)!.confidence]
+                }`}
+                data-testid="fact-norm-selected-confidence"
+              />
+            ) : null}
+            {canEditNorms && (
+              <Tooltip title="Изменить норму этой группы">
+                <IconButton
+                  size="small"
+                  onClick={() => openRevisionDialog(selected)}
+                  aria-label="Изменить норму"
+                  data-testid="fact-norm-selected-edit"
+                >
+                  <EditOutlinedIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Stack>
+          <FactVsNormChart
+            title={`${selected.groupName}: производительность vs объём`}
+            points={selected.chartPoints ?? []}
+            currentFormula={selected.currentFormula}
+            currentParams={selected.currentParameters}
+            proposedFormula={selected.proposedFormula}
+            proposedParams={selected.proposedParameters}
+            deviationSigma={selected.normStdDeviation}
+          />
+        </Box>
+=======
       <DataTable<NormComparison>
         rowData={result?.comparisons ?? []}
         columnDefs={columnDefs}
@@ -344,6 +713,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
           proposedFormula={selected.proposedFormula}
           proposedParams={selected.proposedParameters}
         />
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       )}
 
       <ProjectPickerDialog
@@ -353,11 +723,19 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         onApply={applyProjectIds}
       />
 
+<<<<<<< HEAD
+      <NormRevisionDialog
+        open={dialogOpen}
+        row={dialogRow}
+        suggestion={dialogSuggestion}
+        formulas={formulas}
+=======
       <CreateNormFromSuggestionDialog
         open={dialogOpen}
         suggestion={dialogSuggestion}
         formulas={formulas}
         chartPoints={selected?.chartPoints ?? []}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         onClose={() => setDialogOpen(false)}
         onSaved={() => void runAnalysis()}
       />

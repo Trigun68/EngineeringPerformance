@@ -23,13 +23,14 @@ import { NormAnalysisPanel } from '../../features/analytics/norm-analysis/NormAn
 import { ProductivityTrendPanel } from '../../features/analytics/productivity-trend/ProductivityTrendPanel';
 import type { FactPlanMode } from '../../features/analytics/shared/FactPlanToggle';
 import { TrendAnalysisPanel } from '../../features/analytics/trends/TrendAnalysisPanel';
+import { TrendsAnalyticsPage } from './TrendsAnalyticsPage';
 import { projectsPageSubTabsSx } from '../../features/projects/shared/projectsPageTabStyles';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import type { ProductivityVolumeMode } from '../../api/productivityTrendApi';
 import type { ZTrendWeightMode } from '../../api/zTrendApi';
 
-type AnalyticsMainTab = 'trends' | 'productivity-trend' | 'fact-norms' | 'norm-analysis';
+type AnalyticsMainTab = 'trends' | 'productivity-trend' | 'fact-norms' | 'norm-analysis' | 'trends-legacy';
 
 const PERIOD_PREF_KEY = 'analytics.period.v1';
 const CHROME_PREF_KEY = 'analytics.chrome.v1';
@@ -45,6 +46,7 @@ const MAIN_TABS: { value: AnalyticsMainTab; label: string; testId: string }[] = 
   },
   { value: 'fact-norms', label: 'Сравнение факта и норм', testId: 'analytics-tab-fact-norms' },
   { value: 'norm-analysis', label: 'Анализ норм', testId: 'analytics-tab-norm-analysis' },
+  { value: 'trends-legacy', label: 'Трендовый анализ (архив)', testId: 'analytics-tab-trends-legacy' },
 ];
 
 interface SavedPeriodPrefs {
@@ -69,6 +71,8 @@ const TAB_BLURB: Record<AnalyticsMainTab, string> = {
     'Динамика индекса производительности (% к норме) по основным версиям проектов и смена норм IIC за период.',
   'fact-norms': 'Сверка фактической производительности с действующими нормами IIC.',
   'norm-analysis': 'Реестр норм IIC, таймлайн действия и проверка здоровья.',
+  'trends-legacy':
+    'Архивная версия трендового анализа: факт vs прогноз/план по версиям, отклонения и детализация по объектам.',
 };
 
 export function AnalyticsPage() {
@@ -277,6 +281,10 @@ export function AnalyticsPage() {
           ? factNormToolbarExtras
           : null;
 
+  // Архивная вкладка «Трендовый анализ» самодостаточна — свои фильтры проекта/формулы/периода,
+  // общие фильтры периода страницы «Аналитика» на неё не влияют и не показываются.
+  const showSharedPeriodFilters = prefsLoaded && mainTab !== 'trends-legacy';
+
   return (
     <AnalyticsChromeProvider chromeExpanded={chromeExpanded} setChromeExpanded={handleChromeExpanded}>
       <Box
@@ -307,7 +315,7 @@ export function AnalyticsPage() {
               ))}
             </Tabs>
 
-            {prefsLoaded ? (
+            {showSharedPeriodFilters ? (
               <AnalyticsPeriodFilters
                 preset={preset}
                 dateFrom={dateFrom}
@@ -365,6 +373,8 @@ export function AnalyticsPage() {
         {mainTab === 'norm-analysis' && prefsLoaded ? (
           <NormAnalysisPanel dateFrom={dateFrom} dateTo={dateTo} />
         ) : null}
+
+        {mainTab === 'trends-legacy' ? <TrendsAnalyticsPage /> : null}
       </Box>
     </AnalyticsChromeProvider>
   );

@@ -47,6 +47,16 @@ const SystemSettingsPage = lazy(() =>
 );
 // Дизайн-превью PDF-отчётов — только для администраторов, без AppLayout.
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
+// Дев-мокап вкладки «Анализ тренда оценки факта» с демо-данными вместо backend.
+const TrendAnalysisMockup = lazy(() => import('./pages/dev/TrendAnalysisMockup'));
+// Дев-мокап восстановленной архивной вкладки «Трендовый анализ (архив)» с демо-данными вместо backend.
+const TrendsLegacyMockup = lazy(() => import('./pages/dev/TrendsLegacyMockup'));
+// Дев-мокап детализированных вкладок «Тренд Z-оценок» / «Тренд производительности» с демо-данными вместо backend.
+const TrendDetailMockup = lazy(() => import('./pages/dev/TrendDetailMockup'));
+// Дев-мокап переработанной вкладки «Сравнение факта и норм» с демо-данными вместо backend.
+const FactNormAnalysisMockup = lazy(() => import('./pages/dev/FactNormAnalysisMockup'));
+// Дев-мокап переработанной вкладки «Анализ норм» с демо-данными вместо backend.
+const NormAnalysisMockup = lazy(() => import('./pages/dev/NormAnalysisMockup'));
 
 const LOGO_SRC = '/assets/logo.png';
 const LOGIN_PANEL_BG = '#0D1B2A';
@@ -129,6 +139,56 @@ export default function App() {
               <AdminRouteGuard>
                 <Suspense fallback={null}>
                   <PdfDesignMockups />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trend-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trends-legacy-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendsLegacyMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trend-detail-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendDetailMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/fact-norm-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <FactNormAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/norm-analysis-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <NormAnalysisMockup />
                 </Suspense>
               </AdminRouteGuard>
             )}

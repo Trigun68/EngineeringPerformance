@@ -167,13 +167,19 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByRole('tab', { name: 'Отчет' })).toBeVisible();
   });
 
+<<<<<<< HEAD
+  test('report tab loads performance report panel', async ({ page }) => {
+=======
   test('report tab loads summary (new design) and legacy panel', async ({ page }) => {
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     await page.goto('/projects');
     await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
     await page.locator('.ag-center-cols-container .ag-row').first().dblclick();
     await page.waitForURL(/\/projects\/\d+/);
 
     await page.getByRole('tab', { name: 'Отчет' }).click();
+<<<<<<< HEAD
+=======
 
     // Дефолт — новый «Сводный вер 1»: блоки план/факт по основным версиям, шкала, динамика.
     await expect(page.getByText('Трудоёмкость плана')).toBeVisible({ timeout: 40_000 });
@@ -184,6 +190,7 @@ test.describe('Project Workspace - WPF Style', () => {
 
     // «Сводный вер 2» — старый механизм для отката.
     await page.getByTestId('report-legacy-tab').click();
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Факт:/ })).toHaveCount(0);

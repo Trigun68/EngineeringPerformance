@@ -1,9 +1,23 @@
+<<<<<<< HEAD
+import { Box, Card, CardContent, Grid, Stack, Typography } from '@mui/material';
+import { fmtSigned, interpretationColor, INTERPRETATION_COLOR } from '../reportCalc';
+import { wpColors } from '../../../../theme/wpColors';
+=======
 import { Box, Card, CardContent, Stack, Typography } from '@mui/material';
 import { ACCENT_FACT, ACCENT_PLAN, MUTED_COLOR, ZONE_COLOR } from '../reportCalc';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 const MIN = -1.75;
 const MAX = 1.75;
 
+<<<<<<< HEAD
+const ZONES = [
+  { from: MIN, to: -1, label: 'Отлично', color: INTERPRETATION_COLOR.Excellent },
+  { from: -1, to: -0.5, label: 'Хорошо', color: INTERPRETATION_COLOR.Good },
+  { from: -0.5, to: 0.5, label: 'Удовлетв.', color: INTERPRETATION_COLOR.Satisfactory },
+  { from: 0.5, to: 1, label: 'Внимание', color: INTERPRETATION_COLOR.NeedsAttention },
+  { from: 1, to: MAX, label: 'Критично', color: INTERPRETATION_COLOR.Critical },
+=======
 // Пороги зон — паритет backend PerformanceInterpretationHelper.GetInterpretation.
 // Цвета — пастельная палитра мокапа ReportRedesignMockup.
 const ZONES = [
@@ -12,6 +26,7 @@ const ZONES = [
   { from: -0.5, to: 0.5, label: 'Удовл.', color: ZONE_COLOR.Satisfactory },
   { from: 0.5, to: 1, label: 'Внимание', color: ZONE_COLOR.NeedsAttention },
   { from: 1, to: MAX, label: 'Критично', color: ZONE_COLOR.Critical },
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 ];
 
 function pct(z: number) {
@@ -19,6 +34,18 @@ function pct(z: number) {
   return ((clamped - MIN) / (MAX - MIN)) * 100;
 }
 
+<<<<<<< HEAD
+interface ZScaleProps {
+  zScore: number | null;
+  percentile: string;
+}
+
+export function ZScale({ zScore, percentile }: ZScaleProps) {
+  return (
+    <Card variant="outlined">
+      <CardContent>
+        <Stack spacing={3}>
+=======
 /**
  * Строка-дорожка с маркером на шкале Z. План и факт рисуются на раздельных дорожках
  * (а не общим слоем над шкалой), чтобы подписи значений не пересекались, даже когда
@@ -105,6 +132,7 @@ export function ZScale({ planZScore, factZScore }: ZScaleProps) {
     <Card variant="outlined">
       <CardContent>
         <Stack spacing={2}>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           <Stack spacing={0.5}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
               Шкала интерпретации Z-оценки
@@ -115,6 +143,58 @@ export function ZScale({ planZScore, factZScore }: ZScaleProps) {
             </Typography>
           </Stack>
 
+<<<<<<< HEAD
+          <Box sx={{ pt: 3 }}>
+            <Box sx={{ position: 'relative' }}>
+              <Box sx={{ display: 'flex', height: 32, width: '100%', overflow: 'hidden', borderRadius: 1 }}>
+                {ZONES.map((zone) => (
+                  <Box
+                    key={zone.label}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: `${((zone.to - zone.from) / (MAX - MIN)) * 100}%`,
+                      bgcolor: zone.color,
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 11, fontWeight: 500, color: '#FFFFFF', px: 0.5 }}>
+                      {zone.label}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              {zScore !== null && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: -28,
+                    left: `${pct(zScore)}%`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    transform: 'translateX(-50%)',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      borderRadius: 0.5,
+                      px: 0.75,
+                      py: 0.25,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#FFFFFF',
+                      bgcolor: interpretationColor(zScore),
+                    }}
+                  >
+                    {fmtSigned(zScore)}
+                  </Box>
+                  <Box sx={{ width: 2, height: 36, bgcolor: interpretationColor(zScore) }} />
+                </Box>
+              )}
+=======
           <Box>
             <Stack spacing={0.5} sx={{ mb: 1 }}>
               <MarkerTrack z={planZScore} rowLabel="План" color={ACCENT_PLAN} />
@@ -137,16 +217,60 @@ export function ZScale({ planZScore, factZScore }: ZScaleProps) {
                   </Box>
                 ))}
               </Stack>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
               <Stack
                 direction="row"
                 justifyContent="space-between"
+<<<<<<< HEAD
+                sx={{ mt: 1, fontFamily: 'monospace', fontSize: 11, color: wpColors.muted }}
+=======
                 sx={{ mt: 0.5, fontSize: 11, color: MUTED_COLOR }}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
               >
                 {['−1.5', '−1.0', '−0.5', '0', '+0.5', '+1.0', '+1.5'].map((tick) => (
                   <span key={tick}>{tick}</span>
                 ))}
               </Stack>
+<<<<<<< HEAD
+            </Box>
+          </Box>
+
+          <Grid container spacing={2} sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Перцентиль
+              </Typography>
+              <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
+                {percentile}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Метод агрегации
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Σ(Z × часы) / Σ(часы)
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                База агрегации
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Корневые направления
+              </Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="caption" color="text.secondary" display="block">
+                Источник норм
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                Снимок версии (ИИЦ)
+              </Typography>
+            </Grid>
+          </Grid>
+=======
 
               <Stack
                 direction="row"
@@ -164,6 +288,7 @@ export function ZScale({ planZScore, factZScore }: ZScaleProps) {
               </Stack>
             </Box>
           </Box>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         </Stack>
       </CardContent>
     </Card>

@@ -33,6 +33,18 @@ export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
   Critical: 'Критично',
 };
 
+<<<<<<< HEAD
+/** Flat UI Colors — согласовано с существующей палитрой приложения (wpColors). */
+export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
+  Excellent: '#1E8449',
+  Good: '#27AE60',
+  Satisfactory: '#F1C40F',
+  NeedsAttention: '#E67E22',
+  Critical: '#E74C3C',
+};
+
+export const MUTED_COLOR = '#95A5A6';
+=======
 /**
  * Палитра интерпретации — дизайн-мокап ReportRedesignMockup (ветка v0):
  * смягчённый красный, более выразительный янтарный для «удовлетворительно».
@@ -64,6 +76,7 @@ export const ZONE_COLOR: Record<Interpretation, string> = {
 };
 
 export const MUTED_COLOR = '#7B8794';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 export function interpretationColor(z: number | null | undefined): string {
   const i = getInterpretation(z);
@@ -194,9 +207,13 @@ export function keyDisciplines(leaves: PerformanceTreeRow[], top = 3): Performan
 export interface VersionTrendPoint {
   versionId: number;
   versionName: string;
+<<<<<<< HEAD
+  date: string | null;
+=======
   direction: number;
   date: string | null;
   sortDate: number;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   weightedZScore: number | null;
   totalHours: number | null;
 }
@@ -206,6 +223,8 @@ export const DIRECTION_LABEL: Record<number, string> = {
   2: 'Версия факта',
   3: 'Прогноз',
 };
+<<<<<<< HEAD
+=======
 
 /** Направления версии — паритет backend enum AnalysisDirection. */
 export const DIRECTION_PLAN = 1;
@@ -224,3 +243,4 @@ export function hoursDeltaPct(planHours: number | null, factHours: number | null
   if (factHours === null || factHours === undefined) return null;
   return ((factHours - planHours) / planHours) * 100;
 }
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968

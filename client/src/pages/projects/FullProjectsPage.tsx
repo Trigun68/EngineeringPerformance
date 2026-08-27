@@ -480,6 +480,10 @@ export function FullProjectsPage() {
             projectId={currentProjectId}
             project={resolvedProject!}
             versions={workspace.versions}
+<<<<<<< HEAD
+            initialVersionId={workspace.factVersionId ?? workspace.planVersionId ?? undefined}
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           />
         )}
         {mainTab === 'report' && (!currentProjectId || !hasProject) && (
