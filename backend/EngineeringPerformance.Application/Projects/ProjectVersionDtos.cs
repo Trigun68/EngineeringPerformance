@@ -15,13 +15,9 @@ public sealed record ProjectVersionDto(
     bool IsArchived,
     DateTime CreatedAt,
     PlanningScenario PlanningScenario = PlanningScenario.ByEachValue,
-<<<<<<< HEAD
-    bool IsMain = false);
-=======
     ZParameterLevel ZParameterLevel = ZParameterLevel.EachElement,
     bool IsPrimary = false,
     int RecalculatedVersionCount = 0);
->>>>>>> origin/master
 
 public sealed record ProjectVersionWriteRequest(
     string VersionName,

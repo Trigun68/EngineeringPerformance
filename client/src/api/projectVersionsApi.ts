@@ -14,12 +14,8 @@ export interface ProjectVersion {
   isArchived: boolean;
   createdAt?: string;
   planningScenario?: number;
-<<<<<<< HEAD
-  isMain: boolean;
-=======
   zParameterLevel?: number;
   isPrimary?: boolean;
->>>>>>> origin/master
 }
 
 export interface ProjectVersionWriteRequest {
@@ -54,13 +50,9 @@ const projectVersionSchema = z.object({
   sortOrder: z.number().int(),
   isArchived: z.boolean(),
   createdAt: z.string().optional(),
-<<<<<<< HEAD
-  isMain: z.boolean().optional().default(false),
-=======
   planningScenario: z.number().int().optional(),
   zParameterLevel: z.number().int().optional(),
   isPrimary: z.boolean().optional(),
->>>>>>> origin/master
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 
@@ -103,14 +95,6 @@ export async function deleteProjectVersion(projectId: number, versionId: number)
   await apiClient.delete(`/projects/${projectId}/versions/${versionId}`);
 }
 
-<<<<<<< HEAD
-/** Делает версию основной для её направления (Plan или Fact); Forecast не поддерживается. */
-export async function setMainProjectVersion(projectId: number, versionId: number): Promise<ProjectVersion> {
-  const { data } = await apiClient.post<ProjectVersion>(
-    `/projects/${projectId}/versions/${versionId}/set-main`,
-  );
-  return parseApiContract(`/projects/${projectId}/versions/${versionId}/set-main`, projectVersionSchema, data);
-=======
 export async function setPrimaryProjectVersion(
   projectId: number,
   versionId: number,
@@ -123,7 +107,6 @@ export async function setPrimaryProjectVersion(
     projectVersionSchema,
     data,
   );
->>>>>>> origin/master
 }
 
 export async function recalculateLaborIntensities(

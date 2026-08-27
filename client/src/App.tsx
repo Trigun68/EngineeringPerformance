@@ -17,18 +17,7 @@ import { REFERENCE_ROUTES } from './pages/references/referenceConfig';
 import { ReferencesIndexRedirect } from './pages/references/ReferencesIndexRedirect';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { LoginPage } from './pages/auth/LoginPage';
-<<<<<<< HEAD
-import PdfDesignMockups from './pages/dev/PdfDesignMockups';
-import ReportRedesignMockup from './pages/dev/ReportRedesignMockup';
-import ReportsTabLiveDemo from './pages/dev/ReportsTabLiveDemo';
-import { MonitoringDashboard } from './features/monitoring/MonitoringDashboard';
-import { AdminLayout } from './features/admin/AdminLayout';
-import { LogViewer } from './features/admin/LogViewer';
-import { HealthDashboard } from './features/admin/HealthDashboard';
-import { ConfigAudit } from './features/admin/ConfigAudit';
-=======
 import { SettingsLayout } from './pages/settings/SettingsLayout';
->>>>>>> origin/master
 import { useAuthStore } from './store/useAuthStore';
 import { resolvePreferredPath } from './utils/projectWorkspacePrefs';
 
@@ -130,13 +119,6 @@ export default function App() {
 
   return (
     <BrowserRouter>
-<<<<<<< HEAD
-      <Routes>
-        <Route path="/dev/pdf-mockups" element={<PdfDesignMockups />} />
-        <Route path="/dev/report-redesign" element={<ReportRedesignMockup />} />
-        <Route path="/dev/reports-tab-demo" element={<ReportsTabLiveDemo />} />
-        {user ? (
-=======
       <>
         <Routes>
         {user ? (
@@ -151,7 +133,6 @@ export default function App() {
               </AdminRouteGuard>
             )}
           />
->>>>>>> origin/master
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -271,12 +252,6 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
-<<<<<<< HEAD
-        ) : (
-          <Route path="*" element={<LoginPage />} />
-        )}
-      </Routes>
-=======
           </>
         ) : (
           <Route path="*" element={<LoginPage />} />
@@ -288,7 +263,6 @@ export default function App() {
           onDismiss={completeMfaSetup}
         />
       </>
->>>>>>> origin/master
     </BrowserRouter>
   );
 }

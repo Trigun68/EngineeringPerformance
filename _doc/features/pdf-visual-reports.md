@@ -1,19 +1,11 @@
 # PDF-отчёты с графиками
 
-<<<<<<< HEAD
-**Дата обновления:** 2026-08-26  
-=======
 **Дата обновления:** 2026-08-25  
->>>>>>> origin/master
 **Код:** `VisualReportService.cs`, `QuestPdfReportComposer.cs`, `ScottPlotChartRenderer.cs`, `ReportVisualTheme.cs`, `PdfInsightBuilder.cs`, `client/src/api/visualReportsApi.ts`
 
 ## Дизайн-система «Executive Technical»
 
-<<<<<<< HEAD
-Единый визуальный стиль для всех 10 PDF-отчётов: глубокий графитово-синий (`Primary` `#1B2A38`) + инженерный
-=======
 Единый визуальный стиль для всех визуальных PDF-отчётов: глубокий графитово-синий (`Primary` `#1B2A38`) + инженерный
->>>>>>> origin/master
 синий акцент (`AccentA` `#2E86C1`), нейтральные статусные цвета (`Positive`/`Negative`/`Neutral`), шрифт DejaVu Sans.
 Все токены — в `ReportVisualTheme` (`Application/Export`).
 
@@ -22,23 +14,14 @@
 
 ### Титульная страница
 
-<<<<<<< HEAD
-Каждый PDF (все 10 отчётов) начинает с полноценной обложки `ComposeCoverPage`: градиентный тёмный фон,
-бейдж типа отчёта (`PdfReportKind`), метаданные (проект/версия/дата формирования), 2–4 тизер-KPI.
-=======
 Каждый PDF начинает с полноценной обложки `ComposeCoverPage`: тёмный фон (сплошной `CoverGradientBottom` —
 QuestPDF 2024.12 не поддерживает градиентные заливки), бейдж типа отчёта (`PdfReportKind`), метаданные
 (проект/версия/дата формирования, время московское), 2–4 тизер-KPI.
->>>>>>> origin/master
 
 ### Хедер / футер контентных страниц
 
 `ComposeHeader` — заголовок, бейдж типа отчёта, доп. метаданные, акцентная линия.
-<<<<<<< HEAD
-`ComposeFooter` — тонкая линия, "Confidential", номер страницы, дата формирования.
-=======
 `ComposeFooter` — тонкая линия, "Confidential", номер страницы, дата формирования (MSK).
->>>>>>> origin/master
 
 ### KPI, шкала Z-score, callout-блоки
 
