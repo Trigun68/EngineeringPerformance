@@ -454,4 +454,27 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
         int workDirectionId) =>
         ForecastCalculation.ResolvePlanningZ(planningZByDirection, workDirectionId);
+
+    public decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows)
+    {
+        decimal normHours = 0m;
+        decimal hours = 0m;
+        foreach (var row in performanceRows)
+        {
+            if (row.IsTotal || row.WorkDirectionId < 0)
+                continue;
+            if (row.FactPhysicalVolume is not > 0m || row.NormProductivity is not > 0m)
+                continue;
+            if (row.FactLaborHours is not > 0m)
+                continue;
+
+            normHours += row.FactPhysicalVolume.Value * row.NormProductivity.Value;
+            hours += row.FactLaborHours.Value;
+        }
+
+        if (hours <= 0m || normHours <= 0m)
+            return null;
+
+        return Math.Round(normHours / hours * 100m, 1, MidpointRounding.ToEven);
+    }
 }

@@ -1,34 +1,47 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
   Chip,
+  Divider,
   Grid,
-  IconButton,
   LinearProgress,
-  Popover,
   Skeleton,
   Stack,
-  Tooltip,
   Typography,
 } from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import DateRangeOutlinedIcon from '@mui/icons-material/DateRangeOutlined';
 import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined';
 import {
   fetchZTrends,
-  type ZTrendContribution,
   type ZTrendResponse,
+  type ZTrendSeries,
   type ZTrendWeightMode,
 } from '../../../api/zTrendApi';
+import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
+import type { FactPlanMode } from '../shared/FactPlanToggle';
+import { TrendDetailView, type TrendDetailMetricConfig } from '../shared/TrendDetailView';
+import type {
+  GroupTrendLike,
+  TrendPointLike,
+  TrendVersionRow,
+} from '../shared/trendDetailCalc';
 import { NormLegend } from './NormLegend';
 import { ZTrendChart } from './ZTrendChart';
-import { ZTrendKpiCards } from './ZTrendKpiCards';
-import { computeZTrendKpi } from './zTrendKpi';
 
 const WEIGHT_MODE_LABEL: Record<ZTrendWeightMode, string> = {
   basisHours: 'Нормативные часы (basisHours)',
+};
+
+const Z_TREND_METRIC: TrendDetailMetricConfig = {
+  yAxisTitle: 'Средневзвешенная Z-оценка',
+  unit: '',
+  digits: 2,
+  zeroLine: true,
+  // Для Z-оценки снижение (ближе к норме и ниже) — улучшение.
+  goodDirection: 'negative',
+  factColor: FACT_ACCENT_COLOR,
+  planColor: PLAN_ACCENT_COLOR,
 };
 
 function formatPeriodChip(dateFrom: string, dateTo: string): string {
@@ -40,9 +53,9 @@ function formatPeriodChip(dateFrom: string, dateTo: string): string {
   };
   const from = dateFrom ? fmt(dateFrom) : '';
   const to = dateTo ? fmt(dateTo) : '';
-  if (from && to) return `${from} — ${to}`;
-  if (from) return `с ${from}`;
-  if (to) return `по ${to}`;
+  if (from && to) return `Период: ${from} – ${to}`;
+  if (from) return `Период: с ${from}`;
+  if (to) return `Период: по ${to}`;
   return 'Весь период';
 }
 
@@ -50,46 +63,49 @@ interface Props {
   dateFrom: string;
   dateTo: string;
   weightMode: ZTrendWeightMode;
-  showPlan: boolean;
-  showFact: boolean;
-  onToolbarExtras?: (node: ReactNode) => void;
+  mode: FactPlanMode;
+  onModeChange: (mode: FactPlanMode) => void;
 }
 
-function collectContributions(result: ZTrendResponse | null): ZTrendContribution[] {
-  if (!result) return [];
-  const map = new Map<string, ZTrendContribution>();
-  const visit = (points: { contributions?: ZTrendContribution[] | null }[]) => {
-    for (const p of points) {
+/** Плоский список точек серии (сегменты нормативных режимов схлопываются в хронологию). */
+function flattenSeriesPoints(series: ZTrendSeries | undefined): TrendPointLike[] {
+  if (!series) return [];
+  const points: TrendPointLike[] = [];
+  for (const seg of series.segments) {
+    for (const p of seg.points) {
+      points.push({ date: p.date, value: p.zScore, weight: p.weight });
+    }
+  }
+  return points.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** Версии выборки из contributions точек серии; свежие сверху. */
+function collectVersionRows(series: ZTrendSeries | undefined): TrendVersionRow[] {
+  if (!series) return [];
+  const map = new Map<string, TrendVersionRow>();
+  for (const seg of series.segments) {
+    for (const p of seg.points) {
       for (const c of p.contributions ?? []) {
         const key = `${c.projectId}-${c.versionId}`;
-        if (!map.has(key)) map.set(key, c);
+        if (!map.has(key)) {
+          map.set(key, {
+            projectCode: c.projectCode,
+            projectName: c.projectName,
+            versionName: c.versionName,
+            date: p.date,
+            value: c.zScore,
+          });
+        }
       }
     }
-  };
-  for (const seg of [...result.overall.plan.segments, ...result.overall.fact.segments]) {
-    visit(seg.points);
   }
-  for (const g of result.byGroup) {
-    for (const seg of [...g.plan.segments, ...g.fact.segments]) visit(seg.points);
-  }
-  return [...map.values()].sort((a, b) =>
-    `${a.projectCode} ${a.versionName}`.localeCompare(`${b.projectCode} ${b.versionName}`, 'ru'),
-  );
+  return [...map.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
-export function TrendAnalysisPanel({
-  dateFrom,
-  dateTo,
-  weightMode,
-  showPlan,
-  showFact,
-  onToolbarExtras,
-}: Props) {
+export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeChange }: Props) {
   const [result, setResult] = useState<ZTrendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [infoAnchor, setInfoAnchor] = useState<HTMLElement | null>(null);
-  const [infoPinned, setInfoPinned] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -131,102 +147,36 @@ export function TrendAnalysisPanel({
     };
   }, [load]);
 
-  const contributions = useMemo(() => collectContributions(result), [result]);
-
-  useEffect(() => {
-    if (!onToolbarExtras) return;
-    onToolbarExtras(
-      <Tooltip title="Версии в выборке периода">
-        <IconButton
-          size="small"
-          data-testid="ztrend-versions-info"
-          aria-label="Версии в выборке периода"
-          onMouseEnter={(e) => {
-            if (!infoPinned) setInfoAnchor(e.currentTarget);
-          }}
-          onMouseLeave={() => {
-            if (!infoPinned) setInfoAnchor(null);
-          }}
-          onClick={(e) => {
-            setInfoPinned((p) => !p);
-            setInfoAnchor(e.currentTarget);
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>,
-    );
-    return () => onToolbarExtras(null);
-  }, [onToolbarExtras, infoPinned]);
-
   const hasSegments = useMemo(() => {
     if (!result) return false;
     const o = result.overall;
     return o.plan.segments.length > 0 || o.fact.segments.length > 0 || result.byGroup.length > 0;
   }, [result]);
 
-  const kpi = useMemo(() => (result ? computeZTrendKpi(result.overall) : null), [result]);
+  const planPoints = useMemo(() => flattenSeriesPoints(result?.overall.plan), [result]);
+  const factPoints = useMemo(() => flattenSeriesPoints(result?.overall.fact), [result]);
+  const planVersions = useMemo(() => collectVersionRows(result?.overall.plan), [result]);
+  const factVersions = useMemo(() => collectVersionRows(result?.overall.fact), [result]);
+
+  const waterfallGroups = useMemo<GroupTrendLike[]>(() => {
+    if (!result) return [];
+    return result.byGroup.map((g) => ({
+      groupId: g.groupId,
+      groupName: formatIisNorm({ name: g.groupName }),
+      points: flattenSeriesPoints(g.fact),
+    }));
+  }, [result]);
+
+  // Вторичные графики нормативных режимов следуют режиму переключателя.
+  const showPlan = mode !== 'fact';
+  const showFact = mode !== 'plan';
 
   return (
-    <Stack spacing={2} data-testid="ztrend-panel">
-      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-        <Chip
-          size="small"
-          icon={<FunctionsOutlinedIcon sx={{ fontSize: 15 }} />}
-          label={`Вес: ${WEIGHT_MODE_LABEL[weightMode] ?? weightMode}`}
-          data-testid="ztrend-weight-chip"
-          sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
-        />
-        <Chip
-          size="small"
-          icon={<DateRangeOutlinedIcon sx={{ fontSize: 15 }} />}
-          label={formatPeriodChip(dateFrom, dateTo)}
-          data-testid="ztrend-period-chip"
-          sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
-        />
-      </Stack>
-
-      <Popover
-        open={Boolean(infoAnchor)}
-        anchorEl={infoAnchor}
-        onClose={() => {
-          setInfoPinned(false);
-          setInfoAnchor(null);
-        }}
-        disableRestoreFocus
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { p: 1.5, maxWidth: 420, maxHeight: 360, overflow: 'auto' } } }}
-        data-testid="ztrend-versions-popover"
-      >
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          Версии в выборке периода
-        </Typography>
-        {contributions.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Нет версий с рассчитанным Z в текущем ответе.
-          </Typography>
-        ) : (
-          <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-            {contributions.map((c) => (
-              <Typography key={`${c.projectId}-${c.versionId}`} component="li" variant="body2">
-                {c.projectCode} — {c.projectName}: {c.versionName}
-                {c.zScore != null ? ` (Z=${c.zScore.toFixed(2)})` : ''}
-              </Typography>
-            ))}
-          </Stack>
-        )}
-        {infoPinned ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            Закреплено — нажмите ⓘ ещё раз, чтобы закрыть.
-          </Typography>
-        ) : null}
-      </Popover>
-
+    <Stack spacing={2.5} data-testid="ztrend-panel">
       {loading && !result && (
         <Box data-testid="ztrend-loading" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton
                 key={i}
                 variant="rounded"
@@ -261,13 +211,41 @@ export function TrendAnalysisPanel({
         </Alert>
       )}
 
-      {result && hasSegments && kpi && (
+      {result && hasSegments && (
         <>
-          <ZTrendKpiCards kpi={kpi} />
+          <TrendDetailView
+            mode={mode}
+            onModeChange={onModeChange}
+            config={Z_TREND_METRIC}
+            periodLabel={formatPeriodChip(dateFrom, dateTo)}
+            planPoints={planPoints}
+            factPoints={factPoints}
+            planVersions={planVersions}
+            factVersions={factVersions}
+            waterfallGroups={waterfallGroups}
+            headerExtras={
+              <Chip
+                size="small"
+                icon={<FunctionsOutlinedIcon sx={{ fontSize: 15 }} />}
+                label={`Вес: ${WEIGHT_MODE_LABEL[weightMode] ?? weightMode}`}
+                data-testid="ztrend-weight-chip"
+                sx={{ bgcolor: '#F1F5F9', color: '#475569', fontWeight: 500, cursor: 'default' }}
+              />
+            }
+            testId="ztrend-detail"
+          />
 
-          <Typography variant="h6" component="h2">
-            Общий тренд Z
-          </Typography>
+          <Divider sx={{ my: 1 }} />
+
+          <Box>
+            <Typography variant="h6" component="h2">
+              Динамика по нормативным режимам
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Тот же тренд с разбивкой на сегменты действия норм IIC — видно, где смена нормы
+              изменила оценку.
+            </Typography>
+          </Box>
           <NormLegend legend={result.legend} />
           <ZTrendChart
             group={result.overall}

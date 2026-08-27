@@ -214,9 +214,9 @@ export const DIRECTION_FACT = 2;
 /**
  * Акцентные цвета плана и факта (мокап ReportRedesignMockup):
  * план — фиолетовый (менее акцентный), факт — синий (основной акцент, крупный маркер).
+ * SoT — client/src/constants/planFactColors.ts; здесь реэкспорт для обратной совместимости.
  */
-export const ACCENT_PLAN = '#8E6FD8';
-export const ACCENT_FACT = '#2F6FE0';
+export { PLAN_ACCENT_COLOR as ACCENT_PLAN, FACT_ACCENT_COLOR as ACCENT_FACT } from '../../../constants/planFactColors';
 
 /** Отклонение факта от плана в процентах: (fact − plan) / plan × 100; null при отсутствии данных. */
 export function hoursDeltaPct(planHours: number | null, factHours: number | null): number | null {

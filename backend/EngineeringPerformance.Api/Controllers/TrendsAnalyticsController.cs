@@ -16,6 +16,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
     private readonly ITrendAnalyticsService _trends;
     private readonly IZTrendAnalyticsService _zTrends;
     private readonly IProductivityTrendAnalyticsService _productivityTrends;
+    private readonly IProductivityIndexTrendService _productivityIndexTrends;
     private readonly IVisualReportService _visualReports;
     private readonly IExportFileNameService _fileNames;
 
@@ -23,12 +24,14 @@ public sealed class TrendsAnalyticsController : ControllerBase
         ITrendAnalyticsService trends,
         IZTrendAnalyticsService zTrends,
         IProductivityTrendAnalyticsService productivityTrends,
+        IProductivityIndexTrendService productivityIndexTrends,
         IVisualReportService visualReports,
         IExportFileNameService fileNames)
     {
         _trends = trends;
         _zTrends = zTrends;
         _productivityTrends = productivityTrends;
+        _productivityIndexTrends = productivityIndexTrends;
         _visualReports = visualReports;
         _fileNames = fileNames;
     }
@@ -87,6 +90,22 @@ public sealed class TrendsAnalyticsController : ControllerBase
     {
         var result = await _productivityTrends.GetProductivityTrendAsync(
             request ?? new ProductivityTrendRequest(),
+            cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Тренд индекса производительности (% к норме) по основным версиям: Σ(V×N)/Σ(часы)×100
+    /// через PerformanceCalculationEngine.ComputeProductivityIndex.
+    /// </summary>
+    [HttpPost("productivity-index")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    public async Task<ActionResult<ProductivityIndexTrendResponse>> GetProductivityIndexTrend(
+        [FromBody] ProductivityIndexTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var result = await _productivityIndexTrends.GetProductivityIndexTrendAsync(
+            request ?? new ProductivityIndexTrendRequest(),
             cancellationToken);
         return Ok(result);
     }

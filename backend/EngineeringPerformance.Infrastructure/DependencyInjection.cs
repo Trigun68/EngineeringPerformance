@@ -166,6 +166,7 @@ public static class DependencyInjection
         services.AddScoped<IZTrendEngine, ZTrendEngine>();
         services.AddScoped<IZTrendAnalyticsService, ZTrendAnalyticsService>();
         services.AddScoped<IProductivityTrendAnalyticsService, ProductivityTrendAnalyticsService>();
+        services.AddScoped<IProductivityIndexTrendService, ProductivityIndexTrendService>();
         services.AddScoped<IGroupAnalyticsService, GroupAnalyticsService>();
         services.AddScoped<IAnalyticsExportService, AnalyticsExportService>();
         services.AddScoped<IChartImageRenderer, ScottPlotChartRenderer>();

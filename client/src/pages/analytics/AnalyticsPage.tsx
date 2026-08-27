@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   Box,
   FormControl,
-  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
-  Switch,
   Tab,
   Tabs,
   Typography,
@@ -23,6 +21,7 @@ import {
 import { FactNormAnalysisPanel } from '../../features/analytics/factNorm/FactNormAnalysisPanel';
 import { NormAnalysisPanel } from '../../features/analytics/norm-analysis/NormAnalysisPanel';
 import { ProductivityTrendPanel } from '../../features/analytics/productivity-trend/ProductivityTrendPanel';
+import type { FactPlanMode } from '../../features/analytics/shared/FactPlanToggle';
 import { TrendAnalysisPanel } from '../../features/analytics/trends/TrendAnalysisPanel';
 import { projectsPageSubTabsSx } from '../../features/projects/shared/projectsPageTabStyles';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
@@ -67,7 +66,7 @@ interface SavedProdTrendPrefs {
 const TAB_BLURB: Record<AnalyticsMainTab, string> = {
   trends: 'Динамика средневзвешенного Z по основным версиям плана и факта относительно нормы на дату версии.',
   'productivity-trend':
-    'Как менялась сама норма: часы N(V*) при опорном объёме, без сравнения коэффициентов разных формул.',
+    'Динамика индекса производительности (% к норме) по основным версиям проектов и смена норм IIC за период.',
   'fact-norms': 'Сверка фактической производительности с действующими нормами IIC.',
   'norm-analysis': 'Реестр норм IIC, таймлайн действия и проверка здоровья.',
 };
@@ -83,7 +82,6 @@ export function AnalyticsPage() {
   const [showPlan, setShowPlan] = useState(true);
   const [showFact, setShowFact] = useState(true);
   const [volumeMode, setVolumeMode] = useState<ProductivityVolumeMode>('median');
-  const [trendToolbarExtras, setTrendToolbarExtras] = useState<ReactNode>(null);
   const [factNormToolbarExtras, setFactNormToolbarExtras] = useState<ReactNode>(null);
 
   useEffect(() => {
@@ -177,14 +175,16 @@ export function AnalyticsPage() {
     persistTrends({ weightMode: next, showPlan, showFact });
   };
 
-  const handleShowPlan = (next: boolean) => {
-    setShowPlan(next);
-    persistTrends({ weightMode, showPlan: next, showFact });
-  };
+  // Режим «Факт/План/Оба» — единый переключатель вкладки тренда; храним как пару флагов
+  // для обратной совместимости с сохранёнными предпочтениями.
+  const trendMode: FactPlanMode = showPlan && showFact ? 'both' : showFact ? 'fact' : 'plan';
 
-  const handleShowFact = (next: boolean) => {
-    setShowFact(next);
-    persistTrends({ weightMode, showPlan, showFact: next });
+  const handleTrendModeChange = (next: FactPlanMode) => {
+    const nextShowPlan = next !== 'fact';
+    const nextShowFact = next !== 'plan';
+    setShowPlan(nextShowPlan);
+    setShowFact(nextShowFact);
+    persistTrends({ weightMode, showPlan: nextShowPlan, showFact: nextShowFact });
   };
 
   const handleVolumeMode = (next: ProductivityVolumeMode) => {
@@ -231,43 +231,21 @@ export function AnalyticsPage() {
 
   const trendsExtras = useMemo(
     () => (
-      <>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel id="ztrend-weight-label">Вес</InputLabel>
-          <Select
-            labelId="ztrend-weight-label"
-            label="Вес"
-            value={weightMode}
-            onChange={(e) => handleWeightMode(e.target.value as ZTrendWeightMode)}
-            data-testid="ztrend-weight-mode"
-          >
-            <MenuItem value="basisHours">Нормативные часы (basisHours)</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showPlan}
-              onChange={(_, v) => handleShowPlan(v)}
-              data-testid="ztrend-toggle-plan"
-            />
-          }
-          label="План"
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showFact}
-              onChange={(_, v) => handleShowFact(v)}
-              data-testid="ztrend-toggle-fact"
-            />
-          }
-          label="Факт"
-        />
-        {trendToolbarExtras}
-      </>
+      <FormControl size="small" sx={{ minWidth: 180 }}>
+        <InputLabel id="ztrend-weight-label">Вес</InputLabel>
+        <Select
+          labelId="ztrend-weight-label"
+          label="Вес"
+          value={weightMode}
+          onChange={(e) => handleWeightMode(e.target.value as ZTrendWeightMode)}
+          data-testid="ztrend-weight-mode"
+        >
+          <MenuItem value="basisHours">Нормативные часы (basisHours)</MenuItem>
+        </Select>
+      </FormControl>
     ),
-    [weightMode, showPlan, showFact, trendToolbarExtras, handleWeightMode, handleShowPlan, handleShowFact],
+    // handleWeightMode пересоздаётся каждый рендер (зависит от showPlan/showFact) — включаем в deps.
+    [weightMode, handleWeightMode],
   );
 
   const productivityExtras = useMemo(
@@ -363,9 +341,8 @@ export function AnalyticsPage() {
             dateFrom={dateFrom}
             dateTo={dateTo}
             weightMode={weightMode}
-            showPlan={showPlan}
-            showFact={showFact}
-            onToolbarExtras={setTrendToolbarExtras}
+            mode={trendMode}
+            onModeChange={handleTrendModeChange}
           />
         ) : null}
 

@@ -6,7 +6,7 @@ test.describe('Analytics page — trends', () => {
     await loginAsAdmin(page);
   });
 
-  test('trends tab shows panel with weight toggle and plan/fact switches', async ({ page }) => {
+  test('trends tab shows detail view with fact/plan toggle and KPI row', async ({ page }) => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('analytics-tab-trends')).toHaveText('Анализ тренда оценки факта');
@@ -14,22 +14,27 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
     await expect(page.getByTestId('ztrend-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId('ztrend-weight-mode')).toBeVisible();
-    await expect(page.getByTestId('ztrend-toggle-plan')).toBeVisible();
-    await expect(page.getByTestId('ztrend-toggle-fact')).toBeVisible();
-    await expect(page.getByTestId('ztrend-weight-chip')).toBeVisible();
-    await expect(page.getByTestId('ztrend-period-chip')).toBeVisible();
 
     await expect(page.getByTestId('analytics-placeholder')).toHaveCount(0);
     await expect(
-      page.getByTestId('ztrend-overall-chart')
+      page.getByTestId('ztrend-detail')
         .or(page.getByTestId('ztrend-empty'))
         .or(page.getByTestId('ztrend-error')),
     ).toBeVisible({ timeout: 60_000 });
 
-    if (await page.getByTestId('ztrend-overall-chart').isVisible()) {
-      await expect(page.getByTestId('ztrend-kpi-cards')).toBeVisible();
-      await expect(page.getByTestId('ztrend-kpi-fact')).toBeVisible();
-      await expect(page.getByTestId('ztrend-kpi-delta')).toBeVisible();
+    if (await page.getByTestId('ztrend-detail').isVisible()) {
+      await expect(page.getByTestId('ztrend-detail-period-chip')).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-fact-plan-toggle')).toBeVisible();
+      await expect(page.getByTestId('ztrend-weight-chip')).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-kpi')).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-kpi-current')).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-kpi-delta')).toBeVisible();
+      await expect(page.getByTestId('ztrend-detail-dynamics-chart')).toBeVisible();
+      // Переключатель режимов перестраивает KPI и график.
+      await page.getByTestId('ztrend-detail-fact-plan-toggle-both').click();
+      await expect(page.getByTestId('ztrend-detail-kpi')).toBeVisible();
+      // Секция нормативных режимов сохраняется ниже.
+      await expect(page.getByTestId('ztrend-overall-chart')).toBeVisible();
     }
   });
 
@@ -53,10 +58,15 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
   });
 
-  test('versions info control is present', async ({ page }) => {
+  test('versions table is present in the tab body', async ({ page }) => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-trends').click();
-    await expect(page.getByTestId('ztrend-versions-info')).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page
+        .getByTestId('ztrend-detail-versions-table')
+        .or(page.getByTestId('ztrend-detail-versions-empty'))
+        .or(page.getByTestId('ztrend-empty')),
+    ).toBeVisible({ timeout: 60_000 });
   });
 
   test('fact-norms tab keeps the same period filters', async ({ page }) => {
@@ -65,7 +75,7 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
   });
 
-  test('productivity trend tab shares period and shows panel', async ({ page }) => {
+  test('productivity trend tab shows index detail view and norm section', async ({ page }) => {
     await page.goto('/analytics');
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('analytics-tab-productivity-trend')).toHaveText(
@@ -75,6 +85,23 @@ test.describe('Analytics page — trends', () => {
     await expect(page.getByTestId('analytics-period-filters')).toBeVisible();
     await expect(page.getByTestId('prod-trend-volume-mode')).toBeVisible();
     await expect(page.getByTestId('prod-trend-panel')).toBeVisible({ timeout: 20_000 });
+
+    // Первичный блок — индекс производительности (мокап TrendDetailMockup).
+    await expect(
+      page
+        .getByTestId('prod-trend-detail')
+        .or(page.getByTestId('prod-index-empty'))
+        .or(page.getByTestId('prod-index-error')),
+    ).toBeVisible({ timeout: 60_000 });
+
+    if (await page.getByTestId('prod-trend-detail').isVisible()) {
+      await expect(page.getByTestId('prod-trend-detail-period-chip')).toBeVisible();
+      await expect(page.getByTestId('prod-trend-detail-fact-plan-toggle')).toBeVisible();
+      await expect(page.getByTestId('prod-trend-detail-kpi')).toBeVisible();
+      await expect(page.getByTestId('prod-trend-detail-dynamics-chart')).toBeVisible();
+    }
+
+    // Вторичная секция норм IIC сохраняется.
     await expect(
       page.getByTestId('prod-trend-overall-chart')
         .or(page.getByTestId('prod-trend-empty'))
