@@ -12,6 +12,9 @@ public interface IVisualReportService
 
     Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
 
+    /// <summary>PDF вкладки «Отчёт»: сводка план/факт по основным версиям, шкала Z, топ-5 направлений, диаграммы и таблица физобъёмов.</summary>
+    Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
+
     Task<byte[]> ExportComparePdfAsync(
         int projectId,
         int versionAId,
@@ -43,7 +46,4 @@ public interface IVisualReportService
         int? planVersionId = null,
         int? factVersionId = null,
         CancellationToken cancellationToken = default);
-
-    /// <summary>Сводный отчёт «план/факт» по основным версиям проекта (вкладка «Отчёт»).</summary>
-    Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
 }

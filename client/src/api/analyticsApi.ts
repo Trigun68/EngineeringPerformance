@@ -92,6 +92,7 @@ export interface ProjectVersionAnalysisSummary {
   weightedZScore: number | null;
   weightedZScorePercentile: string;
   weightedZScoreInterpretation: string | null;
+  physicalVolumeTotalsByUnit: PhysicalVolumeTotalByUnit[];
   unallocatedLaborHours: number | null;
   physicalVolumeTotalsByUnit: PhysicalVolumeTotalByUnit[];
 }

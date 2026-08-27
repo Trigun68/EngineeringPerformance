@@ -193,7 +193,7 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, ExcelContentType, fileName);
     }
 
-    /// <summary>Excel текущего вида грида «Детально» (видимые колонки + отфильтрованные строки).</summary>
+    /// <summary>Excel текущего ви��а грида «Детально» (видимые колонки + отфильтрованные строки).</summary>
     [HttpPost("export/forecast-detail/excel-visible")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]

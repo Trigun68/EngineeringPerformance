@@ -31,6 +31,15 @@ export async function exportProjectReportPdf(projectId: number, versionId: numbe
   triggerBrowserDownload(blob, filename);
 }
 
+export async function exportProjectReportPdf(projectId: number, versionId: number): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/versions/${versionId}/export/report/pdf`,
+    {},
+    `Report_${projectId}_v${versionId}.pdf`,
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
 export async function exportComparePdf(
   projectId: number,
   versionA: number,

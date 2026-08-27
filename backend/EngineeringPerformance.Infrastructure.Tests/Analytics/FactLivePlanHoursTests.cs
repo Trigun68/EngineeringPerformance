@@ -391,5 +391,8 @@ public sealed class FactLivePlanHoursTests
         public PlanningZParameters ResolvePlanningZ(
             IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection, int workDirectionId) =>
             inner.ResolvePlanningZ(planningZByDirection, workDirectionId);
+
+        public decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows) =>
+            inner.ComputeProductivityIndex(performanceRows);
     }
 }
