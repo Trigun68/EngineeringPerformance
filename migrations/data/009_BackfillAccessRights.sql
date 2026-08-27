@@ -6,8 +6,8 @@
 SET NOCOUNT ON;
 BEGIN TRANSACTION;
 
-DECLARE @PmRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'ProjectManager');
-DECLARE @ObsRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Observer');
+DECLARE @PmRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Admin');
+DECLARE @ObsRoleId INT = (SELECT [Id] FROM [Roles] WHERE [Name] = N'Engineer');
 
 IF @PmRoleId IS NULL OR @ObsRoleId IS NULL
 BEGIN

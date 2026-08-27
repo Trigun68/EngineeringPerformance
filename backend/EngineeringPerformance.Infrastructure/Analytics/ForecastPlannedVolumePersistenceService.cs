@@ -10,10 +10,14 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVolumePersistenceService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
+    private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
 
-    public ForecastPlannedVolumePersistenceService(IDbContextFactory<AppDbContext> contextFactory)
+    public ForecastPlannedVolumePersistenceService(
+        IDbContextFactory<AppDbContext> contextFactory,
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
     {
         _contextFactory = contextFactory;
+        _recalcOrchestrator = recalcOrchestrator;
     }
 
     public async Task SavePlannedVolumeAsync(
@@ -69,6 +73,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             }
 
             await context.SaveChangesAsync(cancellationToken);
+            await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
             return;
         }
 
@@ -86,7 +91,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             if (catalogKfo is null)
             {
                 throw new InvalidOperationException(
-                    "Не найдена номенклатура КФО с классификатором ИИС для этой группы.");
+                    "Не найдена номенклатура КФО с классификатором IIC для этой группы.");
             }
 
             var entity = new ProjectPhysicalVolume
@@ -111,7 +116,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             if (catalogBer is null)
             {
                 throw new InvalidOperationException(
-                    "Не найдена номенклатура БЭР с классификатором ИИС для этой группы.");
+                    "Не найдена номенклатура БЭР с классификатором IIC для этой группы.");
             }
 
             var entity = new ProjectPhysicalVolume
@@ -126,5 +131,6 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
     }
 }

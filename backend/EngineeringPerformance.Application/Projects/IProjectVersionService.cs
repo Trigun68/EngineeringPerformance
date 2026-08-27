@@ -14,6 +14,10 @@ public interface IProjectVersionService
 
     Task<bool> ArchiveAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
 
+    Task<ProjectVersionDto?> UnarchiveAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
+
+    Task<ProjectVersionDto?> SetPrimaryAsync(int projectId, int versionId, CancellationToken cancellationToken = default);
+
     Task<ProjectVersionDto> CopyAsync(
         int projectId,
         int versionId,

@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Chip,
+<<<<<<< HEAD
   IconButton,
   LinearProgress,
   Paper,
@@ -16,6 +17,11 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
+=======
+  Stack,
+  Typography,
+} from '@mui/material';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import type { ColDef } from 'ag-grid-community';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import { ACTION_LABELS } from '../../../constants/actionLabels';
@@ -27,7 +33,10 @@ import {
   fetchReferenceFormulas,
   runFactNormAnalysis,
   type Accuracy,
+<<<<<<< HEAD
   type Confidence,
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   type FactNormAnalysisResponse,
   type NormComparison,
   type NormSuggestion,
@@ -37,10 +46,16 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { AccuracyBadge } from './AccuracyBadge';
+<<<<<<< HEAD
 import { NormRevisionDialog } from './NormRevisionDialog';
 import { FactVsNormChart } from './FactVsNormChart';
 import { ProjectPickerDialog } from './ProjectPickerDialog';
 import { deltaHeatBackground, severityColor, severityLabel, severityRatio } from './severity';
+=======
+import { CreateNormFromSuggestionDialog } from './CreateNormFromSuggestionDialog';
+import { FactVsNormChart } from './FactVsNormChart';
+import { ProjectPickerDialog } from './ProjectPickerDialog';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   ChangeFormulaType: 'Сменить формулу',
@@ -56,6 +71,7 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
   InsufficientData: 'default',
 };
 
+<<<<<<< HEAD
 const CONFIDENCE_LABEL: Record<Confidence, string> = {
   Low: 'Низкая',
   Medium: 'Средняя',
@@ -74,6 +90,8 @@ function sortByAttention(comparisons: NormComparison[]): NormComparison[] {
   return [...comparisons].sort((a, b) => VERDICT_PRIORITY[a.verdict] - VERDICT_PRIORITY[b.verdict]);
 }
 
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 const FACT_NORM_PROJECTS_PREF_KEY = 'analytics.factNorm.projectIds.v1';
 
 interface Props {
@@ -93,10 +111,14 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
   const [selected, setSelected] = useState<NormComparison | null>(null);
   const [formulas, setFormulas] = useState<ReferenceFormula[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+<<<<<<< HEAD
   const [dialogRow, setDialogRow] = useState<NormComparison | null>(null);
   const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
   // Клик по KPI-карточке фильтрует таблицу; 'all' — фильтр не применён.
   const [kpiFilter, setKpiFilter] = useState<'all' | 'actual' | 'attention' | 'insufficient'>('all');
+=======
+  const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -155,7 +177,11 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         ac.signal,
       );
       setResult(data);
+<<<<<<< HEAD
       setSelected(sortByAttention(data.comparisons)[0] ?? null);
+=======
+      setSelected(data.comparisons[0] ?? null);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     } catch (e) {
       if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') {
         return;
@@ -239,6 +265,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     return map;
   }, [result]);
 
+<<<<<<< HEAD
   const sortedComparisons = useMemo(
     () => sortByAttention(result?.comparisons ?? []),
     [result],
@@ -317,6 +344,14 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       if (!row || !canEditNorms) return;
       const s = row.suggestionId ? suggestionById.get(row.suggestionId) ?? null : null;
       setDialogRow(row);
+=======
+  const openCreateDialog = useCallback(
+    (row: NormComparison | undefined) => {
+      if (!row?.suggestionId || !canEditNorms) return;
+      if (row.verdict === 'NormIsActual') return;
+      const s = suggestionById.get(row.suggestionId);
+      if (!s) return;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       setDialogSuggestion(s);
       setDialogOpen(true);
     },
@@ -327,16 +362,29 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
     if (!canEditNorms) return [];
     return [
       {
+<<<<<<< HEAD
         name: 'Изменить норму',
         action: openRevisionDialog,
       },
     ];
   }, [canEditNorms, openRevisionDialog]);
+=======
+        name: 'Создать норму',
+        action: openCreateDialog,
+        disabled: (row) =>
+          !row?.suggestionId ||
+          row.verdict === 'NormIsActual' ||
+          row.verdict === 'InsufficientData',
+      },
+    ];
+  }, [canEditNorms, openCreateDialog]);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   const columnDefs = useMemo<ColDef<NormComparison>[]>(
     () => [
       { field: 'groupName', headerName: 'Группа IIC', flex: 1.6, minWidth: 200 },
       {
+<<<<<<< HEAD
         colId: 'severity',
         headerName: 'Серьёзность',
         width: 150,
@@ -363,6 +411,8 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         },
       },
       {
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         field: 'normMeanPerformance',
         headerName: 'μ нормы',
         width: 100,
@@ -377,11 +427,16 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       {
         field: 'deltaMean',
         headerName: 'Δμ (факт−норма)',
+<<<<<<< HEAD
         width: 140,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
         cellStyle: (p) => ({
           backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || p.data?.factStdDeviation || 1),
         }),
+=======
+        width: 130,
+        valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'normStdDeviation',
@@ -400,16 +455,22 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         headerName: 'Δσ',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+<<<<<<< HEAD
         cellStyle: (p) => ({
           backgroundColor: deltaHeatBackground(p.value, p.data?.normStdDeviation || 1),
         }),
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'deltaR2',
         headerName: 'ΔR²',
         width: 80,
         valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : ''),
+<<<<<<< HEAD
         cellStyle: (p) => ({ backgroundColor: deltaHeatBackground(p.value, 0.3) }),
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       },
       {
         field: 'verdict',
@@ -427,6 +488,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
           );
         },
       },
+<<<<<<< HEAD
       {
         colId: 'actions',
         headerName: '',
@@ -455,6 +517,10 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       },
     ],
     [canEditNorms, openRevisionDialog],
+=======
+    ],
+    [],
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   );
 
   return (
@@ -467,6 +533,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         участвует. Таблица — полный список направлений; график — динамика объём → производительность.
       </Typography>
 
+<<<<<<< HEAD
       {loading && result ? <LinearProgress sx={{ borderRadius: 1 }} data-testid="fact-norm-refresh-progress" /> : null}
 
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }} data-testid="fact-norm-kpi-row">
@@ -530,6 +597,8 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         </Alert>
       )}
 
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       {error && <Alert severity="error">{error}</Alert>}
 
       {result?.warnings?.length ? (
@@ -546,6 +615,7 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
       <Typography variant="subtitle1" component="h2">
         Сравнение по группам IIC
       </Typography>
+<<<<<<< HEAD
       <Box
         sx={{
           '& .fact-norm-row-selected': {
@@ -621,6 +691,29 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
             deviationSigma={selected.normStdDeviation}
           />
         </Box>
+=======
+      <DataTable<NormComparison>
+        rowData={result?.comparisons ?? []}
+        columnDefs={columnDefs}
+        objectName="GroupTrend"
+        gridId="fact-norm-suggestions"
+        loading={loading}
+        height={Math.max(280, Math.min(560, 48 + (result?.comparisons.length ?? 0) * 42))}
+        contextMenuItems={contextMenuItems}
+        onRowClicked={(row) => setSelected(row)}
+        getRowIdValue={(row) => String(row.normId)}
+      />
+
+      {selected && (
+        <FactVsNormChart
+          title={`${selected.groupName}: производительность vs объём`}
+          points={selected.chartPoints ?? []}
+          currentFormula={selected.currentFormula}
+          currentParams={selected.currentParameters}
+          proposedFormula={selected.proposedFormula}
+          proposedParams={selected.proposedParameters}
+        />
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       )}
 
       <ProjectPickerDialog
@@ -630,11 +723,19 @@ export function FactNormAnalysisPanel({ dateFrom, dateTo, onToolbarExtras }: Pro
         onApply={applyProjectIds}
       />
 
+<<<<<<< HEAD
       <NormRevisionDialog
         open={dialogOpen}
         row={dialogRow}
         suggestion={dialogSuggestion}
         formulas={formulas}
+=======
+      <CreateNormFromSuggestionDialog
+        open={dialogOpen}
+        suggestion={dialogSuggestion}
+        formulas={formulas}
+        chartPoints={selected?.chartPoints ?? []}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         onClose={() => setDialogOpen(false)}
         onSaved={() => void runAnalysis()}
       />

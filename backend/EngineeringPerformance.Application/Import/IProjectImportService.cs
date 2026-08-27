@@ -4,9 +4,6 @@ namespace EngineeringPerformance.Application.Import;
 
 public interface IProjectImportService
 {
-    /// <summary>Импорт списка проектов из Excel (legacy endpoint).</summary>
-    Task<int> ImportFromExcelAsync(int projectId, Stream fileStream, string fileName, CancellationToken cancellationToken = default);
-
     Task<DataImportResultDto> ImportProjectDataAsync(
         int projectId,
         int versionId,
@@ -32,5 +29,27 @@ public interface IProjectImportService
         int versionId,
         DataImportType dataType,
         DateTime importedAt,
+        CancellationToken cancellationToken = default);
+
+    Task<DataImportResultDto> IngestPhysicalVolumesAsync(
+        int projectId,
+        int versionId,
+        PhysicalVolumeIngestRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<DataImportResultDto> IngestEquipmentAsync(
+        int projectId,
+        int versionId,
+        EquipmentIngestRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<DataImportResultDto> IngestLaborIntensitiesAsync(
+        int projectId,
+        int versionId,
+        LaborIntensityIngestRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<LaborImportPreviewDto> PreviewLaborIngestAsync(
+        IReadOnlyList<string> documentTypeNames,
         CancellationToken cancellationToken = default);
 }

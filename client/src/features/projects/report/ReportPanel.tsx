@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, FormControl, MenuItem, Select, Stack, Tab, Tabs, Typography } from '@mui/material';
+=======
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Box, Stack, Tab, Tabs, Typography } from '@mui/material';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -22,6 +27,10 @@ import { getApiErrorMessage } from '../../../services/apiError';
 import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import { ReportsTab } from '../../../pages/projects/reports/ReportsTab';
+<<<<<<< HEAD
+=======
+import { DIRECTION_FACT, DIRECTION_PLAN } from '../../../pages/projects/reports/reportCalc';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { DirectionsTable } from './DirectionsTable';
 import { InsightsPanel } from './InsightsPanel';
 import './report-theme.css';
@@ -30,14 +39,46 @@ import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from
 import { VersionTrend } from './VersionTrend';
 import { ZScale } from './ZScale';
 
+<<<<<<< HEAD
+=======
+type ReportSubTab = 'summary' | 'legacy';
+
+/**
+ * Версия для детальных секций «Сводного» — зеркало backend
+ * PerformanceReportService.ResolveAssessmentVersionId: primary Fact → primary Plan →
+ * последняя Fact → последняя Plan (по CreatedAt).
+ */
+function resolveSummaryVersionId(versions: ProjectVersion[]): number | null {
+  const pool = versions.filter((v) => !v.isArchived);
+  if (pool.length === 0) return null;
+  const facts = pool.filter((v) => v.direction === DIRECTION_FACT);
+  const plans = pool.filter((v) => v.direction === DIRECTION_PLAN);
+  const byCreatedDesc = (a: ProjectVersion, b: ProjectVersion) =>
+    new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime() || b.id - a.id;
+  return (
+    facts.find((v) => v.isPrimary)?.id ??
+    plans.find((v) => v.isPrimary)?.id ??
+    [...facts].sort(byCreatedDesc)[0]?.id ??
+    [...plans].sort(byCreatedDesc)[0]?.id ??
+    null
+  );
+}
+
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 export interface ReportPanelProps {
   projectId: number;
   project?: Project;
   versions?: ProjectVersion[];
+<<<<<<< HEAD
   initialVersionId?: number;
 }
 
 export function ReportPanel({ projectId, project, versions, initialVersionId }: ReportPanelProps) {
+=======
+}
+
+export function ReportPanel({ projectId, project, versions }: ReportPanelProps) {
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const { canRead } = usePermission('Reports');
   const [report, setReport] = useState<PerformanceReportDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -45,12 +86,21 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
   const [error, setError] = useState<string | null>(null);
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
+<<<<<<< HEAD
   const [subTab, setSubTab] = useState<'summary' | 'byVersion'>('summary');
   const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
 
   useEffect(() => {
     setSelectedVersionId((current) => current ?? initialVersionId ?? null);
   }, [initialVersionId]);
+=======
+  const [subTab, setSubTab] = useState<ReportSubTab>('summary');
+
+  const summaryVersionId = useMemo(
+    () => (versions && versions.length > 0 ? resolveSummaryVersionId(versions) : null),
+    [versions],
+  );
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   const load = useCallback(async () => {
     if (!canRead || !projectId) return;
@@ -71,6 +121,17 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
     void load();
   }, [load]);
 
+<<<<<<< HEAD
+=======
+  // Remount ReportsTab по nonce — перезапускает react-query загрузку новых вкладок
+  // без необходимости тянуть QueryClient в панель (тесты рендерят панель без провайдера).
+  const [refreshNonce, setRefreshNonce] = useState(0);
+  const handleRefresh = useCallback(() => {
+    void load();
+    setRefreshNonce((n) => n + 1);
+  }, [load]);
+
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const handlePdf = async () => {
     setExporting(true);
     setError(null);
@@ -101,11 +162,16 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
         <ToolbarActionButton
           startIcon={<RefreshIcon />}
+<<<<<<< HEAD
           onClick={() => void load()}
+=======
+          onClick={handleRefresh}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           disabled={loading}
         >
           {ACTION_LABELS.refresh}
         </ToolbarActionButton>
+<<<<<<< HEAD
         <ExportActionButton
           kind="pdf"
           loading={exporting}
@@ -120,6 +186,26 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
         >
           {dark ? 'Светлая' : 'Тёмная'}
         </ToolbarActionButton>
+=======
+        {subTab === 'legacy' ? (
+          <>
+            <ExportActionButton
+              kind="pdf"
+              loading={exporting}
+              onClick={() => void handlePdf()}
+              disabled={exporting || !report}
+              data-testid="performance-report-pdf"
+            />
+            <ToolbarActionButton
+              startIcon={dark ? <LightModeIcon /> : <DarkModeIcon />}
+              onClick={() => setDarkRaw(dark ? '0' : '1')}
+              data-testid="performance-report-theme"
+            >
+              {dark ? 'Светлая' : 'Тёмная'}
+            </ToolbarActionButton>
+          </>
+        ) : null}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       </Stack>
 
       {error ? (
@@ -129,6 +215,7 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
       ) : null}
 
       {project && versions && versions.length > 0 ? (
+<<<<<<< HEAD
         <Stack
           direction="row"
           spacing={2}
@@ -171,6 +258,32 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
             project={project}
             versions={versions}
             versionId={selectedVersionId ?? versions[0].id}
+=======
+        <Tabs
+          value={subTab}
+          onChange={(_, v: ReportSubTab) => setSubTab(v)}
+          sx={{
+            minHeight: 36,
+            borderBottom: 1,
+            borderColor: 'divider',
+            mb: 1.5,
+            '& .MuiTab-root': { minHeight: 36, textTransform: 'none' },
+          }}
+        >
+          <Tab value="summary" label="Сводный вер 1" data-testid="report-summary-tab" />
+          <Tab value="legacy" label="Сводный вер 2" data-testid="report-legacy-tab" />
+        </Tabs>
+      ) : null}
+
+      {subTab !== 'legacy' && project && versions && versions.length > 0 ? (
+        <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
+          <ReportsTab
+            key={refreshNonce}
+            projectId={projectId}
+            project={project}
+            versions={versions}
+            versionId={summaryVersionId ?? versions[0].id}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           />
         </Box>
       ) : (

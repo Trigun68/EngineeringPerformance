@@ -29,9 +29,15 @@ public sealed class EquipmentConfiguration : IEntityTypeConfiguration<Equipment>
         builder.HasIndex(e => e.ClassifierId);
         builder.HasIndex(e => e.IsAssessment);
         builder.HasIndex(e => e.UnitId);
+        builder.HasIndex(e => e.ProjectId);
         builder.HasIndex(e => new { e.IsArchived, e.ParentId, e.SortOrder });
+        builder.HasIndex(e => new { e.ProjectId, e.IsArchived, e.ParentId, e.SortOrder });
+        builder.HasIndex(e => new { e.ProjectId, e.CatalogKeyHash })
+            .IsUnique()
+            .HasFilter("[ProjectId] IS NOT NULL");
         builder.HasIndex(e => e.CatalogKeyHash)
-            .IsUnique();
+            .IsUnique()
+            .HasFilter("[ProjectId] IS NULL");
 
         builder.HasOne(e => e.Parent)
             .WithMany(e => e.Children)
@@ -47,5 +53,10 @@ public sealed class EquipmentConfiguration : IEntityTypeConfiguration<Equipment>
             .WithMany()
             .HasForeignKey(e => e.UnitId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(e => e.Project)
+            .WithMany()
+            .HasForeignKey(e => e.ProjectId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

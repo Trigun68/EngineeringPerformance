@@ -1,7 +1,7 @@
 # Трёхзвенная архитектура (Docker)
 
 **Обновлено:** 2026-06-29  
-**Связанные документы:** [docs/migration_map.md](../../docs/migration_map.md), [docs/development_roadmap.md](../../docs/development_roadmap.md), [_doc/plans/architecture-comparison-and-improvement-roadmap.md](../plans/architecture-comparison-and-improvement-roadmap.md)
+**Связанные документы:** [_doc/migration_map.md](../migration_map.md), [_doc/development_roadmap.md](../development_roadmap.md), [_doc/plans/architecture-comparison-and-improvement-roadmap.md](../plans/architecture-comparison-and-improvement-roadmap.md)
 
 ## 1) Обзор архитектуры (текущее состояние)
 

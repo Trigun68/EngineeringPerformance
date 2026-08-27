@@ -45,7 +45,7 @@ const AccessRightsPage = lazy(() =>
 const SystemSettingsPage = lazy(() =>
   import('./pages/settings/SystemSettingsPage').then((m) => ({ default: m.SystemSettingsPage })),
 );
-// Дизайн-превью PDF-отчётов — доступно без авторизации и без AppLayout.
+// Дизайн-превью PDF-отчётов — только для администраторов, без AppLayout.
 const PdfDesignMockups = lazy(() => import('./pages/dev/PdfDesignMockups'));
 // Дев-мокап вкладки «Анализ тренда оценки факта» с демо-данными вместо backend.
 const TrendAnalysisMockup = lazy(() => import('./pages/dev/TrendAnalysisMockup'));
@@ -131,55 +131,68 @@ export default function App() {
     <BrowserRouter>
       <>
         <Routes>
-        <Route
-          path="/dev/pdf-mockups"
-          element={(
-            <Suspense fallback={null}>
-              <PdfDesignMockups />
-            </Suspense>
-          )}
-        />
-        <Route
-          path="/dev/trend-mockup"
-          element={(
-            <Suspense fallback={null}>
-              <TrendAnalysisMockup />
-            </Suspense>
-          )}
-        />
-        <Route
-          path="/dev/trends-legacy-mockup"
-          element={(
-            <Suspense fallback={null}>
-              <TrendsLegacyMockup />
-            </Suspense>
-          )}
-        />
-        <Route
-          path="/dev/trend-detail-mockup"
-          element={(
-            <Suspense fallback={null}>
-              <TrendDetailMockup />
-            </Suspense>
-          )}
-        />
-        <Route
-          path="/dev/fact-norm-mockup"
-          element={(
-            <Suspense fallback={null}>
-              <FactNormAnalysisMockup />
-            </Suspense>
-          )}
-        />
-        <Route
-          path="/dev/norm-analysis-mockup"
-          element={(
-            <Suspense fallback={null}>
-              <NormAnalysisMockup />
-            </Suspense>
-          )}
-        />
         {user ? (
+          <>
+          <Route
+            path="/dev/pdf-mockups"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <PdfDesignMockups />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trend-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trends-legacy-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendsLegacyMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/trend-detail-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <TrendDetailMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/fact-norm-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <FactNormAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
+          <Route
+            path="/dev/norm-analysis-mockup"
+            element={(
+              <AdminRouteGuard>
+                <Suspense fallback={null}>
+                  <NormAnalysisMockup />
+                </Suspense>
+              </AdminRouteGuard>
+            )}
+          />
           <Route element={<AppLayout />}>
             <Route
               path="/"
@@ -299,6 +312,7 @@ export default function App() {
             </Route>
             <Route path="*" element={<DefaultRedirect />} />
           </Route>
+          </>
         ) : (
           <Route path="*" element={<LoginPage />} />
         )}

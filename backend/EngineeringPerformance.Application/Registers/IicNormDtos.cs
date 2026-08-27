@@ -34,7 +34,8 @@ public sealed record IicNormDto(
     DateTime? ModifiedAt,
     NormFormulaDto? NormFormula = null,
     DeviationFormulaDto? DeviationFormula = null,
-    DateTime? MigratedAt = null);
+    DateTime? MigratedAt = null,
+    int RecalculatedVersionCount = 0);
 
 public sealed record IicNormHistoryItem(
     int? Id,

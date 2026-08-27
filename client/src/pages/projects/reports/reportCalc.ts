@@ -33,6 +33,7 @@ export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
   Critical: 'Критично',
 };
 
+<<<<<<< HEAD
 /** Flat UI Colors — согласовано с существующей палитрой приложения (wpColors). */
 export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
   Excellent: '#1E8449',
@@ -43,6 +44,39 @@ export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
 };
 
 export const MUTED_COLOR = '#95A5A6';
+=======
+/**
+ * Палитра интерпретации — дизайн-мокап ReportRedesignMockup (ветка v0):
+ * смягчённый красный, более выразительный янтарный для «удовлетворительно».
+ */
+export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
+  Excellent: '#0F9D6B',
+  Good: '#2F9E6E',
+  Satisfactory: '#C77A1F',
+  NeedsAttention: '#D2691E',
+  Critical: '#C6483F',
+};
+
+/** Фоны чипов интерпретации (мокап) — приглушённые оттенки основного цвета. */
+export const INTERPRETATION_BG: Record<Interpretation, string> = {
+  Excellent: '#E5F7EF',
+  Good: '#EAF6F0',
+  Satisfactory: '#FBF0E1',
+  NeedsAttention: '#FCEEE3',
+  Critical: '#F8E9E7',
+};
+
+/** Пастельные цвета зон полосы шкалы Z (мокап) — светлее INTERPRETATION_COLOR. */
+export const ZONE_COLOR: Record<Interpretation, string> = {
+  Excellent: '#6FCB9F',
+  Good: '#A8DDBE',
+  Satisfactory: '#F4CF62',
+  NeedsAttention: '#F0C48A',
+  Critical: '#DDA9A4',
+};
+
+export const MUTED_COLOR = '#7B8794';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 export function interpretationColor(z: number | null | undefined): string {
   const i = getInterpretation(z);
@@ -173,7 +207,13 @@ export function keyDisciplines(leaves: PerformanceTreeRow[], top = 3): Performan
 export interface VersionTrendPoint {
   versionId: number;
   versionName: string;
+<<<<<<< HEAD
   date: string | null;
+=======
+  direction: number;
+  date: string | null;
+  sortDate: number;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   weightedZScore: number | null;
   totalHours: number | null;
 }
@@ -183,3 +223,24 @@ export const DIRECTION_LABEL: Record<number, string> = {
   2: 'Версия факта',
   3: 'Прогноз',
 };
+<<<<<<< HEAD
+=======
+
+/** Направления версии — паритет backend enum AnalysisDirection. */
+export const DIRECTION_PLAN = 1;
+export const DIRECTION_FACT = 2;
+
+/**
+ * Акцентные цвета плана и факта (мокап ReportRedesignMockup):
+ * план — фиолетовый (менее акцентный), факт — синий (основной акцент, крупный маркер).
+ * SoT — client/src/constants/planFactColors.ts; здесь реэкспорт для обратной совместимости.
+ */
+export { PLAN_ACCENT_COLOR as ACCENT_PLAN, FACT_ACCENT_COLOR as ACCENT_FACT } from '../../../constants/planFactColors';
+
+/** Отклонение факта от плана в процентах: (fact − plan) / plan × 100; null при отсутствии данных. */
+export function hoursDeltaPct(planHours: number | null, factHours: number | null): number | null {
+  if (planHours === null || planHours === undefined || planHours === 0) return null;
+  if (factHours === null || factHours === undefined) return null;
+  return ((factHours - planHours) / planHours) * 100;
+}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968

@@ -4,10 +4,18 @@ import { Alert, Box, CircularProgress, Divider, Stack, Tab, Tabs, Typography } f
 import {
   fetchForecast,
   fetchPerformance,
+<<<<<<< HEAD
+=======
+  fetchProjectReportSummary,
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   fetchVersionAnalysis,
   type PerformanceRow,
 } from '../../../api/analyticsApi';
 import { fetchProjectCharacteristics } from '../../../api/projectCharacteristicsApi';
+<<<<<<< HEAD
+=======
+import { exportProjectReportPdf } from '../../../api/visualReportsApi';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import type { Project } from '../../../types/project';
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
@@ -19,13 +27,23 @@ import {
   type VersionTrendPoint,
 } from './reportCalc';
 import { ReportHeader } from './components/ReportHeader';
+<<<<<<< HEAD
 import { SummaryCards } from './components/SummaryCards';
 import { ZScale } from './components/ZScale';
+=======
+import { PlanFactSummary } from './components/PlanFactSummary';
+import { ZScale } from './components/ZScale';
+import { TopPerformersPanel } from './components/TopPerformersPanel';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { DirectionBars } from './components/DirectionBars';
 import { PerformanceTree } from './components/PerformanceTree';
 import { ForecastTable } from './components/ForecastTable';
 import { AccuracyPanel } from './components/AccuracyPanel';
 import { PhysicalVolumesGrid } from './components/PhysicalVolumesGrid';
+<<<<<<< HEAD
+=======
+import { PhysicalVolumeGroupsTable } from './components/PhysicalVolumeGroupsTable';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { VersionTrend } from './components/VersionTrend';
 import { InsightsPanel } from './components/InsightsPanel';
 
@@ -40,6 +58,19 @@ type DetailTab = 'tree' | 'forecast' | 'accuracy' | 'volumes';
 
 export function ReportsTab({ projectId, versionId, project, versions }: ReportsTabProps) {
   const [detailTab, setDetailTab] = useState<DetailTab>('tree');
+<<<<<<< HEAD
+=======
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      await exportProjectReportPdf(projectId, versionId);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   const selectedVersion = versions.find((v) => v.id === versionId) ?? null;
 
@@ -51,11 +82,19 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   const query = useQuery({
     queryKey: ['reports-tab', projectId, versionId, nonArchivedVersions.map((v) => v.id).join(',')],
     queryFn: async () => {
+<<<<<<< HEAD
       const [performance, analysis, forecast, characteristics, trendAnalyses] = await Promise.all([
+=======
+      const [performance, analysis, forecast, characteristics, reportSummary, trendAnalyses] = await Promise.all([
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         fetchPerformance(projectId, versionId),
         fetchVersionAnalysis(projectId, versionId),
         fetchForecast(projectId, versionId),
         fetchProjectCharacteristics(projectId).catch(() => []),
+<<<<<<< HEAD
+=======
+        fetchProjectReportSummary(projectId),
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         Promise.all(
           nonArchivedVersions.map(async (v) => {
             try {
@@ -68,6 +107,7 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
         ),
       ]);
 
+<<<<<<< HEAD
       const trendPoints: VersionTrendPoint[] = trendAnalyses.map(({ version, summary }) => ({
         versionId: version.id,
         versionName: version.versionName,
@@ -77,6 +117,22 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
       }));
 
       return { performance, analysis, forecast, characteristics, trendPoints };
+=======
+      const trendPoints: VersionTrendPoint[] = trendAnalyses.map(({ version, summary }) => {
+        const createdAt = version.createdAt ? new Date(version.createdAt) : null;
+        return {
+          versionId: version.id,
+          versionName: version.versionName,
+          direction: version.direction,
+          date: createdAt ? createdAt.toLocaleDateString('ru-RU') : null,
+          sortDate: createdAt ? createdAt.getTime() : 0,
+          weightedZScore: summary?.weightedZScore ?? null,
+          totalHours: summary?.totalFactLaborHours ?? null,
+        };
+      });
+
+      return { performance, analysis, forecast, characteristics, reportSummary, trendPoints };
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     },
     staleTime: 30_000,
   });
@@ -109,9 +165,13 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   );
 
   const trendPoints = query.data?.trendPoints ?? [];
+<<<<<<< HEAD
   const currentIndex = trendPoints.findIndex((p) => p.versionId === versionId);
   const previousZScore =
     currentIndex > 0 ? trendPoints[currentIndex - 1].weightedZScore : null;
+=======
+  const reportSummary = query.data?.reportSummary;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   if (!selectedVersion) {
     return <Alert severity="warning">Версия анализа не найдена.</Alert>;
@@ -129,17 +189,36 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
     return <Alert severity="error">{getApiErrorMessage(query.error, 'Не удалось загрузить отчёт.')}</Alert>;
   }
 
+<<<<<<< HEAD
   if (!query.data || !summary) {
+=======
+  if (!query.data || !summary || !reportSummary) {
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     return null;
   }
 
   return (
     <Stack spacing={3}>
+<<<<<<< HEAD
       <ReportHeader project={project} version={selectedVersion} />
 
       <SummaryCards summary={summary} previousZScore={previousZScore} accuracyScore={accuracyScore} />
 
       <ZScale zScore={summary.weightedZScore} percentile={summary.weightedZScorePercentile} />
+=======
+      <ReportHeader
+        project={project}
+        version={selectedVersion}
+        onExportPdf={() => void handleExportPdf()}
+        exporting={exportingPdf}
+      />
+
+      <PlanFactSummary summary={reportSummary} accuracyScore={accuracyScore} />
+
+      <ZScale planZScore={reportSummary.planWeightedZScore} factZScore={reportSummary.factWeightedZScore} />
+
+      <TopPerformersPanel leaves={leaves} />
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
         <DirectionBars
@@ -184,7 +263,23 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
           <AccuracyPanel characteristics={query.data.characteristics} score={accuracyScore} />
         )}
         {detailTab === 'volumes' && (
+<<<<<<< HEAD
           <PhysicalVolumesGrid items={summary.physicalVolumeTotalsByUnit} />
+=======
+          <Stack spacing={3}>
+            <PhysicalVolumesGrid items={summary.physicalVolumeTotalsByUnit} />
+            <Divider />
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                Все группы физобъёмов ИИЦ
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Плоский список листовых направлений работ с сортировкой, поиском и фильтром по интерпретации.
+              </Typography>
+            </Stack>
+            <PhysicalVolumeGroupsTable leaves={leaves} />
+          </Stack>
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         )}
       </Box>
 

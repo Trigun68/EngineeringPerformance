@@ -27,10 +27,11 @@ public sealed class RegistersController : ControllerBase
     public IActionResult ExportExcelPost([FromBody] DirectoryExportRequest request)
     {
         var bytes = _directoryExport.ExportToExcel(request);
-        var safeName = SanitizeFileName(request.TabName);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        var filename = $"{safeName}_{timestamp}.xlsx";
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.Views.IicNorms);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("iic-work-direction-norms/export.xlsx")]
@@ -51,7 +52,11 @@ public sealed class RegistersController : ControllerBase
         };
 
         var bytes = ReferenceExcelExporter.Export("iic-work-direction-norms", columns, items.Cast<object>());
-        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "iic-work-direction-norms.xlsx");
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Directory,
+            "xlsx",
+            ExportFileNameBuilder.Views.IicNorms);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
     [HttpGet("iic-work-direction-norms")]
@@ -97,12 +102,5 @@ public sealed class RegistersController : ControllerBase
     {
         var ok = await _norms.DeleteAsync(id, cancellationToken);
         return ok ? NoContent() : NotFound();
-    }
-
-    private static string SanitizeFileName(string name)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray()).Trim();
-        return string.IsNullOrWhiteSpace(cleaned) ? "Справочник" : cleaned;
     }
 }

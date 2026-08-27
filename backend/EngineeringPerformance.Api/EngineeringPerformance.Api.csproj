@@ -2,6 +2,8 @@
   <PropertyGroup>
     <RootNamespace>EngineeringPerformance.Api</RootNamespace>
     <AssemblyName>EngineeringPerformance.Api</AssemblyName>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
@@ -10,6 +12,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="8.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
     <PackageReference Include="QuestPDF" Version="2024.12.2" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
@@ -17,5 +20,12 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\EngineeringPerformance.Infrastructure\EngineeringPerformance.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- XML comments from Application for Swagger -->
+    <None Include="..\EngineeringPerformance.Application\bin\$(Configuration)\$(TargetFramework)\EngineeringPerformance.Application.xml"
+          Link="EngineeringPerformance.Application.xml"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('..\EngineeringPerformance.Application\bin\$(Configuration)\$(TargetFramework)\EngineeringPerformance.Application.xml')" />
   </ItemGroup>
 </Project>

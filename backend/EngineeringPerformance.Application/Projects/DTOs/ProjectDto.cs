@@ -14,5 +14,8 @@ public sealed record ProjectDto(
     string? WorkStatus,
     DateOnly? WorkStart,
     string? Program,
-    int VersionCount,
+    /// <summary>Неархивные версии плана (Direction = Plan).</summary>
+    int PlanVersionCount,
+    /// <summary>Неархивные версии факта (Direction = Fact).</summary>
+    int FactVersionCount,
     bool IsArchived);

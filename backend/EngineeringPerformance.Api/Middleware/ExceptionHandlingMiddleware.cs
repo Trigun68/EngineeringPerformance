@@ -1,5 +1,6 @@
 using System.Text.Json;
 using EngineeringPerformance.Application.Common.Exceptions;
+using EngineeringPerformance.Infrastructure.Persistence;
 using FluentValidation;
 
 namespace EngineeringPerformance.Api.Middleware;
@@ -29,6 +30,10 @@ public sealed class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // Клиент ушёл (смена вкладки, новый переход). Не пишем 500 в лог и в ответ.
+        }
         catch (Exception ex)
         {
             await HandleExceptionAsync(context, ex);
@@ -42,8 +47,15 @@ public sealed class ExceptionHandlingMiddleware
             ? cid?.ToString()
             : null;
 
+        var sqlUnavailable = SqlConnectionTimeoutClassifier.IsUnavailable(exception);
         var (status, title, detail, errorCode, errors) = exception switch
         {
+            _ when sqlUnavailable => (
+                StatusCodes.Status503ServiceUnavailable,
+                "Database temporarily unavailable.",
+                "The database is busy. Retry shortly.",
+                "sql_unavailable",
+                (IReadOnlyDictionary<string, string[]>?)null),
             ValidationException validationException => (
                 StatusCodes.Status400BadRequest,
                 "Validation failed.",
@@ -95,7 +107,9 @@ public sealed class ExceptionHandlingMiddleware
                 null)
         };
 
-        if (status >= 500)
+        if (sqlUnavailable)
+            _logger.LogError(exception, "SQL unavailable for {Method} {Path}", context.Request.Method, context.Request.Path);
+        else if (status >= 500)
             _logger.LogError(exception, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
         else
             _logger.LogWarning(exception, "Handled exception for {Method} {Path}", context.Request.Method, context.Request.Path);

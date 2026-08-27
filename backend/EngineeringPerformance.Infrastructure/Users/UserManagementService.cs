@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Users;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -5,14 +7,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Users;
 
-public sealed class UserManagementService : IUserManagementService
+public sealed class UserManagementService(
+    AppDbContext context,
+    IAccountLockoutService accountLockoutService,
+    IMfaService mfaService) : IUserManagementService
 {
-    private readonly AppDbContext _context;
-
-    public UserManagementService(AppDbContext context)
-    {
-        _context = context;
-    }
+    private const string TemporaryPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    private readonly AppDbContext _context = context;
+    private readonly IAccountLockoutService _accountLockoutService = accountLockoutService;
+    private readonly IMfaService _mfaService = mfaService;
 
     public async Task<IReadOnlyList<UserDto>> GetAllAsync(bool includeArchived, CancellationToken cancellationToken = default)
     {
@@ -64,6 +67,7 @@ public sealed class UserManagementService : IUserManagementService
             RoleId = request.RoleId,
             WindowsUsername = string.IsNullOrWhiteSpace(request.WindowsUsername) ? null : request.WindowsUsername.Trim(),
             IsActive = request.IsActive,
+            MustChangePassword = request.MustChangePassword,
             CreatedAt = DateTime.UtcNow,
         };
 
@@ -173,6 +177,7 @@ public sealed class UserManagementService : IUserManagementService
             return (false, "Неверный текущий пароль");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
+        user.MustChangePassword = false;
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
         return (true, null);
@@ -197,8 +202,60 @@ public sealed class UserManagementService : IUserManagementService
         return (true, null);
     }
 
+    public async Task<bool> UnlockAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
+        if (user is null)
+            return false;
+
+        await _accountLockoutService.UnlockAsync(user, cancellationToken);
+        return true;
+    }
+
+    public async Task<MfaResetStatus> ResetMfaAsync(int userId, CancellationToken cancellationToken = default)
+    {
+        if (!_mfaService.IsAvailable)
+            return MfaResetStatus.Disabled;
+
+        var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
+        if (user is null)
+            return MfaResetStatus.UserNotFound;
+
+        await _mfaService.ResetMfaAsync(user, cancellationToken);
+        return MfaResetStatus.Success;
+    }
+
+    public async Task<(string? TemporaryPassword, string? Error)> ResetPasswordAsync(
+        int userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
+        if (user is null)
+            return (null, "Пользователь не найден");
+
+        var temporaryPassword = GenerateTemporaryPassword();
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(temporaryPassword);
+        user.MustChangePassword = true;
+        user.ModifiedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return (temporaryPassword, null);
+    }
+
     private static string? ValidateNewPassword(string newPassword) =>
         string.IsNullOrWhiteSpace(newPassword) ? "Новый пароль обязателен" : null;
+
+    private static string GenerateTemporaryPassword()
+    {
+        Span<char> password = stackalloc char[16];
+        for (var index = 0; index < password.Length; index++)
+        {
+            password[index] = TemporaryPasswordAlphabet[
+                RandomNumberGenerator.GetInt32(TemporaryPasswordAlphabet.Length)];
+        }
+
+        return new string(password);
+    }
 
     private static string? ValidateRequest(string username, string displayName, int roleId)
     {

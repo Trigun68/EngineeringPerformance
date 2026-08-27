@@ -7,7 +7,8 @@ public sealed record DetailForecastSummaryInputRow(
     int? ClassifierId,
     decimal Quantity,
     decimal? Coefficient,
-    decimal? BaseHours);
+    /// <summary>Часы выбранного сценария (база / опт. / пессим.).</summary>
+    decimal? LaborHours);
 
 /// <summary>Узел дерева групп ФО IIC для определения корневых блоков и ед. изм.</summary>
 public sealed record IicDirectionNodeDto(
@@ -35,7 +36,9 @@ public sealed record DetailForecastSummaryRowDto(
     string FacilityCode,
     string FacilityName,
     string RowLabel,
-    IReadOnlyList<DetailForecastSummaryCellDto> Cells);
+    IReadOnlyList<DetailForecastSummaryCellDto> Cells,
+    /// <summary>Сумма трудоёмкости по всем блокам строки (ФО в итог не входит).</summary>
+    decimal LaborHoursTotal);
 
 /// <summary>Сводная таблица прогноза по объектам и корневым группам IIC.</summary>
 public sealed record DetailForecastSummaryTableDto(

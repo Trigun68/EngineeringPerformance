@@ -2,15 +2,18 @@ using EngineeringPerformance.Domain.Common;
 
 namespace EngineeringPerformance.Domain.Entities;
 
-/// <summary>Справочник оборудования: иерархия, привязка к группе IIC, коэффициент и признак оценки.</summary>
+/// <summary>Справочник оборудования: иерархия в рамках проекта, привязка к группе IIC, коэффициент и признак оценки.</summary>
 public sealed class Equipment : DirectoryItem
 {
     public string Description { get; set; } = string.Empty;
 
+    /// <summary>Проект, которому принадлежит позиция справочника. NULL — legacy/orphans (номенклатура).</summary>
+    public int? ProjectId { get; set; }
+
     /// <summary>Группа физ. объёмов (IIC) для расчёта норм.</summary>
     public int? ClassifierId { get; set; }
 
-    /// <summary>SHA-256 (Name + UnitId) — уникальный ключ без индекса по длинному Name.</summary>
+    /// <summary>SHA-256 (ProjectId?\0 + Name + \0 + UnitId) — уникальный ключ в рамках проекта.</summary>
     public string CatalogKeyHash { get; set; } = string.Empty;
 
     /// <summary>Оценка: да / нет / не выбрано (null).</summary>
@@ -31,4 +34,6 @@ public sealed class Equipment : DirectoryItem
     public IicWorkDirection? Classifier { get; set; }
 
     public UnitOfMeasurement? Unit { get; set; }
+
+    public Project? Project { get; set; }
 }

@@ -1,3 +1,8 @@
+# Имя проекта зафиксировано, чтобы переезд исходников в другую папку не создал
+# новый том SQL (`<имя-папки>_mssql_data`) и не разъехался с бэкапами
+# (`project: engineeringperformance` в host inventory).
+name: engineeringperformance
+
 services:
   redis:
     image: redis:7-alpine
@@ -21,6 +26,8 @@ services:
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required}
+      # Cap buffer pool so Api.Tests + ep-backend on shared SQL avoid RESOURCE_SEMAPHORE / 30s timeouts.
+      MSSQL_MEMORY_LIMIT_MB: "2048"
     ports:
       - "127.0.0.1:1433:1433"
     volumes:
@@ -44,6 +51,8 @@ services:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${SQL_SA_PASSWORD:?SQL_SA_PASSWORD is required}
       SQL_HOST: sqlserver
+      # 1 = заново прогнать 012/013/014 (сбросит Coefficient/IsAssessment к seed)
+      FORCE_NOMENCLATURE_REFRESH: ${FORCE_NOMENCLATURE_REFRESH:-0}
     volumes:
       - ./migrations:/migrations:ro
       # Не монтировать в /scripts — в образе mssql этот путь занят/пустой volume.
@@ -81,8 +90,17 @@ services:
       Jwt__Secret: ${JWT_SECRET:?JWT_SECRET is required}
       Jwt__Issuer: ${JWT_ISSUER:-EngineeringPerformance}
       Jwt__Audience: ${JWT_AUDIENCE:-EngineeringPerformance}
-      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-1440}
+      Jwt__AccessTokenLifetimeMinutes: ${JWT_ACCESS_TOKEN_LIFETIME_MINUTES:-15}
+      Jwt__RefreshTokenLifetimeDays: ${JWT_REFRESH_TOKEN_LIFETIME_DAYS:-7}
+      Mfa__Enabled: ${MFA_ENABLED:-false}
+      Mfa__RequiredRoles__0: SuperAdmin
+      Mfa__RequiredRoles__1: Admin
+      Ldap__Enabled: ${LDAP_ENABLED:-false}
+      RateLimit__Enabled: ${RATE_LIMIT_ENABLED:-true}
+      RateLimit__LoginMaxAttempts: ${RATE_LIMIT_LOGIN_MAX_ATTEMPTS:-5}
+      RateLimit__LoginWindowMinutes: ${RATE_LIMIT_LOGIN_WINDOW_MINUTES:-15}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      Swagger__Enabled: ${Swagger__Enabled:-false}
       Spnego__Enabled: ${SPNEGO_ENABLED:-false}
       Spnego__TrustedProxySecret: ${PROXY_TRUSTED_SECRET:-}
       DevWindowsAuth__SimulatedWindowsUser: ${DEV_WINDOWS_USER:-}
@@ -94,6 +112,12 @@ services:
       - "8080"
     networks:
       - internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   frontend:
     build:
@@ -118,6 +142,12 @@ services:
       - 127.0.0.11
       - 1.1.1.1
       - 8.8.8.8
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   mssql_data:

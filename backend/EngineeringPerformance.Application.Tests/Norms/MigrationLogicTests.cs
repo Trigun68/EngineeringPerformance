@@ -75,6 +75,26 @@ public sealed class MigrationLogicTests
         opt.Should().Be(95m);
     }
 
+    /// <summary>
+    /// Z из ProjectVersionPlanningParameters (в т.ч. версии факта) меняет нормативную LI:
+    /// LI = N(V)·(1+σ·z)·V — эквивалент Performance·(1 + (StdDev/Performance)·z).
+    /// </summary>
+    [Fact]
+    public void PlanningZBase_AdjustsNormativeLaborIntensity()
+    {
+        const decimal performance = 100m;
+        const decimal stdDev = 10m;
+        const decimal volume = 10m;
+        var zZero = new PlanningZParameters(0.5m, 0m, -0.5m);
+        var zBase = new PlanningZParameters(0.5m, 0.4m, -0.5m);
+
+        var (baseZero, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zZero);
+        var (baseAdj, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zBase);
+
+        baseZero.Should().Be(1000m);
+        baseAdj.Should().Be(1040m);
+    }
+
     [Fact]
     public void Migration_IdempotentCoefficientsJson()
     {

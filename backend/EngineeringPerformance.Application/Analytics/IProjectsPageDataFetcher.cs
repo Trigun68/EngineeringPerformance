@@ -11,4 +11,21 @@ public interface IProjectsPageDataFetcher
         int versionId,
         int? compareVersionId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Сетевой вид без строк «Детально» (пустые encoded-гриды с колонками).
+    /// Полный упакованный ответ кэшируется отдельно от DTO экспорта.
+    /// </summary>
+    Task<ProjectsPageDataEncodedDto> GetEncodedPageDataAsync(
+        int projectId,
+        int versionId,
+        int? compareVersionId = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>Только упакованные гриды «Детально» из того же кэша, что и <see cref="GetEncodedPageDataAsync"/>.</summary>
+    Task<ProjectsPageDetailsEncodedDto> GetEncodedPageDetailsAsync(
+        int projectId,
+        int versionId,
+        int? compareVersionId = null,
+        CancellationToken cancellationToken = default);
 }

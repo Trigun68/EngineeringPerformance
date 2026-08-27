@@ -116,6 +116,27 @@ export async function fetchVersionAnalysis(
   return data;
 }
 
+/** Сводка «план/факт» по основным версиям проекта (см. backend ProjectReportSummaryDto). */
+export interface ProjectReportSummary {
+  planVersionId: number | null;
+  planVersionName: string | null;
+  planHours: number | null;
+  planWeightedZScore: number | null;
+  planPercentile: string | null;
+  planInterpretation: string | null;
+  factVersionId: number | null;
+  factVersionName: string | null;
+  factHours: number | null;
+  factWeightedZScore: number | null;
+  factPercentile: string | null;
+  factInterpretation: string | null;
+}
+
+export async function fetchProjectReportSummary(projectId: number): Promise<ProjectReportSummary> {
+  const { data } = await apiClient.get<ProjectReportSummary>(`/projects/${projectId}/report-summary`);
+  return data;
+}
+
 export interface ForecastIicVolumeRow {
   workDirectionId: number;
   parentId: number | null;

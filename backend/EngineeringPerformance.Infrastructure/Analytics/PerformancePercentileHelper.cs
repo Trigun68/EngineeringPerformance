@@ -9,7 +9,7 @@ public static class PerformancePercentileHelper
 {
     public static string GetPercentile(decimal? z)
     {
-        if (!z.HasValue) return "Н/Д";
+        if (!z.HasValue) return "—";
         var v = z.Value;
         if (v < -1.0m) return "0-й";
         if (v < -0.8m) return "0-10-й";

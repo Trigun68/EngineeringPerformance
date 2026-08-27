@@ -1,31 +1,31 @@
-using System.Text.Json;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Distributed;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 public sealed class TrendAnalyticsService : ITrendAnalyticsService
 {
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
-
     private readonly AppDbContext _db;
     private readonly IFactAssessmentPipeline _pipeline;
     private readonly ProjectsPageRawDataLoader _rawLoader;
-    private readonly IDistributedCache _cache;
+    private readonly IProjectAnalyticsCache _cache;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
     public TrendAnalyticsService(
         AppDbContext db,
         IFactAssessmentPipeline pipeline,
         ProjectsPageRawDataLoader rawLoader,
-        IDistributedCache cache)
+        IProjectAnalyticsCache cache,
+        IPerformanceCalculationEngine calculationEngine)
     {
         _db = db;
         _pipeline = pipeline;
         _rawLoader = rawLoader;
         _cache = cache;
+        _calculationEngine = calculationEngine;
     }
 
     public IReadOnlyList<AssessmentFormulaDescriptor> ListFormulas() => _pipeline.ListFormulas();
@@ -38,10 +38,11 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
         string formulaId,
         CancellationToken cancellationToken = default)
     {
-        var cacheKey = $"trends:{projectId}:{dateFrom:O}:{dateTo:O}:{granularity}:{formulaId}";
-        var cached = await _cache.GetStringAsync(cacheKey, cancellationToken);
-        if (!string.IsNullOrEmpty(cached))
-            return JsonSerializer.Deserialize<TrendAnalyticsResultDto>(cached)!;
+        // Ключ версионируется поколением проекта: мутации данных сбрасывают кэш сразу, без TTL.
+        var cacheKey = $"trends:{dateFrom:O}:{dateTo:O}:{granularity}:{formulaId}";
+        var cached = await _cache.GetAsync<TrendAnalyticsResultDto>(projectId, cacheKey, cancellationToken);
+        if (cached is not null)
+            return cached;
 
         var versionsQuery = _db.ProjectAnalysisVersions
             .AsNoTracking()
@@ -61,6 +62,11 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
             .Where(v => v.Direction is AnalysisDirection.Forecast or AnalysisDirection.Plan)
             .ToList();
 
+        // Батч-оценка всех версий одним проходом (без N+1 и без повторной оценки в delta-цикле).
+        var batch = await _pipeline.EvaluateManyAsync(
+            versions.Select(v => new AssessmentRequest(projectId, v.Id, formulaId)).ToList(),
+            cancellationToken);
+
         var factPoints = new List<TrendPointDto>();
         var forecastPoints = new List<TrendPointDto>();
         var deltaPoints = new List<TrendPointDto>();
@@ -69,9 +75,8 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
 
         foreach (var version in factVersions)
         {
-            var result = await _pipeline.EvaluateAsync(
-                new AssessmentRequest(projectId, version.Id, formulaId),
-                cancellationToken);
+            if (!batch.Results.TryGetValue(version.Id, out var result))
+                continue;
             var hours = result.Summary.TotalFactLaborHours;
             factPoints.Add(new TrendPointDto(
                 version.CreatedAt,
@@ -92,9 +97,8 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
 
         foreach (var version in forecastVersions)
         {
-            var result = await _pipeline.EvaluateAsync(
-                new AssessmentRequest(projectId, version.Id, formulaId),
-                cancellationToken);
+            if (!batch.Results.TryGetValue(version.Id, out var result))
+                continue;
             forecastPoints.Add(new TrendPointDto(
                 version.CreatedAt,
                 version.Id,
@@ -112,13 +116,10 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
                 .FirstOrDefault()
                 ?? forecastVersions.FirstOrDefault();
             if (nearestForecast is null) continue;
+            if (!batch.Results.TryGetValue(fact.Id, out var factResult)
+                || !batch.Results.TryGetValue(nearestForecast.Id, out var forecastResult))
+                continue;
 
-            var factResult = await _pipeline.EvaluateAsync(
-                new AssessmentRequest(projectId, fact.Id, formulaId),
-                cancellationToken);
-            var forecastResult = await _pipeline.EvaluateAsync(
-                new AssessmentRequest(projectId, nearestForecast.Id, formulaId),
-                cancellationToken);
             var factH = factResult.Summary.TotalFactLaborHours ?? 0m;
             var forecastH = forecastResult.Summary.TotalFactLaborHours ?? 0m;
             deltaPoints.Add(new TrendPointDto(
@@ -159,11 +160,7 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
             ],
             importEvents.Concat(versionEvents).OrderBy(e => e.Timestamp).ToList());
 
-        await _cache.SetStringAsync(
-            cacheKey,
-            JsonSerializer.Serialize(resultDto),
-            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl },
-            cancellationToken);
+        await _cache.SetAsync(projectId, cacheKey, resultDto, cancellationToken);
 
         return resultDto;
     }
@@ -184,7 +181,8 @@ public sealed class TrendAnalyticsService : ITrendAnalyticsService
             cancellationToken);
 
         var bundle = await _rawLoader.LoadAsync(projectId, versionId, cancellationToken);
-        var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(bundle, result.Performance);
+        var (_, detail) = ProjectsPageGridBuilder.BuildFactGrids(
+            bundle, result.Performance, _calculationEngine);
 
         return detail.Select(d => new TrendDetailRowDto(
             version.CreatedAt,

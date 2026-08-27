@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "skills": {
+    "authoring-github-workflows": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/authoring-github-workflows/SKILL.md",
+      "computedHash": "8a1ab212d59191e828ad00d02060c93cb642ff35dcb1761212a7cd2dcef212cb"
+    },
+    "authorization": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "authorization/SKILL.md",
+      "computedHash": "52a92cc39eee8b98214e7eb2fc584b01aaaec498f4db14c81a1acf12b0da6001"
+    },
+    "ci-cd": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "ci-cd/SKILL.md",
+      "computedHash": "418708ce2c90bdafaa08371a246045bff59dfdcb73163583a598a49f1ba0c58a"
+    },
+    "code-testing-agent": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-test/skills/code-testing-agent/SKILL.md",
+      "computedHash": "d656c3efd52debb7a8e43f1f95f670c8e61205c5b29a7632539de21db5d23a14"
+    },
+    "docker": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "docker/SKILL.md",
+      "computedHash": "37ae6180168ecbffa4e4c063169691afb146c91c38f2790988d8d3665b9a0adb"
+    },
+    "dotnet-authorization": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "dotnet-authorization/SKILL.md",
+      "computedHash": "8913a4ce89e878f476e848188dc6d174b080afeeded2090beca2fc03c884cac6"
+    },
+    "dotnet-testing": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "dotnet-testing/SKILL.md",
+      "computedHash": "79c4c41f741bf76071698e5ebfbecbb9402fda43d34abd5bc4f05f49f2d965ed"
+    },
+    "dotnet-webapi": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-aspnetcore/skills/dotnet-webapi/SKILL.md",
+      "computedHash": "9f9ca386ddefb34ebeaf269c6a7dac0bd0a8e9ea901ad5c489cd4d5e7c61fb22"
+    },
+    "optimizing-ef-core-queries": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-data/skills/optimizing-ef-core-queries/SKILL.md",
+      "computedHash": "265a890a57f60bf55d79fb92483176aca3c6e5c88c23cd75d18911e8354d0e87"
+    },
+    "playwright-cli": {
+      "source": "microsoft/playwright-cli",
+      "sourceType": "github",
+      "skillPath": "skills/playwright-cli/SKILL.md",
+      "computedHash": "f602822b51bcb6d033749c60731b8f1e80f308222fcb2e4af551905a817c6e08"
+    },
+    "production-react": {
+      "source": "nkartik94/agentic-skills",
+      "sourceType": "github",
+      "skillPath": "skills/production-react/SKILL.md",
+      "computedHash": "334e207139943e3f57305728510412af90681ef07707890fc7d5778ff3263f96"
+    },
+    "react-spa": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "react-spa/SKILL.md",
+      "computedHash": "2e3c0f541e9bd25db51562e0d9384e167e178aeecccdf408b2a089dad19b58e8"
+    },
+    "react-testing": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "react-testing/SKILL.md",
+      "computedHash": "5e893c7966cda668026ee2f94a050f1bf45db54c7bfb97bcb4ae265459d97c33"
+    },
+    "run-tests": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-test/skills/run-tests/SKILL.md",
+      "computedHash": "075d5b12b7c83a80ef676d1850f71be544823881192ce18f5c24ee17368b7248"
+    },
+    "test-anti-patterns": {
+      "source": "dotnet/skills",
+      "sourceType": "github",
+      "skillPath": "plugins/dotnet-test/skills/test-anti-patterns/SKILL.md",
+      "computedHash": "8fc0e1ca4dc122d139d75e660215b08d305d6f168c3d265c3a24a995489d1432"
+    },
+    "testing": {
+      "source": "hkarpinen/agent-skills",
+      "sourceType": "github",
+      "skillPath": "testing/SKILL.md",
+      "computedHash": "fb166f316e68a91779f8160044d3649da7c9d75243108ecd74e0e4fa5a01783f"
+    },
+    "vercel-composition-patterns": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/composition-patterns/SKILL.md",
+      "computedHash": "575757e3e25761c8c562d6e395d29f0b76c98b1273c0bd72d88e6ab1bc9c7d42"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212"
+    }
+  }
+}

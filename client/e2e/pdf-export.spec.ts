@@ -23,6 +23,13 @@ test.describe('PDF visual reports export', () => {
   test('report tab has PDF export for performance report', async ({ page }) => {
     await openFirstProject(page);
     await page.getByRole('tab', { name: 'Отчет' }).click();
+<<<<<<< HEAD
+=======
+    // Дефолтная под-вкладка «Сводный вер 1» — новый дизайн со своей кнопкой PDF в шапке.
+    await expect(page.getByTestId('report-export-pdf')).toBeVisible({ timeout: 30_000 });
+    // Прежняя сводная (откат) — под-вкладка «Сводный вер 2», там своя кнопка PDF.
+    await page.getByTestId('report-legacy-tab').click();
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
     await expect(actionButton(page, 'exportPdf')).toBeVisible();
   });

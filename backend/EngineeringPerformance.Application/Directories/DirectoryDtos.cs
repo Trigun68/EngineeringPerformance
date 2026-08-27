@@ -18,7 +18,8 @@ public sealed record DirectoryEntryDto(
     bool IsArchived,
     DateTime CreatedAt,
     DateTime? ModifiedAt,
-    IReadOnlyDictionary<string, JsonElement> Properties);
+    IReadOnlyDictionary<string, JsonElement> Properties,
+    int RecalculatedVersionCount = 0);
 
 public sealed record DirectoryTreeNodeDto(
     int Id,

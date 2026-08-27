@@ -18,7 +18,8 @@ public sealed record CreateUserRequest(
     int RoleId,
     string? Password,
     string? WindowsUsername,
-    bool IsActive = true);
+    bool IsActive = true,
+    bool MustChangePassword = false);
 
 public sealed record UpdateUserRequest(
     string Username,
@@ -27,3 +28,10 @@ public sealed record UpdateUserRequest(
     string? Password,
     string? WindowsUsername,
     bool IsActive);
+
+public enum MfaResetStatus
+{
+    Success,
+    Disabled,
+    UserNotFound,
+}

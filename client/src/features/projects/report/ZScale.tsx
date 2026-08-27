@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { fmtSigned, interpretationColor } from './reportFormat';
+=======
+import { fmtSigned } from './reportFormat';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 
 const MIN = -3;
@@ -26,6 +30,10 @@ type Marker = {
   zScore: number | null;
   label: string;
   side: 'top' | 'bottom';
+<<<<<<< HEAD
+=======
+  color: string;
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 };
 
 type Props = {
@@ -43,10 +51,18 @@ export function ZScale({
   factPercentile,
   normSourcesUsed,
 }: Props) {
+<<<<<<< HEAD
   // UX: план сверху, факт снизу.
   const markers: Marker[] = [
     { zScore: planZ, label: 'План', side: 'top' },
     { zScore: factZ, label: 'Факт', side: 'bottom' },
+=======
+  // UX: план сверху, факт снизу. Маркеры — в акцентных цветах план/факт (не в цвете зоны),
+  // чтобы не сливались со шкалой.
+  const markers: Marker[] = [
+    { zScore: planZ, label: 'План', side: 'top', color: 'var(--ep-report-accent-plan)' },
+    { zScore: factZ, label: 'Факт', side: 'bottom', color: 'var(--ep-report-accent-fact)' },
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   ];
 
   const normsLabel =
@@ -87,6 +103,7 @@ export function ZScale({
                 <div
                   key={m.label}
                   className={`absolute flex -translate-x-1/2 flex-col items-center ${
+<<<<<<< HEAD
                     m.side === 'top' ? '-top-7' : 'top-8'
                   }`}
                   style={{ left: `${pct(m.zScore)}%` }}
@@ -99,17 +116,41 @@ export function ZScale({
                       <span
                         className="rounded-sm px-1.5 py-0.5 font-mono text-xs font-semibold text-background"
                         style={{ backgroundColor: interpretationColor(m.zScore) }}
+=======
+                    m.side === 'top' ? '-top-8' : 'top-8'
+                  }`}
+                  style={{ left: `${pct(m.zScore)}%` }}
+                  data-testid={`report-z-marker-${m.side === 'top' ? 'plan' : 'fact'}`}
+                >
+                  {m.side === 'top' ? (
+                    <>
+                      <span
+                        className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        style={{ color: m.color }}
+                      >
+                        {m.label}
+                      </span>
+                      <span
+                        className="rounded-sm px-1.5 py-0.5 font-mono text-xs font-bold text-background shadow-sm"
+                        style={{ backgroundColor: m.color }}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
                       >
                         {fmtSigned(m.zScore)}
                       </span>
                       <span
+<<<<<<< HEAD
                         className="h-8 w-0.5"
                         style={{ backgroundColor: interpretationColor(m.zScore) }}
+=======
+                        className="h-8 w-1 rounded-full"
+                        style={{ backgroundColor: m.color }}
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
                       />
                     </>
                   ) : (
                     <>
                       <span
+<<<<<<< HEAD
                         className="h-8 w-0.5"
                         style={{ backgroundColor: interpretationColor(m.zScore) }}
                       />
@@ -120,6 +161,21 @@ export function ZScale({
                         {fmtSigned(m.zScore)}
                       </span>
                       <span className="mt-0.5 text-[10px] font-medium text-muted-foreground">
+=======
+                        className="h-8 w-1 rounded-full"
+                        style={{ backgroundColor: m.color }}
+                      />
+                      <span
+                        className="rounded-sm px-1.5 py-0.5 font-mono text-xs font-bold text-background shadow-sm"
+                        style={{ backgroundColor: m.color }}
+                      >
+                        {fmtSigned(m.zScore)}
+                      </span>
+                      <span
+                        className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                        style={{ color: m.color }}
+                      >
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
                         {m.label}
                       </span>
                     </>

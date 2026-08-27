@@ -35,8 +35,8 @@ docker run --rm --network host -v "$(pwd)/backend:/src" -w /src \
 
 ## Legacy WPF (только если задача явно про desktop)
 
-- `dotnet build EngineeringPerformance.slnx`
-- `dotnet test EngineeringPerformance.slnx`
+- `dotnet build EngineeringPerformance.Legacy.slnx`
+- `dotnet test EngineeringPerformance.Legacy.slnx`
 
 ## Завершение задачи
 

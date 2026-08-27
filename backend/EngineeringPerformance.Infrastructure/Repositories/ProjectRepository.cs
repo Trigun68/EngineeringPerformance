@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Projects.DTOs;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -71,10 +72,23 @@ public sealed class ProjectRepository : IProjectRepository
 
     public void Update(Project project) => _context.Projects.Update(project);
 
-    public Task DeleteAsync(Project project, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(Project project, CancellationToken cancellationToken = default)
     {
+        // Справочник оборудования проекта (Excel/JSON ingest) держит Restrict на Projects —
+        // без явного удаления DELETE проекта падает с FK_Equipments_Projects_ProjectId.
+        var versionEquipment = await _context.ProjectEquipments
+            .Where(e => e.ProjectId == project.Id)
+            .ToListAsync(cancellationToken);
+        _context.ProjectEquipments.RemoveRange(versionEquipment);
+
+        var catalog = await _context.Equipments
+            .Where(e => e.ProjectId == project.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var item in catalog)
+            item.ParentId = null;
+        _context.Equipments.RemoveRange(catalog);
+
         _context.Projects.Remove(project);
-        return Task.CompletedTask;
     }
 
     private static System.Linq.Expressions.Expression<Func<Project, ProjectDto>> MapToDto() =>
@@ -92,6 +106,8 @@ public sealed class ProjectRepository : IProjectRepository
             p.WorkStatus,
             p.WorkStart,
             p.Program,
-            p.AnalysisVersions.Count,
+            // Как в списке версий UI: только неархивные; отдельно план и факт.
+            p.AnalysisVersions.Count(v => !v.IsArchived && v.Direction == AnalysisDirection.Plan),
+            p.AnalysisVersions.Count(v => !v.IsArchived && v.Direction == AnalysisDirection.Fact),
             p.IsArchived);
 }

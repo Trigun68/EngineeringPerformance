@@ -18,6 +18,12 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
 
     public PlanningScenario PlanningScenario { get; set; } = PlanningScenario.ByEachValue;
 
+    /// <summary>Уровень UI-редактирования Z (по проекту / L1 / L2 / каждый элемент).</summary>
+    public ZParameterLevel ZParameterLevel { get; set; } = ZParameterLevel.EachElement;
+
+    /// <summary>Основная версия направления (Plan/Fact) в рамках проекта.</summary>
+    public bool IsPrimary { get; set; }
+
     public Project Project { get; set; } = null!;
 
     public PhysicalVolumeType? PhysicalVolumeType { get; set; }

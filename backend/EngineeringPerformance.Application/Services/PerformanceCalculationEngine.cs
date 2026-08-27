@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
@@ -11,6 +12,13 @@ namespace EngineeringPerformance.Application.Services;
 public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 {
     private readonly IDeviationCalculator _deviationCalculator;
+
+    /// <summary>
+    /// Оценка нормы/факта в лог-шкале: Estimate = ln(производительность), при 0 → 0.
+    /// Конвенция хранения норм ИИС — единственный SoT перехода производительность → estimate.
+    /// </summary>
+    public static decimal ProductivityToEstimate(decimal productivity) =>
+        productivity > 0 ? (decimal)Math.Log((double)productivity) : 0m;
 
     public PerformanceCalculationEngine(IDeviationCalculator deviationCalculator)
     {
@@ -111,7 +119,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                         && norm.NormStdDev is decimal nsd
                         && nsd > 0)
                     {
-                        var factEstimate = (decimal)Math.Log((double)factProductivity.Value);
+                        var factEstimate = ProductivityToEstimate(factProductivity.Value);
                         zScore = Math.Round((factEstimate - ne) / nsd, 4);
                     }
                 }
@@ -130,19 +138,19 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 pv.Quantity,
                 factHours,
                 factProductivity,
-                zScore));
+                zScore,
+                pv.SourceRowId,
+                IsEquipment: false));
         }
 
+        // Оборудование: только объём в гриде. Факт. трудоёмкость — исключительно из LI
+        // (доля DocSet×направление на PPV). Не считать vol×NormProductivity — это формула прогноза.
         foreach (var eq in input.Equipment
                      .OrderBy(e => e.FacilityCode)
                      .ThenBy(e => e.FacilityName)
                      .ThenBy(e => e.PvName))
         {
             input.NormByDirection.TryGetValue(eq.ClassifierId ?? -1, out var norm);
-            var vol = eq.Quantity * eq.Coefficient;
-            decimal? factHours = null;
-            if (eq.IsAssessment && norm?.NormProductivity is decimal p && vol != 0)
-                factHours = Math.Round(vol * p, 2);
 
             detailRows.Add(new FactAssessmentDetailRowDto(
                 eq.FacilityCode,
@@ -155,9 +163,11 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 FormatClassifierName(eq.ClassifierId, input.ClassifierMap),
                 norm?.NormUnitName ?? string.Empty,
                 eq.Quantity,
-                factHours,
-                null,
-                null));
+                FactLaborHours: null,
+                FactProductivity: null,
+                ZScore: null,
+                eq.SourceRowId,
+                IsEquipment: true));
         }
 
         var facilityRows = detailRows
@@ -167,21 +177,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             .Select(g =>
             {
                 var first = g.First();
-                var hoursRows = g.Where(r => r.FactLaborHours.HasValue && r.ZScore.HasValue).ToList();
                 decimal? totalHours = g.Any(r => r.FactLaborHours.HasValue)
                     ? Math.Round(g.Sum(r => r.FactLaborHours ?? 0m), 2)
                     : null;
 
-                decimal? facilityZ = null;
-                if (hoursRows.Count > 0)
-                {
-                    var sumHours = hoursRows.Sum(r => r.FactLaborHours!.Value);
-                    if (sumHours > 0)
-                    {
-                        var weighted = hoursRows.Sum(r => r.ZScore!.Value * r.FactLaborHours!.Value);
-                        facilityZ = Math.Round(weighted / sumHours, 4);
-                    }
-                }
+                var facilityZ = ComputeWeightedZ(
+                    g.Select(r => (r.ZScore, r.FactLaborHours)),
+                    decimalPlaces: 4);
 
                 var interp = PerformanceInterpretationMapper.FromZScore(facilityZ);
                 return new FactAssessmentFacilityRowDto(
@@ -217,7 +219,9 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 0m,
                 unmatchedHours,
                 null,
-                null));
+                null,
+                SourceRowId: null,
+                IsEquipment: false));
         }
 
         return new FactAssessmentCalculationResult(detailRows, facilityRows);
@@ -269,9 +273,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
     {
         if (classifierId is not int cid || !classifierMap.TryGetValue(cid, out var node))
             return string.Empty;
-        return string.IsNullOrWhiteSpace(node.UnitName)
-            ? $"{node.Code} — {node.Name}"
-            : $"{node.Code} — {node.Name} ({node.UnitName})";
+        return IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(node.Code, node.Name, node.UnitName);
     }
 
     private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
@@ -290,11 +292,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         var factVolume = volumeByDirection.GetValueOrDefault(direction.Id);
         var factHours = hoursByDirection.GetValueOrDefault(direction.Id);
 
-        decimal? factProductivity = factVolume > 0 ? Math.Max(0m, factHours / factVolume) : null;
+        decimal? factProductivity = factVolume > 0 && factHours > 0
+            ? Math.Round(factHours / factVolume, 4)
+            : null;
 
         decimal? ownFactEstimate = null;
         if (factProductivity is > 0)
-            ownFactEstimate = (decimal)Math.Log((double)factProductivity.Value);
+            ownFactEstimate = ProductivityToEstimate(factProductivity.Value);
 
         decimal subtreeEstimateHours = ownFactEstimate.HasValue && factHours > 0 ? factHours : 0m;
         decimal subtreeWeightedEstimate = ownFactEstimate.HasValue && factHours > 0
@@ -395,4 +399,82 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         decimal? stdDev,
         PlanningZParameters z) =>
         ForecastCalculation.ComputeForecastHours(volume, productivity, stdDev, z);
+
+    public IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
+        PlanningScenario scenario,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        LaborIntensityCalculator.Recalculate(
+            scenario, lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
+        PlanningScenario scenario,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.ComputePpvHours(
+            scenario, lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
+        IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.AggregateByDirection(
+            lines, ppvHoursById, equipmentVolumes, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        ForecastHoursAggregator.ComputeEquipmentHours(
+            lines, normsByDirection, planningZByDirection, _deviationCalculator);
+
+    public decimal? ComputeWeightedZFromPerformanceRows(
+        IReadOnlyList<PerformanceRowDto> performanceRows,
+        int decimalPlaces = 2) =>
+        WeightedZScoreCalculator.FromRootPerformanceRows(performanceRows, decimalPlaces);
+
+    public decimal? ComputeWeightedZ(
+        IEnumerable<(decimal? ZScore, decimal? Weight)> samples,
+        int decimalPlaces = 2,
+        MidpointRounding rounding = MidpointRounding.ToEven,
+        bool arithmeticFallback = false)
+    {
+        var aggregator = new WeightedZAggregator();
+        foreach (var (zScore, weight) in samples)
+            aggregator.Add(zScore, weight);
+
+        return aggregator.Result(decimalPlaces, rounding, arithmeticFallback);
+    }
+
+    public PlanningZParameters ResolvePlanningZ(
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
+        int workDirectionId) =>
+        ForecastCalculation.ResolvePlanningZ(planningZByDirection, workDirectionId);
+
+    public decimal? ComputeProductivityIndex(IReadOnlyList<PerformanceRowDto> performanceRows)
+    {
+        decimal normHours = 0m;
+        decimal hours = 0m;
+        foreach (var row in performanceRows)
+        {
+            if (row.IsTotal || row.WorkDirectionId < 0)
+                continue;
+            if (row.FactPhysicalVolume is not > 0m || row.NormProductivity is not > 0m)
+                continue;
+            if (row.FactLaborHours is not > 0m)
+                continue;
+
+            normHours += row.FactPhysicalVolume.Value * row.NormProductivity.Value;
+            hours += row.FactLaborHours.Value;
+        }
+
+        if (hours <= 0m || normHours <= 0m)
+            return null;
+
+        return Math.Round(normHours / hours * 100m, 1, MidpointRounding.ToEven);
+    }
 }

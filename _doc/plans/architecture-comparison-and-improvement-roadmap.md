@@ -156,5 +156,22 @@
 - Гейты перехода к OIDC/очередям/OTel/K8s согласованы в виде проверяемых условий.
 - **2026-07-14:** зафиксирована политика web-only; WPF исключён из scope.
 
+---
+
+## 6) Ревизия архитектуры 2026-08-25 (выполнено)
+
+Повторный аудит «документация ↔ код ↔ лучшие практики»; работы сгруппированы в пять фаз.
+Резервная точка: тег `backup/pre-arch-revision-2026-08-25`; рабочая ветка `refactor/architecture-revision-2026-08-25`.
+
+| Фаза | Содержание | Статус |
+|---|---|---|
+| 1. Prod-риски | SQL-профилирование off по умолчанию; trend-кэши на generation-ключах; `.env.example` ↔ compose (JWT); `CancellationToken` в публичных API | done |
+| 2. Перф аналитики | `LoadManyAsync`/`EvaluateManyAsync` батчи; устранение N+1 в group/trend/Z-trend/fact-norm; предзагрузка версий в сводном отчёте | done |
+| 3. Backend-техдолг | `IAuthService`/`AuthService`, `INormPreviewService`; `IicWorkDirectionDisplayUnit` → Application + примитивный хелпер; формулы запечатаны в `PerformanceCalculationEngine` (`internal`, `ProductivityToEstimate`); unit-тесты Auth/ExportFileName/SqlGate | done |
+| 4. Frontend | Мёртвые страницы удалены; IIC-формат только для IIC-ресурсов; общие AG Grid-настройки (`gridDefaults.ts`); `any` устранены; `DirectoryPage` декомпозирована (`useDirectoryColumnDefs`) | done |
+| 5. Репо/доки/инфра | `docs/` слит в `_doc/` (коллизия ADR-002 → ADR-004); чистка корня; healthchecks backend/frontend в compose | done |
+
+Остаток (backlog): FluentValidation — покрытие неполное; миграции EF ↔ SQL-скрипты — риск рассинхрона; Storybook/MSW — отложено.
+
 **См. также:** [web-only-development-plan.md](./web-only-development-plan.md) — фазы A/B/C по бизнес-логике.
 

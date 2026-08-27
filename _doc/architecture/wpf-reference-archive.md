@@ -26,7 +26,7 @@
 - `*ViewModel` → `client/src/pages/*` + API
 - `EngineeringPerformance.Infrastructure/Services/*` → `backend/EngineeringPerformance.Infrastructure/*`
 
-Инвентаризация WPF-логики (устарела как operational doc): [docs/inventory/business_logic_inventory.md](../../docs/inventory/business_logic_inventory.md).
+Инвентаризация WPF-логики (устарела как operational doc): [_doc/inventory/business_logic_inventory.md](../inventory/business_logic_inventory.md).
 
 ---
 

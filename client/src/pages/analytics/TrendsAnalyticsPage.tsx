@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -577,3 +578,8 @@ export function TrendsAnalyticsPage() {
     </Box>
   );
 }
+=======
+/** @deprecated Используйте AnalyticsPage — реэкспорт для совместимости импортов. */
+export { AnalyticsPage as TrendsAnalyticsPage } from './AnalyticsPage';
+export { AnalyticsPage } from './AnalyticsPage';
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968

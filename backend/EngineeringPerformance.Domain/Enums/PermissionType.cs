@@ -31,6 +31,7 @@ public enum PermissionType
     LaborIntensities,
     ProjectCharacteristics,
     UserActionLog,
+    Reports,
     Administration
 }
 

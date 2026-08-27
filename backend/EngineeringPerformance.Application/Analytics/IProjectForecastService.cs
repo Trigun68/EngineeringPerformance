@@ -11,12 +11,14 @@ public interface IProjectForecastService
         int projectId,
         int versionId,
         IReadOnlyDictionary<int, decimal>? nodePlannedTotalsByWorkDirectionId = null,
-        ForecastCalculationOptionsDto? calculation = null);
+        ForecastCalculationOptionsDto? calculation = null,
+        CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Физ. объёмы и оборудование оценки, сгруппированные по ClassifierId (направление ИИС).
     /// </summary>
     Task<ProjectForecastAssessmentVolumesDto> GetAssessmentVolumesByDirectionAsync(
         int projectId,
-        int versionId);
+        int versionId,
+        CancellationToken cancellationToken = default);
 }

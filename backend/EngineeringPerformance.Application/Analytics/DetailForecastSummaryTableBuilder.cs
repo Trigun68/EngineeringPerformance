@@ -84,7 +84,7 @@ public static class DetailForecastSummaryTableBuilder
             var key = (fac, col);
 
             var volume = row.Quantity * (row.Coefficient is > 0 ? row.Coefficient.Value : 1m);
-            var hours = row.BaseHours ?? 0m;
+            var hours = row.LaborHours ?? 0m;
 
             if (aggregates.TryGetValue(key, out var existing))
                 aggregates[key] = (existing.Vol + volume, existing.Hours + hours);
@@ -111,11 +111,10 @@ public static class DetailForecastSummaryTableBuilder
 
             foreach (var unit in units)
             {
-                var title = units.Count > 1
-                    ? $"{root.Name} — {unit}"
-                    : string.IsNullOrWhiteSpace(unit) || unit == "—"
-                        ? root.Name
-                        : $"{root.Name} — {unit}";
+                var title = IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(
+                    root.Code,
+                    root.Name,
+                    string.IsNullOrWhiteSpace(unit) || unit == "—" ? null : unit);
 
                 columns.Add(new DetailForecastSummaryColumnDto(root.Id, root.Name, unit, title));
             }
@@ -136,10 +135,17 @@ public static class DetailForecastSummaryTableBuilder
         foreach (var fac in facilities)
         {
             var cells = new List<DetailForecastSummaryCellDto>();
+            decimal laborTotal = 0m;
             foreach (var colKey in columnKeys)
             {
                 if (aggregates.TryGetValue((fac, colKey), out var agg))
-                    cells.Add(new DetailForecastSummaryCellDto(Math.Round(agg.Vol, 4), Math.Round(agg.Hours, 2)));
+                {
+                    var hours = Math.Round(agg.Hours, 0, MidpointRounding.AwayFromZero);
+                    laborTotal += hours;
+                    cells.Add(new DetailForecastSummaryCellDto(
+                        Math.Round(agg.Vol, 0, MidpointRounding.AwayFromZero),
+                        hours));
+                }
                 else
                     cells.Add(new DetailForecastSummaryCellDto(0m, 0m));
             }
@@ -150,7 +156,8 @@ public static class DetailForecastSummaryTableBuilder
                     ? fac.Code
                     : $"{fac.Code} — {fac.Name}";
 
-            resultRows.Add(new DetailForecastSummaryRowDto(fac.Code, fac.Name, label, cells));
+            resultRows.Add(new DetailForecastSummaryRowDto(
+                fac.Code, fac.Name, label, cells, laborTotal));
         }
 
         return new DetailForecastSummaryTableDto(projectCode, versionName, columns, resultRows);

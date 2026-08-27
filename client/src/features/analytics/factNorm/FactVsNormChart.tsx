@@ -1,10 +1,14 @@
 import { useMemo } from 'react';
 import Highcharts from 'highcharts';
+<<<<<<< HEAD
 import HighchartsMoreImport from 'highcharts/highcharts-more';
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import HighchartsReact from 'highcharts-react-official';
 import { Box, Typography } from '@mui/material';
 import type { ChartPoint, ReferenceFormula } from '../../../api/factNormAnalyticsApi';
 
+<<<<<<< HEAD
 // Тип пакета описывает default-экспорт как пространство имён Highcharts, но во время
 // выполнения это UMD-фабрика, регистрирующая тип серии `arearange` (полоса допуска).
 const HighchartsMore = HighchartsMoreImport as unknown as (hc: typeof Highcharts) => void;
@@ -12,6 +16,8 @@ if (typeof HighchartsMore === 'function') {
   HighchartsMore(Highcharts);
 }
 
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 function predict(
   code: string,
   params: Record<string, number>,
@@ -48,8 +54,11 @@ interface Props {
   proposedFormula: string;
   proposedParams?: Record<string, number> | null;
   formulas?: ReferenceFormula[];
+<<<<<<< HEAD
   /** σ допуска вокруг текущей нормы — рисует закрашенную полосу допуска и подсвечивает точки-выбросы. */
   deviationSigma?: number | null;
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 }
 
 export function FactVsNormChart({
@@ -59,7 +68,10 @@ export function FactVsNormChart({
   currentParams,
   proposedFormula,
   proposedParams,
+<<<<<<< HEAD
   deviationSigma,
+=======
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 }: Props) {
   const options = useMemo<Highcharts.Options>(() => {
     const xs = points.map((p) => p.x).sort((a, b) => a - b);
@@ -83,6 +95,7 @@ export function FactVsNormChart({
       };
     };
 
+<<<<<<< HEAD
     const sigma = deviationSigma && deviationSigma > 0 ? deviationSigma : null;
     const bandData: [number, number, number][] = [];
     if (sigma && currentParams) {
@@ -156,6 +169,30 @@ export function FactVsNormChart({
     const proposed = curve(proposedFormula, proposedParams ?? null, 'Предложение', '#2e7d32');
     if (current) series.push({ ...current, zIndex: 1 });
     if (proposed) series.push({ ...proposed, zIndex: 1, dashStyle: 'Dash' } as Highcharts.SeriesLineOptions);
+=======
+    const series: Highcharts.SeriesOptionsType[] = [
+      {
+        type: 'scatter',
+        name: 'Факт (проекты)',
+        data: points.map((p) => ({
+          x: p.x,
+          y: p.y,
+          projectCode: p.projectCode,
+          projectName: p.projectName,
+          versionName: p.versionName,
+        })),
+        color: '#1976d2',
+        tooltip: {
+          pointFormat:
+            '<b>{point.projectCode}</b> {point.projectName}<br/>Версия: {point.versionName}<br/>Объём: {point.x:.3f}<br/>Производительность: {point.y:.4f}',
+        },
+      },
+    ];
+    const current = curve(currentFormula, currentParams ?? null, 'Текущая норма', '#9e9e9e');
+    const proposed = curve(proposedFormula, proposedParams ?? null, 'Предложение', '#d32f2f');
+    if (current) series.push(current);
+    if (proposed) series.push(proposed);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
     return {
       chart: { height: 360 },
@@ -167,7 +204,11 @@ export function FactVsNormChart({
       series,
       accessibility: { enabled: true, description: 'График факт vs норма: X объём, Y производительность' },
     };
+<<<<<<< HEAD
   }, [title, points, currentFormula, currentParams, proposedFormula, proposedParams, deviationSigma]);
+=======
+  }, [title, points, currentFormula, currentParams, proposedFormula, proposedParams]);
+>>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
   if (points.length === 0) {
     return (

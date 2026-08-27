@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Import;
+using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -53,7 +54,14 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ProjectExcelDataImportService> _logger;
 
-    private async Task<DataImportResultDto> ImportFromFileAsync(int projectId, int versionId, DataImportType dataType, string filePath, string description, bool addMissingLaborToCatalog = false)
+    private async Task<DataImportResultDto> ImportFromFileAsync(
+        int projectId,
+        int versionId,
+        DataImportType dataType,
+        string filePath,
+        string description,
+        ImportSourceMetadata source,
+        bool addMissingLaborToCatalog = false)
     {
         if (!File.Exists(filePath))
         {
@@ -64,9 +72,9 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         {
             return dataType switch
             {
-                DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description),
-                DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, addMissingLaborToCatalog),
-                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description),
+                DataImportType.PhysicalVolume => await ImportPhysicalVolumesAsync(projectId, versionId, filePath, description, source),
+                DataImportType.LaborIntensity => await ImportLaborIntensitiesAsync(projectId, versionId, filePath, description, source, addMissingLaborToCatalog),
+                DataImportType.Equipment => await ImportEquipmentAsync(projectId, versionId, filePath, description, source),
                 _ => new DataImportResultDto(false, 0, $"Unsupported import type: {dataType}", 0),
             };
         }
@@ -94,6 +102,35 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
             .OrderByDescending(i => i.ImportedAt)
             .Select(i => new DataImportIterationInfoDto(i.ImportedAt, i.RecordCount, i.Description, i.SourceFileName))
             .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Единая точка создания итерации импорта: описание, происхождение файла и автор
+    /// сохраняются вместе с данными в одной транзакции.
+    /// </summary>
+    private static async Task<DataImportIteration> CreateIterationAsync(
+        AppDbContext context,
+        int projectId,
+        int versionId,
+        DataImportType dataType,
+        string description,
+        ImportSourceMetadata source)
+    {
+        var iteration = new DataImportIteration
+        {
+            ProjectId = projectId,
+            ProjectAnalysisVersionId = versionId,
+            DataType = dataType,
+            Description = description,
+            SourceFileName = source.FileName,
+            SourceFileHash = source.FileHash,
+            ImportedByUserId = source.UserId,
+            ImportedAt = DateTime.UtcNow,
+        };
+
+        context.DataImportIterations.Add(iteration);
+        await context.SaveChangesAsync();
+        return iteration;
     }
 
     /// <summary>
@@ -237,23 +274,15 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
             return (decimal)dbl;
         }
 
-        return 0m;
+        throw new InvalidOperationException($"\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C \u0447\u0438\u0441\u043B\u043E\u0432\u043E\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u0435: '{value}'.");
     }
 
     private static string FormatImportExceptionMessage(Exception ex)
     {
-        var inner = ex.InnerException;
-        if (ex is DbUpdateException && inner is not null)
-        {
-            return $"{inner.Message} ({inner.GetType().Name})";
-        }
-
-        if (inner is not null)
-        {
-            return $"{ex.Message} — {inner.Message}";
-        }
-
-        return ex.Message;
+        // Log full exception server-side (already logged at call site).
+        // Return a generic message to avoid leaking DB schema, constraint names,
+        // connection details, or other internal information to the caller.
+        return "Ошибка импорта данных. Обратитесь к администратору.";
     }
 
     private static async Task<int> DeleteImportedRecordsAsync(AppDbContext context, DataImportType dataType, int projectId, int versionId, DateTime importedAt)
