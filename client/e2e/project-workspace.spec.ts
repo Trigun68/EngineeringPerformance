@@ -175,14 +175,14 @@ test.describe('Project Workspace - WPF Style', () => {
 
     await page.getByRole('tab', { name: 'Отчет' }).click();
 
-    // Дефолт — новый «Сводный»: блоки план/факт по основным версиям, шкала, динамика.
+    // Дефолт — новый «Сводный вер 1»: блоки план/факт по основным версиям, шкала, динамика.
     await expect(page.getByText('Трудоёмкость плана')).toBeVisible({ timeout: 40_000 });
     await expect(page.getByText('Z-план')).toBeVisible();
     await expect(page.getByText('Шкала интерпретации Z-оценки')).toBeVisible();
     await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
     await expect(page.getByTestId('report-export-pdf')).toBeVisible();
 
-    // «Сводный (прежний)» — старый механизм для отката.
+    // «Сводный вер 2» — старый механизм для отката.
     await page.getByTestId('report-legacy-tab').click();
     await expect(page.getByTestId('performance-report-panel')).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: /План:/ })).toHaveCount(0);

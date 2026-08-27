@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Box, FormControl, MenuItem, Select, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Stack, Tab, Tabs, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -31,7 +31,7 @@ import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from
 import { VersionTrend } from './VersionTrend';
 import { ZScale } from './ZScale';
 
-type ReportSubTab = 'summary' | 'byVersion' | 'legacy';
+type ReportSubTab = 'summary' | 'legacy';
 
 /**
  * Версия для детальных секций «Сводного» — зеркало backend
@@ -58,10 +58,9 @@ export interface ReportPanelProps {
   projectId: number;
   project?: Project;
   versions?: ProjectVersion[];
-  initialVersionId?: number;
 }
 
-export function ReportPanel({ projectId, project, versions, initialVersionId }: ReportPanelProps) {
+export function ReportPanel({ projectId, project, versions }: ReportPanelProps) {
   const { canRead } = usePermission('Reports');
   const [report, setReport] = useState<PerformanceReportDto | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,11 +69,6 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
   const [subTab, setSubTab] = useState<ReportSubTab>('summary');
-  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(initialVersionId ?? null);
-
-  useEffect(() => {
-    setSelectedVersionId((current) => current ?? initialVersionId ?? null);
-  }, [initialVersionId]);
 
   const summaryVersionId = useMemo(
     () => (versions && versions.length > 0 ? resolveSummaryVersionId(versions) : null),
@@ -170,40 +164,20 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
       ) : null}
 
       {project && versions && versions.length > 0 ? (
-        <Stack
-          direction="row"
-          spacing={2}
-          alignItems="center"
-          justifyContent="space-between"
-          flexWrap="wrap"
-          useFlexGap
-          sx={{ borderBottom: 1, borderColor: 'divider', mb: 1.5 }}
+        <Tabs
+          value={subTab}
+          onChange={(_, v: ReportSubTab) => setSubTab(v)}
+          sx={{
+            minHeight: 36,
+            borderBottom: 1,
+            borderColor: 'divider',
+            mb: 1.5,
+            '& .MuiTab-root': { minHeight: 36, textTransform: 'none' },
+          }}
         >
-          <Tabs
-            value={subTab}
-            onChange={(_, v: ReportSubTab) => setSubTab(v)}
-            sx={{ minHeight: 36, '& .MuiTab-root': { minHeight: 36, textTransform: 'none' } }}
-          >
-            <Tab value="summary" label="Сводный" data-testid="report-summary-tab" />
-            <Tab value="byVersion" label="По версии" data-testid="report-by-version-tab" />
-            <Tab value="legacy" label="Сводный (прежний)" data-testid="report-legacy-tab" />
-          </Tabs>
-          {subTab === 'byVersion' ? (
-            <FormControl size="small" sx={{ minWidth: 260, mb: 0.5 }}>
-              <Select<number>
-                value={selectedVersionId ?? versions[0].id}
-                onChange={(e) => setSelectedVersionId(Number(e.target.value))}
-                data-testid="report-version-select"
-              >
-                {versions.map((v) => (
-                  <MenuItem key={v.id} value={v.id}>
-                    {v.versionName}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          ) : null}
-        </Stack>
+          <Tab value="summary" label="Сводный вер 1" data-testid="report-summary-tab" />
+          <Tab value="legacy" label="Сводный вер 2" data-testid="report-legacy-tab" />
+        </Tabs>
       ) : null}
 
       {subTab !== 'legacy' && project && versions && versions.length > 0 ? (
@@ -213,11 +187,7 @@ export function ReportPanel({ projectId, project, versions, initialVersionId }: 
             projectId={projectId}
             project={project}
             versions={versions}
-            versionId={
-              subTab === 'summary'
-                ? (summaryVersionId ?? versions[0].id)
-                : (selectedVersionId ?? versions[0].id)
-            }
+            versionId={summaryVersionId ?? versions[0].id}
           />
         </Box>
       ) : (
