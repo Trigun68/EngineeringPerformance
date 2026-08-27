@@ -56,26 +56,6 @@ export function VersionTrend({ points }: VersionTrendProps) {
           return `<b>${p?.versionName ?? ''}</b><br/>Z = ${fmt(point.y, 2)}<br/>${fmt(p?.totalHours ?? null, 0)} ч`;
         },
       },
-<<<<<<< HEAD
-      plotOptions: {
-        line: {
-          dataLabels: { enabled: true, format: '{point.y:.2f}' },
-        },
-      },
-      series: [
-        {
-          type: 'line',
-          name: 'План',
-          color: ACCENT_PLAN,
-          marker: { radius: 5, symbol: 'circle', lineWidth: 2, lineColor: '#FFFFFF' },
-          data: planIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
-        },
-        {
-          type: 'line',
-          name: 'Факт',
-          color: ACCENT_FACT,
-          marker: { radius: 8, symbol: 'diamond', lineWidth: 3, lineColor: '#FFFFFF' },
-=======
       series: [
         {
           type: 'line',
@@ -101,7 +81,6 @@ export function VersionTrend({ points }: VersionTrendProps) {
           name: 'Факт (основная версия)',
           color: ACCENT_FACT,
           marker: { radius: 6, symbol: 'circle', lineWidth: 2.5, lineColor: '#FFFFFF' },
->>>>>>> origin/master
           lineWidth: 0,
           data: factIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
         },

@@ -137,10 +137,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectDataService, ProjectDataService>();
         services.AddScoped<IPerformanceService, PerformanceService>();
         services.AddScoped<IProjectVersionAnalysisService, ProjectVersionAnalysisService>();
-<<<<<<< HEAD
-=======
         services.AddScoped<IPerformanceReportService, PerformanceReportService>();
->>>>>>> origin/master
         services.AddScoped<IProjectReportSummaryService, ProjectReportSummaryService>();
         services.AddScoped<IProjectForecastService, ProjectForecastService>();
         services.AddScoped<IForecastPlannedVolumePersistenceService, ForecastPlannedVolumePersistenceService>();

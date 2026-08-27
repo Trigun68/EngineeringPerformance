@@ -162,16 +162,7 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
 
       <PlanFactSummary summary={reportSummary} accuracyScore={accuracyScore} />
 
-<<<<<<< HEAD
-      <ZScale
-        planZScore={reportSummary.planWeightedZScore}
-        factZScore={reportSummary.factWeightedZScore}
-        percentile={reportSummary.factPercentile}
-        planPercentile={reportSummary.planPercentile}
-      />
-=======
       <ZScale planZScore={reportSummary.planWeightedZScore} factZScore={reportSummary.factWeightedZScore} />
->>>>>>> origin/master
 
       <TopPerformersPanel leaves={leaves} />
 

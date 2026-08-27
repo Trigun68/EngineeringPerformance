@@ -33,18 +33,6 @@ export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
   Critical: 'Критично',
 };
 
-<<<<<<< HEAD
-/** Flat UI Colors — согласовано с существующей палитрой приложения (wpColors). */
-export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
-  Excellent: '#1E8449',
-  Good: '#27AE60',
-  Satisfactory: '#D9A100',
-  NeedsAttention: '#E67E22',
-  Critical: '#B5544C',
-};
-
-export const MUTED_COLOR = '#95A5A6';
-=======
 /**
  * Палитра интерпретации — дизайн-мокап ReportRedesignMockup (ветка v0):
  * смягчённый красный, более выразительный янтарный для «удовлетворительно».
@@ -76,27 +64,12 @@ export const ZONE_COLOR: Record<Interpretation, string> = {
 };
 
 export const MUTED_COLOR = '#7B8794';
->>>>>>> origin/master
 
 export function interpretationColor(z: number | null | undefined): string {
   const i = getInterpretation(z);
   return i ? INTERPRETATION_COLOR[i] : MUTED_COLOR;
 }
 
-<<<<<<< HEAD
-/**
- * Численная позиция перцентиля (0..100) для визуальной шкалы — паритет backend
- * PerformancePercentileHelper.GetPercentile: диапазон Z [-1, 1] линейно отображается на
- * [0, 100], значения вне диапазона клэмпятся к границам.
- */
-export function percentileFraction(z: number | null | undefined): number | null {
-  if (z === null || z === undefined || Number.isNaN(z)) return null;
-  const clamped = Math.min(1, Math.max(-1, z));
-  return ((clamped + 1) / 2) * 100;
-}
-
-=======
->>>>>>> origin/master
 export function fmt(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
   return value.toLocaleString('ru-RU', {
@@ -239,13 +212,6 @@ export const DIRECTION_PLAN = 1;
 export const DIRECTION_FACT = 2;
 
 /**
-<<<<<<< HEAD
- * Акцентные цвета для различения плана и факта на шкале Z и графике динамики.
- * Согласованы с общей палитрой приложения (wpColors: accent, heading).
- */
-export const ACCENT_PLAN = '#3498DB';
-export const ACCENT_FACT = '#2C3E50';
-=======
  * Акцентные цвета плана и факта (мокап ReportRedesignMockup):
  * план — фиолетовый (менее акцентный), факт — синий (основной акцент, крупный маркер).
  * SoT — client/src/constants/planFactColors.ts; здесь реэкспорт для обратной совместимости.
@@ -258,4 +224,3 @@ export function hoursDeltaPct(planHours: number | null, factHours: number | null
   if (factHours === null || factHours === undefined) return null;
   return ((factHours - planHours) / planHours) * 100;
 }
->>>>>>> origin/master

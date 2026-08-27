@@ -34,9 +34,6 @@ public sealed class PerformanceService : IPerformanceService
     /// <inheritdoc />
     public void InvalidateWorkDirectionHierarchyCache() => _workDirectionsCache = null;
 
-<<<<<<< HEAD
-    public async Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(int projectId, int versionId, bool useActualHours = false)
-=======
     public Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(
         int projectId,
         int versionId,
@@ -48,7 +45,6 @@ public sealed class PerformanceService : IPerformanceService
         int versionId,
         LaborHoursKind hoursKind,
         CancellationToken cancellationToken = default)
->>>>>>> origin/master
     {
         // GAP WPF: defense-in-depth — проверка ProjectVisibility с уровнем Read
         // (дополняет [RequireProjectAccess] на контроллере; без учёта Level в WPF данные утекали).
@@ -137,11 +133,7 @@ public sealed class PerformanceService : IPerformanceService
             LaborIntensities: laborIntensities
                 .Select(li => new LaborIntensityCalculationLine(
                     li.WorkDirectionId,
-<<<<<<< HEAD
-                    useActualHours ? li.ActualHours : li.PlannedHours))
-=======
                     hoursKind == LaborHoursKind.Actual ? li.ActualHours : li.PlannedHours))
->>>>>>> origin/master
                 .ToList(),
             NormsByDirection: normsByDirection);
 

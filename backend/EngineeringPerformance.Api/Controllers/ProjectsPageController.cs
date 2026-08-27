@@ -193,7 +193,7 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, ExcelContentType, fileName);
     }
 
-    /// <summary>Excel текущего вида грида «Детально» (видимые колонки + отфильтрованные строки).</summary>
+    /// <summary>Excel текущего ви��а грида «Детально» (видимые колонки + отфильтрованные строки).</summary>
     [HttpPost("export/forecast-detail/excel-visible")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Projects, AccessLevel.Read)]
@@ -286,26 +286,6 @@ public sealed class ProjectsPageController : ControllerBase
         return File(bytes, ExcelContentType, fileName);
     }
 
-<<<<<<< HEAD
-    /// <summary>PDF вкладки «Отчёт»: сводка план/факт по основным версиям проекта + топ-5/детали фактической версии.</summary>
-    [HttpGet("export/report/pdf")]
-    [RequireProjectAccess]
-    [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
-    public async Task<IActionResult> ExportProjectReportPdf(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken)
-    {
-        var bytes = await _visualReports.ExportProjectReportPdfAsync(projectId, versionId, cancellationToken);
-        var (projectCode, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
-        var timestamp = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
-        var safeProject = SanitizeFileName(projectCode);
-        var safeVersion = SanitizeFileName(versionName);
-        return File(bytes, "application/pdf", $"{safeProject}_{safeVersion}_Отчёт_{timestamp}.pdf");
-    }
-
-    private static string SanitizeFileName(string name)
-=======
     [HttpGet("export/fact-detail/excel")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
@@ -313,7 +293,6 @@ public sealed class ProjectsPageController : ControllerBase
         int projectId,
         int versionId,
         CancellationToken cancellationToken)
->>>>>>> origin/master
     {
         var bytes = await _exportService.ExportFactDetailExcelAsync(projectId, versionId, cancellationToken);
         var fileName = await FactFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Detail, "xlsx", cancellationToken);

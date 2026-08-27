@@ -9,15 +9,6 @@ public static class FactLaborHoursTotals
 {
     public const int WeightedZDecimalPlaces = 2;
 
-<<<<<<< HEAD
-    public static decimal? FromLaborIntensities(IEnumerable<ProjectLaborIntensity> laborIntensities, bool useActualHours = false)
-    {
-        var total = useActualHours
-            ? laborIntensities.Sum(li => li.ActualHours)
-            : laborIntensities.Sum(li => li.PlannedHours);
-        return total > 0 ? Math.Round(total, 2) : null;
-    }
-=======
     public static decimal? FromLaborIntensities(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         FromHours(laborIntensities.Sum(li => li.PlannedHours));
 
@@ -31,7 +22,6 @@ public static class FactLaborHoursTotals
     /// <summary>Σ ActualHours только по строкам с группой IIC. Колонка хранится, в оценку не входит.</summary>
     public static decimal? FromAllocatedActualHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         FromHours(laborIntensities.Where(li => li.WorkDirectionId.HasValue).Sum(li => li.ActualHours));
->>>>>>> origin/master
 
     public static decimal UnallocatedPlannedHours(IEnumerable<ProjectLaborIntensity> laborIntensities) =>
         laborIntensities.Where(li => !li.WorkDirectionId.HasValue).Sum(li => li.PlannedHours);

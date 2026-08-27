@@ -16,34 +16,23 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IProjectCompareService _compare;
     private readonly IGroupAnalyticsService _groupAnalytics;
     private readonly IVisualReportService _visualReports;
-<<<<<<< HEAD
-=======
     private readonly IProjectExportService _projectExport;
     private readonly IDirectoryExportService _directoryExport;
     private readonly IExportFileNameService _fileNames;
->>>>>>> origin/master
     private readonly IProjectReportSummaryService _reportSummary;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
         IGroupAnalyticsService groupAnalytics,
         IVisualReportService visualReports,
-<<<<<<< HEAD
-=======
         IProjectExportService projectExport,
         IDirectoryExportService directoryExport,
         IExportFileNameService fileNames,
->>>>>>> origin/master
         IProjectReportSummaryService reportSummary)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
         _visualReports = visualReports;
-<<<<<<< HEAD
-        _reportSummary = reportSummary;
-    }
-
-=======
         _projectExport = projectExport;
         _directoryExport = directoryExport;
         _fileNames = fileNames;
@@ -51,7 +40,6 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     }
 
     /// <summary>Сводка «план/факт» по основным версиям проекта для вкладки «Отчёт».</summary>
->>>>>>> origin/master
     [HttpGet("report-summary")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.Assessment, AccessLevel.Read)]
