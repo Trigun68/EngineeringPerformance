@@ -19,17 +19,7 @@ public interface IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default);
 
-    Task<byte[]> ExportForecastSummaryPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default);
-
     Task<byte[]> ExportForecastFacilityExcelAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default);
-
-    Task<byte[]> ExportForecastFacilityPdfAsync(
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default);
@@ -49,17 +39,7 @@ public interface IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default);
 
-    Task<byte[]> ExportFactSummaryPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default);
-
     Task<byte[]> ExportFactFacilityExcelAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default);
-
-    Task<byte[]> ExportFactFacilityPdfAsync(
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default);
