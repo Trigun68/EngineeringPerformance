@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Paper,
+  Slider,
   Stack,
   Table,
   TableBody,
@@ -11,6 +13,8 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -20,14 +24,21 @@ import ShowChartOutlinedIcon from '@mui/icons-material/ShowChartOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
+import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
+import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
+import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
+import CompareArrowsOutlinedIcon from '@mui/icons-material/CompareArrowsOutlined';
+import RestartAltOutlinedIcon from '@mui/icons-material/RestartAltOutlined';
 import { NormBandChart } from '../../features/norms/NormBandChart';
 import type { NormPreviewPoint } from '../../api/normsApi';
 
 type IssueSeverity = 'Error' | 'Warning' | 'Info' | null;
 type NormStatus = 'Active' | 'Historical' | 'Future';
+type Confidence = 'High' | 'Medium' | 'Low';
 
 interface MockNorm {
   id: number;
+  category: string;
   groupName: string;
   formulaType: string;
   mean: number;
@@ -41,6 +52,10 @@ interface MockNorm {
   previousMean: number | null;
   previousSigma: number | null;
   lastReviewedMonthsAgo: number;
+  sampleSize: number;
+  rSquared: number;
+  /** Отношение факт/норма за последние 6 периодов — для мини-графика дрейфа. */
+  driftHistory: number[];
 }
 
 const SEVERITY_RANK: Record<'Error' | 'Warning' | 'Info' | 'None', number> = {
@@ -77,19 +92,32 @@ const STATUS_LABEL: Record<NormStatus, string> = {
   Future: 'Будущая',
 };
 
-const STATUS_COLOR: Record<NormStatus, 'success' | 'default' | 'info'> = {
-  Active: 'success',
-  Historical: 'default',
-  Future: 'info',
+const CONFIDENCE_COLOR: Record<Confidence, string> = {
+  High: '#27AE60',
+  Medium: '#F39C12',
+  Low: '#E74C3C',
+};
+
+const CONFIDENCE_LABEL: Record<Confidence, string> = {
+  High: 'Высокая',
+  Medium: 'Средняя',
+  Low: 'Низкая',
 };
 
 function severityKey(s: IssueSeverity): 'Error' | 'Warning' | 'Info' | 'None' {
   return s ?? 'None';
 }
 
+function confidenceOf(n: MockNorm): Confidence {
+  if (n.sampleSize >= 20 && n.rSquared >= 0.7) return 'High';
+  if (n.sampleSize >= 8 && n.rSquared >= 0.4) return 'Medium';
+  return 'Low';
+}
+
 const RAW_NORMS: MockNorm[] = [
   {
     id: 101,
+    category: 'Разработка ПО',
     groupName: 'Разработка ПО — кодирование',
     formulaType: 'Linear',
     mean: 1.42,
@@ -103,9 +131,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 1.3,
     previousSigma: 0.11,
     lastReviewedMonthsAgo: 5,
+    sampleSize: 34,
+    rSquared: 0.86,
+    driftHistory: [0.97, 1.01, 0.99, 1.02, 1.0, 1.01],
   },
   {
     id: 102,
+    category: 'Проектирование конструкций',
     groupName: 'Проектирование конструкций — расчётная часть',
     formulaType: 'Power',
     mean: 0.87,
@@ -119,9 +151,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.85,
     previousSigma: 0.06,
     lastReviewedMonthsAgo: 7,
+    sampleSize: 6,
+    rSquared: 0.52,
+    driftHistory: [1.05, 0.98, 1.1, 0.95, 1.03, 1.04],
   },
   {
     id: 103,
+    category: 'Электротехнические системы',
     groupName: 'Электротехнические системы — рабочая документация',
     formulaType: 'Linear',
     mean: 0.61,
@@ -135,9 +171,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.6,
     previousSigma: 0.19,
     lastReviewedMonthsAgo: 10,
+    sampleSize: 22,
+    rSquared: 0.48,
+    driftHistory: [1.02, 1.08, 1.14, 1.11, 1.18, 1.22],
   },
   {
     id: 104,
+    category: 'Генплан',
     groupName: 'Генеральный план и благоустройство',
     formulaType: 'Logarithmic',
     mean: 0.33,
@@ -151,9 +191,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: null,
     previousSigma: null,
     lastReviewedMonthsAgo: 19,
+    sampleSize: 41,
+    rSquared: 0.91,
+    driftHistory: [1.0, 0.99, 1.01, 1.0, 0.98, 1.0],
   },
   {
     id: 105,
+    category: 'Инженерные сети',
     groupName: 'Инженерные сети — водоснабжение и водоотведение',
     formulaType: 'ShiftedLog',
     mean: 0.95,
@@ -167,9 +211,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.9,
     previousSigma: 0.22,
     lastReviewedMonthsAgo: 4,
+    sampleSize: 17,
+    rSquared: 0.29,
+    driftHistory: [1.1, 1.24, 1.15, 1.35, 1.28, 1.41],
   },
   {
     id: 106,
+    category: 'BIM',
     groupName: 'BIM-координация и коллизии',
     formulaType: 'Constant',
     mean: 0.5,
@@ -183,9 +231,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.48,
     previousSigma: 0.04,
     lastReviewedMonthsAgo: 1,
+    sampleSize: 9,
+    rSquared: 0.61,
+    driftHistory: [1.0, 1.01, 0.99, 1.0, 1.0, 0.99],
   },
   {
     id: 107,
+    category: 'Пожарная безопасность',
     groupName: 'Пожарная безопасность — расчёты рисков',
     formulaType: 'Polynomial',
     mean: 0.44,
@@ -199,9 +251,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.44,
     previousSigma: 0.16,
     lastReviewedMonthsAgo: 14,
+    sampleSize: 28,
+    rSquared: 0.58,
+    driftHistory: [1.05, 1.02, 1.08, 1.04, 1.09, 1.07],
   },
   {
     id: 108,
+    category: 'Технологические решения',
     groupName: 'Технологические решения производства',
     formulaType: 'Exponential',
     mean: 1.1,
@@ -215,9 +271,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 1.08,
     previousSigma: 0.07,
     lastReviewedMonthsAgo: 3,
+    sampleSize: 31,
+    rSquared: 0.83,
+    driftHistory: [1.0, 0.99, 1.02, 1.01, 0.98, 1.0],
   },
   {
     id: 109,
+    category: 'Архитектурные решения',
     groupName: 'Архитектурные решения — рабочая документация',
     formulaType: 'Linear',
     mean: 0.78,
@@ -231,9 +291,13 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.76,
     previousSigma: 0.05,
     lastReviewedMonthsAgo: 2,
+    sampleSize: 26,
+    rSquared: 0.79,
+    driftHistory: [0.99, 1.0, 1.01, 1.0, 0.99, 1.0],
   },
   {
     id: 110,
+    category: 'Сметная документация',
     groupName: 'Сметная документация — проверка',
     formulaType: 'Hyperbolic',
     mean: 0.29,
@@ -247,7 +311,17 @@ const RAW_NORMS: MockNorm[] = [
     previousMean: 0.3,
     previousSigma: 0.06,
     lastReviewedMonthsAgo: 3,
+    sampleSize: 5,
+    rSquared: 0.21,
+    driftHistory: [1.15, 1.3, 1.2, 1.45, 1.38, 1.5],
   },
+];
+
+/** Направления работ (КФО), для которых в реестре нет ни одной активной нормы — «слепые зоны». */
+const MISSING_NORM_GROUPS: string[] = [
+  'Инженерная геология и геодезия',
+  'Ландшафтное проектирование',
+  'Экологическая экспертиза',
 ];
 
 const MEDIAN_CV = (() => {
@@ -278,16 +352,53 @@ function generateBand(mean: number, ratio: number): NormPreviewPoint[] {
   return points;
 }
 
+/** Детерминированный псевдо-разброс исторических фактических точек вокруг μ нормы (для симулятора). */
+function syntheticFactPoints(n: MockNorm): number[] {
+  const base = n.mean;
+  const spread = n.sigma;
+  const seedFactors = [-1.6, -1.1, -0.6, -0.3, -0.1, 0.1, 0.25, 0.5, 0.8, 1.2, 1.5, 1.9];
+  return seedFactors.map((f) => Number((base + f * spread).toFixed(4)));
+}
+
 function formatRuDate(iso: string): string {
   const [y, m, d] = iso.split('-');
   return `${d}.${m}.${y}`;
 }
 
-type KpiFilter = 'all' | 'Error' | 'Warning' | 'cv' | 'ok';
+type KpiFilter = 'all' | 'Error' | 'Warning' | 'cv' | 'ok' | 'lowConfidence';
+type ViewMode = 'table' | 'heatmap';
+
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const w = 72;
+  const h = 24;
+  const min = Math.min(...values, 1) * 0.95;
+  const max = Math.max(...values, 1) * 1.05;
+  const range = max - min || 1;
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const baselineY = h - ((1 - min) / range) * h;
+  return (
+    <Tooltip title={`Факт/норма за 6 периодов: ${values.map((v) => v.toFixed(2)).join(' → ')}`}>
+      <svg width={w} height={h} role="img" aria-label="Динамика отношения факт/норма">
+        <line x1={0} y1={baselineY} x2={w} y2={baselineY} stroke="currentColor" strokeOpacity={0.25} strokeDasharray="2,2" />
+        <polyline points={points} fill="none" stroke={color} strokeWidth={1.75} strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={w} cy={h - ((values[values.length - 1] - min) / range) * h} r={2.25} fill={color} />
+      </svg>
+    </Tooltip>
+  );
+}
 
 export default function NormAnalysisMockup() {
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>('all');
   const [selectedId, setSelectedId] = useState<number | null>(105);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [meanOffsetPct, setMeanOffsetPct] = useState(0);
+  const [sigmaMultiplier, setSigmaMultiplier] = useState(1);
 
   const sorted = useMemo(
     () =>
@@ -305,17 +416,37 @@ export default function NormAnalysisMockup() {
     const warnings = RAW_NORMS.filter((n) => n.issueSeverity === 'Warning').length;
     const cvOutliers = RAW_NORMS.filter((n) => n.sigma / n.mean >= MEDIAN_CV * 1.5).length;
     const ok = RAW_NORMS.filter((n) => n.issueSeverity === null).length;
-    return { total, errors, warnings, cvOutliers, ok };
+    const lowConfidence = RAW_NORMS.filter((n) => confidenceOf(n) === 'Low').length;
+    return { total, errors, warnings, cvOutliers, ok, lowConfidence };
   }, []);
 
   const filtered = useMemo(() => {
     if (kpiFilter === 'all') return sorted;
     if (kpiFilter === 'ok') return sorted.filter((n) => n.issueSeverity === null);
     if (kpiFilter === 'cv') return sorted.filter((n) => n.sigma / n.mean >= MEDIAN_CV * 1.5);
+    if (kpiFilter === 'lowConfidence') return sorted.filter((n) => confidenceOf(n) === 'Low');
     return sorted.filter((n) => n.issueSeverity === kpiFilter);
   }, [sorted, kpiFilter]);
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, MockNorm[]>();
+    filtered.forEach((n) => {
+      const list = map.get(n.category) ?? [];
+      list.push(n);
+      map.set(n.category, list);
+    });
+    return Array.from(map.entries());
+  }, [filtered]);
+
   const selected = RAW_NORMS.find((n) => n.id === selectedId) ?? null;
+
+  // Сброс параметров симулятора при переключении выбранной нормы.
+  const [simFor, setSimFor] = useState<number | null>(null);
+  if (selected && simFor !== selected.id) {
+    setSimFor(selected.id);
+    setMeanOffsetPct(0);
+    setSigmaMultiplier(1);
+  }
 
   const kpiCards: Array<{
     key: KpiFilter;
@@ -353,6 +484,13 @@ export default function NormAnalysisMockup() {
       color: '#8E44AD',
     },
     {
+      key: 'lowConfidence',
+      label: 'Низкая уверенность',
+      value: summary.lowConfidence,
+      icon: <HelpOutlineOutlinedIcon fontSize="small" />,
+      color: '#8E44AD',
+    },
+    {
       key: 'ok',
       label: 'Без замечаний',
       value: summary.ok,
@@ -367,6 +505,35 @@ export default function NormAnalysisMockup() {
   const timelineSpan = timelineMaxMs - timelineMinMs;
   const todayLeftPct = ((today.getTime() - timelineMinMs) / timelineSpan) * 100;
 
+  // Данные симулятора «что если» для выбранной нормы.
+  const simData = useMemo(() => {
+    if (!selected) return null;
+    const baseRatio = selected.sigma / selected.mean;
+    const factPoints = syntheticFactPoints(selected);
+
+    const withinTolerance = (mean: number, ratio: number) => {
+      const lower = mean * (1 - ratio);
+      const upper = mean * (1 + ratio);
+      const inCount = factPoints.filter((p) => p >= lower && p <= upper).length;
+      return Math.round((inCount / factPoints.length) * 100);
+    };
+
+    const beforePct = withinTolerance(selected.mean, baseRatio);
+
+    const newMean = selected.mean * (1 + meanOffsetPct / 100);
+    const newRatio = baseRatio * sigmaMultiplier;
+    const afterPct = withinTolerance(newMean, newRatio);
+
+    return {
+      currentBand: generateBand(selected.mean, baseRatio),
+      proposedBand: generateBand(newMean, newRatio),
+      beforePct,
+      afterPct,
+      newMean,
+      newRatio,
+    };
+  }, [selected, meanOffsetPct, sigmaMultiplier]);
+
   return (
     <Box sx={{ height: '100%', overflowY: 'auto', bgcolor: 'background.default' }}>
       <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 1280, mx: 'auto' }}>
@@ -375,11 +542,25 @@ export default function NormAnalysisMockup() {
             Анализ норм
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Мокап переработанного дизайна: кликабельная сводка health-check, коэффициент вариации (CV) с тепловой
-            подсветкой аномального разброса, единая шкала серьёзности вместо счётчика проблем, таймлайн с легендой
-            и меткой «сегодня», сравнение параметров нормы с предыдущей версией.
+            Мокап переработанного дизайна: покрытие направлений нормами, достоверность (N, R²), дрейф-спарклайны,
+            group heatmap-обзор, симулятор «что если» на формуле и переход к вкладке «Сравнение факта и норм».
           </Typography>
         </Box>
+
+        {/* Блок 1: покрытие и пробелы */}
+        {MISSING_NORM_GROUPS.length > 0 && (
+          <Alert severity="warning" icon={<ErrorOutlineIcon fontSize="inherit" />}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              {MISSING_NORM_GROUPS.length} направления работ без активной нормы — расчёты идут без нормативного
+              контроля
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+              {MISSING_NORM_GROUPS.map((g) => (
+                <Chip key={g} size="small" label={g} variant="outlined" color="warning" />
+              ))}
+            </Stack>
+          </Alert>
+        )}
 
         {/* KPI-панель */}
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -394,8 +575,8 @@ export default function NormAnalysisMockup() {
                 onClick={() => setKpiFilter(active ? 'all' : card.key)}
                 aria-pressed={active}
                 sx={{
-                  flex: '1 1 200px',
-                  minWidth: 190,
+                  flex: '1 1 170px',
+                  minWidth: 160,
                   p: 2,
                   display: 'flex',
                   alignItems: 'center',
@@ -515,216 +696,426 @@ export default function NormAnalysisMockup() {
           </Box>
         </Paper>
 
-        {/* Реестр норм */}
-        <Typography variant="subtitle1" component="h3">
-          Реестр норм ({filtered.length} из {RAW_NORMS.length})
-        </Typography>
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 520 }}>
-          <Table size="small" stickyHeader>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ minWidth: 220 }}>Группа IIC</TableCell>
-                <TableCell sx={{ minWidth: 170 }}>Серьёзность</TableCell>
-                <TableCell>Формула</TableCell>
-                <TableCell align="right">μ</TableCell>
-                <TableCell align="right">σ</TableCell>
-                <TableCell align="right">
-                  <Tooltip title="Коэффициент вариации σ/μ — насколько велик разброс относительно среднего. Подсвечивается, если заметно выше медианы по всем нормам.">
-                    <span>CV</span>
-                  </Tooltip>
-                </TableCell>
-                <TableCell>Статус</TableCell>
-                <TableCell>Период действия</TableCell>
-                <TableCell align="right">Ревизия</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filtered.map((n) => {
-                const cv = n.sigma / n.mean;
-                const sevKey = severityKey(n.issueSeverity);
-                const isSelected = n.id === selectedId;
-                const stale = n.status === 'Active' && n.lastReviewedMonthsAgo >= 12;
-                return (
-                  <TableRow
-                    key={n.id}
-                    hover
-                    selected={isSelected}
-                    onClick={() => setSelectedId(n.id)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell sx={{ fontWeight: isSelected ? 600 : 400 }}>{n.groupName}</TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={0.75} alignItems="center">
-                        <Box
-                          sx={{
-                            width: 9,
-                            height: 9,
-                            borderRadius: '50%',
-                            flexShrink: 0,
-                            bgcolor: SEVERITY_COLOR[sevKey],
-                          }}
-                        />
-                        <Typography variant="body2" noWrap>
-                          {SEVERITY_LABEL[sevKey]}
-                        </Typography>
-                      </Stack>
-                    </TableCell>
-                    <TableCell>{n.formulaType}</TableCell>
-                    <TableCell align="right">{n.mean.toFixed(3)}</TableCell>
-                    <TableCell align="right">{n.sigma.toFixed(3)}</TableCell>
-                    <TableCell align="right" sx={{ backgroundColor: cvHeatBackground(cv) }}>
-                      {cv.toFixed(2)}
-                    </TableCell>
-                    <TableCell>
-                      <Chip size="small" color={STATUS_COLOR[n.status]} label={STATUS_LABEL[n.status]} />
-                    </TableCell>
-                    <TableCell>
-                      {formatRuDate(n.effectiveFrom)} — {n.effectiveTo ? formatRuDate(n.effectiveTo) : '∞'}
-                    </TableCell>
-                    <TableCell align="right">
-                      {stale ? (
-                        <Tooltip title="Норма активна и не пересматривалась 12+ месяцев">
-                          <Chip
-                            size="small"
-                            icon={<ScheduleOutlinedIcon fontSize="small" />}
-                            label={`${n.lastReviewedMonthsAgo} мес.`}
+        {/* Реестр норм: заголовок + переключатель вида */}
+        <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap>
+          <Typography variant="subtitle1" component="h3">
+            Реестр норм ({filtered.length} из {RAW_NORMS.length})
+          </Typography>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={viewMode}
+            onChange={(_, v) => v && setViewMode(v)}
+            aria-label="Режим отображения реестра"
+          >
+            <ToggleButton value="table" aria-label="Таблица">
+              <TableRowsOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
+              Таблица
+            </ToggleButton>
+            <ToggleButton value="heatmap" aria-label="Тепловая карта">
+              <GridViewOutlinedIcon fontSize="small" sx={{ mr: 0.75 }} />
+              Тепловая карта
+            </ToggleButton>
+          </ToggleButtonGroup>
+        </Stack>
+
+        {viewMode === 'table' ? (
+          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 520 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ minWidth: 210 }}>Группа IIC</TableCell>
+                  <TableCell sx={{ minWidth: 170 }}>Серьёзность</TableCell>
+                  <TableCell>Формула</TableCell>
+                  <TableCell align="right">μ</TableCell>
+                  <TableCell align="right">σ</TableCell>
+                  <TableCell align="right">
+                    <Tooltip title="Коэффициент вариации σ/μ — насколько велик разброс относительно среднего. Подсвечивается, если заметно выше медианы по всем нормам.">
+                      <span>CV</span>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell sx={{ minWidth: 120 }}>
+                    <Tooltip title="Достоверность нормы: чем больше версий факта (N) и выше качество подгонки формулы (R²), тем надёжнее оценка.">
+                      <span>Достоверность</span>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell sx={{ minWidth: 90 }}>
+                    <Tooltip title="Динамика отношения факт/норма за последние 6 периодов — направление дрейфа важнее единичного выхода за допуск.">
+                      <span>Дрейф</span>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>Статус</TableCell>
+                  <TableCell align="right">Ревизия</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filtered.map((n) => {
+                  const cv = n.sigma / n.mean;
+                  const sevKey = severityKey(n.issueSeverity);
+                  const isSelected = n.id === selectedId;
+                  const stale = n.status === 'Active' && n.lastReviewedMonthsAgo >= 12;
+                  const confidence = confidenceOf(n);
+                  return (
+                    <TableRow
+                      key={n.id}
+                      hover
+                      selected={isSelected}
+                      onClick={() => setSelectedId(n.id)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell sx={{ fontWeight: isSelected ? 600 : 400 }}>{n.groupName}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                          <Box
                             sx={{
-                              bgcolor: SEVERITY_BG.Warning,
-                              color: SEVERITY_COLOR.Warning,
-                              fontWeight: 600,
+                              width: 9,
+                              height: 9,
+                              borderRadius: '50%',
+                              flexShrink: 0,
+                              bgcolor: SEVERITY_COLOR[sevKey],
                             }}
                           />
+                          <Typography variant="body2" noWrap>
+                            {SEVERITY_LABEL[sevKey]}
+                          </Typography>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>{n.formulaType}</TableCell>
+                      <TableCell align="right">{n.mean.toFixed(3)}</TableCell>
+                      <TableCell align="right">{n.sigma.toFixed(3)}</TableCell>
+                      <TableCell align="right" sx={{ backgroundColor: cvHeatBackground(cv) }}>
+                        {cv.toFixed(2)}
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip title={`N = ${n.sampleSize} версий факта, R² = ${n.rSquared.toFixed(2)}`}>
+                          <Stack direction="row" spacing={0.75} alignItems="center">
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                flexShrink: 0,
+                                bgcolor: CONFIDENCE_COLOR[confidence],
+                              }}
+                            />
+                            <Typography variant="body2" noWrap>
+                              {CONFIDENCE_LABEL[confidence]}
+                            </Typography>
+                          </Stack>
                         </Tooltip>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          {n.lastReviewedMonthsAgo} мес.
-                        </Typography>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ color: SEVERITY_COLOR[sevKey], lineHeight: 0 }}>
+                          <Sparkline values={n.driftHistory} color={SEVERITY_COLOR[sevKey]} />
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={STATUS_LABEL[n.status]}
+                          color={n.status === 'Active' ? 'success' : n.status === 'Future' ? 'info' : 'default'}
+                          variant={n.status === 'Historical' ? 'outlined' : 'filled'}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        {stale ? (
+                          <Tooltip title="Норма активна и не пересматривалась 12+ месяцев">
+                            <Chip
+                              size="small"
+                              icon={<ScheduleOutlinedIcon fontSize="small" />}
+                              label={`${n.lastReviewedMonthsAgo} мес.`}
+                              sx={{
+                                bgcolor: SEVERITY_BG.Warning,
+                                color: SEVERITY_COLOR.Warning,
+                                fontWeight: 600,
+                              }}
+                            />
+                          </Tooltip>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            {n.lastReviewedMonthsAgo} мес.
+                          </Typography>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        ) : (
+          <Stack spacing={2}>
+            {grouped.map(([category, norms]) => (
+              <Paper key={category} variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1.25 }}>
+                  {category}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1.25, flexWrap: 'wrap' }}>
+                  {norms.map((n) => {
+                    const sevKey = severityKey(n.issueSeverity);
+                    const confidence = confidenceOf(n);
+                    const isSelected = n.id === selectedId;
+                    return (
+                      <Tooltip
+                        key={n.id}
+                        title={`${n.groupName} · ${SEVERITY_LABEL[sevKey]} · достоверность: ${CONFIDENCE_LABEL[confidence]}`}
+                      >
+                        <Paper
+                          component="button"
+                          type="button"
+                          onClick={() => setSelectedId(n.id)}
+                          sx={{
+                            width: 132,
+                            height: 84,
+                            p: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'space-between',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            font: 'inherit',
+                            bgcolor: SEVERITY_BG[sevKey],
+                            border: isSelected ? '2px solid' : '1px solid transparent',
+                            borderColor: isSelected ? 'text.primary' : 'transparent',
+                            '&:hover': { filter: 'brightness(0.97)' },
+                          }}
+                        >
+                          <Typography variant="caption" sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>
+                            {n.groupName.split(' — ')[1] ?? n.groupName}
+                          </Typography>
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                bgcolor: SEVERITY_COLOR[sevKey],
+                              }}
+                            />
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                bgcolor: CONFIDENCE_COLOR[confidence],
+                              }}
+                            />
+                            <Typography variant="caption" color="text.secondary">
+                              CV {(n.sigma / n.mean).toFixed(2)}
+                            </Typography>
+                          </Stack>
+                        </Paper>
+                      </Tooltip>
+                    );
+                  })}
+                </Box>
+              </Paper>
+            ))}
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ px: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                Цвет ячейки — серьёзность отклонения. Левая точка — серьёзность, правая — достоверность нормы.
+              </Typography>
+            </Stack>
+          </Stack>
+        )}
 
         {/* Панель деталей выбранной нормы */}
-        {selected && (
-          <Paper variant="outlined" sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Typography variant="subtitle1" component="h3" sx={{ mr: 1 }}>
-                {selected.groupName}
-              </Typography>
-              <Chip
+        {selected && simData && (
+          <Paper variant="outlined" sx={{ p: 2.5 }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" useFlexGap spacing={1}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  {selected.groupName}
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ mt: 0.75 }} flexWrap="wrap" useFlexGap>
+                  <Chip
+                    size="small"
+                    label={SEVERITY_LABEL[severityKey(selected.issueSeverity)]}
+                    sx={{
+                      bgcolor: SEVERITY_BG[severityKey(selected.issueSeverity)],
+                      color: SEVERITY_COLOR[severityKey(selected.issueSeverity)],
+                      fontWeight: 600,
+                    }}
+                  />
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    label={STATUS_LABEL[selected.status]}
+                  />
+                  <Chip size="small" variant="outlined" label={`Формула: ${selected.formulaType}`} />
+                  <Tooltip title={`N = ${selected.sampleSize} версий факта, R² = ${selected.rSquared.toFixed(2)}`}>
+                    <Chip
+                      size="small"
+                      variant="outlined"
+                      label={`Достоверность: ${CONFIDENCE_LABEL[confidenceOf(selected)]}`}
+                      sx={{ borderColor: CONFIDENCE_COLOR[confidenceOf(selected)], color: CONFIDENCE_COLOR[confidenceOf(selected)] }}
+                    />
+                  </Tooltip>
+                </Stack>
+              </Box>
+              <Button
                 size="small"
-                sx={{
-                  bgcolor: SEVERITY_BG[severityKey(selected.issueSeverity)],
-                  color: SEVERITY_COLOR[severityKey(selected.issueSeverity)],
-                  fontWeight: 600,
-                }}
-                label={SEVERITY_LABEL[severityKey(selected.issueSeverity)]}
-              />
-              <Chip size="small" color={STATUS_COLOR[selected.status]} label={STATUS_LABEL[selected.status]} />
-              <Chip size="small" variant="outlined" label={selected.formulaType} />
+                variant="outlined"
+                startIcon={<CompareArrowsOutlinedIcon fontSize="small" />}
+                href="/dev/fact-norm-mockup"
+              >
+                Показать в сравнении факта и норм
+              </Button>
             </Stack>
 
             {selected.issueMessage && (
               <Alert
                 severity={
-                  selected.issueSeverity === 'Error'
+                  severityKey(selected.issueSeverity) === 'Error'
                     ? 'error'
-                    : selected.issueSeverity === 'Warning'
+                    : severityKey(selected.issueSeverity) === 'Warning'
                       ? 'warning'
                       : 'info'
                 }
-                sx={{ py: 0.5 }}
+                sx={{ mt: 2 }}
               >
-                {selected.issueMessage}
-                {selected.issueRecommendation ? (
-                  <>
-                    <br />
-                    <strong>Что делать:</strong> {selected.issueRecommendation}
-                  </>
-                ) : null}
+                <Typography variant="body2">{selected.issueMessage}</Typography>
+                {selected.issueRecommendation && (
+                  <Typography variant="body2" sx={{ mt: 0.5, fontWeight: 600 }}>
+                    Рекомендация: {selected.issueRecommendation}
+                  </Typography>
+                )}
               </Alert>
             )}
 
-            <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
-              <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  μ (текущая → предыдущая версия)
-                </Typography>
-                <Typography variant="body1">
-                  {selected.mean.toFixed(3)}
-                  {selected.previousMean != null ? (
-                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-                      (было {selected.previousMean.toFixed(3)},{' '}
-                      {selected.mean >= selected.previousMean ? '+' : ''}
-                      {(((selected.mean - selected.previousMean) / selected.previousMean) * 100).toFixed(0)}%)
-                    </Typography>
-                  ) : (
-                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-                      (первая версия)
-                    </Typography>
-                  )}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  σ (текущая → предыдущая версия)
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    color:
-                      selected.previousSigma != null && selected.sigma > selected.previousSigma * 1.3
-                        ? SEVERITY_COLOR.Error
-                        : selected.previousSigma != null && selected.sigma < selected.previousSigma * 0.85
-                          ? SEVERITY_COLOR.None
-                          : 'text.primary',
-                    fontWeight:
-                      selected.previousSigma != null && selected.sigma > selected.previousSigma * 1.3 ? 700 : 400,
-                  }}
-                >
-                  {selected.sigma.toFixed(3)}
-                  {selected.previousSigma != null ? (
-                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-                      (было {selected.previousSigma.toFixed(3)},{' '}
-                      {selected.sigma >= selected.previousSigma ? '+' : ''}
-                      {(((selected.sigma - selected.previousSigma) / selected.previousSigma) * 100).toFixed(0)}%)
-                    </Typography>
-                  ) : (
-                    <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-                      (первая версия)
-                    </Typography>
-                  )}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  Коэффициент вариации (CV)
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    color:
-                      selected.sigma / selected.mean >= MEDIAN_CV * 1.5 ? SEVERITY_COLOR.Warning : 'text.primary',
-                    fontWeight: selected.sigma / selected.mean >= MEDIAN_CV * 1.5 ? 700 : 400,
-                  }}
-                >
-                  {(selected.sigma / selected.mean).toFixed(2)}
-                  <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 0.75 }}>
-                    (медиана по реестру: {MEDIAN_CV.toFixed(2)})
+            <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', mt: 2 }}>
+              {selected.previousMean != null && selected.previousSigma != null && (
+                <Box sx={{ minWidth: 260, flex: '1 1 260px' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                    Сравнение с предыдущей версией
                   </Typography>
-                </Typography>
-              </Box>
-            </Stack>
+                  <Stack spacing={0.75}>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="caption" color="text.secondary">
+                        μ: {selected.previousMean.toFixed(3)} → {selected.mean.toFixed(3)}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{ fontWeight: 600 }}
+                        color={selected.mean > selected.previousMean ? 'text.primary' : 'text.secondary'}
+                      >
+                        {selected.mean >= selected.previousMean ? '+' : ''}
+                        {(((selected.mean - selected.previousMean) / selected.previousMean) * 100).toFixed(1)}%
+                      </Typography>
+                    </Stack>
+                    <Stack direction="row" justifyContent="space-between">
+                      <Typography variant="caption" color="text.secondary">
+                        σ: {selected.previousSigma.toFixed(3)} → {selected.sigma.toFixed(3)}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{ fontWeight: 600 }}
+                        color={selected.sigma > selected.previousSigma * 1.2 ? 'error.main' : 'text.secondary'}
+                      >
+                        {selected.sigma >= selected.previousSigma ? '+' : ''}
+                        {(((selected.sigma - selected.previousSigma) / selected.previousSigma) * 100).toFixed(1)}%
+                      </Typography>
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary">
+                      Действует с {formatRuDate(selected.effectiveFrom)}
+                      {selected.effectiveTo ? ` по ${formatRuDate(selected.effectiveTo)}` : ' (текущая)'}
+                    </Typography>
+                  </Stack>
+                </Box>
+              )}
 
-            <NormBandChart
-              band={generateBand(selected.mean, Math.min(0.6, selected.sigma / selected.mean))}
-              deviationRatio={Math.min(0.6, selected.sigma / selected.mean)}
-              chartVisible
-            />
+              <Box sx={{ minWidth: 320, flex: '2 1 420px' }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                  Коридор допуска (с учётом симулятора)
+                </Typography>
+                <NormBandChart band={simData.proposedBand} deviationRatio={simData.newRatio} />
+              </Box>
+            </Box>
+
+            {/* Симулятор «что если» */}
+            <Paper variant="outlined" sx={{ p: 2, mt: 2, bgcolor: 'action.hover' }}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  Симулятор «что если»: правка параметров формулы
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<RestartAltOutlinedIcon fontSize="small" />}
+                  onClick={() => {
+                    setMeanOffsetPct(0);
+                    setSigmaMultiplier(1);
+                  }}
+                  disabled={meanOffsetPct === 0 && sigmaMultiplier === 1}
+                >
+                  Сбросить
+                </Button>
+              </Stack>
+              <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mt: 1.5 }}>
+                <Box sx={{ minWidth: 220, flex: '1 1 220px' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Смещение μ: {meanOffsetPct > 0 ? '+' : ''}
+                    {meanOffsetPct}% (было {selected.mean.toFixed(3)}, станет {simData.newMean.toFixed(3)})
+                  </Typography>
+                  <Slider
+                    size="small"
+                    min={-20}
+                    max={20}
+                    step={1}
+                    value={meanOffsetPct}
+                    onChange={(_, v) => setMeanOffsetPct(v as number)}
+                    aria-label="Смещение μ, %"
+                  />
+                </Box>
+                <Box sx={{ minWidth: 220, flex: '1 1 220px' }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Ширина допуска (×σ): {sigmaMultiplier.toFixed(2)}× (было ±
+                    {((selected.sigma / selected.mean) * 100).toFixed(0)}%, станет ±
+                    {(simData.newRatio * 100).toFixed(0)}%)
+                  </Typography>
+                  <Slider
+                    size="small"
+                    min={0.5}
+                    max={2}
+                    step={0.05}
+                    value={sigmaMultiplier}
+                    onChange={(_, v) => setSigmaMultiplier(v as number)}
+                    aria-label="Множитель ширины допуска"
+                  />
+                </Box>
+              </Box>
+              <Stack direction="row" spacing={3} sx={{ mt: 2 }} flexWrap="wrap" useFlexGap>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Точек факта в допуске сейчас
+                  </Typography>
+                  <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+                    {simData.beforePct}%
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Точек факта в допуске после правки
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    sx={{ lineHeight: 1.2 }}
+                    color={simData.afterPct > simData.beforePct ? 'success.main' : simData.afterPct < simData.beforePct ? 'error.main' : 'text.primary'}
+                  >
+                    {simData.afterPct}%
+                    {simData.afterPct !== simData.beforePct && (
+                      <Typography component="span" variant="caption" sx={{ ml: 0.75 }}>
+                        ({simData.afterPct > simData.beforePct ? '+' : ''}
+                        {simData.afterPct - simData.beforePct} п.п.)
+                      </Typography>
+                    )}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                Расчёт основан на исторических точках факта по этой группе IIC и не публикует новую версию нормы —
+                только предварительный просчёт эффекта.
+              </Typography>
+            </Paper>
           </Paper>
         )}
       </Box>
