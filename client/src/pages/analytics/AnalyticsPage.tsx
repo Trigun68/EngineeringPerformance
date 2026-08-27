@@ -2,17 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import {
   Box,
   FormControl,
-<<<<<<< HEAD
-  FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
-  Switch,
-=======
-  InputLabel,
-  MenuItem,
-  Select,
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   Tab,
   Tabs,
   Typography,
@@ -29,24 +21,16 @@ import {
 import { FactNormAnalysisPanel } from '../../features/analytics/factNorm/FactNormAnalysisPanel';
 import { NormAnalysisPanel } from '../../features/analytics/norm-analysis/NormAnalysisPanel';
 import { ProductivityTrendPanel } from '../../features/analytics/productivity-trend/ProductivityTrendPanel';
-<<<<<<< HEAD
-import { TrendAnalysisPanel } from '../../features/analytics/trends/TrendAnalysisPanel';
-import { TrendsAnalyticsPage } from './TrendsAnalyticsPage';
-=======
 import type { FactPlanMode } from '../../features/analytics/shared/FactPlanToggle';
 import { TrendAnalysisPanel } from '../../features/analytics/trends/TrendAnalysisPanel';
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
+import { TrendsAnalyticsPage } from './TrendsAnalyticsPage';
 import { projectsPageSubTabsSx } from '../../features/projects/shared/projectsPageTabStyles';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import type { ProductivityVolumeMode } from '../../api/productivityTrendApi';
 import type { ZTrendWeightMode } from '../../api/zTrendApi';
 
-<<<<<<< HEAD
 type AnalyticsMainTab = 'trends' | 'productivity-trend' | 'fact-norms' | 'norm-analysis' | 'trends-legacy';
-=======
-type AnalyticsMainTab = 'trends' | 'productivity-trend' | 'fact-norms' | 'norm-analysis';
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 
 const PERIOD_PREF_KEY = 'analytics.period.v1';
 const CHROME_PREF_KEY = 'analytics.chrome.v1';
@@ -62,10 +46,7 @@ const MAIN_TABS: { value: AnalyticsMainTab; label: string; testId: string }[] = 
   },
   { value: 'fact-norms', label: 'Сравнение факта и норм', testId: 'analytics-tab-fact-norms' },
   { value: 'norm-analysis', label: 'Анализ норм', testId: 'analytics-tab-norm-analysis' },
-<<<<<<< HEAD
   { value: 'trends-legacy', label: 'Трендовый анализ (архив)', testId: 'analytics-tab-trends-legacy' },
-=======
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 ];
 
 interface SavedPeriodPrefs {
@@ -87,17 +68,11 @@ interface SavedProdTrendPrefs {
 const TAB_BLURB: Record<AnalyticsMainTab, string> = {
   trends: 'Динамика средневзвешенного Z по основным версиям плана и факта относительно нормы на дату версии.',
   'productivity-trend':
-<<<<<<< HEAD
-    'Как менялась сама норма: часы N(V*) при опорном объёме, без сравнения коэффициентов разных формул.',
+    'Динамика индекса производительности (% к норме) по основным версиям проектов и смена норм IIC за период.',
   'fact-norms': 'Сверка фактической производительности с действующими нормами IIC.',
   'norm-analysis': 'Реестр норм IIC, таймлайн действия и проверка здоровья.',
   'trends-legacy':
     'Архивная версия трендового анализа: факт vs прогноз/план по версиям, отклонения и детализация по объектам.',
-=======
-    'Динамика индекса производительности (% к норме) по основным версиям проектов и смена норм IIC за период.',
-  'fact-norms': 'Сверка фактической производительности с действующими нормами IIC.',
-  'norm-analysis': 'Реестр норм IIC, таймлайн действия и проверка здоровья.',
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 };
 
 export function AnalyticsPage() {
@@ -111,10 +86,6 @@ export function AnalyticsPage() {
   const [showPlan, setShowPlan] = useState(true);
   const [showFact, setShowFact] = useState(true);
   const [volumeMode, setVolumeMode] = useState<ProductivityVolumeMode>('median');
-<<<<<<< HEAD
-  const [trendToolbarExtras, setTrendToolbarExtras] = useState<ReactNode>(null);
-=======
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const [factNormToolbarExtras, setFactNormToolbarExtras] = useState<ReactNode>(null);
 
   useEffect(() => {
@@ -208,16 +179,6 @@ export function AnalyticsPage() {
     persistTrends({ weightMode: next, showPlan, showFact });
   };
 
-<<<<<<< HEAD
-  const handleShowPlan = (next: boolean) => {
-    setShowPlan(next);
-    persistTrends({ weightMode, showPlan: next, showFact });
-  };
-
-  const handleShowFact = (next: boolean) => {
-    setShowFact(next);
-    persistTrends({ weightMode, showPlan, showFact: next });
-=======
   // Режим «Факт/План/Оба» — единый переключатель вкладки тренда; храним как пару флагов
   // для обратной совместимости с сохранёнными предпочтениями.
   const trendMode: FactPlanMode = showPlan && showFact ? 'both' : showFact ? 'fact' : 'plan';
@@ -228,7 +189,6 @@ export function AnalyticsPage() {
     setShowPlan(nextShowPlan);
     setShowFact(nextShowFact);
     persistTrends({ weightMode, showPlan: nextShowPlan, showFact: nextShowFact });
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   };
 
   const handleVolumeMode = (next: ProductivityVolumeMode) => {
@@ -275,45 +235,6 @@ export function AnalyticsPage() {
 
   const trendsExtras = useMemo(
     () => (
-<<<<<<< HEAD
-      <>
-        <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel id="ztrend-weight-label">Вес</InputLabel>
-          <Select
-            labelId="ztrend-weight-label"
-            label="Вес"
-            value={weightMode}
-            onChange={(e) => handleWeightMode(e.target.value as ZTrendWeightMode)}
-            data-testid="ztrend-weight-mode"
-          >
-            <MenuItem value="basisHours">Нормативные часы (basisHours)</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showPlan}
-              onChange={(_, v) => handleShowPlan(v)}
-              data-testid="ztrend-toggle-plan"
-            />
-          }
-          label="План"
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showFact}
-              onChange={(_, v) => handleShowFact(v)}
-              data-testid="ztrend-toggle-fact"
-            />
-          }
-          label="Факт"
-        />
-        {trendToolbarExtras}
-      </>
-    ),
-    [weightMode, showPlan, showFact, trendToolbarExtras, handleWeightMode, handleShowPlan, handleShowFact],
-=======
       <FormControl size="small" sx={{ minWidth: 180 }}>
         <InputLabel id="ztrend-weight-label">Вес</InputLabel>
         <Select
@@ -329,7 +250,6 @@ export function AnalyticsPage() {
     ),
     // handleWeightMode пересоздаётся каждый рендер (зависит от showPlan/showFact) — включаем в deps.
     [weightMode, handleWeightMode],
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   );
 
   const productivityExtras = useMemo(
@@ -361,13 +281,10 @@ export function AnalyticsPage() {
           ? factNormToolbarExtras
           : null;
 
-<<<<<<< HEAD
   // Архивная вкладка «Трендовый анализ» самодостаточна — свои фильтры проекта/формулы/периода,
   // общие фильтры периода страницы «Аналитика» на неё не влияют и не показываются.
   const showSharedPeriodFilters = prefsLoaded && mainTab !== 'trends-legacy';
 
-=======
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   return (
     <AnalyticsChromeProvider chromeExpanded={chromeExpanded} setChromeExpanded={handleChromeExpanded}>
       <Box
@@ -398,11 +315,7 @@ export function AnalyticsPage() {
               ))}
             </Tabs>
 
-<<<<<<< HEAD
             {showSharedPeriodFilters ? (
-=======
-            {prefsLoaded ? (
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
               <AnalyticsPeriodFilters
                 preset={preset}
                 dateFrom={dateFrom}
@@ -436,14 +349,8 @@ export function AnalyticsPage() {
             dateFrom={dateFrom}
             dateTo={dateTo}
             weightMode={weightMode}
-<<<<<<< HEAD
-            showPlan={showPlan}
-            showFact={showFact}
-            onToolbarExtras={setTrendToolbarExtras}
-=======
             mode={trendMode}
             onModeChange={handleTrendModeChange}
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           />
         ) : null}
 
@@ -466,11 +373,8 @@ export function AnalyticsPage() {
         {mainTab === 'norm-analysis' && prefsLoaded ? (
           <NormAnalysisPanel dateFrom={dateFrom} dateTo={dateTo} />
         ) : null}
-<<<<<<< HEAD
 
         {mainTab === 'trends-legacy' ? <TrendsAnalyticsPage /> : null}
-=======
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       </Box>
     </AnalyticsChromeProvider>
   );

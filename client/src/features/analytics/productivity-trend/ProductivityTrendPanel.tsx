@@ -4,10 +4,7 @@ import {
   Box,
   Chip,
   CircularProgress,
-<<<<<<< HEAD
-=======
   Divider,
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   Grid,
   LinearProgress,
   Paper,
@@ -27,8 +24,6 @@ import {
   type ProductivityTrendTransition,
   type ProductivityVolumeMode,
 } from '../../../api/productivityTrendApi';
-<<<<<<< HEAD
-=======
 import {
   fetchProductivityIndexTrend,
   type ProductivityIndexPoint,
@@ -42,7 +37,6 @@ import type {
   TrendPointLike,
   TrendVersionRow,
 } from '../shared/trendDetailCalc';
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 import { FormulaTypeLegend } from './FormulaTypeLegend';
 import { ProductivityTrendChart } from './ProductivityTrendChart';
 
@@ -52,8 +46,6 @@ interface Props {
   volumeMode: ProductivityVolumeMode;
 }
 
-<<<<<<< HEAD
-=======
 const PRODUCTIVITY_INDEX_METRIC: TrendDetailMetricConfig = {
   yAxisTitle: 'Индекс производительности, % к норме',
   unit: ' %',
@@ -94,7 +86,6 @@ function toVersionRow(p: ProductivityIndexPoint): TrendVersionRow {
   };
 }
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 const VERDICT_LABEL: Record<string, string> = {
   tightening: 'Ужесточение',
   loosening: 'Ослабление',
@@ -163,8 +154,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-<<<<<<< HEAD
-=======
   // Первичный блок (мокап TrendDetailMockup): индекс производительности по основным версиям.
   const [indexResult, setIndexResult] = useState<ProductivityIndexTrendResponse | null>(null);
   const [indexLoading, setIndexLoading] = useState(false);
@@ -172,7 +161,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   const [mode, setMode] = useState<FactPlanMode>('fact');
   const indexAbortRef = useRef<AbortController | null>(null);
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const load = useCallback(() => {
     abortRef.current?.abort();
     const ac = new AbortController();
@@ -210,8 +198,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
     };
   }, [load]);
 
-<<<<<<< HEAD
-=======
   const loadIndex = useCallback(() => {
     indexAbortRef.current?.abort();
     const ac = new AbortController();
@@ -277,7 +263,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
 
   const hasIndexPoints = indexPoints.plan.length > 0 || indexPoints.fact.length > 0;
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const columnDefs = useMemo<ColDef<ProductivityTrendTransition>[]>(
     () => [
       { field: 'groupName', headerName: 'Группа IIC', flex: 1, minWidth: 220 },
@@ -410,9 +395,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   ];
 
   return (
-<<<<<<< HEAD
-    <Stack spacing={2} data-testid="prod-trend-panel">
-=======
     <Stack spacing={2.5} data-testid="prod-trend-panel">
       {indexLoading && !indexResult && (
         <Box data-testid="prod-index-loading" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -479,7 +461,6 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
         </Typography>
       </Box>
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       {loading && !result && (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
           <CircularProgress size={32} data-testid="prod-trend-loading" />

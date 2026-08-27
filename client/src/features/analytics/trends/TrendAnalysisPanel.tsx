@@ -1,28 +1,3 @@
-<<<<<<< HEAD
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import {
-  Alert,
-  Box,
-  CircularProgress,
-  Grid,
-  IconButton,
-  Popover,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import {
-  fetchZTrends,
-  type ZTrendContribution,
-  type ZTrendResponse,
-  type ZTrendWeightMode,
-} from '../../../api/zTrendApi';
-import { formatIisNorm } from '../../../utils/formatIisNorm';
-import { NormLegend } from './NormLegend';
-import { ZTrendChart } from './ZTrendChart';
-
-=======
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -84,53 +59,10 @@ function formatPeriodChip(dateFrom: string, dateTo: string): string {
   return 'Весь период';
 }
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
 interface Props {
   dateFrom: string;
   dateTo: string;
   weightMode: ZTrendWeightMode;
-<<<<<<< HEAD
-  showPlan: boolean;
-  showFact: boolean;
-  onToolbarExtras?: (node: ReactNode) => void;
-}
-
-function collectContributions(result: ZTrendResponse | null): ZTrendContribution[] {
-  if (!result) return [];
-  const map = new Map<string, ZTrendContribution>();
-  const visit = (points: { contributions?: ZTrendContribution[] | null }[]) => {
-    for (const p of points) {
-      for (const c of p.contributions ?? []) {
-        const key = `${c.projectId}-${c.versionId}`;
-        if (!map.has(key)) map.set(key, c);
-      }
-    }
-  };
-  for (const seg of [...result.overall.plan.segments, ...result.overall.fact.segments]) {
-    visit(seg.points);
-  }
-  for (const g of result.byGroup) {
-    for (const seg of [...g.plan.segments, ...g.fact.segments]) visit(seg.points);
-  }
-  return [...map.values()].sort((a, b) =>
-    `${a.projectCode} ${a.versionName}`.localeCompare(`${b.projectCode} ${b.versionName}`, 'ru'),
-  );
-}
-
-export function TrendAnalysisPanel({
-  dateFrom,
-  dateTo,
-  weightMode,
-  showPlan,
-  showFact,
-  onToolbarExtras,
-}: Props) {
-  const [result, setResult] = useState<ZTrendResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [infoAnchor, setInfoAnchor] = useState<HTMLElement | null>(null);
-  const [infoPinned, setInfoPinned] = useState(false);
-=======
   mode: FactPlanMode;
   onModeChange: (mode: FactPlanMode) => void;
 }
@@ -174,7 +106,6 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
   const [result, setResult] = useState<ZTrendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -216,90 +147,12 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
     };
   }, [load]);
 
-<<<<<<< HEAD
-  const contributions = useMemo(() => collectContributions(result), [result]);
-
-  useEffect(() => {
-    if (!onToolbarExtras) return;
-    onToolbarExtras(
-      <Tooltip title="Версии в выборке периода">
-        <IconButton
-          size="small"
-          data-testid="ztrend-versions-info"
-          aria-label="Версии в выборке периода"
-          onMouseEnter={(e) => {
-            if (!infoPinned) setInfoAnchor(e.currentTarget);
-          }}
-          onMouseLeave={() => {
-            if (!infoPinned) setInfoAnchor(null);
-          }}
-          onClick={(e) => {
-            setInfoPinned((p) => !p);
-            setInfoAnchor(e.currentTarget);
-          }}
-        >
-          <InfoOutlinedIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>,
-    );
-    return () => onToolbarExtras(null);
-  }, [onToolbarExtras, infoPinned]);
-
-=======
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
   const hasSegments = useMemo(() => {
     if (!result) return false;
     const o = result.overall;
     return o.plan.segments.length > 0 || o.fact.segments.length > 0 || result.byGroup.length > 0;
   }, [result]);
 
-<<<<<<< HEAD
-  return (
-    <Stack spacing={2} data-testid="ztrend-panel">
-      <Popover
-        open={Boolean(infoAnchor)}
-        anchorEl={infoAnchor}
-        onClose={() => {
-          setInfoPinned(false);
-          setInfoAnchor(null);
-        }}
-        disableRestoreFocus
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-        slotProps={{ paper: { sx: { p: 1.5, maxWidth: 420, maxHeight: 360, overflow: 'auto' } } }}
-        data-testid="ztrend-versions-popover"
-      >
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          Версии в выборке периода
-        </Typography>
-        {contributions.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            Нет версий с рассчитанным Z в текущем ответе.
-          </Typography>
-        ) : (
-          <Stack component="ul" spacing={0.5} sx={{ m: 0, pl: 2 }}>
-            {contributions.map((c) => (
-              <Typography key={`${c.projectId}-${c.versionId}`} component="li" variant="body2">
-                {c.projectCode} — {c.projectName}: {c.versionName}
-                {c.zScore != null ? ` (Z=${c.zScore.toFixed(2)})` : ''}
-              </Typography>
-            ))}
-          </Stack>
-        )}
-        {infoPinned ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            Закреплено — нажмите ⓘ ещё раз, чтобы закрыть.
-          </Typography>
-        ) : null}
-      </Popover>
-
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress size={32} data-testid="ztrend-loading" />
-        </Box>
-      )}
-
-=======
   const planPoints = useMemo(() => flattenSeriesPoints(result?.overall.plan), [result]);
   const factPoints = useMemo(() => flattenSeriesPoints(result?.overall.fact), [result]);
   const planVersions = useMemo(() => collectVersionRows(result?.overall.plan), [result]);
@@ -340,40 +193,24 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
         <LinearProgress sx={{ borderRadius: 1 }} data-testid="ztrend-refresh-progress" />
       ) : null}
 
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
       {error && (
         <Alert severity="error" data-testid="ztrend-error">
           {error}
         </Alert>
       )}
 
-<<<<<<< HEAD
-      {!loading && result && result.warnings.length > 0 && (
-=======
       {result && result.warnings.length > 0 && (
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         <Alert severity="info" data-testid="ztrend-warnings" sx={{ py: 0.5 }}>
           {result.warnings.slice(0, 3).join(' ')}
         </Alert>
       )}
 
-<<<<<<< HEAD
-      {!loading && result && !hasSegments && (
-=======
       {result && !hasSegments && (
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
         <Alert severity="info" data-testid="ztrend-empty">
           Нет основных версий (isPrimary) с рассчитанным Z в выбранном периоде.
         </Alert>
       )}
 
-<<<<<<< HEAD
-      {!loading && result && hasSegments && (
-        <>
-          <Typography variant="h6" component="h2">
-            Общий тренд Z
-          </Typography>
-=======
       {result && hasSegments && (
         <>
           <TrendDetailView
@@ -409,7 +246,6 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
               изменила оценку.
             </Typography>
           </Box>
->>>>>>> 480f11eb88553d5509e14adcaba70049ddca2968
           <NormLegend legend={result.legend} />
           <ZTrendChart
             group={result.overall}
