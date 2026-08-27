@@ -171,17 +171,6 @@ public sealed class ProjectExportService : IProjectExportService
             WithBanner(ForecastTableDocumentBuilder.BuildSummary(data.Forecast.Summary, title), headerLines));
     }
 
-    public async Task<byte[]> ExportForecastSummaryPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default)
-    {
-        var (data, title, headerLines) = await LoadForecastTableAsync(
-            projectId, versionId, "Прогноз трудозатрат", cancellationToken);
-        return ForecastTableRenderers.ToPdf(
-            WithBanner(ForecastTableDocumentBuilder.BuildSummary(data.Forecast.Summary, title), headerLines));
-    }
-
     public async Task<byte[]> ExportForecastFacilityExcelAsync(
         int projectId,
         int versionId,
@@ -190,17 +179,6 @@ public sealed class ProjectExportService : IProjectExportService
         var (data, title, headerLines) = await LoadForecastTableAsync(
             projectId, versionId, "Прогноз трудозатрат по объектам", cancellationToken);
         return ForecastTableRenderers.ToExcel(
-            WithBanner(ForecastTableDocumentBuilder.BuildFacility(data.Forecast.Facility, title), headerLines));
-    }
-
-    public async Task<byte[]> ExportForecastFacilityPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default)
-    {
-        var (data, title, headerLines) = await LoadForecastTableAsync(
-            projectId, versionId, "Прогноз трудозатрат по объектам", cancellationToken);
-        return ForecastTableRenderers.ToPdf(
             WithBanner(ForecastTableDocumentBuilder.BuildFacility(data.Forecast.Facility, title), headerLines));
     }
 
@@ -298,25 +276,13 @@ public sealed class ProjectExportService : IProjectExportService
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default) =>
-        await RenderFactSummaryAsync(projectId, versionId, excel: true, cancellationToken);
-
-    public async Task<byte[]> ExportFactSummaryPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default) =>
-        await RenderFactSummaryAsync(projectId, versionId, excel: false, cancellationToken);
+        await RenderFactSummaryAsync(projectId, versionId, cancellationToken);
 
     public async Task<byte[]> ExportFactFacilityExcelAsync(
         int projectId,
         int versionId,
         CancellationToken cancellationToken = default) =>
-        await RenderFactFacilityAsync(projectId, versionId, excel: true, cancellationToken);
-
-    public async Task<byte[]> ExportFactFacilityPdfAsync(
-        int projectId,
-        int versionId,
-        CancellationToken cancellationToken = default) =>
-        await RenderFactFacilityAsync(projectId, versionId, excel: false, cancellationToken);
+        await RenderFactFacilityAsync(projectId, versionId, cancellationToken);
 
     public async Task<byte[]> ExportFactDetailExcelAsync(
         int projectId,
@@ -329,18 +295,18 @@ public sealed class ProjectExportService : IProjectExportService
         return ForecastTableRenderers.ToExcel(document);
     }
 
-    private async Task<byte[]> RenderFactSummaryAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
+    private async Task<byte[]> RenderFactSummaryAsync(int projectId, int versionId, CancellationToken cancellationToken)
     {
         var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Оценка факта", cancellationToken);
         var document = WithBanner(FactTableDocumentBuilder.BuildSummary(data.Fact.Performance, title), headerLines);
-        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
+        return ForecastTableRenderers.ToExcel(document);
     }
 
-    private async Task<byte[]> RenderFactFacilityAsync(int projectId, int versionId, bool excel, CancellationToken cancellationToken)
+    private async Task<byte[]> RenderFactFacilityAsync(int projectId, int versionId, CancellationToken cancellationToken)
     {
         var (data, title, headerLines) = await LoadForecastTableAsync(projectId, versionId, "Оценка факта по объектам", cancellationToken);
         var document = WithBanner(FactTableDocumentBuilder.BuildFacility(data.Fact.Facility, title), headerLines);
-        return excel ? ForecastTableRenderers.ToExcel(document) : ForecastTableRenderers.ToPdf(document);
+        return ForecastTableRenderers.ToExcel(document);
     }
 
     public async Task<byte[]> ExportFactDetailSummaryTableAsync(

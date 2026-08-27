@@ -174,7 +174,8 @@ public sealed class ProjectsPageController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var bytes = await _exportService.ExportForecastFacilityPdfAsync(projectId, versionId, cancellationToken);
+        // Визуальный движок (QuestPdfReportComposer), как у остальных PDF вкладки.
+        var bytes = await _visualReports.ExportForecastFacilityPdfAsync(projectId, versionId, cancellationToken);
         var fileName = await ForecastFileNameAsync(projectId, versionId, ExportFileNameBuilder.Views.Facility, "pdf", cancellationToken);
         return File(bytes, "application/pdf", fileName);
     }

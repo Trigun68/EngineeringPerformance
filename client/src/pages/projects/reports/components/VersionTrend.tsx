@@ -56,24 +56,31 @@ export function VersionTrend({ points }: VersionTrendProps) {
           return `<b>${p?.versionName ?? ''}</b><br/>Z = ${fmt(point.y, 2)}<br/>${fmt(p?.totalHours ?? null, 0)} ч`;
         },
       },
-      plotOptions: {
-        line: {
-          dataLabels: { enabled: true, format: '{point.y:.2f}' },
-        },
-      },
       series: [
         {
           type: 'line',
-          name: 'План',
+          name: 'План (по версиям)',
           color: ACCENT_PLAN,
-          marker: { radius: 5, symbol: 'circle', lineWidth: 2, lineColor: '#FFFFFF' },
+          lineWidth: 2.25,
+          marker: { radius: 3.5, symbol: 'circle', fillColor: '#FFFFFF', lineWidth: 2, lineColor: ACCENT_PLAN },
           data: planIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
         },
         {
-          type: 'line',
-          name: 'Факт',
+          // Гало под основным маркером факта — акцент по мокапу ReportRedesignMockup.
+          type: 'scatter',
+          name: 'Факт (гало)',
           color: ACCENT_FACT,
-          marker: { radius: 8, symbol: 'diamond', lineWidth: 3, lineColor: '#FFFFFF' },
+          marker: { radius: 9, symbol: 'circle', fillColor: Highcharts.color(ACCENT_FACT).setOpacity(0.16).get() },
+          showInLegend: false,
+          enableMouseTracking: false,
+          dataLabels: { enabled: false },
+          data: factIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
+        },
+        {
+          type: 'line',
+          name: 'Факт (основная версия)',
+          color: ACCENT_FACT,
+          marker: { radius: 6, symbol: 'circle', lineWidth: 2.5, lineColor: '#FFFFFF' },
           lineWidth: 0,
           data: factIndices.map((i) => [i, chronological[i].weightedZScore ?? undefined]),
         },

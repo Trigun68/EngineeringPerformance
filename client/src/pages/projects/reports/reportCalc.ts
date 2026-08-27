@@ -33,31 +33,41 @@ export const INTERPRETATION_SHORT_RU: Record<Interpretation, string> = {
   Critical: 'Критично',
 };
 
-/** Flat UI Colors — согласовано с существующей палитрой приложения (wpColors). */
+/**
+ * Палитра интерпретации — дизайн-мокап ReportRedesignMockup (ветка v0):
+ * смягчённый красный, более выразительный янтарный для «удовлетворительно».
+ */
 export const INTERPRETATION_COLOR: Record<Interpretation, string> = {
-  Excellent: '#1E8449',
-  Good: '#27AE60',
-  Satisfactory: '#D9A100',
-  NeedsAttention: '#E67E22',
-  Critical: '#B5544C',
+  Excellent: '#0F9D6B',
+  Good: '#2F9E6E',
+  Satisfactory: '#C77A1F',
+  NeedsAttention: '#D2691E',
+  Critical: '#C6483F',
 };
 
-export const MUTED_COLOR = '#95A5A6';
+/** Фоны чипов интерпретации (мокап) — приглушённые оттенки основного цвета. */
+export const INTERPRETATION_BG: Record<Interpretation, string> = {
+  Excellent: '#E5F7EF',
+  Good: '#EAF6F0',
+  Satisfactory: '#FBF0E1',
+  NeedsAttention: '#FCEEE3',
+  Critical: '#F8E9E7',
+};
+
+/** Пастельные цвета зон полосы шкалы Z (мокап) — светлее INTERPRETATION_COLOR. */
+export const ZONE_COLOR: Record<Interpretation, string> = {
+  Excellent: '#6FCB9F',
+  Good: '#A8DDBE',
+  Satisfactory: '#F4CF62',
+  NeedsAttention: '#F0C48A',
+  Critical: '#DDA9A4',
+};
+
+export const MUTED_COLOR = '#7B8794';
 
 export function interpretationColor(z: number | null | undefined): string {
   const i = getInterpretation(z);
   return i ? INTERPRETATION_COLOR[i] : MUTED_COLOR;
-}
-
-/**
- * Численная позиция перцентиля (0..100) для визуальной шкалы — паритет backend
- * PerformancePercentileHelper.GetPercentile: диапазон Z [-1, 1] линейно отображается на
- * [0, 100], значения вне диапазона клэмпятся к границам.
- */
-export function percentileFraction(z: number | null | undefined): number | null {
-  if (z === null || z === undefined || Number.isNaN(z)) return null;
-  const clamped = Math.min(1, Math.max(-1, z));
-  return ((clamped + 1) / 2) * 100;
 }
 
 export function fmt(value: number | null | undefined, digits = 2): string {
@@ -202,8 +212,15 @@ export const DIRECTION_PLAN = 1;
 export const DIRECTION_FACT = 2;
 
 /**
- * Акцентные цвета для различения плана и факта на шкале Z и графике динамики.
- * Согласованы с общей палитрой приложения (wpColors: accent, heading).
+ * Акцентные цвета плана и факта (мокап ReportRedesignMockup):
+ * план — фиолетовый (менее акцентный), факт — синий (основной акцент, крупный маркер).
  */
-export const ACCENT_PLAN = '#3498DB';
-export const ACCENT_FACT = '#2C3E50';
+export const ACCENT_PLAN = '#8E6FD8';
+export const ACCENT_FACT = '#2F6FE0';
+
+/** Отклонение факта от плана в процентах: (fact − plan) / plan × 100; null при отсутствии данных. */
+export function hoursDeltaPct(planHours: number | null, factHours: number | null): number | null {
+  if (planHours === null || planHours === undefined || planHours === 0) return null;
+  if (factHours === null || factHours === undefined) return null;
+  return ((factHours - planHours) / planHours) * 100;
+}
