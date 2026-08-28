@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -133,6 +133,12 @@ export function FullProjectsPage() {
     currentProjectId ? `projects.${currentProjectId}.mainTab` : 'projects.mainTab',
     'forecast',
   );
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('tab') === 'report') {
+      setMainTab('report');
+    }
+  }, [searchParams, setMainTab]);
   // Только localStorage: сворачивание шапки не должно бить API / перезагружать данные.
   const [headerExpanded, setHeaderExpandedState] = useState(readHeaderExpanded);
   const setHeaderExpanded = useCallback((expanded: boolean) => {

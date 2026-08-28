@@ -37,6 +37,10 @@ import type {
   TrendVersionRow,
 } from '../shared/trendDetailCalc';
 import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
+import { HoursBridgeChart } from '../shared/HoursBridgeChart';
+import { HoursCoverageChips } from '../shared/HoursCoverageChips';
+import { SCurveChart } from '../shared/SCurveChart';
+import { fetchZTrends, type ZTrendResponse } from '../../../api/zTrendApi';
 import { FormulaTypeLegend } from './FormulaTypeLegend';
 import { ProductivityTrendChart } from './ProductivityTrendChart';
 
@@ -160,6 +164,8 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
   const [indexError, setIndexError] = useState<string | null>(null);
   const [mode, setMode] = useState<FactPlanMode>('fact');
   const indexAbortRef = useRef<AbortController | null>(null);
+  const [hours, setHours] = useState<ZTrendResponse | null>(null);
+  const hoursAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(() => {
     abortRef.current?.abort();
@@ -233,6 +239,23 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
       indexAbortRef.current?.abort();
     };
   }, [loadIndex]);
+
+  useEffect(() => {
+    hoursAbortRef.current?.abort();
+    const ac = new AbortController();
+    hoursAbortRef.current = ac;
+    void fetchZTrends(
+      { periodStart: dateFrom || null, periodEnd: dateTo || null },
+      ac.signal,
+    )
+      .then((data) => {
+        if (!ac.signal.aborted) setHours(data);
+      })
+      .catch(() => {
+        if (!ac.signal.aborted) setHours(null);
+      });
+    return () => ac.abort();
+  }, [dateFrom, dateTo]);
 
   const indexPoints = useMemo(
     () => ({
@@ -450,6 +473,39 @@ export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) 
           testId="prod-trend-detail"
         />
       )}
+
+      {hours ? (
+        <Box data-testid="prod-trend-hours-chapter">
+          <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+            Часы основных версий
+          </Typography>
+          <HoursCoverageChips coverage={hours.coverage} />
+          <Paper variant="outlined" sx={{ p: 2, mt: 1 }}>
+            {hours.disciplineBridge.lines.length > 0 ? (
+              <HoursBridgeChart lines={hours.disciplineBridge.lines} testId="prod-trend-hours-bridge" />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Нет пары план/факт с объёмом и часами для моста.
+              </Typography>
+            )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Сырой Δ часов:{' '}
+              {hours.rawHoursDelta == null
+                ? '—'
+                : `${hours.rawHoursDelta > 0 ? '+' : ''}${hours.rawHoursDelta.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ч`}
+            </Typography>
+          </Paper>
+          {(hours.portfolioSCurve.length > 0 || hours.planSCurve.length > 0) && (
+            <Paper variant="outlined" sx={{ p: 2, mt: 2 }}>
+              <SCurveChart
+                points={hours.portfolioSCurve}
+                planPoints={hours.planSCurve}
+                testId="prod-trend-scurve"
+              />
+            </Paper>
+          )}
+        </Box>
+      ) : null}
 
       <AnalyticsExtraAccordion testId="prod-trend-extra">
       <Box>

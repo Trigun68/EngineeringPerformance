@@ -4,8 +4,19 @@ import { normalizeTrendDetailAggregation } from '../features/analytics/shared/tr
 import {
   normalizeHoursBridge,
   normalizeSCurve,
+  normalizeCoverage,
+  normalizeNamedSCurves,
+  normalizeBand,
+  normalizeEvents,
+  normalizeMovers,
+  EMPTY_COVERAGE,
   type HoursBridgeResultDto,
+  type HoursCoverageDto,
   type CumulativeHoursPointDto,
+  type NamedSCurveDto,
+  type PercentileBandPointDto,
+  type TrendEventDto,
+  type MoverRowDto,
 } from './projectTrendApi';
 
 export type ZTrendFlag = 'ok' | 'sigma_zero' | 'no_norm' | 'clipped';
@@ -81,6 +92,13 @@ export interface ZTrendResponse {
   disciplineBridge: HoursBridgeResultDto;
   groupZeroBars: GroupZeroBaseline[];
   portfolioSCurve: CumulativeHoursPointDto[];
+  coverage: HoursCoverageDto;
+  movers: MoverRowDto[];
+  zPercentileBand: PercentileBandPointDto[];
+  events: TrendEventDto[];
+  planSCurve: CumulativeHoursPointDto[];
+  projectSCurves: NamedSCurveDto[];
+  rawHoursDelta: number | null;
 }
 
 export interface ZTrendRequest {
@@ -226,5 +244,15 @@ export async function fetchZTrends(
       }),
     ),
     portfolioSCurve: normalizeSCurve(data.portfolioSCurve ?? data.PortfolioSCurve),
+    coverage: normalizeCoverage(data.coverage ?? data.Coverage) ?? EMPTY_COVERAGE,
+    movers: normalizeMovers(data.movers ?? data.Movers),
+    zPercentileBand: normalizeBand(data.zPercentileBand ?? data.ZPercentileBand),
+    events: normalizeEvents(data.events ?? data.Events),
+    planSCurve: normalizeSCurve(data.planSCurve ?? data.PlanSCurve),
+    projectSCurves: normalizeNamedSCurves(data.projectSCurves ?? data.ProjectSCurves),
+    rawHoursDelta:
+      data.rawHoursDelta == null && data.RawHoursDelta == null
+        ? null
+        : Number(data.rawHoursDelta ?? data.RawHoursDelta),
   };
 }

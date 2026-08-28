@@ -112,12 +112,13 @@ public interface IPerformanceCalculationEngine
         decimal? overallDelta,
         int topCount = 3);
 
-    /// <summary>Полная агрегация детализированной тренд-вкладки (план/факт бакеты, KPI, водопад факта).</summary>
+    /// <summary>Полная агрегация детализированной тренд-вкладки (план/факт бакеты, KPI, водопады).</summary>
     TrendDetailAggregationDto BuildTrendDetailAggregation(
         IReadOnlyList<TrendPointSample> planPoints,
         IReadOnlyList<TrendPointSample> factPoints,
         IReadOnlyList<TrendGroupSample> factGroups,
-        int waterfallTopCount = 3);
+        int waterfallTopCount = 3,
+        IReadOnlyList<TrendGroupSample>? planGroups = null);
 
     /// <summary>
     /// Мост часов факт vs план: эффект объёма + эффект производительности.
@@ -137,4 +138,34 @@ public interface IPerformanceCalculationEngine
     IReadOnlyList<ZeroBaselineBarDto> BuildZeroBaselineBars(
         IReadOnlyList<ZeroBaselineSample> samples,
         int topCount = 12);
+
+    /// <summary>
+    /// Покрытие часов: Z на корневых строках и пара план/факт по правилам моста.
+    /// Доли 0…1; null, если знаменатель нулевой.
+    /// </summary>
+    HoursCoverageDto ComputeHoursCoverage(
+        IReadOnlyList<PerformanceRowDto> planRows,
+        IReadOnlyList<PerformanceRowDto> factRows);
+
+    /// <summary>Сумма покрытий по проектам с пересчётом долей.</summary>
+    HoursCoverageDto CombineHoursCoverages(IEnumerable<HoursCoverageDto> parts);
+
+    /// <summary>Сырой Δ часов: сумма корневых часов факта минус плана (не эффекты моста).</summary>
+    decimal ComputeRawHoursDelta(
+        IReadOnlyList<PerformanceRowDto> planRows,
+        IReadOnlyList<PerformanceRowDto> factRows);
+
+    /// <summary>
+    /// Взвешенные перцентили p10 и p90 по выборке вкладов. Пустая или из одной точки — null.
+    /// </summary>
+    WeightedPercentileBandDto? ComputeWeightedPercentileBand(
+        IEnumerable<(decimal ZScore, decimal Weight)> samples);
+
+    /// <summary>Таблица «кто тянет»: вклад = Z×вес/Σвесов, сортировка по |вклад|.</summary>
+    IReadOnlyList<MoverRowDto> BuildMoverRows(IReadOnlyList<MoverSample> samples);
+
+    /// <summary>Тонкие S-curve проектов: топ-N по итоговому накоплению + «Прочие».</summary>
+    IReadOnlyList<NamedSCurveDto> BuildTopProjectSCurves(
+        IReadOnlyList<ProjectHoursSeriesSample> series,
+        int topCount = 8);
 }

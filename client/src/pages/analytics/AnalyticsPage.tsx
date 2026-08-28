@@ -5,6 +5,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Stack,
   Tab,
   Tabs,
   Typography,
@@ -23,13 +24,20 @@ import { NormAnalysisPanel } from '../../features/analytics/norm-analysis/NormAn
 import { ProductivityTrendPanel } from '../../features/analytics/productivity-trend/ProductivityTrendPanel';
 import type { FactPlanMode } from '../../features/analytics/shared/FactPlanToggle';
 import { TrendAnalysisPanel } from '../../features/analytics/trends/TrendAnalysisPanel';
+import { HoursTrendPanel } from '../../features/analytics/hours-trend/HoursTrendPanel';
 import { projectsPageSubTabsSx } from '../../features/projects/shared/projectsPageTabStyles';
 import { usePersistedTabState } from '../../hooks/usePersistedTabState';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import type { ProductivityVolumeMode } from '../../api/productivityTrendApi';
 import type { ZTrendWeightMode } from '../../api/zTrendApi';
+import { useSearchParams } from 'react-router-dom';
 
-type AnalyticsMainTab = 'trends' | 'productivity-trend' | 'fact-norms' | 'norm-analysis';
+type AnalyticsMainTab =
+  | 'trends'
+  | 'hours-trend'
+  | 'productivity-trend'
+  | 'fact-norms'
+  | 'norm-analysis';
 
 const PERIOD_PREF_KEY = 'analytics.period.v1';
 const CHROME_PREF_KEY = 'analytics.chrome.v1';
@@ -38,6 +46,11 @@ const PROD_TREND_PREF_KEY = 'analytics.productivityTrend.v1';
 
 const MAIN_TABS: { value: AnalyticsMainTab; label: string; testId: string }[] = [
   { value: 'trends', label: 'Тренд оценки', testId: 'analytics-tab-trends' },
+  {
+    value: 'hours-trend',
+    label: 'Тренд часов',
+    testId: 'analytics-tab-hours-trend',
+  },
   {
     value: 'productivity-trend',
     label: 'Тренд оценки производительности',
@@ -65,7 +78,9 @@ interface SavedProdTrendPrefs {
 
 const TAB_BLURB: Record<AnalyticsMainTab, string> = {
   trends:
-    'Портфель: динамика Z по датам, мост часов (объём / производительность), Z групп IIC относительно нормы и накопительные часы факта. Разбор ΔZ и сегменты норм — в «Дополнительно».',
+    'Портфель: динамика Z по датам, мост часов (объём / производительность), Z групп IIC относительно нормы и накопительные часы. Разбор ΔZ факта и сегменты норм — в «Дополнительно».',
+  'hours-trend':
+    'Архивный тренд часов проекта: факт, план-прогноз, сырой Δ и накопительный факт. Клик по точке версии открывает объекты.',
   'productivity-trend':
     'Соотношение факта и плана с нормативной выработкой по основным версиям проектов — на сколько процентов быстрее или медленнее нормы выполняется работа.',
   'fact-norms': 'Сверка фактической производительности с действующими нормами IIC: серьёзность отклонений и вердикт по группе.',
@@ -74,6 +89,7 @@ const TAB_BLURB: Record<AnalyticsMainTab, string> = {
 };
 
 export function AnalyticsPage() {
+  const [searchParams] = useSearchParams();
   const [mainTab, setMainTab] = usePersistedTabState<AnalyticsMainTab>('analytics.mainTab', 'trends');
   const [preset, setPreset] = useState<AnalyticsPeriodPreset>('1m');
   const [dateFrom, setDateFrom] = useState('');
@@ -85,7 +101,21 @@ export function AnalyticsPage() {
   const [showFact, setShowFact] = useState(true);
   const [volumeMode, setVolumeMode] = useState<ProductivityVolumeMode>('median');
   const [factNormToolbarExtras, setFactNormToolbarExtras] = useState<ReactNode>(null);
+  const [trendToolbarExtras, setTrendToolbarExtras] = useState<ReactNode>(null);
   const [factNormDirectionIds, setFactNormDirectionIds] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (
+      tab === 'trends' ||
+      tab === 'hours-trend' ||
+      tab === 'productivity-trend' ||
+      tab === 'fact-norms' ||
+      tab === 'norm-analysis'
+    ) {
+      setMainTab(tab);
+    }
+  }, [searchParams, setMainTab]);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,21 +264,24 @@ export function AnalyticsPage() {
 
   const trendsExtras = useMemo(
     () => (
-      <FormControl size="small" sx={{ minWidth: 180 }}>
-        <InputLabel id="ztrend-weight-label">Вес</InputLabel>
-        <Select
-          labelId="ztrend-weight-label"
-          label="Вес"
-          value={weightMode}
-          onChange={(e) => handleWeightMode(e.target.value as ZTrendWeightMode)}
-          data-testid="ztrend-weight-mode"
-        >
-          <MenuItem value="basisHours">Нормативные часы (basisHours)</MenuItem>
-        </Select>
-      </FormControl>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <InputLabel id="ztrend-weight-label">Вес</InputLabel>
+          <Select
+            labelId="ztrend-weight-label"
+            label="Вес"
+            value={weightMode}
+            onChange={(e) => handleWeightMode(e.target.value as ZTrendWeightMode)}
+            data-testid="ztrend-weight-mode"
+          >
+            <MenuItem value="basisHours">Нормативные часы (basisHours)</MenuItem>
+          </Select>
+        </FormControl>
+        {trendToolbarExtras}
+      </Stack>
     ),
     // handleWeightMode пересоздаётся каждый рендер (зависит от showPlan/showFact) — включаем в deps.
-    [weightMode, handleWeightMode],
+    [weightMode, handleWeightMode, trendToolbarExtras],
   );
 
   const productivityExtras = useMemo(
@@ -346,7 +379,16 @@ export function AnalyticsPage() {
             weightMode={weightMode}
             mode={trendMode}
             onModeChange={handleTrendModeChange}
+            onSelectWorkDirection={(id) => {
+              setFactNormDirectionIds([id]);
+              setMainTab('fact-norms');
+            }}
+            onToolbarExtras={setTrendToolbarExtras}
           />
+        ) : null}
+
+        {mainTab === 'hours-trend' && prefsLoaded ? (
+          <HoursTrendPanel dateFrom={dateFrom} dateTo={dateTo} />
         ) : null}
 
         {mainTab === 'productivity-trend' && prefsLoaded ? (

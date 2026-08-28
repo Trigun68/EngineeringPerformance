@@ -36,6 +36,7 @@ public static class ExportFileNameBuilder
         public const string NormHealth = "здоровье_норм";
         public const string FactNorm = "факт_норма";
         public const string Trends = "динамика";
+        public const string Trend = "тренд";
         public const string ProductivityTrend = "тренд_производительности";
         public const string IicGroups = "группы_IIC";
         public const string IicNorms = "нормы_IIC";

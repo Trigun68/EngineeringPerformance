@@ -195,6 +195,9 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByTestId('project-trend-panel')).toBeVisible({ timeout: 40_000 });
     await expect(page.getByRole('heading', { name: 'Динамика Z по датам' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Отклонения по дисциплинам' })).toBeVisible();
+    await expect(page.getByTestId('project-trend-coverage')).toBeVisible({ timeout: 40_000 });
+    await expect(page.getByTestId('project-trend-export-excel')).toBeVisible();
+    await expect(page.getByTestId('project-trend-export-pdf')).toBeVisible();
 
     // «Сводный вер 2» — старый механизм для отката.
     await page.getByTestId('report-legacy-tab').click();

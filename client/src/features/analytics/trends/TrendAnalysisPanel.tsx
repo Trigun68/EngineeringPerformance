@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -16,12 +17,17 @@ import {
   type ZTrendResponse,
   type ZTrendWeightMode,
 } from '../../../api/zTrendApi';
+import { exportAnalyticsTrendExcel, exportAnalyticsTrendPdf } from '../../../api/projectTrendApi';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
+import { getApiErrorMessage } from '../../../services/apiError';
 import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
 import { FactPlanToggle, type FactPlanMode } from '../shared/FactPlanToggle';
 import { FactorWaterfallChart } from '../shared/FactorWaterfallChart';
 import { HoursBridgeChart } from '../shared/HoursBridgeChart';
+import { HoursCoverageChips } from '../shared/HoursCoverageChips';
+import { MoversTable } from '../shared/MoversTable';
 import { PeriodDynamicsChart, type DynamicsSeries } from '../shared/PeriodDynamicsChart';
 import { SCurveChart } from '../shared/SCurveChart';
 import { ZeroBaselineChart } from '../shared/ZeroBaselineChart';
@@ -43,18 +49,36 @@ function formatPeriodChip(dateFrom: string, dateTo: string): string {
   return 'Весь период';
 }
 
+function formatRawDelta(n: number | null): string {
+  if (n == null) return '—';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ч`;
+}
+
 interface Props {
   dateFrom: string;
   dateTo: string;
   weightMode: ZTrendWeightMode;
   mode: FactPlanMode;
   onModeChange: (mode: FactPlanMode) => void;
+  onSelectWorkDirection?: (workDirectionId: number) => void;
+  onToolbarExtras?: (node: ReactNode) => void;
 }
 
-export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeChange }: Props) {
+export function TrendAnalysisPanel({
+  dateFrom,
+  dateTo,
+  weightMode,
+  mode,
+  onModeChange,
+  onSelectWorkDirection,
+  onToolbarExtras,
+}: Props) {
+  const navigate = useNavigate();
   const [result, setResult] = useState<ZTrendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -81,8 +105,7 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
       })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
-        const message = err instanceof Error ? err.message : 'Не удалось загрузить тренды';
-        setError(message);
+        setError(getApiErrorMessage(err, 'Не удалось загрузить тренды'));
         setLoading(false);
       });
   }, [dateFrom, dateTo, weightMode]);
@@ -95,6 +118,52 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
       abortRef.current?.abort();
     };
   }, [load]);
+
+  const requestBody = useMemo(
+    () => ({
+      periodStart: dateFrom || null,
+      periodEnd: dateTo || null,
+      weightMode,
+    }),
+    [dateFrom, dateTo, weightMode],
+  );
+
+  const handleExport = useCallback(
+    async (kind: 'excel' | 'pdf') => {
+      setExporting(kind);
+      try {
+        if (kind === 'excel') await exportAnalyticsTrendExcel(requestBody);
+        else await exportAnalyticsTrendPdf(requestBody);
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, 'Не удалось выгрузить тренд.'));
+      } finally {
+        setExporting(null);
+      }
+    },
+    [requestBody],
+  );
+
+  useEffect(() => {
+    onToolbarExtras?.(
+      <Stack direction="row" spacing={1}>
+        <ExportActionButton
+          kind="excel"
+          loading={exporting === 'excel'}
+          disabled={exporting !== null || !result}
+          onClick={() => void handleExport('excel')}
+          data-testid="ztrend-export-excel"
+        />
+        <ExportActionButton
+          kind="pdf"
+          loading={exporting === 'pdf'}
+          disabled={exporting !== null || !result}
+          onClick={() => void handleExport('pdf')}
+          data-testid="ztrend-export-pdf"
+        />
+      </Stack>,
+    );
+    return () => onToolbarExtras?.(null);
+  }, [onToolbarExtras, exporting, result, handleExport]);
 
   const hasSegments = useMemo(() => {
     if (!result) return false;
@@ -109,6 +178,7 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
       result.disciplineBridge.lines.length > 0 ||
       result.groupZeroBars.length > 0 ||
       result.portfolioSCurve.length > 0 ||
+      result.movers.length > 0 ||
       (result.detail?.planMonthly.length ?? 0) > 0 ||
       (result.detail?.factMonthly.length ?? 0) > 0
     );
@@ -144,6 +214,8 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
 
   const deltaWaterfall = result?.detail?.factWaterfall ?? null;
   const deltaStart = result?.detail?.factKpi.initial ?? null;
+  const planWaterfall = result?.detail?.planWaterfall ?? null;
+  const planStart = result?.detail?.planKpi.initial ?? null;
 
   return (
     <Stack spacing={2.5} data-testid="ztrend-panel">
@@ -198,6 +270,15 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
           </Box>
 
           <Typography variant="h6" component="h2">
+            Кто тянет оценку
+          </Typography>
+          <MoversTable
+            rows={result.movers}
+            onProjectClick={(id) => navigate(`/projects/${id}?tab=report&reportTab=trend`)}
+            testId="ztrend-movers"
+          />
+
+          <Typography variant="h6" component="h2">
             Динамика Z по датам
           </Typography>
           <Paper variant="outlined" sx={{ p: 2 }}>
@@ -206,6 +287,8 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
                 series={zSeries}
                 yAxisTitle="Средневзвешенная Z-оценка"
                 zeroLine
+                band={result.zPercentileBand}
+                events={result.events}
                 testId="ztrend-dynamics"
               />
             ) : (
@@ -218,15 +301,45 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
           <Typography variant="h6" component="h2">
             Отклонения по дисциплинам
           </Typography>
+          <HoursCoverageChips coverage={result.coverage} testId="ztrend-coverage" />
           <Paper variant="outlined" sx={{ p: 2 }}>
             {result.disciplineBridge.lines.length > 0 ? (
-              <HoursBridgeChart lines={result.disciplineBridge.lines} testId="ztrend-hours-bridge" />
+              <HoursBridgeChart
+                lines={result.disciplineBridge.lines}
+                onGroupClick={onSelectWorkDirection}
+                testId="ztrend-hours-bridge"
+              />
             ) : (
               <Typography variant="body2" color="text.secondary">
                 Нет пары план/факт с объёмом и часами для моста.
               </Typography>
             )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-testid="ztrend-raw-delta">
+              Сырой Δ часов: {formatRawDelta(result.rawHoursDelta)}
+            </Typography>
           </Paper>
+
+          {planWaterfall && planStart != null ? (
+            <>
+              <Typography variant="h6" component="h2">
+                Изменение Z плана за период
+              </Typography>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <FactorWaterfallChart
+                  startLabel="Было"
+                  startValue={planStart}
+                  endLabel="Стало"
+                  steps={planWaterfall}
+                  goodDirection="positive"
+                  testId="ztrend-plan-waterfall"
+                />
+              </Paper>
+            </>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Недостаточно истории плана для разбора ΔZ.
+            </Typography>
+          )}
 
           <Typography variant="h6" component="h2">
             Z по группам IIC относительно нормы
@@ -235,10 +348,18 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
             <Grid container spacing={2} data-testid="ztrend-group-zero">
               {result.groupZeroBars.map((g) => (
                 <Grid item xs={12} md={6} key={g.groupId}>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ mb: 1, cursor: onSelectWorkDirection ? 'pointer' : 'default' }}
+                    onClick={() => onSelectWorkDirection?.(g.groupId)}
+                  >
                     {formatIisNorm({ name: g.groupName })}
                   </Typography>
-                  <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{ p: 2, cursor: onSelectWorkDirection ? 'pointer' : 'default' }}
+                    onClick={() => onSelectWorkDirection?.(g.groupId)}
+                  >
                     <ZeroBaselineChart bars={g.bars} height={260} testId={`ztrend-group-zero-${g.groupId}`} />
                   </Paper>
                 </Grid>
@@ -253,11 +374,16 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
           )}
 
           <Typography variant="h6" component="h2">
-            S-curve часов факта
+            S-curve часов
           </Typography>
           <Paper variant="outlined" sx={{ p: 2 }}>
-            {result.portfolioSCurve.length > 0 ? (
-              <SCurveChart points={result.portfolioSCurve} testId="ztrend-scurve" />
+            {result.portfolioSCurve.length > 0 || result.planSCurve.length > 0 ? (
+              <SCurveChart
+                points={result.portfolioSCurve}
+                planPoints={result.planSCurve}
+                events={result.events}
+                testId="ztrend-scurve"
+              />
             ) : (
               <Typography variant="body2" color="text.secondary">
                 Нет факт-версий с часами.
@@ -266,10 +392,25 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
           </Paper>
 
           <AnalyticsExtraAccordion testId="ztrend-extra">
+            {result.projectSCurves.length > 0 ? (
+              <>
+                <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
+                  S-curve по проектам
+                </Typography>
+                <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                  <SCurveChart
+                    points={result.portfolioSCurve}
+                    extraLines={result.projectSCurves.map((s) => ({ name: s.name, points: s.points }))}
+                    testId="ztrend-scurve-projects"
+                  />
+                </Paper>
+              </>
+            ) : null}
+
             {deltaWaterfall && deltaStart != null ? (
               <>
                 <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
-                  Изменение Z за период по группам
+                  Изменение Z факта за период по группам
                 </Typography>
                 <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
                   <FactorWaterfallChart
@@ -315,16 +456,21 @@ export function TrendAnalysisPanel({ dateFrom, dateTo, weightMode, mode, onModeC
                 <Grid container spacing={2} data-testid="ztrend-groups-grid">
                   {result.byGroup.map((g) => (
                     <Grid item xs={12} md={6} lg={4} key={g.groupId}>
-                      <ZTrendChart
-                        group={{
-                          ...g,
-                          groupName: formatIisNorm({ name: g.groupName }),
-                        }}
-                        showPlan={showPlan}
-                        showFact={showFact}
-                        height={260}
-                        testId={`ztrend-group-${g.groupId}`}
-                      />
+                      <Box
+                        onClick={() => onSelectWorkDirection?.(g.groupId)}
+                        sx={{ cursor: onSelectWorkDirection ? 'pointer' : 'default' }}
+                      >
+                        <ZTrendChart
+                          group={{
+                            ...g,
+                            groupName: formatIisNorm({ name: g.groupName }),
+                          }}
+                          showPlan={showPlan}
+                          showFact={showFact}
+                          height={260}
+                          testId={`ztrend-group-${g.groupId}`}
+                        />
+                      </Box>
                     </Grid>
                   ))}
                 </Grid>

@@ -66,4 +66,15 @@ test.describe('Norm analysis registry', () => {
     await expect(page.getByTestId('norm-analysis-export-csv')).toBeVisible();
     await expect(page.getByTestId('norm-analysis-export-health')).toBeVisible();
   });
+
+  test('help icon opens the interpretation dialog', async ({ page }) => {
+    await page.goto('/analytics');
+    await page.getByTestId('analytics-tab-norm-analysis').click();
+    await expect(page.getByTestId('norm-analysis-panel')).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId('norm-analysis-help').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Справка: анализ норм' })).toBeVisible();
+    await expect(page.getByTestId('norm-analysis-help-body')).toContainText('CV');
+    await expect(page.getByTestId('norm-analysis-help-body')).toContainText('Достоверность');
+  });
 });

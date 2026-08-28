@@ -29,12 +29,14 @@ public sealed record TrendDetailAggregationDto(
     IReadOnlyList<MonthlyTrendBucketDto> FactMonthly,
     PeriodKpiDto PlanKpi,
     PeriodKpiDto FactKpi,
-    IReadOnlyList<WaterfallStepDto>? FactWaterfall)
+    IReadOnlyList<WaterfallStepDto>? FactWaterfall,
+    IReadOnlyList<WaterfallStepDto>? PlanWaterfall = null)
 {
     public static TrendDetailAggregationDto Empty { get; } = new(
         [],
         [],
         new PeriodKpiDto(null, null, null),
         new PeriodKpiDto(null, null, null),
+        null,
         null);
 }

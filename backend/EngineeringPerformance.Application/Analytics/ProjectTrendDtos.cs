@@ -21,7 +21,15 @@ public sealed record ProjectTrendDto(
     IReadOnlyList<CumulativeHoursPointDto> SCurve,
     decimal? DeltaWaterfallStart,
     IReadOnlyList<WaterfallStepDto>? DeltaWaterfall,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    HoursCoverageDto Coverage,
+    IReadOnlyList<ProjectTrendZPointDto> PortfolioZHistory,
+    IReadOnlyList<PercentileBandPointDto> ZPercentileBand,
+    IReadOnlyList<TrendEventDto> Events,
+    IReadOnlyList<CumulativeHoursPointDto> PlanSCurve,
+    decimal? RawHoursDelta,
+    decimal? PlanDeltaWaterfallStart,
+    IReadOnlyList<WaterfallStepDto>? PlanDeltaWaterfall);
 
 public interface IProjectTrendService
 {

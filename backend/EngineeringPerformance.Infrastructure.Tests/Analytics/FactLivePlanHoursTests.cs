@@ -411,8 +411,9 @@ public sealed class FactLivePlanHoursTests
             IReadOnlyList<TrendPointSample> planPoints,
             IReadOnlyList<TrendPointSample> factPoints,
             IReadOnlyList<TrendGroupSample> factGroups,
-            int waterfallTopCount = 3) =>
-            inner.BuildTrendDetailAggregation(planPoints, factPoints, factGroups, waterfallTopCount);
+            int waterfallTopCount = 3,
+            IReadOnlyList<TrendGroupSample>? planGroups = null) =>
+            inner.BuildTrendDetailAggregation(planPoints, factPoints, factGroups, waterfallTopCount, planGroups);
 
         public HoursBridgeResultDto ComputeHoursBridge(
             IReadOnlyList<PerformanceRowDto> planRows,
@@ -429,5 +430,30 @@ public sealed class FactLivePlanHoursTests
             IReadOnlyList<ZeroBaselineSample> samples,
             int topCount = 12) =>
             inner.BuildZeroBaselineBars(samples, topCount);
+
+        public HoursCoverageDto ComputeHoursCoverage(
+            IReadOnlyList<PerformanceRowDto> planRows,
+            IReadOnlyList<PerformanceRowDto> factRows) =>
+            inner.ComputeHoursCoverage(planRows, factRows);
+
+        public HoursCoverageDto CombineHoursCoverages(IEnumerable<HoursCoverageDto> parts) =>
+            inner.CombineHoursCoverages(parts);
+
+        public decimal ComputeRawHoursDelta(
+            IReadOnlyList<PerformanceRowDto> planRows,
+            IReadOnlyList<PerformanceRowDto> factRows) =>
+            inner.ComputeRawHoursDelta(planRows, factRows);
+
+        public WeightedPercentileBandDto? ComputeWeightedPercentileBand(
+            IEnumerable<(decimal ZScore, decimal Weight)> samples) =>
+            inner.ComputeWeightedPercentileBand(samples);
+
+        public IReadOnlyList<MoverRowDto> BuildMoverRows(IReadOnlyList<MoverSample> samples) =>
+            inner.BuildMoverRows(samples);
+
+        public IReadOnlyList<NamedSCurveDto> BuildTopProjectSCurves(
+            IReadOnlyList<ProjectHoursSeriesSample> series,
+            int topCount = 8) =>
+            inner.BuildTopProjectSCurves(series, topCount);
     }
 }

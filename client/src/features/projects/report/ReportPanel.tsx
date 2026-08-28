@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Alert, Box, Stack, Tab, Tabs, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
@@ -12,6 +13,7 @@ import {
   fetchPerformanceReport,
   type PerformanceReportDto,
 } from '../../../api/performanceReportApi';
+import { exportProjectTrendExcel, exportProjectTrendPdf } from '../../../api/projectTrendApi';
 import type { Project } from '../../../types/project';
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverlay';
@@ -64,6 +66,7 @@ export interface ReportPanelProps {
 
 export function ReportPanel({ projectId, project, versions }: ReportPanelProps) {
   const { canRead } = usePermission('Reports');
+  const [searchParams] = useSearchParams();
   const [report, setReport] = useState<PerformanceReportDto | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -71,6 +74,12 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
   const [subTab, setSubTab] = useState<ReportSubTab>('summary');
+
+  useEffect(() => {
+    if (searchParams.get('reportTab') === 'trend') {
+      setSubTab('trend');
+    }
+  }, [searchParams]);
 
   const summaryVersionId = useMemo(
     () => (versions && versions.length > 0 ? resolveSummaryVersionId(versions) : null),
@@ -116,6 +125,19 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
     }
   };
 
+  const handleTrendExport = async (kind: 'excel' | 'pdf') => {
+    setExporting(true);
+    setError(null);
+    try {
+      if (kind === 'excel') await exportProjectTrendExcel(projectId);
+      else await exportProjectTrendPdf(projectId);
+    } catch (e) {
+      setError(getApiErrorMessage(e, 'Не удалось выгрузить тренд.'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   if (!canRead) {
     return (
       <>
@@ -139,6 +161,24 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
         >
           {ACTION_LABELS.refresh}
         </ToolbarActionButton>
+        {subTab === 'trend' ? (
+          <>
+            <ExportActionButton
+              kind="excel"
+              loading={exporting}
+              onClick={() => void handleTrendExport('excel')}
+              disabled={exporting}
+              data-testid="project-trend-export-excel"
+            />
+            <ExportActionButton
+              kind="pdf"
+              loading={exporting}
+              onClick={() => void handleTrendExport('pdf')}
+              disabled={exporting}
+              data-testid="project-trend-export-pdf"
+            />
+          </>
+        ) : null}
         {subTab === 'legacy' ? (
           <>
             <ExportActionButton

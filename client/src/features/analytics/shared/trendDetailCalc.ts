@@ -137,6 +137,7 @@ export interface TrendDetailAggregation {
   planKpi: PeriodKpi;
   factKpi: PeriodKpi;
   factWaterfall: WaterfallStep[] | null;
+  planWaterfall: WaterfallStep[] | null;
 }
 
 function toIsoDate(raw: unknown): string {
@@ -186,11 +187,23 @@ export function normalizeTrendDetailAggregation(
       };
     });
   }
+  const planWaterfallRaw = raw.planWaterfall ?? raw.PlanWaterfall;
+  let planWaterfall: WaterfallStep[] | null = null;
+  if (Array.isArray(planWaterfallRaw) && planWaterfallRaw.length > 0) {
+    planWaterfall = planWaterfallRaw.map((item) => {
+      const row = item as Record<string, unknown>;
+      return {
+        name: String(row.name ?? row.Name ?? ''),
+        value: Number(row.value ?? row.Value ?? 0),
+      };
+    });
+  }
   return {
     planMonthly: normalizeMonthly(raw.planMonthly ?? raw.PlanMonthly),
     factMonthly: normalizeMonthly(raw.factMonthly ?? raw.FactMonthly),
     planKpi: normalizeKpi(raw.planKpi ?? raw.PlanKpi),
     factKpi: normalizeKpi(raw.factKpi ?? raw.FactKpi),
     factWaterfall,
+    planWaterfall,
   };
 }

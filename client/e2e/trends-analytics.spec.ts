@@ -27,7 +27,11 @@ test.describe('Analytics page — trends', () => {
       await expect(page.getByRole('heading', { name: 'Динамика Z по датам' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Отклонения по дисциплинам' })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Z по группам IIC относительно нормы' })).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'S-curve часов факта' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'S-curve часов' })).toBeVisible();
+      await expect(page.getByTestId('ztrend-coverage')).toBeVisible();
+      await expect(page.getByTestId('ztrend-movers')).toBeVisible();
+      await expect(page.getByTestId('ztrend-export-excel')).toBeVisible();
+      await expect(page.getByTestId('ztrend-export-pdf')).toBeVisible();
       await expect(page.getByTestId('ztrend-detail-kpi')).toHaveCount(0);
       await expect(page.getByTestId('ztrend-detail-versions-table')).toHaveCount(0);
       await page.getByTestId('ztrend-fact-plan-toggle-both').click();
@@ -67,6 +71,14 @@ test.describe('Analytics page — trends', () => {
     ).toBeVisible({ timeout: 60_000 });
   });
 
+  test('hours-trend tab shows project picker', async ({ page }) => {
+    await page.goto('/analytics?tab=hours-trend');
+    await expect(page.getByTestId('analytics-tab-hours-trend')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('hours-trend-panel')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('hours-trend-project')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('hours-trend-export-pdf')).toBeVisible();
+  });
+
   test('fact-norms tab keeps the same period filters', async ({ page }) => {
     await page.goto('/analytics');
     await page.getByTestId('analytics-tab-fact-norms').click();
@@ -99,6 +111,8 @@ test.describe('Analytics page — trends', () => {
       await expect(page.getByTestId('prod-trend-detail-dynamics-chart')).toBeVisible();
     }
 
+    await expect(page.getByTestId('prod-trend-hours-chapter')).toBeVisible({ timeout: 60_000 });
+
     // Вторичная секция норм IIC — в «Дополнительно».
     await page.getByTestId('prod-trend-extra-summary').click();
     await expect(
@@ -112,9 +126,10 @@ test.describe('Analytics page — trends', () => {
     }
   });
 
-  test('legacy /analytics/trends redirects to /analytics', async ({ page }) => {
+  test('legacy /analytics/trends redirects to hours-trend tab', async ({ page }) => {
     await page.goto('/analytics/trends');
-    await expect(page).toHaveURL(/\/analytics\/?$/, { timeout: 15_000 });
+    await expect(page).toHaveURL(/tab=hours-trend/, { timeout: 15_000 });
     await expect(page.getByRole('heading', { name: 'Аналитика' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('analytics-tab-hours-trend')).toHaveAttribute('aria-selected', 'true');
   });
 });

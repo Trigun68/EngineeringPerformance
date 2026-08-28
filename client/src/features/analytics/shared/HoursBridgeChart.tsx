@@ -17,10 +17,11 @@ interface Props {
   lines: HoursBridgeLine[];
   height?: number;
   testId?: string;
+  onGroupClick?: (groupId: number) => void;
 }
 
 /** Кластер: эффект объёма и эффект производительности по корневым группам IIC. */
-export function HoursBridgeChart({ lines, height = 320, testId }: Props) {
+export function HoursBridgeChart({ lines, height = 320, testId, onGroupClick }: Props) {
   const options = useMemo<Highcharts.Options>(
     () => ({
       chart: { type: 'column', height },
@@ -36,7 +37,23 @@ export function HoursBridgeChart({ lines, height = 320, testId }: Props) {
       tooltip: { shared: true, valueDecimals: 1, valueSuffix: ' ч' },
       legend: { enabled: true },
       credits: { enabled: false },
-      plotOptions: { column: { grouping: true, borderWidth: 0 } },
+      plotOptions: {
+        column: {
+          grouping: true,
+          borderWidth: 0,
+          cursor: onGroupClick ? 'pointer' : undefined,
+          point: {
+            events: {
+              click() {
+                const idx = this.index;
+                if (onGroupClick && idx >= 0 && idx < lines.length) {
+                  onGroupClick(lines[idx].groupId);
+                }
+              },
+            },
+          },
+        },
+      },
       series: [
         {
           type: 'column',
@@ -52,7 +69,7 @@ export function HoursBridgeChart({ lines, height = 320, testId }: Props) {
         },
       ],
     }),
-    [lines, height],
+    [lines, height, onGroupClick],
   );
 
   return (

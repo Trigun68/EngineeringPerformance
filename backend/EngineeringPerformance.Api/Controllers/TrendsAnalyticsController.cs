@@ -19,6 +19,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
     private readonly IProductivityIndexTrendService _productivityIndexTrends;
     private readonly IVisualReportService _visualReports;
     private readonly IExportFileNameService _fileNames;
+    private readonly ITrendExportService _trendExport;
 
     public TrendsAnalyticsController(
         ITrendAnalyticsService trends,
@@ -26,7 +27,8 @@ public sealed class TrendsAnalyticsController : ControllerBase
         IProductivityTrendAnalyticsService productivityTrends,
         IProductivityIndexTrendService productivityIndexTrends,
         IVisualReportService visualReports,
-        IExportFileNameService fileNames)
+        IExportFileNameService fileNames,
+        ITrendExportService trendExport)
     {
         _trends = trends;
         _zTrends = zTrends;
@@ -34,6 +36,7 @@ public sealed class TrendsAnalyticsController : ControllerBase
         _productivityIndexTrends = productivityIndexTrends;
         _visualReports = visualReports;
         _fileNames = fileNames;
+        _trendExport = trendExport;
     }
 
     [HttpGet("formulas")]
@@ -72,6 +75,36 @@ public sealed class TrendsAnalyticsController : ControllerBase
     {
         var result = await _zTrends.GetZTrendsAsync(request ?? new ZTrendRequest(), cancellationToken);
         return Ok(result);
+    }
+
+    [HttpPost("z-score/export.xlsx")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportZTrendsExcel(
+        [FromBody] ZTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _trendExport.ExportAnalyticsExcelAsync(request ?? new ZTrendRequest(), cancellationToken);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Analytics,
+            "xlsx",
+            ExportFileNameBuilder.Views.Trend);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
+    [HttpPost("z-score/export.pdf")]
+    [HasPermission(PermissionType.GroupTrend, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportZTrendsPdf(
+        [FromBody] ZTrendRequest? request,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _trendExport.ExportAnalyticsPdfAsync(request ?? new ZTrendRequest(), cancellationToken);
+        var fileName = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Analytics,
+            "pdf",
+            ExportFileNameBuilder.Views.Trend);
+        return File(bytes, "application/pdf", fileName);
     }
 
     [HttpGet("z-score/filters")]

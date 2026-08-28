@@ -14,9 +14,10 @@ public sealed class ProjectTrendService(
     AppDbContext db,
     IFactAssessmentPipeline pipeline,
     IPerformanceCalculationEngine engine,
-    IProjectAnalyticsCache cache) : IProjectTrendService
+    IProjectAnalyticsCache cache,
+    IZTrendAnalyticsService zTrends) : IProjectTrendService
 {
-    private const string CacheKey = "report-trend:v1";
+    private const string CacheKey = "report-trend:v2";
 
     public async Task<ProjectTrendDto> GetAsync(int projectId, CancellationToken cancellationToken = default)
     {
@@ -69,6 +70,8 @@ public sealed class ProjectTrendService(
                 : fallback;
 
         HoursBridgeResultDto hoursBridge = HoursBridgeResultDto.Empty;
+        HoursCoverageDto coverage = HoursCoverageDto.Empty;
+        decimal? rawHoursDelta = null;
         if (planId is int pid && factId is int fid
             && batch.Results.TryGetValue(pid, out var planAssessment)
             && batch.Results.TryGetValue(fid, out var factAssessment))
@@ -78,6 +81,8 @@ public sealed class ProjectTrendService(
                 hoursBridge.Lines.Select(l => l with { GroupName = FormatGroup(l.GroupId, l.GroupName) }).ToList(),
                 hoursBridge.TotalVolumeEffect,
                 hoursBridge.TotalProductivityEffect);
+            coverage = engine.ComputeHoursCoverage(planAssessment.Performance, factAssessment.Performance);
+            rawHoursDelta = engine.ComputeRawHoursDelta(planAssessment.Performance, factAssessment.Performance);
         }
         else
         {
@@ -103,10 +108,13 @@ public sealed class ProjectTrendService(
 
         var zHistory = new List<ProjectTrendZPointDto>();
         var factHoursSamples = new List<HoursAtDateSample>();
+        var planHoursSamples = new List<HoursAtDateSample>();
         var planPoints = new List<TrendPointSample>();
         var factPoints = new List<TrendPointSample>();
         var groupPoints = new Dictionary<int, List<TrendPointSample>>();
+        var planGroupPoints = new Dictionary<int, List<TrendPointSample>>();
         var groupNames = new Dictionary<int, string>();
+        var bandPoints = new List<PercentileBandPointDto>();
 
         foreach (var version in versions)
         {
@@ -119,25 +127,37 @@ public sealed class ProjectTrendService(
             zHistory.Add(new ProjectTrendZPointDto(version.CreatedAt, direction, version.VersionName, z, hours));
 
             var sample = new TrendPointSample(version.CreatedAt, z, hours);
+            var roots = assessment.Performance
+                .Where(r => !r.IsTotal && r.ParentId == null && r.WorkDirectionId >= 0)
+                .ToList();
+
             if (version.Direction == AnalysisDirection.Fact)
             {
                 factPoints.Add(sample);
                 factHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, hours, version.VersionName));
+                var band = engine.ComputeWeightedPercentileBand(
+                    roots.Where(r => r.ZScore is not null).Select(r => (
+                        r.ZScore!.Value,
+                        r.SubtreeHours ?? r.FactLaborHours ?? 0m)));
+                if (band is not null)
+                    bandPoints.Add(new PercentileBandPointDto(version.CreatedAt, band.P10, band.P90));
             }
             else if (version.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast)
             {
                 planPoints.Add(sample);
+                planHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, hours, version.VersionName));
             }
 
-            if (version.Direction != AnalysisDirection.Fact)
+            var targetGroups = version.Direction == AnalysisDirection.Fact ? groupPoints : planGroupPoints;
+            if (version.Direction is not (AnalysisDirection.Fact or AnalysisDirection.Plan or AnalysisDirection.Forecast))
                 continue;
 
-            foreach (var row in assessment.Performance.Where(r => !r.IsTotal && r.ParentId == null && r.WorkDirectionId >= 0))
+            foreach (var row in roots)
             {
-                if (!groupPoints.TryGetValue(row.WorkDirectionId, out var list))
+                if (!targetGroups.TryGetValue(row.WorkDirectionId, out var list))
                 {
                     list = [];
-                    groupPoints[row.WorkDirectionId] = list;
+                    targetGroups[row.WorkDirectionId] = list;
                     groupNames[row.WorkDirectionId] = FormatGroup(row.WorkDirectionId, row.WorkDirectionName);
                 }
 
@@ -149,10 +169,17 @@ public sealed class ProjectTrendService(
         }
 
         var sCurve = engine.ComputeCumulativeHours(factHoursSamples);
+        var planSCurve = engine.ComputeCumulativeHours(planHoursSamples);
         var groups = groupPoints
-            .Select(kv => new TrendGroupSample(kv.Key, groupNames[kv.Key], kv.Value))
+            .Select(kv => new TrendGroupSample(kv.Key, groupNames.GetValueOrDefault(kv.Key, $"Группа {kv.Key}"), kv.Value))
             .ToList();
-        var detail = engine.BuildTrendDetailAggregation(planPoints, factPoints, groups);
+        var planGroups = planGroupPoints
+            .Select(kv => new TrendGroupSample(kv.Key, groupNames.GetValueOrDefault(kv.Key, $"Группа {kv.Key}"), kv.Value))
+            .ToList();
+        var detail = engine.BuildTrendDetailAggregation(planPoints, factPoints, groups, planGroups: planGroups);
+
+        var events = await LoadEventsAsync(projectId, versions, cancellationToken);
+        var portfolioZ = await LoadPortfolioZAsync(versions, cancellationToken);
 
         var factMeta = factId is int fmeta ? versions.First(v => v.Id == fmeta) : null;
         var planMeta = planId is int pmeta ? versions.First(v => v.Id == pmeta) : null;
@@ -171,10 +198,74 @@ public sealed class ProjectTrendService(
             sCurve,
             detail.FactKpi.Initial,
             detail.FactWaterfall,
-            warnings.Distinct().ToList());
+            warnings.Distinct().ToList(),
+            coverage,
+            portfolioZ,
+            bandPoints,
+            events,
+            planSCurve,
+            rawHoursDelta,
+            detail.PlanKpi.Initial,
+            detail.PlanWaterfall);
 
         await cache.SetAsync(projectId, CacheKey, dto, cancellationToken);
         return dto;
+    }
+
+    private async Task<IReadOnlyList<TrendEventDto>> LoadEventsAsync(
+        int projectId,
+        IReadOnlyList<VersionRow> versions,
+        CancellationToken cancellationToken)
+    {
+        var versionEvents = versions
+            .Select(v => new TrendEventDto(
+                v.CreatedAt,
+                "versionCreated",
+                $"{DirectionLabel(v.Direction)}: {v.VersionName}",
+                v.Id))
+            .ToList();
+
+        var importEvents = await db.DataImportIterations.AsNoTracking()
+            .Where(i => i.ProjectId == projectId)
+            .OrderBy(i => i.ImportedAt)
+            .Select(i => new TrendEventDto(
+                i.ImportedAt,
+                "import",
+                $"{i.DataType} ({i.RecordCount} зап.)",
+                i.ProjectAnalysisVersionId))
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        return versionEvents.Concat(importEvents).OrderBy(e => e.Timestamp).ToList();
+    }
+
+    private async Task<IReadOnlyList<ProjectTrendZPointDto>> LoadPortfolioZAsync(
+        IReadOnlyList<VersionRow> versions,
+        CancellationToken cancellationToken)
+    {
+        if (versions.Count == 0)
+            return [];
+
+        try
+        {
+            var portfolio = await zTrends.GetZTrendsAsync(
+                new ZTrendRequest(versions[0].CreatedAt, versions[^1].CreatedAt),
+                cancellationToken);
+            return portfolio.Overall.Fact.Segments
+                .SelectMany(s => s.Points)
+                .Where(p => p.ZScore is not null)
+                .Select(p => new ProjectTrendZPointDto(
+                    p.Date,
+                    "portfolio",
+                    "Портфель",
+                    p.ZScore is null ? null : (decimal)p.ZScore.Value,
+                    (decimal)p.Weight))
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     private sealed record VersionRow(
@@ -195,6 +286,15 @@ public sealed class ProjectTrendService(
         return ofDirection.OrderByDescending(v => v.CreatedAt).ThenByDescending(v => v.Id).First().Id;
     }
 
+    private static string DirectionLabel(AnalysisDirection direction) =>
+        direction switch
+        {
+            AnalysisDirection.Fact => "Факт",
+            AnalysisDirection.Plan => "План",
+            AnalysisDirection.Forecast => "Прогноз",
+            _ => direction.ToString(),
+        };
+
     private static ProjectTrendDto Empty(string code, string name, IReadOnlyList<string> warnings) =>
         new(
             code,
@@ -210,5 +310,13 @@ public sealed class ProjectTrendService(
             [],
             null,
             null,
-            warnings);
+            warnings,
+            HoursCoverageDto.Empty,
+            [],
+            [],
+            [],
+            [],
+            null,
+            null,
+            null);
 }

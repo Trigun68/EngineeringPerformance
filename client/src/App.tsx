@@ -199,7 +199,7 @@ export default function App() {
                 </PermissionGuard>
               )}
             />
-            <Route path="/analytics/trends" element={<Navigate to="/analytics" replace />} />
+            <Route path="/analytics/trends" element={<Navigate to="/analytics?tab=hours-trend" replace />} />
             <Route
               path="/references"
               element={(

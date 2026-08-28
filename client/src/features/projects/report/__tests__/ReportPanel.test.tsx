@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportPanel } from '../ReportPanel';
 import type { PerformanceReportDto } from '../../../../api/performanceReportApi';
@@ -31,6 +32,11 @@ vi.mock('../../../../pages/projects/reports/ReportsTab', () => ({
 
 vi.mock('../ProjectTrendPanel', () => ({
   ProjectTrendPanel: () => <div data-testid="project-trend-stub" />,
+}));
+
+vi.mock('../../../../api/projectTrendApi', () => ({
+  exportProjectTrendExcel: vi.fn(),
+  exportProjectTrendPdf: vi.fn(),
 }));
 
 const report: PerformanceReportDto = {
@@ -110,7 +116,11 @@ describe('ReportPanel', () => {
         isPrimary: true,
       },
     ];
-    render(<ReportPanel projectId={1} project={project} versions={versions} />);
+    render(
+      <MemoryRouter>
+        <ReportPanel projectId={1} project={project} versions={versions} />
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId('report-trend-tab')).toHaveTextContent('Тренд');
     fireEvent.click(screen.getByTestId('report-legacy-tab'));
     await waitFor(() => {

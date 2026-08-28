@@ -3,11 +3,14 @@ import {
   Alert,
   Box,
   Chip,
+  IconButton,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
@@ -36,6 +39,7 @@ import { usePermission } from '../../../hooks/usePermission';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
 import { AnalyticsKpiCards } from '../shared/AnalyticsKpiCards';
+import { NormAnalysisHelpDialog } from './NormAnalysisHelpDialog';
 import { NormFilters, type NormFilterState } from './NormFilters';
 import { NormHeatmap } from './NormHeatmap';
 import { NormInlineDetail } from './NormInlineDetail';
@@ -87,6 +91,7 @@ export function NormAnalysisPanel({ dateFrom, dateTo, onOpenFactNorms }: Props) 
   const [sigmaMultiplier, setSigmaMultiplier] = useState(1);
   const [factYs, setFactYs] = useState<number[] | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -283,6 +288,19 @@ export function NormAnalysisPanel({ dateFrom, dateTo, onOpenFactNorms }: Props) 
       sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 1280, mx: 'auto' }}
       data-testid="norm-analysis-panel"
     >
+      <Stack direction="row" justifyContent="flex-end" alignItems="center" sx={{ mb: -1 }}>
+        <Tooltip title="Справка">
+          <IconButton
+            size="small"
+            aria-label="Справка"
+            onClick={() => setHelpOpen(true)}
+            data-testid="norm-analysis-help"
+          >
+            <InfoOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+      <NormAnalysisHelpDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
       <AnalyticsExtraAccordion
         testId="norm-analysis-filters-extra"
         title="Фильтры и выгрузка"

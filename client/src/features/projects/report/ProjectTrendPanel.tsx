@@ -7,9 +7,12 @@ import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFac
 import { AnalyticsExtraAccordion } from '../../analytics/shared/AnalyticsExtraAccordion';
 import { FactorWaterfallChart } from '../../analytics/shared/FactorWaterfallChart';
 import { HoursBridgeChart } from '../../analytics/shared/HoursBridgeChart';
+import { HoursCoverageChips } from '../../analytics/shared/HoursCoverageChips';
 import { PeriodDynamicsChart, type DynamicsSeries } from '../../analytics/shared/PeriodDynamicsChart';
 import { SCurveChart } from '../../analytics/shared/SCurveChart';
 import { ZeroBaselineChart } from '../../analytics/shared/ZeroBaselineChart';
+
+const PORTFOLIO_COLOR = '#64748B';
 
 interface Props {
   projectId: number;
@@ -20,6 +23,12 @@ function formatDate(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   return Number.isFinite(d.getTime()) ? d.toLocaleDateString('ru-RU') : iso.slice(0, 10);
+}
+
+function formatRawDelta(n: number | null): string {
+  if (n == null) return '—';
+  const sign = n > 0 ? '+' : '';
+  return `${sign}${n.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ч`;
 }
 
 export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
@@ -55,7 +64,7 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
 
   const zSeries = useMemo<DynamicsSeries[]>(() => {
     if (!data) return [];
-    const plan = data.zHistory.filter((p) => p.direction !== 'fact');
+    const plan = data.zHistory.filter((p) => p.direction !== 'fact' && p.direction !== 'portfolio');
     const fact = data.zHistory.filter((p) => p.direction === 'fact');
     const series: DynamicsSeries[] = [];
     if (plan.length > 0) {
@@ -73,6 +82,15 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
         name: 'Факт',
         color: FACT_ACCENT_COLOR,
         points: fact.map((p) => ({ date: p.date, value: p.zScore })),
+      });
+    }
+    if (data.portfolioZHistory.length > 0) {
+      series.push({
+        id: 'portfolio',
+        name: 'Портфель',
+        color: PORTFOLIO_COLOR,
+        dashStyle: 'ShortDash',
+        points: data.portfolioZHistory.map((p) => ({ date: p.date, value: p.zScore })),
       });
     }
     return series;
@@ -138,6 +156,8 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
                 series={zSeries}
                 yAxisTitle="Средневзвешенная Z-оценка"
                 zeroLine
+                band={data.zPercentileBand}
+                events={data.events}
                 testId="project-trend-z-history"
               />
             ) : (
@@ -150,6 +170,7 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
           <Typography variant="h6" component="h2">
             Отклонения по дисциплинам
           </Typography>
+          <HoursCoverageChips coverage={data.coverage} testId="project-trend-coverage" />
           <Paper variant="outlined" sx={{ p: 2 }}>
             {data.hoursBridge.lines.length > 0 ? (
               <HoursBridgeChart lines={data.hoursBridge.lines} testId="project-trend-hours-bridge" />
@@ -158,7 +179,32 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
                 Нет пары план/факт с объёмом и часами для моста.
               </Typography>
             )}
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }} data-testid="project-trend-raw-delta">
+              Сырой Δ часов: {formatRawDelta(data.rawHoursDelta)}
+            </Typography>
           </Paper>
+
+          {data.planDeltaWaterfall && data.planDeltaWaterfallStart != null ? (
+            <>
+              <Typography variant="h6" component="h2">
+                Изменение Z плана за период
+              </Typography>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <FactorWaterfallChart
+                  startLabel="Было"
+                  startValue={data.planDeltaWaterfallStart}
+                  endLabel="Стало"
+                  steps={data.planDeltaWaterfall}
+                  goodDirection="positive"
+                  testId="project-trend-plan-waterfall"
+                />
+              </Paper>
+            </>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Недостаточно истории плана для разбора ΔZ.
+            </Typography>
+          )}
 
           <Typography variant="h6" component="h2">
             Z по группам IIC относительно нормы
@@ -174,14 +220,19 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
           </Paper>
 
           <Typography variant="h6" component="h2">
-            S-curve часов факта
+            S-curve часов
           </Typography>
           <Paper variant="outlined" sx={{ p: 2 }}>
-            {data.sCurve.length > 0 ? (
-              <SCurveChart points={data.sCurve} testId="project-trend-scurve" />
+            {data.sCurve.length > 0 || data.planSCurve.length > 0 ? (
+              <SCurveChart
+                points={data.sCurve}
+                planPoints={data.planSCurve}
+                events={data.events}
+                testId="project-trend-scurve"
+              />
             ) : (
               <Typography variant="body2" color="text.secondary">
-                Нет факт-версий с часами.
+                Нет версий с часами.
               </Typography>
             )}
           </Paper>
@@ -190,7 +241,7 @@ export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
             {data.deltaWaterfall && data.deltaWaterfallStart != null ? (
               <>
                 <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
-                  Изменение Z за период по группам
+                  Изменение Z факта за период по группам
                 </Typography>
                 <Paper variant="outlined" sx={{ p: 2 }}>
                   <FactorWaterfallChart

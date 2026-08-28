@@ -21,6 +21,7 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
     private readonly IExportFileNameService _fileNames;
     private readonly IProjectReportSummaryService _reportSummary;
     private readonly IProjectTrendService _projectTrend;
+    private readonly ITrendExportService _trendExport;
 
     public ProjectLevelAnalyticsController(
         IProjectCompareService compare,
@@ -30,7 +31,8 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         IDirectoryExportService directoryExport,
         IExportFileNameService fileNames,
         IProjectReportSummaryService reportSummary,
-        IProjectTrendService projectTrend)
+        IProjectTrendService projectTrend,
+        ITrendExportService trendExport)
     {
         _compare = compare;
         _groupAnalytics = groupAnalytics;
@@ -40,6 +42,7 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         _fileNames = fileNames;
         _reportSummary = reportSummary;
         _projectTrend = projectTrend;
+        _trendExport = trendExport;
     }
 
     /// <summary>Сводка «план/факт» по основным версиям проекта для вкладки «Отчёт».</summary>
@@ -59,6 +62,38 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         int projectId,
         CancellationToken cancellationToken = default) =>
         _projectTrend.GetAsync(projectId, cancellationToken);
+
+    [HttpGet("report-trend/export.xlsx")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Reports, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportReportTrendExcel(int projectId, CancellationToken cancellationToken)
+    {
+        var bytes = await _trendExport.ExportProjectExcelAsync(projectId, cancellationToken);
+        var fileName = await _fileNames.ForProjectAsync(
+            projectId,
+            ExportFileNameBuilder.Modules.Report,
+            "xlsx",
+            ExportFileNameBuilder.Views.Trend,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
+    [HttpGet("report-trend/export.pdf")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.Reports, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportReportTrendPdf(int projectId, CancellationToken cancellationToken)
+    {
+        var bytes = await _trendExport.ExportProjectPdfAsync(projectId, cancellationToken);
+        var fileName = await _fileNames.ForProjectAsync(
+            projectId,
+            ExportFileNameBuilder.Modules.Report,
+            "pdf",
+            ExportFileNameBuilder.Views.Trend,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/pdf", fileName);
+    }
 
     [HttpGet("compare")]
     [RequireProjectAccess]

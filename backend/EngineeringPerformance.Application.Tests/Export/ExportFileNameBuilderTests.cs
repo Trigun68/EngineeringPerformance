@@ -129,4 +129,29 @@ public sealed class ExportFileNameBuilderTests
 
         name.Should().Be("аналитика_тренд_производительности.xlsx");
     }
+
+    [Fact]
+    public void Build_ProjectTrend_UsesReportModuleAndTrendView()
+    {
+        var name = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Report,
+            "xlsx",
+            ExportFileNameBuilder.Views.Trend,
+            projectCode: "25-310",
+            projectName: "Реконструкция НС",
+            versionLabel: "Основная");
+
+        name.Should().Be("отчет_тренд_-_25-310_Реконструкция_НС_(Основная).xlsx");
+    }
+
+    [Fact]
+    public void Build_AnalyticsTrend_UsesAnalyticsModuleAndTrendView()
+    {
+        var name = ExportFileNameBuilder.Build(
+            ExportFileNameBuilder.Modules.Analytics,
+            "pdf",
+            ExportFileNameBuilder.Views.Trend);
+
+        name.Should().Be("аналитика_тренд.pdf");
+    }
 }

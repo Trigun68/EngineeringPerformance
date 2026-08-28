@@ -77,7 +77,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
 
         // Портфельное поколение в ключе: мутация любого проекта сбрасывает выборку без TTL.
         var cacheKey =
-            $"ztrends:v3:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
+            $"ztrends:v5:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
             $"{string.Join(',', projectIds.OrderBy(x => x))}:" +
             $"{string.Join(',', (request.WorkDirectionIds ?? []).OrderBy(x => x))}";
 
@@ -92,38 +92,68 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             return empty;
         }
 
-        var versionsQuery = _db.ProjectAnalysisVersions.AsNoTracking()
-            .Where(v => projectIds.Contains(v.ProjectId) && !v.IsArchived && v.IsPrimary);
-
         // Capture DateTime? locals — request.PeriodStart.Value inside the expression tree breaks EF parameter extract.
         DateTime? periodStart = request.PeriodStart;
         DateTime? periodEnd = request.PeriodEnd;
-        if (periodStart.HasValue)
-            versionsQuery = versionsQuery.Where(v => v.CreatedAt >= periodStart);
-        if (periodEnd.HasValue)
-            versionsQuery = versionsQuery.Where(v => v.CreatedAt <= periodEnd);
 
-        var versions = await versionsQuery
+        var allVersions = await _db.ProjectAnalysisVersions.AsNoTracking()
+            .Where(v => projectIds.Contains(v.ProjectId) && !v.IsArchived)
             .OrderBy(v => v.CreatedAt)
-            .Select(v => new
-            {
+            .Select(v => new VersionInfo(
                 v.Id,
                 v.ProjectId,
                 v.CreatedAt,
                 v.Direction,
                 v.VersionName,
-                ProjectCode = v.Project!.Code,
-                ProjectName = v.Project.Name,
-            })
+                v.IsPrimary,
+                v.Project!.Code,
+                v.Project.Name))
             .ToListAsync(cancellationToken);
 
-        if (versions.Count == 0)
+        bool InPeriod(DateTime created)
+        {
+            if (periodStart.HasValue && created < periodStart.Value)
+                return false;
+            if (periodEnd.HasValue && created > periodEnd.Value)
+                return false;
+            return true;
+        }
+
+        var seriesVersions = allVersions.Where(v => v.IsPrimary && InPeriod(v.CreatedAt)).ToList();
+        var factPrimaryProjects = seriesVersions
+            .Where(v => v.Direction == AnalysisDirection.Fact)
+            .Select(v => v.ProjectId)
+            .ToHashSet();
+        var pairingPlans = allVersions
+            .Where(v => v.IsPrimary
+                && v.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast
+                && factPrimaryProjects.Contains(v.ProjectId))
+            .ToList();
+        var sCurveFacts = allVersions
+            .Where(v => v.Direction == AnalysisDirection.Fact && InPeriod(v.CreatedAt))
+            .ToList();
+        var sCurvePlans = allVersions
+            .Where(v => v.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast && InPeriod(v.CreatedAt))
+            .ToList();
+
+        var versions = seriesVersions
+            .Concat(pairingPlans)
+            .Concat(sCurveFacts)
+            .Concat(sCurvePlans)
+            .DistinctBy(v => v.Id)
+            .OrderBy(v => v.CreatedAt)
+            .ToList();
+
+        if (seriesVersions.Count == 0)
         {
             var empty = EmptyResponse(warnings, "Нет основных версий (isPrimary) в выбранном периоде.");
             await CacheAsync(cacheKey, empty, cancellationToken);
             return empty;
         }
 
+        var seriesIds = seriesVersions.Select(v => v.Id).ToHashSet();
+        var sCurveFactIds = sCurveFacts.Select(v => v.Id).ToHashSet();
+        var sCurvePlanIds = sCurvePlans.Select(v => v.Id).ToHashSet();
         var versionIds = versions.Select(v => v.Id).ToList();
         var snapshots = await _db.AnalysisVersionSnapshots.AsNoTracking()
             .Where(s => versionIds.Contains(s.ProjectAnalysisVersionId))
@@ -160,6 +190,8 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var planPerfByProject = new Dictionary<int, IReadOnlyList<PerformanceRowDto>>();
         var factPerfByProject = new Dictionary<int, IReadOnlyList<PerformanceRowDto>>();
         var factHoursSamples = new List<HoursAtDateSample>();
+        var planHoursSamples = new List<HoursAtDateSample>();
+        var factHoursByProject = new Dictionary<int, (string Name, List<HoursAtDateSample> Points)>();
 
         var directionFilter = request.WorkDirectionIds is { Length: > 0 }
             ? request.WorkDirectionIds.ToHashSet()
@@ -184,16 +216,38 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
                 : string.Join('-', versionSnaps.OrderBy(s => s.WorkDirectionId).Select(s => s.NormId));
 
             var weight = Math.Max(0m, assessment.Summary.TotalFactLaborHours ?? 0m);
+            var inSeries = seriesIds.Contains(version.Id);
+            var projectLabel = string.IsNullOrWhiteSpace(version.ProjectName)
+                ? version.ProjectCode
+                : $"{version.ProjectCode} — {version.ProjectName}";
 
             if (version.Direction == AnalysisDirection.Fact)
             {
-                factPerfByProject[version.ProjectId] = assessment.Performance;
-                factHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, weight, version.VersionName));
+                if (inSeries)
+                    factPerfByProject[version.ProjectId] = assessment.Performance;
+                if (sCurveFactIds.Contains(version.Id))
+                {
+                    factHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, weight, version.VersionName));
+                    if (!factHoursByProject.TryGetValue(version.ProjectId, out var pack))
+                    {
+                        pack = (projectLabel, []);
+                        factHoursByProject[version.ProjectId] = pack;
+                    }
+
+                    pack.Points.Add(new HoursAtDateSample(version.CreatedAt, weight, version.VersionName));
+                }
             }
             else if (version.Direction is AnalysisDirection.Plan or AnalysisDirection.Forecast)
             {
-                planPerfByProject[version.ProjectId] = assessment.Performance;
+                if (version.IsPrimary && (version.Direction == AnalysisDirection.Plan
+                    || !planPerfByProject.ContainsKey(version.ProjectId)))
+                    planPerfByProject[version.ProjectId] = assessment.Performance;
+                if (sCurvePlanIds.Contains(version.Id))
+                    planHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, weight, version.VersionName));
             }
+
+            if (!inSeries)
+                continue;
 
             var clippedOverall = _engine.ClipZ(assessment.Summary.WeightedZScore, _options.ZClipMax, out var overallFlag);
             if (assessment.Summary.WeightedZScore is null)
@@ -347,11 +401,34 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
         var detail = _calculationEngine.BuildTrendDetailAggregation(
             ToSamples(overall.Plan),
             ToSamples(overall.Fact),
-            byGroup.Select(g => new TrendGroupSample(g.GroupId, g.GroupName, ToSamples(g.Fact))).ToList());
+            byGroup.Select(g => new TrendGroupSample(g.GroupId, g.GroupName, ToSamples(g.Fact))).ToList(),
+            planGroups: byGroup.Select(g => new TrendGroupSample(g.GroupId, g.GroupName, ToSamples(g.Plan))).ToList());
 
         var disciplineBridge = BuildDisciplineBridge(planPerfByProject, factPerfByProject, directionById);
         var groupZeroBars = BuildGroupZeroBars(byGroup);
         var sCurve = _calculationEngine.ComputeCumulativeHours(factHoursSamples);
+        var planSCurve = _calculationEngine.ComputeCumulativeHours(planHoursSamples);
+        var projectSCurves = _calculationEngine.BuildTopProjectSCurves(
+            factHoursByProject
+                .Select(kv => new ProjectHoursSeriesSample(kv.Key, kv.Value.Name, kv.Value.Points))
+                .ToList());
+        var coverageParts = new List<HoursCoverageDto>();
+        decimal rawHoursDelta = 0m;
+        foreach (var projectId in factPerfByProject.Keys)
+        {
+            if (!planPerfByProject.TryGetValue(projectId, out var planRows))
+                continue;
+            coverageParts.Add(_calculationEngine.ComputeHoursCoverage(planRows, factPerfByProject[projectId]));
+            rawHoursDelta += _calculationEngine.ComputeRawHoursDelta(planRows, factPerfByProject[projectId]);
+        }
+
+        var coverage = coverageParts.Count == 0
+            ? HoursCoverageDto.Empty
+            : _calculationEngine.CombineHoursCoverages(coverageParts);
+        var movers = BuildMovers(overall.Fact);
+        var band = BuildPercentileBand(overall.Fact);
+        var events = await LoadEventsAsync(projectIds, seriesVersions, periodStart, periodEnd, cancellationToken);
+
         var response = new ZTrendResponse(
             overall,
             byGroup,
@@ -360,7 +437,14 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             detail,
             disciplineBridge,
             groupZeroBars,
-            sCurve);
+            sCurve,
+            coverage,
+            movers,
+            band,
+            events,
+            planSCurve,
+            projectSCurves,
+            Math.Round(rawHoursDelta, 2, MidpointRounding.ToEven));
         await CacheAsync(cacheKey, response, cancellationToken);
         return response;
     }
@@ -500,6 +584,92 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
 
         return items.Values.OrderBy(x => x.EffectiveFrom).ThenBy(x => x.NormName).ToList();
     }
+
+    private IReadOnlyList<MoverRowDto> BuildMovers(ZTrendSeriesDto factSeries)
+    {
+        var points = factSeries.Segments.SelectMany(s => s.Points).OrderBy(p => p.Date).ToList();
+        var last = points.LastOrDefault(p =>
+            p.Contributions is { Count: > 0 } && p.Contributions.Any(c => c.ZScore is not null));
+        last ??= points.LastOrDefault(p => p.Contributions is { Count: > 0 });
+        if (last?.Contributions is null || last.Contributions.Count == 0)
+            return [];
+
+        return _calculationEngine.BuildMoverRows(
+            last.Contributions
+                .Select(c => new MoverSample(
+                    c.ProjectId,
+                    c.ProjectCode,
+                    c.ProjectName,
+                    c.ZScore is null ? null : (decimal)c.ZScore.Value,
+                    (decimal)c.Weight))
+                .ToList());
+    }
+
+    private IReadOnlyList<PercentileBandPointDto> BuildPercentileBand(ZTrendSeriesDto factSeries)
+    {
+        var result = new List<PercentileBandPointDto>();
+        foreach (var point in factSeries.Segments.SelectMany(s => s.Points).OrderBy(p => p.Date))
+        {
+            if (point.Contributions is not { Count: > 0 })
+                continue;
+            var band = _calculationEngine.ComputeWeightedPercentileBand(
+                point.Contributions
+                    .Where(c => c.ZScore is not null && c.Weight > 0)
+                    .Select(c => ((decimal)c.ZScore!.Value, (decimal)c.Weight)));
+            if (band is not null)
+                result.Add(new PercentileBandPointDto(point.Date, band.P10, band.P90));
+        }
+
+        return result;
+    }
+
+    private async Task<IReadOnlyList<TrendEventDto>> LoadEventsAsync(
+        List<int> projectIds,
+        IReadOnlyList<VersionInfo> seriesVersions,
+        DateTime? periodStart,
+        DateTime? periodEnd,
+        CancellationToken cancellationToken)
+    {
+        var versionEvents = seriesVersions
+            .OrderByDescending(v => v.CreatedAt)
+            .Take(12)
+            .Select(v => new TrendEventDto(
+                v.CreatedAt,
+                "versionCreated",
+                $"{v.ProjectCode}: {v.VersionName}",
+                v.Id))
+            .ToList();
+
+        var importQuery = _db.DataImportIterations.AsNoTracking()
+            .Where(i => projectIds.Contains(i.ProjectId));
+        if (periodStart.HasValue)
+            importQuery = importQuery.Where(i => i.ImportedAt >= periodStart);
+        if (periodEnd.HasValue)
+            importQuery = importQuery.Where(i => i.ImportedAt <= periodEnd);
+
+        var importTimes = await importQuery.Select(i => i.ImportedAt).ToListAsync(cancellationToken);
+        var importDays = importTimes
+            .GroupBy(t => t.Date)
+            .Select(g => (Day: g.Key, Count: g.Count()))
+            .OrderByDescending(g => g.Day)
+            .Take(8)
+            .ToList();
+
+        var importEvents = importDays
+            .Select(d => new TrendEventDto(d.Day, "import", $"Импорт ({d.Count})", null));
+
+        return versionEvents.Concat(importEvents).OrderBy(e => e.Timestamp).ToList();
+    }
+
+    private sealed record VersionInfo(
+        int Id,
+        int ProjectId,
+        DateTime CreatedAt,
+        AnalysisDirection Direction,
+        string VersionName,
+        bool IsPrimary,
+        string ProjectCode,
+        string ProjectName);
 
     private ZTrendResponse EmptyResponse(List<string> warnings, string warning)
     {

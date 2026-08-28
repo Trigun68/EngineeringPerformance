@@ -73,7 +73,14 @@ public sealed record ZTrendResponse(
     TrendDetailAggregationDto? Detail = null,
     HoursBridgeResultDto? DisciplineBridge = null,
     IReadOnlyList<GroupZeroBaselineDto>? GroupZeroBars = null,
-    IReadOnlyList<CumulativeHoursPointDto>? PortfolioSCurve = null);
+    IReadOnlyList<CumulativeHoursPointDto>? PortfolioSCurve = null,
+    HoursCoverageDto? Coverage = null,
+    IReadOnlyList<MoverRowDto>? Movers = null,
+    IReadOnlyList<PercentileBandPointDto>? ZPercentileBand = null,
+    IReadOnlyList<TrendEventDto>? Events = null,
+    IReadOnlyList<CumulativeHoursPointDto>? PlanSCurve = null,
+    IReadOnlyList<NamedSCurveDto>? ProjectSCurves = null,
+    decimal? RawHoursDelta = null);
 
 /// <summary>Сырая точка версии до агрегации/сегментации (вход TrendEngine).</summary>
 public sealed record ZTrendRawPoint(

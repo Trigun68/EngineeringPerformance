@@ -1,7 +1,9 @@
 # Анализ норм — реестр и health-check
 
-**Дата:** 2026-08-27  
+**Дата обновления:** 2026-08-28  
 **Код:** `backend/.../Analytics/NormRegistry/*`, `client/src/features/analytics/norm-analysis/*`
+
+**Справка для пользователя (CV, достоверность, дрейф, KPI):** [_doc/ui/norm-analysis-help.md](../ui/norm-analysis-help.md). Тот же текст открывается кнопкой «Справка» (иконка i) на вкладке.
 
 ## Назначение
 
