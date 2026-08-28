@@ -19,7 +19,7 @@ alwaysApply: true
 
 ## Команды
 
-Полный suite (предпочтительно, как в CI):
+Полный suite (это и есть критерий готовности; GitHub Actions E2E не оплачен):
 ```bash
 cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
 ```
@@ -54,18 +54,11 @@ cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker -- e2e/<
    При `MemAvailable` меньше ~2 ГБ прогон будет флакать независимо от кода;
    сначала освободить память, потом делать выводы о регрессии.
 
-## `cancelled` в Actions — смотреть шаг, а не тесты
+## GitHub Actions
 
-Прогон E2E со статусом `cancelled` обычно означает бюджет job (`timeout-minutes: 100`),
-а не флак теста. Сначала выяснить, на каком шаге стоял прогон:
-
-```bash
-gh run view <id> --json jobs --jq '[.jobs[].steps[]|{name,conclusion}]'
-```
-
-Известный случай: `Install Playwright browsers` встаёт в `apt` на зеркале Ubuntu
-(шаг ограничен 20 минутами и повторяется — см. комментарий в `e2e-tests.yml`).
-Если `Playwright E2E` в статусе `skipped` — тесты не запускались, вердикта нет.
+В этом репозитории E2E на GitHub **не гоняется** (нет средств). Не ждать
+`gh run watch` и не разбирать billing-fail как падение тестов.
+См. `ci-e2e-visual-green.mdc`.
 
 ## Критерий готовности UI-задачи
 
@@ -74,4 +67,4 @@ gh run view <id> --json jobs --jq '[.jobs[].steps[]|{name,conclusion}]'
 - Playwright — green (полный suite или релевантные spec)
 - В отчёте пользователю: **N passed**, base URL, был ли пересобран `frontend`
 
-См. также: `run-after-changes.mdc`, CI `.github/workflows/e2e-tests.yml`.
+См. также: `run-after-changes.mdc`, `ci-e2e-visual-green.mdc`.

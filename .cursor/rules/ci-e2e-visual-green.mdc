@@ -1,36 +1,41 @@
 ---
-description: After tasks, GitHub E2E (and Visual if present) must be green
+description: E2E гоняет агент локально; GitHub Actions в этом репо не оплачен
 alwaysApply: true
 ---
 
-# CI E2E / Visual после задачи (Engineering Performance)
+# E2E — только локально (GitHub без средств)
 
-Дополняет глобальные `~/.cursor/rules/ci-e2e-visual-after-task.mdc` и
-`github-ci-after-push.mdc`.
+**OVERRIDE** глобальных `ci-e2e-visual-after-task.mdc` и `github-ci-after-push.mdc`
+для этого репозитория.
 
-## Workflows репозитория
+На GitHub **нет средств** на Actions (billing / spending limit). Workflow
+`e2e-tests.yml` / `api-tests.yml` не стартуют или падают за секунды с
+«payments have failed» — это **не** вердикт по тестам.
 
-| Workflow | Файл | Обязателен |
-|----------|------|------------|
-| **E2E Playwright** | `.github/workflows/e2e-tests.yml` | да (после push с `client/**` / compose / migrations) |
-| API Tests | `.github/workflows/api-tests.yml` | да (после push с `backend/**`) |
-| Visual | — | N/A (пока нет отдельного workflow) |
+## Что делать
 
-## После push на master / PR
-
-```bash
-gh run list --commit "$(git rev-parse HEAD)" --limit 10
-gh run watch <e2e_run_id> --exit-status
-gh run watch <api_run_id> --exit-status   # если запущен
-```
-
-В ответе явно: **E2E = OK/FAIL** + URL; **Visual = N/A**; API Tests = OK/FAIL.
-
-## Локально (если push ещё нет / UI правки)
+Агент **сам** гоняет E2E на docker-стеке. Не ждать `gh run watch`. Не закрывать
+UI-задачу, пока локальный Playwright не зелёный.
 
 ```bash
 docker compose build frontend backend && docker compose up -d
 cd client && E2E_BASE_URL=http://127.0.0.1:8081 npm run test:e2e:docker
 ```
 
-Не закрывать UI-задачу на красном Playwright (локально или в Actions).
+Не против Vite `:5173`. Подробности стенда: `playwright-e2e-verify.mdc`.
+
+API-тесты тоже локально (Docker SDK / `dotnet test`), не через Actions.
+
+## Отчёт после задачи
+
+- **E2E** = локальный Playwright: N passed, base URL `:8081`, был ли `--build`
+- **Visual** = N/A
+- **GitHub Actions** = не критерий (нет средств); billing-fail не чинить как баг
+
+## Запрещено
+
+```text
+❌ «E2E упадёт на GitHub — посмотрите Actions»
+❌ Считать billing-fail провалом тестов
+❌ Пропустить локальный Playwright, потому что «CI всё равно не бежит»
+```

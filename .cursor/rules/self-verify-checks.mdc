@@ -15,7 +15,7 @@ alwaysApply: true
 | API tests | затронут `backend/` или логика | Docker SDK (см. ниже) |
 | Docker rebuild | UI/API/миграции | `docker compose build backend frontend && docker compose up -d` (всегда `--build`; см. `docker-rebuild-on-up.mdc`) |
 | Smoke API | после deploy или крупных фич | `./scripts/uat-smoke.sh` и/или `./scripts/perf-smoke.sh` |
-| E2E Playwright | затронут `client/` или UI-поведение | `cd client && npm run test:e2e:docker` (Docker; web на `E2E_BASE_URL`, default :8081) |
+| E2E Playwright | затронут `client/` или UI-поведение | агент сам: `cd client && npm run test:e2e:docker` (`:8081`). GitHub Actions не критерий (нет средств) |
 
 ### API tests (если `dotnet` недоступен на хосте)
 
