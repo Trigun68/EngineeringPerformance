@@ -209,7 +209,7 @@ return permission is not null && permission.Level >= requiredLevel;
 
 ## 9. Объекты `AccessControlConstants` (полный список для матрицы)
 
-`Dashboard`, `Users`, `Projects`, `PhysicalVolumes`, `PhysicalVolumeTypes`, `Equipment`, `IicWorkDirections`, `ProjectAnalysisVersions`, `IicWorkDirectionNorms`, `UnitsOfMeasurement`, `ProjectPhysicalVolumes`, `ProjectEquipments`, `ProjectLaborIntensities`, `ProjectDataUpload`, `Assessment`, `Planning`, `VersionComparison`, `GroupAnalysis`, `GroupTrend`, `References`, `DataPage`, `SettingsPage`, `HelpPage`, `LaborIntensities`, `ProjectCharacteristics`, `UserActionLog`.
+`Dashboard`, `Users`, `Projects`, `PhysicalVolumes`, `PhysicalVolumeTypes`, `Equipment`, `IicWorkDirections`, `ProjectAnalysisVersions`, `IicWorkDirectionNorms`, `EngineeringWorkCosts`, `UnitsOfMeasurement`, `ProjectPhysicalVolumes`, `ProjectEquipments`, `ProjectLaborIntensities`, `ProjectDataUpload`, `Assessment`, `Planning`, `VersionComparison`, `GroupAnalysis`, `GroupTrend`, `References`, `DataPage`, `SettingsPage`, `HelpPage`, `LaborIntensities`, `ProjectCharacteristics`, `UserActionLog`.
 
 Уровни: `None=0`, `Read=1`, `Edit=2` (`AccessLevel` enum).
 

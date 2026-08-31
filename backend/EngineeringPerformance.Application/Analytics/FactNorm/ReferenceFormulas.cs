@@ -96,6 +96,28 @@ public sealed class ConstantReferenceFormula : ReferenceFormulaBase
     public override double Predict(double x, IReadOnlyDictionary<string, double> parameters) => P(parameters, "a");
 }
 
+/// <summary>Только для R² текущей нормы; не входит в BIC-каталог подгонки.</summary>
+public sealed class KimCurveReferenceFormula : ReferenceFormulaBase
+{
+    public override string Code => ReferenceFormulaCodes.KimCurve;
+    public override string DisplayName => "Кривая Кима";
+    public override string Formula => "P(z) = e^(μ + z·σ)";
+    public override string Description => "Логнормаль: μ = ln(P), производительность не зависит от объёма";
+    public override IReadOnlyList<string> ParamNames => ["a"];
+
+    public override IReadOnlyDictionary<string, double> GetDefaultParams() =>
+        new Dictionary<string, double> { ["a"] = 1 };
+
+    public override FormulaFitResult Fit(IReadOnlyList<FactPoint> points)
+    {
+        var a = points.Average(p => p.Y);
+        var parameters = new Dictionary<string, double> { ["a"] = a };
+        return FromPredictions(points, parameters, _ => a);
+    }
+
+    public override double Predict(double x, IReadOnlyDictionary<string, double> parameters) => P(parameters, "a");
+}
+
 public sealed class LinearReferenceFormula : ReferenceFormulaBase
 {
     public override string Code => ReferenceFormulaCodes.Linear;
@@ -295,5 +317,14 @@ public static class ReferenceFormulaCatalog
     ];
 
     public static IReferenceFormula Get(string code) =>
-        All.First(f => string.Equals(f.Code, code, StringComparison.OrdinalIgnoreCase));
+        TryGet(code) ?? throw new ArgumentOutOfRangeException(nameof(code), code, "Unknown reference formula.");
+
+    public static IReferenceFormula? TryGet(string code)
+    {
+        if (string.Equals(code, ReferenceFormulaCodes.KimCurve, StringComparison.OrdinalIgnoreCase))
+            return KimCurve;
+        return All.FirstOrDefault(f => string.Equals(f.Code, code, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static readonly IReferenceFormula KimCurve = new KimCurveReferenceFormula();
 }

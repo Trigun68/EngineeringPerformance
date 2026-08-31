@@ -121,6 +121,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectImportService, ProjectExcelDataImportService>();
         services.AddScoped<IDirectoryFacade, DirectoryFacade>();
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
+        services.AddScoped<IWorkCostService, IicWorkDirectionWorkCostService>();
         services.AddScoped<ILaborIntensityRecalculationService, LaborIntensityRecalculationService>();
         services.AddScoped<IAnalysisVersionRecalculationOrchestrator, AnalysisVersionRecalculationOrchestrator>();
         services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();

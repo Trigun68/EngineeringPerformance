@@ -8,7 +8,7 @@ using EngineeringPerformance.Infrastructure.Data;
 
 namespace EngineeringPerformance.App.ViewModels;
 
-/// <summary>Базовая форма редактирования номенклатуры КФО/БЭР (без выбора вида).</summary>
+/// <summary>Базовая форма редактирования номенклатуры КФО/БЕР (без выбора вида).</summary>
 public abstract partial class PhysicalVolumeCatalogEditViewModelBase<T> : ObservableObject
     where T : DirectoryItem, new()
 {
@@ -324,8 +324,8 @@ public sealed partial class PhysicalVolumeKfoEditViewModel : PhysicalVolumeCatal
 
 public sealed partial class PhysicalVolumeBerEditViewModel : PhysicalVolumeCatalogEditViewModelBase<PhysicalVolumeBer>
 {
-    protected override string NewItemTitle => "Новая номенклатура БЭР";
-    protected override string EditItemTitle => "Редактирование номенклатуры БЭР";
+    protected override string NewItemTitle => "Новая номенклатура БЕР";
+    protected override string EditItemTitle => "Редактирование номенклатуры БЕР";
 
     public PhysicalVolumeBerEditViewModel(
         IDirectoryService<PhysicalVolumeBer> service,

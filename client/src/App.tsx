@@ -13,6 +13,7 @@ import { FullProjectsPage } from './pages/projects/FullProjectsPage';
 import { ReferencesLayout } from './pages/references/ReferencesLayout';
 import { DirectoryPage } from './pages/references/DirectoryPage';
 import { IicNormsPage } from './pages/references/IicNormsPage';
+import { WorkCostsPage } from './pages/references/WorkCostsPage';
 import { REFERENCE_ROUTES } from './pages/references/referenceConfig';
 import { ReferencesIndexRedirect } from './pages/references/ReferencesIndexRedirect';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
@@ -217,6 +218,16 @@ export default function App() {
                     element={(
                       <PermissionGuard objectName={route.permission}>
                         <IicNormsPage />
+                      </PermissionGuard>
+                    )}
+                  />
+                ) : route.path === 'work-costs' ? (
+                  <Route
+                    key={route.path}
+                    path={route.path}
+                    element={(
+                      <PermissionGuard objectName={route.permission}>
+                        <WorkCostsPage />
                       </PermissionGuard>
                     )}
                   />

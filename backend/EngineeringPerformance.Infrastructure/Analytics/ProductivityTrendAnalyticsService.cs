@@ -35,6 +35,7 @@ public sealed class ProductivityTrendAnalyticsService : IProductivityTrendAnalyt
             [FormulaType.Constant] = "#546e7a",
             [FormulaType.Hyperbolic] = "#ad1457",
             [FormulaType.Exponential] = "#2e7d32",
+            [FormulaType.KimCurve] = "#00838f",
         };
 
     private readonly IAnalyticsDbContextFactory _analytics;

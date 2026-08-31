@@ -26,6 +26,7 @@ public static class NormFormulaDisplay
             FormulaType.ShiftedLog => $"y = {C("a")} + {C("b")}·ln(x + {C("c", "0")})",
             FormulaType.Polynomial => "Полином",
             FormulaType.PiecewiseLinear => "Ломаная",
+            FormulaType.KimCurve => $"P(z) = e^({C("mu")} + z·{C("sigma")})",
             _ => type.ToString(),
         };
     }

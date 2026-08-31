@@ -121,7 +121,7 @@ export function ProjectVersionPickerDialog({
   // Нельзя .filter() внутри селектора Zustand — каждый вызов новый массив → React #185.
   const physicalVolumeTypes = useDictionaryStore((s) => s.lists.physicalVolumeTypes);
   const catalogOptions = useMemo(
-    () => physicalVolumeTypes.filter((t) => t.name === 'КФО' || t.name === 'БЭР'),
+    () => physicalVolumeTypes.filter((t) => t.name === 'КФО' || t.name === 'БЕР' || t.name === 'БЭР'),
     [physicalVolumeTypes],
   );
   const [submitting, setSubmitting] = useState(false);
@@ -560,7 +560,7 @@ export function ProjectVersionPickerDialog({
               required
               fullWidth
               InputLabelProps={{ shrink: true }}
-              helperText="Снимок норм IIC на эту дату. Смена БЭР↔КФО после импорта ФО недоступна."
+              helperText="Снимок норм IIC на эту дату. Смена БЕР↔КФО после импорта ФО недоступна."
             />
             <FormControlLabel
               control={

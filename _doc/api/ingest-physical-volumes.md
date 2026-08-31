@@ -12,7 +12,7 @@ JSON: `POST /api/projects/{id}/versions/{vid}/ingest/physical-volumes`.
 
 - **Replace:** удаляются все строки ФО версии и прошлые итерации этого типа, затем вставка.
 - Шифр ЕП: колонки «ID/Код/Шифр по каталогу», шаблон «Список работ»; нормализация тире и нулей (`01-01-001-01` / КФО `KQ.02.160`).
-- Нет шифра или нет в каталоге версии (КФО/БЭР) — строка **skip**, импорт `Success=true`, текст в `details`.
+- Нет шифра или нет в каталоге версии (КФО/БЕР) — строка **skip**, импорт `Success=true`, текст в `details`.
 - Поля строки: quantity, facility (часто `код - имя`), bindingType, documentSet, catalogId, tag, workId, workName, workComment, estimationBasis, catalogCode/Name с номенклатуры.
 - Не заполняет: `parentId`, машинные часы, `status` (это пересчёт / ручная правка).
 - Rollback по `createdAt == importedAt` имеет смысл только для **текущего** replace-батча.

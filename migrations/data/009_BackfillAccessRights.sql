@@ -27,6 +27,7 @@ VALUES
     (N'IicWorkDirections'),
     (N'ProjectAnalysisVersions'),
     (N'IicWorkDirectionNorms'),
+    (N'EngineeringWorkCosts'),
     (N'UnitsOfMeasurement'),
     (N'ProjectPhysicalVolumes'),
     (N'ProjectEquipments'),

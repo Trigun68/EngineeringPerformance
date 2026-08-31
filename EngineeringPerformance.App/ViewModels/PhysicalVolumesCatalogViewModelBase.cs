@@ -12,7 +12,7 @@ using Serilog;
 
 namespace EngineeringPerformance.App.ViewModels;
 
-/// <summary>Общая логика справочника номенклатуры КФО/БЭР без фильтра по виду.</summary>
+/// <summary>Общая логика справочника номенклатуры КФО/БЕР без фильтра по виду.</summary>
 public abstract partial class PhysicalVolumesCatalogViewModelBase<T> : DirectoryViewModelBase<T>
     where T : DirectoryItem, new()
 {

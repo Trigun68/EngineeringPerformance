@@ -75,10 +75,11 @@ export function NormRegistryTable({
             <TableCell sx={{ minWidth: 210 }}>Группа IIC</TableCell>
             <TableCell sx={{ minWidth: 170 }}>Серьёзность</TableCell>
             <TableCell>Формула</TableCell>
+            <TableCell align="right">Производительность</TableCell>
             <TableCell align="right">μ</TableCell>
             <TableCell align="right">σ</TableCell>
             <TableCell align="right">
-              <Tooltip title="Коэффициент вариации σ/μ — насколько велик разброс относительно среднего. Подсвечивается, если заметно выше медианы по всем нормам.">
+              <Tooltip title="Коэффициент вариации |σ / производительность| — насколько велик разброс относительно среднего. Подсвечивается, если заметно выше медианы по всем нормам.">
                 <span>CV</span>
               </Tooltip>
             </TableCell>
@@ -88,7 +89,7 @@ export function NormRegistryTable({
               </Tooltip>
             </TableCell>
             <TableCell sx={{ minWidth: 90 }}>
-              <Tooltip title="Динамика μ по ревизиям той же группы IIC — направление дрейфа важнее единичного выхода за допуск.">
+              <Tooltip title="Динамика производительности по ревизиям той же группы IIC — направление дрейфа важнее единичного выхода за допуск.">
                 <span>Дрейф</span>
               </Tooltip>
             </TableCell>
@@ -135,6 +136,9 @@ export function NormRegistryTable({
                 <TableCell>{n.formulaType}</TableCell>
                 <TableCell align="right">
                   {n.meanPerformance == null ? '—' : n.meanPerformance.toFixed(3)}
+                </TableCell>
+                <TableCell align="right">
+                  {n.estimate == null ? '—' : n.estimate.toFixed(4)}
                 </TableCell>
                 <TableCell align="right">
                   {n.stdDeviation == null ? '—' : n.stdDeviation.toFixed(3)}

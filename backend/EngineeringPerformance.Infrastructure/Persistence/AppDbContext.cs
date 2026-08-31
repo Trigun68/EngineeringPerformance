@@ -22,6 +22,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<Equipment> Equipments => Set<Equipment>();
     public DbSet<IicWorkDirection> IicWorkDirections => Set<IicWorkDirection>();
     public DbSet<IicWorkDirectionNorm> IicWorkDirectionNorms => Set<IicWorkDirectionNorm>();
+    public DbSet<IicWorkDirectionWorkCost> IicWorkDirectionWorkCosts => Set<IicWorkDirectionWorkCost>();
     public DbSet<UnitOfMeasurement> UnitsOfMeasurement => Set<UnitOfMeasurement>();
     public DbSet<ProjectPhysicalVolume> ProjectPhysicalVolumes => Set<ProjectPhysicalVolume>();
     public DbSet<ProjectEquipment> ProjectEquipments => Set<ProjectEquipment>();
@@ -57,6 +58,7 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfiguration(new SqlQueryMetricConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());
+        modelBuilder.ApplyConfiguration(new IicWorkDirectionWorkCostConfiguration());
         modelBuilder.ApplyConfiguration(new DataImportIterationConfiguration());
         modelBuilder.ApplyConfiguration(new NormSuggestionConfiguration());
         modelBuilder.ApplyConfiguration(new NormChangeAuditConfiguration());

@@ -109,7 +109,43 @@ function KindBadge({ label, color }: { label: string; color: string }) {
 // 1. Титульная страница
 // ---------------------------------------------------------------------------
 
-function CoverPageMockup() {
+function CoverTeaserKpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <Box sx={{ flex: 1 }}>
+      <Typography sx={{ fontFamily: FONT, color: theme.coverMutedText, fontSize: 8 }}>{label}</Typography>
+      <Typography sx={{ fontFamily: FONT, color: theme.white, fontWeight: 700, fontSize: 19, mt: 0.3 }}>
+        {value}
+      </Typography>
+      {sub ? (
+        <Typography sx={{ fontFamily: FONT, color: theme.white, fontSize: 11, mt: 0.35 }}>{sub}</Typography>
+      ) : null}
+      <Box sx={{ width: 26, height: 2, bgcolor: theme.accentA, mt: 0.6 }} />
+    </Box>
+  );
+}
+
+function CoverPageMockup({
+  kindLabel = 'ОЦЕНКА ФАКТА',
+  kindColor = theme.accentB,
+  title = (
+    <>
+      Отчёт по оценке
+      <br />
+      фактической трудоёмкости
+    </>
+  ),
+  teasers = [
+    { label: 'ЧАСЫ ФАКТ', value: '12 480 ч' },
+    { label: 'ВЗВЕШ. Z', value: '−0.34' },
+    { label: 'ПЕРЦЕНТИЛЬ', value: 'P62' },
+    { label: 'ОЦЕНКА', value: 'Хорошо' },
+  ],
+}: {
+  kindLabel?: string;
+  kindColor?: string;
+  title?: ReactNode;
+  teasers?: { label: string; value: string; sub?: string }[];
+}) {
   return (
     <PageFrame width={PAGE_W} height={PAGE_H} label="Титульная страница · A4 портрет">
       <Box
@@ -137,15 +173,13 @@ function CoverPageMockup() {
             >
               EP
             </Box>
-            <KindBadge label="ОЦЕНКА ФАКТА" color={theme.accentB} />
+            <KindBadge label={kindLabel} color={kindColor} />
           </Stack>
 
           <Typography
             sx={{ fontFamily: FONT, color: theme.white, fontWeight: 700, fontSize: 27, mt: 4, lineHeight: 1.15 }}
           >
-            Отчёт по оценке
-            <br />
-            фактической трудоёмкости
+            {title}
           </Typography>
           <Typography sx={{ fontFamily: FONT, color: theme.coverMutedText, fontSize: 11.5, mt: 0.6 }}>
             Engineering Performance · Инженерная аналитика трудоёмкости
@@ -176,19 +210,8 @@ function CoverPageMockup() {
           </Box>
 
           <Stack direction="row" spacing={3} sx={{ mt: 3.5 }}>
-            {[
-              ['ЧАСЫ ФАКТ', '12 480 ч'],
-              ['ВЗВЕШ. Z', '−0.34'],
-              ['ПЕРЦЕНТИЛЬ', 'P62'],
-              ['ОЦЕНКА', 'Хорошо'],
-            ].map(([label, value]) => (
-              <Box key={label} sx={{ flex: 1 }}>
-                <Typography sx={{ fontFamily: FONT, color: theme.coverMutedText, fontSize: 8 }}>{label}</Typography>
-                <Typography sx={{ fontFamily: FONT, color: theme.white, fontWeight: 700, fontSize: 19, mt: 0.3 }}>
-                  {value}
-                </Typography>
-                <Box sx={{ width: 26, height: 2, bgcolor: theme.accentA, mt: 0.6 }} />
-              </Box>
+            {teasers.map((item) => (
+              <CoverTeaserKpi key={item.label} label={item.label} value={item.value} sub={item.sub} />
             ))}
           </Stack>
 
@@ -294,16 +317,16 @@ function KpiCard({ label, value, dotColor }: { label: string; value: string; dot
 }
 
 const Z_BANDS: { label: string; range: string; color: string }[] = [
-  { label: 'Отлично', range: 'Z < −1', color: theme.positive },
-  { label: 'Хорошо', range: '−1…−0.5', color: theme.positive },
-  { label: 'Удовл.', range: '−0.5…0.5', color: theme.neutral },
-  { label: 'Внимание', range: '0.5…1', color: theme.negative },
   { label: 'Критично', range: 'Z > 1', color: theme.negative },
+  { label: 'Внимание', range: '0.5…1', color: theme.negative },
+  { label: 'Удовл.', range: '−0.5…0.5', color: theme.neutral },
+  { label: 'Хорошо', range: '−1…−0.5', color: theme.positive },
+  { label: 'Отлично', range: 'Z < −1', color: theme.positive },
 ];
 
 function ZScaleLegend({ z }: { z: number }) {
   const clamped = Math.max(-2, Math.min(2, z));
-  const left = Math.min(0.94, Math.max(0.02, (clamped + 2) / 4)) * 100;
+  const left = Math.min(0.94, Math.max(0.02, (2 - clamped) / 4)) * 100;
   return (
     <Box>
       <Typography sx={{ fontFamily: FONT, fontSize: 9.5, fontWeight: 600, color: theme.primary, mb: 0.5 }}>
@@ -612,9 +635,9 @@ function ForecastContentPageMockup() {
       <Box sx={{ px: 3.5, pt: 1.8, pb: 4.5, bgcolor: theme.pageBg, height: '100%' }}>
         <Stack spacing={1.4}>
           <Stack direction="row" spacing={1}>
+            <KpiCard label="Оптимистичный" value="15 890 ч" />
             <KpiCard label="Базовый" value="18 240 ч" />
-            <KpiCard label="Оптимист." value="15 890 ч" />
-            <KpiCard label="Пессимист." value="21 470 ч" />
+            <KpiCard label="Пессимистичный" value="21 470 ч" />
           </Stack>
           <Callout
             kind="data"
@@ -880,11 +903,27 @@ export default function PdfDesignMockups() {
               Титульная страница — общий шаблон
             </Typography>
             <Typography sx={{ fontFamily: FONT, fontSize: 12, color: theme.muted }}>
-              Одинаковая композиция для всех 10 PDF — меняется только бейдж, заголовок и тизер-KPI
+              Факт — часы/Z; прогноз — три сценария с часами и стоимостью ₽ (только титул)
             </Typography>
           </Stack>
-          <Stack direction="row" sx={{ justifyContent: 'center' }}>
+          <Stack direction="row" spacing={2} sx={{ justifyContent: 'center', flexWrap: 'wrap', rowGap: 3 }}>
             <CoverPageMockup />
+            <CoverPageMockup
+              kindLabel={KIND_META.forecast.label}
+              kindColor={KIND_META.forecast.color}
+              title={
+                <>
+                  Прогноз трудоёмкости
+                  <br />
+                  по сценариям
+                </>
+              }
+              teasers={[
+                { label: 'ОПТИМИСТИЧНЫЙ', value: '15 890 ч', sub: '23 835 000 ₽' },
+                { label: 'БАЗОВЫЙ', value: '18 240 ч', sub: '27 360 000 ₽' },
+                { label: 'ПЕССИМИСТИЧНЫЙ', value: '21 470 ч', sub: '32 205 000 ₽' },
+              ]}
+            />
           </Stack>
         </Box>
 

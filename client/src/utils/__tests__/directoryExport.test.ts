@@ -46,6 +46,7 @@ describe('buildCanonicalExportFileName', () => {
         view: directoryExportView('iic-work-directions'),
       }),
     ).toBe('справочник_группы_IIC.xlsx');
+    expect(directoryExportView('work-costs')).toBe('стоимость_работ');
   });
 
   it('truncates long names to the max length', () => {

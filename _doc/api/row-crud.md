@@ -14,6 +14,6 @@ GET — пагинация `page`, `pageSize` (1…1000), `sort`. После cre
 | `labor-intensities` | ProjectLaborIntensities | `plannedHours`, `actualHours`; опционально `laborIntensityId`, `documentationCode`, `brand`, `notes` |
 | `equipment` | ProjectEquipments | `equipmentId`, `quantity`; опционально `quantityInWork` и поля Excel (facility, tag, …) |
 
-`physicalVolumeId` — Id номенклатуры **того** каталога, который выбран у версии (КФО или БЭР). Иначе 400.
+`physicalVolumeId` — Id номенклатуры **того** каталога, который выбран у версии (КФО или БЕР). Иначе 400.
 
 Уникальность строки ФО: номенклатура × `facilityCode` × `facilityName` × `workId` ([ADR-003](../adr/ADR-003-project-physical-volume-unique-key.md)).

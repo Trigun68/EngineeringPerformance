@@ -25,6 +25,7 @@ export interface NormListItem {
   formulaDisplay: string;
   parameters: Record<string, number>;
   meanPerformance: number | null;
+  estimate: number | null;
   stdDeviation: number | null;
   effectiveFrom: string;
   effectiveTo: string | null;
@@ -146,6 +147,7 @@ function mapListItem(raw: Record<string, unknown>): NormListItem {
     formulaDisplay: String(raw.formulaDisplay ?? raw.FormulaDisplay ?? ''),
     parameters: (raw.parameters ?? raw.Parameters ?? {}) as Record<string, number>,
     meanPerformance: (raw.meanPerformance ?? raw.MeanPerformance ?? null) as number | null,
+    estimate: (raw.estimate ?? raw.Estimate ?? null) as number | null,
     stdDeviation: (raw.stdDeviation ?? raw.StdDeviation ?? null) as number | null,
     effectiveFrom: String(raw.effectiveFrom ?? raw.EffectiveFrom ?? ''),
     effectiveTo: (raw.effectiveTo ?? raw.EffectiveTo ?? null) as string | null,

@@ -70,7 +70,7 @@ public sealed class PhysicalVolumeImportTests
             .Replace('\u2212', '-')
             .Replace('\u2011', '-');
 
-        // Нормализация БЭР-кода
+        // Нормализация БЕР-кода
         var parts = t.Split('-');
         if (parts.Length == 4 && parts.All(p => p.Length > 0 && p.All(char.IsDigit)))
         {

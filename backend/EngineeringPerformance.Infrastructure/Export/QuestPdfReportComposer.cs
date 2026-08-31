@@ -147,6 +147,8 @@ public static class QuestPdfReportComposer
                 {
                     c.Item().Text(item.Label.ToUpperInvariant()).FontSize(7.5f).FontColor(ReportVisualTheme.CoverMutedText);
                     c.Item().PaddingTop(2).Text(item.Value).Bold().FontSize(20).FontColor(Colors.White);
+                    if (!string.IsNullOrWhiteSpace(item.SubValue))
+                        c.Item().PaddingTop(3).Text(item.SubValue).FontSize(11).FontColor(Colors.White);
                     c.Item().PaddingTop(5).Height(2).Width(28).Background(ReportVisualTheme.AccentA);
                 });
             }
@@ -314,19 +316,26 @@ public static class QuestPdfReportComposer
     }
 
     // ------------------------------------------------------------------
-    // Шкала Z-score
+    // Шкала Z-score: слева хуже (+3 / Критично), справа лучше (−3 / Отлично)
     // ------------------------------------------------------------------
+
+    /// <summary>Доля слева на визуальной шкале: больший Z левее. Клэмп по <paramref name="min"/>…<paramref name="max"/>.</summary>
+    internal static double ZScaleVisualFraction(double z, double min = -3, double max = 3)
+    {
+        var clamped = Math.Clamp(z, min, max);
+        return (max - clamped) / (max - min);
+    }
 
     private static readonly (string Label, string Range, string Color, decimal LowerBound)[] ZScoreBands =
     [
-        ("Отлично", "Z < −1", ReportVisualTheme.Positive, -2m),
-        ("Хорошо", "−1…−0.5", ReportVisualTheme.Positive, -1m),
-        ("Удовл.", "−0.5…0.5", ReportVisualTheme.Neutral, -0.5m),
-        ("Внимание", "0.5…1", ReportVisualTheme.Negative, 0.5m),
         ("Критично", "Z > 1", ReportVisualTheme.Negative, 1m),
+        ("Внимание", "0.5…1", ReportVisualTheme.Negative, 0.5m),
+        ("Удовл.", "−0.5…0.5", ReportVisualTheme.Neutral, -0.5m),
+        ("Хорошо", "−1…−0.5", ReportVisualTheme.Positive, -1m),
+        ("Отлично", "Z < −1", ReportVisualTheme.Positive, -2m),
     ];
 
-    /// <summary>Шкала Excellent…Critical (±1σ). Если передан <paramref name="currentZ"/> — под шкалой рисуется маркер положения.</summary>
+    /// <summary>Шкала Critical…Excellent (±1σ), слева хуже. Если передан <paramref name="currentZ"/> — под шкалой рисуется маркер положения.</summary>
     public static void ComposeZScoreScaleLegend(IContainer container, decimal? currentZ = null)
     {
         container.Column(col =>
@@ -352,9 +361,8 @@ public static class QuestPdfReportComposer
 
     private static void ComposeZScoreMarker(IContainer container, decimal z)
     {
-        // Диапазон шкалы визуально соответствует [-2, 2]; клэмп + перевод в долю 0..1.
-        var clamped = Math.Max(-2m, Math.Min(2m, z));
-        var proportion = (double)((clamped + 2m) / 4m);
+        // Диапазон шкалы визуально соответствует [-2, 2]; клэмп + перевод в долю 0..1 (слева хуже).
+        var proportion = ZScaleVisualFraction((double)z, min: -2, max: 2);
         var left = Math.Clamp(proportion, 0.02, 0.94);
         var right = 1 - left;
 
@@ -399,8 +407,7 @@ public static class QuestPdfReportComposer
     private static void ComposeZScoreMarker(
         IContainer container, double z, string label, string color, float markerHeight)
     {
-        var position = (float)((z + 3.0) / 6.0);
-        position = Math.Clamp(position, 0f, 1f);
+        var position = (float)ZScaleVisualFraction(z);
         container.Height(30).Column(col =>
         {
             col.Item().Row(r =>

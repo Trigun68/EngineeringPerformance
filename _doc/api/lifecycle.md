@@ -8,7 +8,7 @@
 2. Справочники: `GET /api/dictionaries/all`; при необходимости CRUD `/api/directories/{slug}` и нормы `/api/registers/iic-work-direction-norms`.
 3. `POST /api/projects` (`code` + `name`).
 4. `PUT /api/projects/{id}/characteristics`.
-5. `POST /api/projects/{id}/versions` — `direction`, обязательный `physicalVolumeTypeId` (КФО/БЭР).
+5. `POST /api/projects/{id}/versions` — `direction`, обязательный `physicalVolumeTypeId` (КФО/БЕР).
 6. `PUT …/planning-parameters` — Z по ИИС.
 7. Данные версии:
    - точечно: `POST …/physical-volumes|equipment|labor-intensities` (внутренние Id);

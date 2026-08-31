@@ -128,6 +128,17 @@ public static class FormulaTemplates
         ],
         RequiresBounds: true);
 
+    public static readonly FormulaTemplate KimCurve = new(
+        FormulaType.KimCurve,
+        "Кривая Кима",
+        @"P(z) = e^{\mu + z \cdot \sigma},\ \mu = \ln(P)",
+        [
+            new("a", "Производительность", true, 0),
+            new("mu", "μ", false),
+            new("sigma", "σ", true, 0),
+        ],
+        RequiresBounds: false);
+
     /// <summary>Все шаблоны — объявлен после полей, иначе static init даёт null в списке.</summary>
     public static IReadOnlyList<FormulaTemplate> All { get; } =
     [
@@ -142,5 +153,6 @@ public static class FormulaTemplates
         Constant,
         Hyperbolic,
         Exponential,
+        KimCurve,
     ];
 }

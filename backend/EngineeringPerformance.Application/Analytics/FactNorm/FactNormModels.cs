@@ -10,6 +10,7 @@ public static class ReferenceFormulaCodes
     public const string Exponential = "EXPONENTIAL";
     public const string Polynomial2 = "POLYNOMIAL2";
     public const string Hyperbolic = "HYPERBOLIC";
+    public const string KimCurve = "KIMCURVE";
 
     public static readonly IReadOnlyList<string> All =
     [

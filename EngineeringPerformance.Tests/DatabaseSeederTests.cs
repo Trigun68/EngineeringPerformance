@@ -69,7 +69,7 @@ public sealed class DatabaseSeederTests
 
         var types = await context.PhysicalVolumeTypes.ToListAsync();
         types.Should().HaveCount(2);
-        types.Should().Contain(t => t.Name == "БЭР");
+        types.Should().Contain(t => t.Name == "БЕР");
         types.Should().Contain(t => t.Name == "КФО");
     }
 

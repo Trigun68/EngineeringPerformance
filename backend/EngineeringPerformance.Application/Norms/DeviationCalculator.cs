@@ -29,6 +29,8 @@ public sealed class DeviationCalculator : IDeviationCalculator
                 n * (1 + Coeff(deviationFormula, "k") * zScore) * effectiveVolume,
             DeviationModelType.ProportionalToSqrtV =>
                 (n + Coeff(deviationFormula, "sigma0") * (decimal)Math.Sqrt((double)Math.Max(0, volume)) * zScore) * effectiveVolume,
+            DeviationModelType.Lognormal =>
+                KimCurveMath.ProductivityAtZ(MuOf(n), Coeff(deviationFormula, "sigma"), zScore) * effectiveVolume,
             _ => throw new ArgumentOutOfRangeException(nameof(deviationFormula.ModelType)),
         };
     }
@@ -81,8 +83,13 @@ public sealed class DeviationCalculator : IDeviationCalculator
             DeviationModelType.ProportionalToSqrtV => (
                 n + Coeff(deviationFormula, "sigma0") * (decimal)Math.Sqrt((double)Math.Max(0, volume)),
                 n - Coeff(deviationFormula, "sigma0") * (decimal)Math.Sqrt((double)Math.Max(0, volume))),
+            DeviationModelType.Lognormal => (
+                KimCurveMath.ProductivityAtZ(MuOf(n), Coeff(deviationFormula, "sigma"), 1m),
+                KimCurveMath.ProductivityAtZ(MuOf(n), Coeff(deviationFormula, "sigma"), -1m)),
             _ => throw new ArgumentOutOfRangeException(nameof(deviationFormula.ModelType)),
         };
+
+    private static decimal MuOf(decimal n) => KimCurveMath.Ln(n);
 
     private static decimal Coeff(DeviationFormula df, string name) =>
         df.Coefficients.TryGetValue(name, out var v) ? v : 0m;

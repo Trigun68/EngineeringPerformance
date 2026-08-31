@@ -65,9 +65,9 @@ public sealed class PhysicalVolumesBerViewModel(
     IDirectoryCache<UnitOfMeasurement> unitCache)
     : PhysicalVolumesCatalogViewModelBase<PhysicalVolumeBer>(service, pvCache, classifierCache, unitCache)
 {
-    protected override string LoadingTitle => "Загрузка: Номенклатура БЭР";
-    protected override string ExportSheetTitle => "Номенклатура БЭР";
-    protected override string ExportFileName => "Номенклатура_БЭР.xlsx";
+    protected override string LoadingTitle => "Загрузка: Номенклатура БЕР";
+    protected override string ExportSheetTitle => "Номенклатура БЕР";
+    protected override string ExportFileName => "Номенклатура_БЕР.xlsx";
 
     protected override void ApplyCatalogFields(PhysicalVolumeBer existing, PhysicalVolumeBer updated)
     {

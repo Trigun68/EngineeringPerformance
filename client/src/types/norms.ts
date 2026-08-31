@@ -1,6 +1,6 @@
-export type FormulaType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11;
+export type FormulaType = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 export type ExtrapolationMode = 1 | 2;
-export type DeviationModelType = 1 | 2 | 3 | 4;
+export type DeviationModelType = 1 | 2 | 3 | 4 | 5;
 export type PlanningScenario = 1 | 2 | 3;
 
 export type ZParameterLevel = 1 | 2 | 3 | 4;

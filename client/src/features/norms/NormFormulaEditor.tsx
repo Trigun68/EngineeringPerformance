@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { Alert, CircularProgress, MenuItem, Stack, TextField } from '@mui/material';
+import { Alert, CircularProgress, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { fetchFormulaTemplates, previewNormCurve } from '../../api/normsApi';
-import type { DeviationFormulaDto, NormFormulaDto } from '../../types/norms';
+import type { DeviationFormulaDto, FormulaType, NormFormulaDto } from '../../types/norms';
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
+import { isKimCurveType, kimDeviation, muFromProductivity, withKimDerived } from './kimCurve';
 // График норм открывается только в модалке редактирования — Highcharts грузим по требованию (ISS-018).
 const NormBandChart = lazy(() => import('./NormBandChart').then((m) => ({ default: m.NormBandChart })));
 
@@ -30,14 +31,17 @@ export function NormFormulaEditor({
   const template = templates.find((t) => t.type === value.type);
   const [band, setBand] = useState<Array<{ volume: number; center: number; upper: number; lower: number }>>([]);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const kim = isKimCurveType(value.type);
 
   const normalizedNorm = useMemo(
-    () => normalizeNormFormula(value, value.coefficients?.a),
-    [value],
+    () => (kim ? withKimDerived(value, value.coefficients.sigma ?? deviationFormula.coefficients.sigma ?? 0) : normalizeNormFormula(value, value.coefficients?.a)),
+    [deviationFormula.coefficients.sigma, kim, value],
   );
   const normalizedDeviation = useMemo(
-    () => normalizeDeviationFormula(deviationFormula, normalizedNorm.coefficients.a),
-    [deviationFormula, normalizedNorm.coefficients.a],
+    () => (kim
+      ? kimDeviation(normalizedNorm.coefficients.sigma ?? 0)
+      : normalizeDeviationFormula(deviationFormula, normalizedNorm.coefficients.a)),
+    [deviationFormula, kim, normalizedNorm.coefficients.a, normalizedNorm.coefficients.sigma],
   );
 
   const deviationRatio = normalizedDeviation.coefficients.sigma ?? 0;
@@ -67,6 +71,20 @@ export function NormFormulaEditor({
     return <CircularProgress size={24} />;
   }
 
+  const setCoefficient = (name: string, raw: string) => {
+    const numeric = raw === '' ? 0 : Number(raw);
+    if (kim) {
+      const nextA = name === 'a' ? numeric : (value.coefficients.a ?? 0);
+      const nextSigma = name === 'sigma' ? numeric : (value.coefficients.sigma ?? 0);
+      onChange(withKimDerived({ ...value, coefficients: { ...value.coefficients, a: nextA, sigma: nextSigma } }, nextSigma));
+      return;
+    }
+    onChange({
+      ...value,
+      coefficients: { ...value.coefficients, [name]: numeric },
+    });
+  };
+
   return (
     <Stack spacing={1.5}>
       {templatesError && (
@@ -84,12 +102,25 @@ export function NormFormulaEditor({
         size="small"
         label="Тип формулы"
         value={normalizedNorm.type}
-        onChange={(e) => onChange({ ...value, type: Number(e.target.value) as NormFormulaDto['type'] })}
+        onChange={(e) => {
+          const type = Number(e.target.value) as FormulaType;
+          if (isKimCurveType(type)) {
+            onChange(withKimDerived({ ...value, type }, value.coefficients.sigma ?? deviationFormula.coefficients.sigma ?? 0));
+            return;
+          }
+          onChange({ ...value, type });
+        }}
       >
         {templates.map((t) => (
           <MenuItem key={t.type} value={t.type}>{t.displayName}</MenuItem>
         ))}
       </TextField>
+
+      {kim && (
+        <Typography variant="caption" color="text.secondary">
+          P(z) = e^(μ + z·σ), μ = ln(P). Часы плана: P(z)·V. Z = (ln(P факт) − μ) / σ.
+        </Typography>
+      )}
 
       {template?.coefficients.map((c) => (
         <TextField
@@ -97,13 +128,17 @@ export function NormFormulaEditor({
           size="small"
           type="number"
           label={c.label}
-          value={value.coefficients[c.name] ?? ''}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              coefficients: { ...value.coefficients, [c.name]: e.target.value === '' ? 0 : Number(e.target.value) },
-            })
-          }
+          value={kim && c.name === 'mu' ? (normalizedNorm.coefficients.mu ?? muFromProductivity(value.coefficients.a ?? 0)) : (value.coefficients[c.name] ?? '')}
+          InputProps={{ readOnly: c.name === 'mu' }}
+          inputProps={{
+            min: c.min ?? undefined,
+            max: c.max ?? undefined,
+            step: c.name === 'sigma' || c.name === 'mu' ? 0.0001 : undefined,
+          }}
+          onChange={(e) => {
+            if (c.name === 'mu') return;
+            setCoefficient(c.name, e.target.value);
+          }}
         />
       ))}
 

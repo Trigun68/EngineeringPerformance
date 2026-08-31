@@ -24,6 +24,7 @@ function item(partial: Partial<NormListItem>): NormListItem {
     formulaDisplay: 'N=a',
     parameters: {},
     meanPerformance: 1,
+    estimate: 0,
     stdDeviation: 0.1,
     effectiveFrom: '2026-01-01',
     effectiveTo: null,
@@ -36,7 +37,7 @@ function item(partial: Partial<NormListItem>): NormListItem {
 }
 
 describe('coefficientOfVariation / outliers', () => {
-  it('is σ / μ', () => {
+  it('is |σ / производительность|', () => {
     expect(coefficientOfVariation(2, 0.5)).toBeCloseTo(0.25, 6);
     expect(coefficientOfVariation(0, 0.5)).toBeNull();
     expect(coefficientOfVariation(null, 0.5)).toBeNull();

@@ -905,4 +905,40 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 
         return current;
     }
+
+    public ScenarioWorkCostResult? ComputeScenarioWorkCosts(
+        IEnumerable<WorkCostHourSample> hoursByDirection,
+        IReadOnlyDictionary<int, decimal> ratePerHourByDirection)
+    {
+        ArgumentNullException.ThrowIfNull(hoursByDirection);
+        ArgumentNullException.ThrowIfNull(ratePerHourByDirection);
+
+        var hours = new Dictionary<int, (decimal Opt, decimal Base, decimal Pes)>();
+        foreach (var sample in hoursByDirection)
+        {
+            if (sample.WorkDirectionId < 0)
+                continue;
+
+            hours.TryGetValue(sample.WorkDirectionId, out var acc);
+            hours[sample.WorkDirectionId] = (
+                acc.Opt + (sample.OptimisticHours ?? 0m),
+                acc.Base + (sample.BaseHours ?? 0m),
+                acc.Pes + (sample.PessimisticHours ?? 0m));
+        }
+
+        decimal optimistic = 0m, baseline = 0m, pessimistic = 0m;
+        var matched = false;
+        foreach (var (directionId, acc) in hours)
+        {
+            if (!ratePerHourByDirection.TryGetValue(directionId, out var rate))
+                continue;
+
+            matched = true;
+            optimistic += acc.Opt * rate;
+            baseline += acc.Base * rate;
+            pessimistic += acc.Pes * rate;
+        }
+
+        return matched ? new ScenarioWorkCostResult(optimistic, baseline, pessimistic) : null;
+    }
 }

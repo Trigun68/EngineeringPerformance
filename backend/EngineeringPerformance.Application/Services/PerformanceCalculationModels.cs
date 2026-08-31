@@ -114,3 +114,16 @@ public sealed record FactAssessmentFacilityRowDto(
 public sealed record FactAssessmentCalculationResult(
     IReadOnlyList<FactAssessmentDetailRowDto> Detail,
     IReadOnlyList<FactAssessmentFacilityRowDto> Facility);
+
+/// <summary>Часы сценариев по направлению ИИС для Σ(часы × ставка).</summary>
+public sealed record WorkCostHourSample(
+    int WorkDirectionId,
+    decimal? OptimisticHours,
+    decimal? BaseHours,
+    decimal? PessimisticHours);
+
+/// <summary>Стоимость сценариев, ₽. null метода — ни одной пары часы+ставка.</summary>
+public sealed record ScenarioWorkCostResult(
+    decimal Optimistic,
+    decimal Base,
+    decimal Pessimistic);

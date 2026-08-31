@@ -14,7 +14,7 @@ interface Props {
   onReset: () => void;
 }
 
-/** Клиентский превью «что если»: сдвиг μ и множитель σ без публикации нормы. */
+/** Клиентский превью «что если»: сдвиг производительности и множитель σ без публикации нормы. */
 export function NormWhatIfSimulator({
   mean,
   sigma,
@@ -54,14 +54,14 @@ export function NormWhatIfSimulator({
       </Stack>
       {mean == null || sigma == null || !sim ? (
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          У выбранной нормы нет μ/σ для симуляции.
+          У выбранной нормы нет производительности/σ для симуляции.
         </Alert>
       ) : (
         <>
           <Box sx={{ display: 'flex', gap: 4, flexWrap: 'wrap', mt: 1.5 }}>
             <Box sx={{ minWidth: 220, flex: '1 1 220px' }}>
               <Typography variant="caption" color="text.secondary">
-                Смещение μ: {meanOffsetPct > 0 ? '+' : ''}
+                Смещение производительности: {meanOffsetPct > 0 ? '+' : ''}
                 {meanOffsetPct}% (было {mean.toFixed(3)}, станет {sim.nextMean.toFixed(3)})
               </Typography>
               <Slider
@@ -71,7 +71,7 @@ export function NormWhatIfSimulator({
                 step={1}
                 value={meanOffsetPct}
                 onChange={(_, v) => onMeanOffset(Array.isArray(v) ? v[0] : v)}
-                aria-label="Смещение μ, %"
+                aria-label="Смещение производительности, %"
                 data-testid="norm-analysis-sim-mean"
               />
             </Box>

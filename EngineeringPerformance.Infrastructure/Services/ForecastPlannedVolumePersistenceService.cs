@@ -98,7 +98,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
 
             if (catalogBer is null)
                 throw new InvalidOperationException(
-                    "Не найдена номенклатура БЭР с классификатором ИИС для этой группы.");
+                    "Не найдена номенклатура БЕР с классификатором ИИС для этой группы.");
 
             var entity = new ProjectPhysicalVolume
             {

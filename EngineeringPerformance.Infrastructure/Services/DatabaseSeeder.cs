@@ -133,7 +133,7 @@ public static class DatabaseSeeder
 
     private static async Task SeedPhysicalVolumeTypesAsync(AppDbContext context)
     {
-        var berType = new Data.PhysicalVolumeType { Name = "БЭР", Description = "Базовая единица ресурса", SortOrder = 0 };
+        var berType = new Data.PhysicalVolumeType { Name = "БЕР", Description = "Базовая единица ресурса", SortOrder = 0 };
         var kfoType = new Data.PhysicalVolumeType { Name = "КФО", Description = "Классификатор физических объёмов", SortOrder = 1 };
         context.PhysicalVolumeTypes.AddRange(berType, kfoType);
         await context.SaveChangesAsync();

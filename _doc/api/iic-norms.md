@@ -1,6 +1,6 @@
 # Нормы ИИС
 
-Дата обновления: 2026-08-24.  
+Дата обновления: 2026-08-31.  
 SoT: [`RegistersController`](../../backend/EngineeringPerformance.Api/Controllers/RegistersController.cs) `/api/registers/iic-work-direction-norms`.  
 Алиас: [`IicNormsController`](../../backend/EngineeringPerformance.Api/Controllers/IicNormsController.cs) `/api/iic-norms` (тот же `IIicNormService`).
 
@@ -15,6 +15,8 @@ SoT: [`RegistersController`](../../backend/EngineeringPerformance.Api/Controller
 
 Тело записи [`IicNormWriteRequest`](../../backend/EngineeringPerformance.Application/Registers/IicNormDtos.cs): `workDirectionId`, `performance`, `estimate`, `standardDeviation`, `unitId`, `effectiveFrom`, `effectiveTo`, `normFormula`, `deviationFormula`, `history`.
 
+`FormulaType.KimCurve = 12` («Кривая Кима»): `N = P`, `Estimate = ln(P)`, `StandardDeviation = σ` в лог-пространстве, `DeviationModelType.Lognormal = 5`. Валидация P > 0, σ > 0. Линейные нормы по-прежнему пишут `StandardDeviation = σ_rel · P`.
+
 Имена групп в ответах — формат `код — наименование (ед.)`.
 
-Изменение норм **не пересчитывает** уже созданные версии (снимок). Пересчёт затронутых версий делает оркестратор после CRUD, где это предусмотрено кодом сервиса норм.
+CRUD нормы вызывает `AfterNormChangedAsync` только для версий, чья дата попадает в период **этой** нормы. Массовый `RecalculateAllVersions` при добавлении типа формулы **не** выполняется.

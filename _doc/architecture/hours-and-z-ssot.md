@@ -1,6 +1,6 @@
 # Единый SoT часов и Z-оценки
 
-**Дата:** 2026-08-25  
+**Дата:** 2026-08-31  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
 Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
@@ -30,7 +30,14 @@ Web-путь: **движок → persist в БД → invalidate кэша → GET
 ### Две фазы
 
 1. Получить норму `N` (зависит от сценария).
-2. Часы варианта: `LI(z) = N · (1 + σ · z) · V`.
+2. Часы варианта зависят от модели отклонения:
+
+| Модель | LI(z) |
+|--------|--------|
+| Multiplicative (по умолчанию) | `N · (1 + σ_rel · z) · V` |
+| Lognormal («Кривая Кима») | `e^(μ + z · σ) · V`, `μ = ln(P)`, `N = P` независимо от V |
+
+При z = 0 Ким совпадает с Constant: `P · V`. Z-оценка не ветвится: `Estimate = μ`, `StandardDeviation = σ` (лог).
 
 | Сценарий | Как берётся N |
 |----------|----------------|

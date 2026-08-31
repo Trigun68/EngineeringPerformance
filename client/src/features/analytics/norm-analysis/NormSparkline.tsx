@@ -5,7 +5,7 @@ interface Props {
   color: string;
 }
 
-/** Мини-график дрейфа μ по ревизиям той же группы IIC. */
+/** Мини-график дрейфа производительности по ревизиям той же группы IIC. */
 export function NormSparkline({ values, color }: Props) {
   if (values.length < 2) return null;
 
@@ -24,8 +24,8 @@ export function NormSparkline({ values, color }: Props) {
     .join(' ');
 
   return (
-    <Tooltip title={`μ по ревизиям: ${values.map((v) => v.toFixed(2)).join(' → ')}`}>
-      <svg width={w} height={h} role="img" aria-label="Динамика среднего нормы">
+    <Tooltip title={`Производительность по ревизиям: ${values.map((v) => v.toFixed(2)).join(' → ')}`}>
+      <svg width={w} height={h} role="img" aria-label="Динамика производительности нормы">
         <polyline
           points={points}
           fill="none"

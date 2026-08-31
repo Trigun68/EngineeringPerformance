@@ -184,3 +184,74 @@ public sealed class AccuracyLevelTests
         r.Level.Should().Be(AccuracyLevel.High);
     }
 }
+
+public sealed class KimCurveFactNormTests
+{
+    [Fact]
+    public void Catalog_All_DoesNotIncludeKimCurve()
+    {
+        ReferenceFormulaCatalog.All.Should().HaveCount(7);
+        ReferenceFormulaCatalog.All.Should().NotContain(f => f.Code == ReferenceFormulaCodes.KimCurve);
+        ReferenceFormulaCodes.All.Should().NotContain(ReferenceFormulaCodes.KimCurve);
+        ReferenceFormulaCatalog.TryGet(ReferenceFormulaCodes.KimCurve).Should().NotBeNull();
+        ReferenceFormulaCatalog.TryGet(ReferenceFormulaCodes.KimCurve)!.DisplayName.Should().Be("Кривая Кима");
+    }
+
+    [Fact]
+    public void FormulaTypeMapper_RoundTripsKimCurve()
+    {
+        FormulaTypeMapper.ToReferenceCode(EngineeringPerformance.Domain.Norms.FormulaType.KimCurve)
+            .Should().Be(ReferenceFormulaCodes.KimCurve);
+        FormulaTypeMapper.ToFormulaType(ReferenceFormulaCodes.KimCurve)
+            .Should().Be(EngineeringPerformance.Domain.Norms.FormulaType.KimCurve);
+    }
+
+    [Fact]
+    public void Engine_KimCurrentNorm_UsesLogSpaceSigma_AndDoesNotProposeKim()
+    {
+        const double p = 10.0;
+        const double mu = 2.302585092994046; // ln(10)
+        const double sigma = 0.2;
+        var points = Enumerable.Range(0, 60)
+            .Select(i =>
+            {
+                var z = (i % 3) - 1; // -1, 0, 1
+                return new FactPoint(i + 1, Math.Exp(mu + sigma * z));
+            })
+            .ToList();
+
+        var engine = new FactNormAnalysisEngine();
+        var input = new NormGroupComparisonInput(
+            1, 1, "Kim",
+            new CurrentNormFitContext(
+                ReferenceFormulaCodes.KimCurve,
+                new Dictionary<string, double> { ["a"] = p },
+                p,
+                sigma,
+                null),
+            points);
+        var result = engine.Run(new DateTime(2025, 1, 1), new DateTime(2026, 8, 1), [input], new AnalyticsOptions());
+        var row = result.Comparisons.Should().ContainSingle().Subject;
+        row.FactStdDeviation.Should().BeApproximately(Math.Sqrt(2.0 / 3.0) * sigma, 0.01);
+        if (row.Suggestion is not null)
+            row.Suggestion.ProposedFormulaType.Should().NotBe(ReferenceFormulaCodes.KimCurve);
+    }
+
+    [Fact]
+    public void Engine_KimCurrentNorm_FlatFacts_HaveR2NearOne()
+    {
+        var points = Enumerable.Range(1, 40).Select(i => new FactPoint(i, 10)).ToList();
+        var engine = new FactNormAnalysisEngine();
+        var input = new NormGroupComparisonInput(
+            1, 1, "Kim",
+            new CurrentNormFitContext(
+                ReferenceFormulaCodes.KimCurve,
+                new Dictionary<string, double> { ["a"] = 10 },
+                10,
+                0.2,
+                null),
+            points);
+        var result = engine.Run(new DateTime(2025, 1, 1), new DateTime(2026, 8, 1), [input], new AnalyticsOptions());
+        result.Comparisons.Single().CurrentR2.Should().BeApproximately(1, 1e-9);
+    }
+}

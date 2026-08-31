@@ -1,21 +1,21 @@
+import {
+  Z_SCALE_MAX,
+  Z_SCALE_MIN,
+  zScaleVisualPct,
+} from '../../../pages/projects/reports/reportCalc';
 import { fmtSigned } from './reportFormat';
 import { ReportCard, ReportCardContent, ReportCardHeader, ReportCardTitle } from './ui';
 
-const MIN = -3;
-const MAX = 3;
+const RANGE = Z_SCALE_MAX - Z_SCALE_MIN;
 
+/** Слева направо: хуже (+3 / Критично) → лучше (−3 / Отлично). Цвета — CSS-тема отчёта. */
 const ZONES = [
-  { from: MIN, to: -1, label: 'Отлично', color: 'var(--ep-report-perf-excellent)' },
-  { from: -1, to: -0.5, label: 'Хорошо', color: 'var(--ep-report-perf-good)' },
-  { from: -0.5, to: 0.5, label: 'Удовлетв.', color: 'var(--ep-report-perf-satisfactory)' },
+  { from: 1, to: Z_SCALE_MAX, label: 'Критично', color: 'var(--ep-report-perf-critical)' },
   { from: 0.5, to: 1, label: 'Внимание', color: 'var(--ep-report-perf-attention)' },
-  { from: 1, to: MAX, label: 'Критично', color: 'var(--ep-report-perf-critical)' },
+  { from: -0.5, to: 0.5, label: 'Удовлетв.', color: 'var(--ep-report-perf-satisfactory)' },
+  { from: -1, to: -0.5, label: 'Хорошо', color: 'var(--ep-report-perf-good)' },
+  { from: Z_SCALE_MIN, to: -1, label: 'Отлично', color: 'var(--ep-report-perf-excellent)' },
 ];
-
-function pct(z: number): number {
-  const clamped = Math.min(MAX, Math.max(MIN, z));
-  return ((clamped - MIN) / (MAX - MIN)) * 100;
-}
 
 function dashPercentile(value: string | null | undefined): string {
   if (!value || value === 'Н/Д' || value === 'НД') return '—';
@@ -63,7 +63,8 @@ export function ZScale({
       <ReportCardHeader>
         <ReportCardTitle className="text-base md:text-lg">Шкала интерпретации Z-оценки</ReportCardTitle>
         <p className="text-sm text-muted-foreground">
-          Диапазон −3…+3. Меньшая Z — выше производительность. Маркеры: план сверху, факт снизу.
+          Слева хуже (+3), справа лучше (−3). Меньшая Z — выше производительность. Маркеры: план
+          сверху, факт снизу.
         </p>
       </ReportCardHeader>
       <ReportCardContent className="flex flex-col gap-6">
@@ -75,7 +76,7 @@ export function ZScale({
                   key={zone.label}
                   className="flex items-center justify-center"
                   style={{
-                    width: `${((zone.to - zone.from) / (MAX - MIN)) * 100}%`,
+                    width: `${((zone.to - zone.from) / RANGE) * 100}%`,
                     backgroundColor: zone.color,
                   }}
                 >
@@ -91,7 +92,7 @@ export function ZScale({
                   className={`absolute flex -translate-x-1/2 flex-col items-center ${
                     m.side === 'top' ? '-top-8' : 'top-8'
                   }`}
-                  style={{ left: `${pct(m.zScore)}%` }}
+                  style={{ left: `${zScaleVisualPct(m.zScore)}%` }}
                   data-testid={`report-z-marker-${m.side === 'top' ? 'plan' : 'fact'}`}
                 >
                   {m.side === 'top' ? (
@@ -138,7 +139,7 @@ export function ZScale({
             )}
 
             <div className="mt-2 flex justify-between font-mono text-xs font-semibold text-foreground">
-              {['−3', '−2', '−1', '0', '+1', '+2', '+3'].map((tick) => (
+              {['+3', '+2', '+1', '0', '−1', '−2', '−3'].map((tick) => (
                 <span key={tick} data-testid="report-z-tick">
                   {tick}
                 </span>

@@ -203,6 +203,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "iic-work-directions" =>
                 await _context.IicWorkDirections.AsNoTracking().AnyAsync(x => x.ParentId == id, cancellationToken)
                 || await _context.IicWorkDirectionNorms.AsNoTracking().AnyAsync(x => x.WorkDirectionId == id, cancellationToken)
+                || await _context.IicWorkDirectionWorkCosts.AsNoTracking().AnyAsync(x => x.WorkDirectionId == id, cancellationToken)
                 || await _context.PhysicalVolumesKfo.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)
                 || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)
                 || await _context.Equipments.AsNoTracking().AnyAsync(x => x.ClassifierId == id, cancellationToken)

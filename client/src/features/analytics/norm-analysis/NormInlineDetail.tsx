@@ -20,6 +20,8 @@ import {
 } from '../../../api/normRegistryApi';
 import { previewNormCurve, type NormPreviewPoint } from '../../../api/normsApi';
 import { NormBandChart } from '../../norms/NormBandChart';
+import { NormTripleMetrics } from '../../norms/NormTripleMetrics';
+import { isKimCurveType, kimDeviation, muFromProductivity } from '../../norms/kimCurve';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { formatDate } from '../../../utils/formatDateTime';
 import type { DeviationFormulaDto, FormulaType, NormFormulaDto } from '../../../types/norms';
@@ -65,13 +67,27 @@ const FORMULA_NAME_TO_TYPE: Record<string, FormulaType> = {
   Constant: 9,
   Hyperbolic: 10,
   Exponential: 11,
+  KimCurve: 12,
 };
 
 function resolveFormulaType(raw: string): FormulaType {
   if (FORMULA_NAME_TO_TYPE[raw]) return FORMULA_NAME_TO_TYPE[raw];
   const n = Number(raw);
-  if (n >= 1 && n <= 11) return n as FormulaType;
+  if (n >= 1 && n <= 12) return n as FormulaType;
   return 1;
+}
+
+function scaleKimBand(
+  band: NormPreviewPoint[],
+  nextMean: number,
+  nextSigma: number,
+): NormPreviewPoint[] {
+  if (band.length === 0 || nextMean <= 0) return band;
+  const mu = Math.log(nextMean);
+  const center = nextMean;
+  const upper = Math.exp(mu + nextSigma);
+  const lower = Math.exp(mu - nextSigma);
+  return band.map((p) => ({ ...p, center, upper, lower }));
 }
 
 function scaleBand(
@@ -123,6 +139,7 @@ export function NormInlineDetail({
         setDetails(d);
         const formulaType = resolveFormulaType(d.norm.formulaType);
         const a = d.norm.parameters.a ?? d.norm.meanPerformance ?? 1;
+        const sigma = d.norm.parameters.sigma ?? d.norm.stdDeviation ?? 0.1;
         const normFormula: NormFormulaDto = {
           type: formulaType,
           coefficients: { a: Number(a), b: 0, ...d.norm.parameters },
@@ -130,10 +147,12 @@ export function NormInlineDetail({
           maxVolume: Math.max(100, Number(a) * 20),
           extrapolation: 2,
         };
-        const deviationFormula: DeviationFormulaDto = {
-          modelType: 1,
-          coefficients: { sigma: d.norm.stdDeviation ?? 0.1 },
-        };
+        const deviationFormula: DeviationFormulaDto = isKimCurveType(formulaType)
+          ? kimDeviation(Number(sigma))
+          : {
+              modelType: 1,
+              coefficients: { sigma: d.norm.stdDeviation ?? 0.1 },
+            };
         try {
           const preview = await previewNormCurve(normFormula, deviationFormula, 40);
           setBand(preview.band ?? []);
@@ -159,14 +178,19 @@ export function NormInlineDetail({
   const previous = previousNormInGroup(allRows, row);
   const mean = row.meanPerformance;
   const sigma = row.stdDeviation;
+  const mu = row.estimate
+    ?? (typeof row.parameters.mu === 'number' ? row.parameters.mu : null)
+    ?? (mean != null && mean > 0 ? muFromProductivity(mean) : null);
+  const kim = isKimCurveType(resolveFormulaType(row.formulaType));
   const nextMean = mean == null ? null : mean * (1 + meanOffsetPct / 100);
   const nextSigma = sigma == null ? null : sigma * sigmaMultiplier;
   const nextRatio =
     nextMean != null && nextSigma != null && nextMean !== 0 ? nextSigma / nextMean : 0;
   const proposedBand = useMemo(() => {
     if (mean == null || nextMean == null) return band;
+    if (kim && nextSigma != null) return scaleKimBand(band, nextMean, nextSigma);
     return scaleBand(band, mean, nextMean, nextRatio);
-  }, [band, mean, nextMean, nextRatio]);
+  }, [band, kim, mean, nextMean, nextRatio, nextSigma]);
 
   const canArchive = canEdit && row.status !== 'Historical';
   const primaryIssue = relatedIssues[0];
@@ -236,6 +260,10 @@ export function NormInlineDetail({
         ) : null}
       </Stack>
 
+      <Box sx={{ mt: 2 }}>
+        <NormTripleMetrics performance={mean} mu={mu} sigma={sigma} />
+      </Box>
+
       {error && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {error}
@@ -265,7 +293,7 @@ export function NormInlineDetail({
             <Stack spacing={0.75}>
               <Stack direction="row" justifyContent="space-between">
                 <Typography variant="caption" color="text.secondary">
-                  μ: {previous.meanPerformance.toFixed(3)} → {mean.toFixed(3)}
+                  Производительность: {previous.meanPerformance.toFixed(3)} → {mean.toFixed(3)}
                 </Typography>
                 {previous.meanPerformance !== 0 ? (
                   <Typography variant="caption" sx={{ fontWeight: 600 }}>

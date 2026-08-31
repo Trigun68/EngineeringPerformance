@@ -48,7 +48,13 @@ public sealed class FactNormAnalysisEngine : IFactNormAnalysisEngine
             totalPoints += points.Count;
 
             var meanFact = points.Count == 0 ? 0 : points.Average(p => p.Y);
-            var sigmaFact = ComputeStdDev(points.Select(p => p.Y).ToList());
+            var isKim = string.Equals(
+                group.CurrentNorm.FormulaCode,
+                ReferenceFormulaCodes.KimCurve,
+                StringComparison.OrdinalIgnoreCase);
+            var sigmaFact = isKim
+                ? ComputeLogStdDev(points.Select(p => p.Y).ToList())
+                : ComputeStdDev(points.Select(p => p.Y).ToList());
             var sigmaZero = group.CurrentNorm.StdDeviation <= 0 || double.IsNaN(group.CurrentNorm.StdDeviation);
             var deltaMean = meanFact - group.CurrentNorm.MeanPerformance;
             var deltaSigma = sigmaZero ? 0 : sigmaFact - group.CurrentNorm.StdDeviation;
@@ -154,6 +160,12 @@ public sealed class FactNormAnalysisEngine : IFactNormAnalysisEngine
         return new FactNormEngineResult(accuracyResult, comparisons, warnings);
     }
 
+    private static double ComputeLogStdDev(IReadOnlyList<double> values)
+    {
+        var logs = values.Where(v => v > 0).Select(v => Math.Log(v)).ToList();
+        return ComputeStdDev(logs);
+    }
+
     private static double ComputeStdDev(IReadOnlyList<double> values)
     {
         if (values.Count == 0) return 0;
@@ -166,8 +178,9 @@ public sealed class FactNormAnalysisEngine : IFactNormAnalysisEngine
     {
         try
         {
-            var formula = _formulas.FirstOrDefault(f =>
-                string.Equals(f.Code, current.FormulaCode, StringComparison.OrdinalIgnoreCase));
+            var formula = ReferenceFormulaCatalog.TryGet(current.FormulaCode)
+                ?? _formulas.FirstOrDefault(f =>
+                    string.Equals(f.Code, current.FormulaCode, StringComparison.OrdinalIgnoreCase));
             if (formula is null)
                 return current.CurrentR2 ?? 0;
 

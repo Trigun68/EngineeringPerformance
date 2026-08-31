@@ -22,6 +22,15 @@ public static class PdfNumberFormat
     public static string HoursWithUnit(decimal? value) =>
         value is null ? "—" : $"{Hours(value)} ч";
 
+    /// <summary>Стоимость на титуле PDF: целые рубли, ru-RU группировка, суффикс ₽. null — «—».</summary>
+    public static string CurrencyRub(decimal? value)
+    {
+        if (value is null)
+            return "—";
+        var rounded = decimal.Round(value.Value, 0, MidpointRounding.AwayFromZero);
+        return $"{rounded.ToString("N0", Ru)} ₽";
+    }
+
     public static string Productivity(decimal? value) => Format(value, ProductivityDecimals);
 
     public static string Z(decimal? value) => Format(value, ZDecimals);

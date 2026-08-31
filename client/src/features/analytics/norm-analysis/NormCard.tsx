@@ -23,6 +23,8 @@ import {
 } from '../../../api/normRegistryApi';
 import { previewNormCurve, type NormPreviewPoint } from '../../../api/normsApi';
 import { NormBandChart } from '../../norms/NormBandChart';
+import { NormTripleMetrics } from '../../norms/NormTripleMetrics';
+import { isKimCurveType, kimDeviation } from '../../norms/kimCurve';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { formatDate } from '../../../utils/formatDateTime';
 import type { DeviationFormulaDto, FormulaType, NormFormulaDto } from '../../../types/norms';
@@ -56,12 +58,13 @@ const FORMULA_NAME_TO_TYPE: Record<string, FormulaType> = {
   Constant: 9,
   Hyperbolic: 10,
   Exponential: 11,
+  KimCurve: 12,
 };
 
 function resolveFormulaType(raw: string): FormulaType {
   if (FORMULA_NAME_TO_TYPE[raw]) return FORMULA_NAME_TO_TYPE[raw];
   const n = Number(raw);
-  if (n >= 1 && n <= 11) return n as FormulaType;
+  if (n >= 1 && n <= 12) return n as FormulaType;
   return 1;
 }
 
@@ -96,6 +99,7 @@ export function NormCard({
         setDetails(d);
         const formulaType = resolveFormulaType(d.norm.formulaType);
         const a = d.norm.parameters.a ?? d.norm.meanPerformance ?? 1;
+        const sigma = d.norm.parameters.sigma ?? d.norm.stdDeviation ?? 0.1;
         const normFormula: NormFormulaDto = {
           type: formulaType,
           coefficients: { a: Number(a), b: 0, ...d.norm.parameters },
@@ -103,10 +107,12 @@ export function NormCard({
           maxVolume: Math.max(100, Number(a) * 20),
           extrapolation: 2,
         };
-        const deviationFormula: DeviationFormulaDto = {
-          modelType: 1,
-          coefficients: { sigma: d.norm.stdDeviation ?? 0.1 },
-        };
+        const deviationFormula: DeviationFormulaDto = isKimCurveType(formulaType)
+          ? kimDeviation(Number(sigma))
+          : {
+              modelType: 1,
+              coefficients: { sigma: d.norm.stdDeviation ?? 0.1 },
+            };
         try {
           const preview = await previewNormCurve(normFormula, deviationFormula, 40);
           setBand(preview.band ?? []);
@@ -178,6 +184,11 @@ export function NormCard({
           <Typography>
             <strong>Формула:</strong> {norm.formulaType} — {norm.formulaDisplay}
           </Typography>
+          <NormTripleMetrics
+            performance={norm.meanPerformance}
+            mu={norm.estimate ?? (typeof norm.parameters.mu === 'number' ? norm.parameters.mu : null)}
+            sigma={norm.stdDeviation}
+          />
           <Typography>
             <strong>Период:</strong> {formatDate(norm.effectiveFrom)} —{' '}
             {norm.effectiveTo ? formatDate(norm.effectiveTo) : '∞'}

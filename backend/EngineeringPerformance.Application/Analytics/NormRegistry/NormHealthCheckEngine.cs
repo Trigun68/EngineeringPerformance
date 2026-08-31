@@ -355,6 +355,15 @@ public static class NormHealthCheckEngine
                 return;
             }
         }
+
+        if (norm.FormulaType == FormulaType.KimCurve)
+        {
+            var aOk = TryGetCoeff(norm.Coefficients, "a", out var kimA) && kimA > 0;
+            if (!aOk || norm.StandardDeviation is not > 0)
+            {
+                AddInvalid(norm, severity, detectedAt, issues);
+            }
+        }
     }
 
     private static void AddInvalid(

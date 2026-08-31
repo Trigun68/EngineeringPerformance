@@ -10,7 +10,7 @@ public sealed record DictionaryItemDto(
 
 /// <summary>
 /// Справочники страницы «Справочники» + регистр норм ИИС (кэшируется на фронте).
-/// PhysicalVolumes — объединение KFO+BER (обратная совместимость); для FK БЭР→КФО
+/// PhysicalVolumes — объединение KFO+BER (обратная совместимость); для FK БЕР→КФО
 /// используйте PhysicalVolumesKfo (ID в таблицах не пересекаются по смыслу, но совпадают численно).
 /// </summary>
 public sealed record DictionariesAllDto(

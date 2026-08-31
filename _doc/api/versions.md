@@ -5,7 +5,7 @@
 
 Права: `ProjectAnalysisVersions`. Данные версии — `[RequireProjectAccess]`.
 
-Направление (`AnalysisDirection`): `Plan = 1`, `Fact = 2`, `Forecast = 3`. Версия привязана к типу номенклатуры ФО (`physicalVolumeTypeId`: КФО или БЭР из `dictionaries/all.physicalVolumeTypes`).
+Направление (`AnalysisDirection`): `Plan = 1`, `Fact = 2`, `Forecast = 3`. Версия привязана к типу номенклатуры ФО (`physicalVolumeTypeId`: КФО или БЕР из `dictionaries/all.physicalVolumeTypes`).
 
 При создании (и при `asOfDate` на update) пишется **снимок норм** `AnalysisVersionSnapshot`. Расчёты версии используют снимок, не живой справочник.
 

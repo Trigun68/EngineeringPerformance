@@ -64,7 +64,7 @@ test.describe('Mobile portal navigation', () => {
     await page.getByTestId('mobile-nav-toggle').click();
     await page.getByRole('link', { name: 'Справочники' }).click();
     await page.waitForURL(/\/references/);
-    await expect(page.getByRole('link', { name: /КФО|БЭР|Направления/i }).first()).toBeVisible({
+    await expect(page.getByRole('link', { name: /КФО|БЕР|Направления/i }).first()).toBeVisible({
       timeout: 15_000,
     });
   });

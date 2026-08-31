@@ -14,6 +14,7 @@ function predict(
   const c = params.c ?? 0;
   switch (code.toUpperCase()) {
     case 'CONSTANT':
+    case 'KIMCURVE':
       return a;
     case 'LINEAR':
       return a + b * x;

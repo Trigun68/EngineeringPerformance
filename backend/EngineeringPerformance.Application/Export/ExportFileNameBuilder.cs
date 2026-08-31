@@ -40,6 +40,7 @@ public static class ExportFileNameBuilder
         public const string ProductivityTrend = "тренд_производительности";
         public const string IicGroups = "группы_IIC";
         public const string IicNorms = "нормы_IIC";
+        public const string WorkCosts = "стоимость_работ";
     }
 
     public static class Qualifiers
@@ -115,6 +116,8 @@ public static class ExportFileNameBuilder
             "units-of-measurement" => "единицы",
             "project-characteristics" => "характеристики",
             "iic-work-direction-norms" => Views.IicNorms,
+            "work-costs" => Views.WorkCosts,
+            "iic-work-direction-work-costs" => Views.WorkCosts,
             _ => SanitizeToken(tabOrSlug) ?? Views.Catalog,
         };
 

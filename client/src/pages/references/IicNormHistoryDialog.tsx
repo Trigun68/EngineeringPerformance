@@ -19,6 +19,7 @@ import {
 } from '../../api/registersApi';
 import { DeviationFormulaEditor } from '../../features/norms/DeviationFormulaEditor';
 import { NormFormulaEditor } from '../../features/norms/NormFormulaEditor';
+import { applyNormFormulaFields, isKimCurveType, withKimDerived, kimDeviation } from '../../features/norms/kimCurve';
 import { defaultDeviationFormula, defaultNormFormula } from '../../types/norms';
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
 import { getApiErrorMessage } from '../../services/apiError';
@@ -37,20 +38,24 @@ interface IicNormHistoryDialogProps {
 }
 
 function toWriteRequest(workDirectionId: number, row: IicNormHistoryItem): IicNormWriteRequest {
-  const normFormula = normalizeNormFormula(row.normFormula, row.performance);
-  const deviationFormula = normalizeDeviationFormula(row.deviationFormula, row.performance, row.standardDeviation);
-  const performance = normFormula.coefficients.a ?? row.performance ?? null;
+  const next = applyNormFormulaFields(
+    normalizeNormFormula(row.normFormula, row.performance),
+    normalizeDeviationFormula(row.deviationFormula, row.performance, row.standardDeviation),
+  );
+  const performance = next.performance ?? row.performance ?? null;
   const unitId = row.unitId != null && row.unitId > 0 ? row.unitId : null;
   return {
     workDirectionId,
     performance,
-    estimate: row.estimate ?? null,
-    standardDeviation: row.standardDeviation ?? null,
+    estimate: isKimCurveType(next.normFormula.type) ? next.estimate : (row.estimate ?? null),
+    standardDeviation: isKimCurveType(next.normFormula.type)
+      ? next.standardDeviation
+      : (row.standardDeviation ?? next.standardDeviation),
     unitId,
     effectiveFrom: row.effectiveFrom,
     effectiveTo: row.effectiveTo ?? null,
-    normFormula,
-    deviationFormula,
+    normFormula: next.normFormula,
+    deviationFormula: next.deviationFormula,
   };
 }
 
@@ -69,6 +74,18 @@ function emptyHistoryItem(): IicNormHistoryItem {
 
 function hydrateHistoryItem(initial: IicNormHistoryItem): IicNormHistoryItem {
   const normFormula = normalizeNormFormula(initial.normFormula, initial.performance);
+  if (isKimCurveType(normFormula.type)) {
+    const synced = withKimDerived(normFormula, initial.standardDeviation ?? 0);
+    const sigma = synced.coefficients.sigma ?? 0;
+    return {
+      ...initial,
+      normFormula: synced,
+      deviationFormula: kimDeviation(sigma),
+      performance: synced.coefficients.a ?? initial.performance ?? null,
+      estimate: synced.coefficients.mu ?? null,
+      standardDeviation: sigma,
+    };
+  }
   const deviationFormula = normalizeDeviationFormula(
     initial.deviationFormula,
     initial.performance,
@@ -169,15 +186,22 @@ export function IicNormHistoryDialog({
               chartVisible={open}
               value={normFormula}
               deviationFormula={deviationFormula}
-              onChange={(nextNorm) =>
+              onChange={(nextNorm) => {
+                const next = applyNormFormulaFields(nextNorm, deviationFormula);
                 setForm({
                   ...form,
-                  normFormula: nextNorm,
-                  performance: nextNorm.coefficients.a ?? form.performance,
-                })
-              }
+                  normFormula: next.normFormula,
+                  deviationFormula: next.deviationFormula,
+                  performance: next.performance,
+                  estimate: isKimCurveType(next.normFormula.type) ? next.estimate : form.estimate,
+                  standardDeviation: isKimCurveType(next.normFormula.type)
+                    ? next.standardDeviation
+                    : form.standardDeviation,
+                });
+              }}
             />
           </DirectoryFormRow>
+          {!isKimCurveType(normFormula.type) && (
           <DirectoryFormRow label="Отклонение от нормы, %">
             <DeviationFormulaEditor
               value={deviationFormula}
@@ -192,6 +216,7 @@ export function IicNormHistoryDialog({
               }}
             />
           </DirectoryFormRow>
+          )}
         </Grid>
         {error && (
           <Alert severity="error" sx={{ mt: 1 }}>

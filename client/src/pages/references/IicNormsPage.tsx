@@ -32,6 +32,7 @@ import { IicNormHistoryDialog } from './IicNormHistoryDialog';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { DeviationFormulaEditor } from '../../features/norms/DeviationFormulaEditor';
 import { NormFormulaEditor } from '../../features/norms/NormFormulaEditor';
+import { applyNormFormulaFields, formulaTypeLabel, isKimCurveType } from '../../features/norms/kimCurve';
 import { defaultDeviationFormula, defaultNormFormula } from '../../types/norms';
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
 
@@ -192,8 +193,8 @@ export function IicNormsPage() {
       { field: 'performance', headerName: 'Производительность', minWidth: 130 },
       {
         headerName: 'Тип формулы',
-        minWidth: 120,
-        valueGetter: (p) => (p.data?.normFormula?.type === 1 ? 'Линейная' : p.data?.normFormula?.type ?? '—'),
+        minWidth: 140,
+        valueGetter: (p) => formulaTypeLabel(p.data?.normFormula?.type),
       },
       {
         colId: 'migration',
@@ -201,8 +202,8 @@ export function IicNormsPage() {
         minWidth: 130,
         valueGetter: (p) => (p.data?.migratedAt ? 'Автоконверт.' : ''),
       },
-      { field: 'estimate', headerName: 'Оценка', minWidth: 100 },
-      { field: 'standardDeviation', headerName: 'Станд. отклонение', minWidth: 140 },
+      { field: 'estimate', headerName: 'μ', minWidth: 100 },
+      { field: 'standardDeviation', headerName: 'σ', minWidth: 110 },
       {
         colId: 'unitName',
         headerName: 'Ед. изм.',
@@ -371,7 +372,20 @@ export function IicNormsPage() {
       }
       const unitId = resolveIicDirectionUnitId(form.workDirectionId, directions);
       setMutating(true);
-      await createIicNorm({ ...form, unitId });
+      const next = applyNormFormulaFields(
+        form.normFormula ?? defaultNormFormula(form.performance ?? 0),
+        form.deviationFormula ?? defaultDeviationFormula(),
+      );
+      const kim = isKimCurveType(next.normFormula.type);
+      await createIicNorm({
+        ...form,
+        unitId,
+        normFormula: next.normFormula,
+        deviationFormula: next.deviationFormula,
+        performance: next.performance,
+        estimate: kim ? next.estimate : form.estimate,
+        standardDeviation: kim ? next.standardDeviation : form.standardDeviation,
+      });
       setModalOpen(false);
       await load();
     } catch {
@@ -521,9 +535,25 @@ export function IicNormsPage() {
               <NormFormulaEditor
                 value={form.normFormula ?? defaultNormFormula(form.performance ?? 0)}
                 deviationFormula={form.deviationFormula ?? defaultDeviationFormula()}
-                onChange={(normFormula) => setForm({ ...form, normFormula, performance: normFormula.coefficients.a ?? form.performance })}
+                onChange={(normFormula) => {
+                  const next = applyNormFormulaFields(
+                    normFormula,
+                    form.deviationFormula ?? defaultDeviationFormula(),
+                  );
+                  setForm({
+                    ...form,
+                    normFormula: next.normFormula,
+                    deviationFormula: next.deviationFormula,
+                    performance: next.performance,
+                    estimate: isKimCurveType(next.normFormula.type) ? next.estimate : form.estimate,
+                    standardDeviation: isKimCurveType(next.normFormula.type)
+                      ? next.standardDeviation
+                      : form.standardDeviation,
+                  });
+                }}
               />
             </DirectoryFormRow>
+            {!isKimCurveType(form.normFormula?.type) && (
             <DirectoryFormRow label="Отклонение от нормы, %">
               <DeviationFormulaEditor
                 value={form.deviationFormula ?? defaultDeviationFormula()}
@@ -538,6 +568,7 @@ export function IicNormsPage() {
                 }}
               />
             </DirectoryFormRow>
+            )}
             <DirectoryFormRow label="Действует с">
               <TextField
                 type="date"
@@ -610,8 +641,8 @@ export function IicNormsPage() {
                 <Box sx={{ width: 140 }}>Действует по</Box>
                 <Box sx={{ width: 110 }}>Производительность</Box>
                 <Box sx={{ width: 90 }}>Тип формулы</Box>
-                <Box sx={{ width: 80 }}>Оценка</Box>
-                <Box sx={{ width: 110 }}>Станд. отклонение</Box>
+                <Box sx={{ width: 80 }}>μ</Box>
+                <Box sx={{ width: 110 }}>σ</Box>
               </Stack>
 
               {historyRows.map((row) => {
@@ -642,7 +673,7 @@ export function IicNormsPage() {
                       {row.performance ?? '—'}
                     </Typography>
                     <Typography variant="body2" sx={{ width: 90 }}>
-                      {row.normFormula?.type === 1 ? 'Линейная' : row.normFormula?.type ?? '—'}
+                      {formulaTypeLabel(row.normFormula?.type)}
                     </Typography>
                     <Typography variant="body2" sx={{ width: 80 }}>
                       {row.estimate ?? '—'}

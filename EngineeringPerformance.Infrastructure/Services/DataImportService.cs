@@ -556,9 +556,9 @@ public sealed class DataImportService : IDataImportService
         AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
 
         parts.Add(string.Empty);
-        parts.Add("Каждая строка файла сопоставляется с записью каталога по полю Code (шифр работы: БЭР вида 01-01-001-01 или КФО2 вида KQ.02.160).");
+        parts.Add("Каждая строка файла сопоставляется с записью каталога по полю Code (шифр работы: БЕР вида 01-01-001-01 или КФО2 вида KQ.02.160).");
         parts.Add("Если много строк «без распознанного шифра», проверьте, что в ожидаемых колонках есть именно такие коды (а не только наименование), и что открыт лист «Список работ» с колонкой «Код по каталогу» / «Шифр по каталогу».");
-        parts.Add("Если в базе только демонстрационные коды (например FO-001), а в файле — полные шифры БЭР или КФО2, совпадений не будет, пока в каталог не загружен полный перечень работ.");
+        parts.Add("Если в базе только демонстрационные коды (например FO-001), а в файле — полные шифры БЕР или КФО2, совпадений не будет, пока в каталог не загружен полный перечень работ.");
         parts.Add("Проверьте справочник «Физические объёмы» в приложении или выполните миграцию с полными данными каталога.");
 
         return string.Join(Environment.NewLine, parts);
@@ -590,7 +590,7 @@ public sealed class DataImportService : IDataImportService
         AppendSkippedRowDetails(parts, skippedNoEpCodeRows, skippedNotInCatalogRows);
 
         parts.Add(string.Empty);
-        parts.Add("Проверьте перечисленные строки в файле «Список работ»: в колонке «ID по каталогу» / «Шифр работ» должен быть код БЭР (01-01-001-01) или КФО2 (KQ.02.160). После заполнения шифров повторите импорт.");
+        parts.Add("Проверьте перечисленные строки в файле «Список работ»: в колонке «ID по каталогу» / «Шифр работ» должен быть код БЕР (01-01-001-01) или КФО2 (KQ.02.160). После заполнения шифров повторите импорт.");
 
         return string.Join(Environment.NewLine, parts);
     }
@@ -1618,7 +1618,7 @@ public sealed class DataImportService : IDataImportService
         return false;
     }
 
-    /// <summary>Совпадение с шифром БЭР (01-01-001-01) или КФО2 (KQ.02.160) в ячейке или внутри текста.</summary>
+    /// <summary>Совпадение с шифром БЕР (01-01-001-01) или КФО2 (KQ.02.160) в ячейке или внутри текста.</summary>
     private static bool CellTextLooksLikeCatalogWorkCode(string x)
     {
         if (CatalogEpCodeLoosePattern.IsMatch(x) || CatalogEpCodePattern.IsMatch(x))

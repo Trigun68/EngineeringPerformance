@@ -73,7 +73,7 @@ The initial migration creates the core tables; later DDL adds columns and tables
 | `Projects` | Project definitions with metadata |
 | `ProjectAnalysisVersions` | Project analysis versions (plan / fact / forecast) |
 | `ProjectUserAccess` | User–project access mapping |
-| `PhysicalVolumeTypes` | Types of physical volumes (БЭР, КФО, …) |
+| `PhysicalVolumeTypes` | Types of physical volumes (БЕР, КФО, …) |
 | `PhysicalVolumes` | Physical volume catalog (includes `Coefficient` after `007`) |
 | `IicWorkDirections` | Work direction classifier (IIC) |
 | `IicWorkDirectionNorms` | Norms register |
@@ -92,7 +92,7 @@ The `migrations/data/002_SeedData.sql` script loads **reference and demo** data.
 |------|----------|
 | Roles / Users | Administrator, ProjectManager, Observer; users `admin`, `manager`, `observer`, optional `eliseev` (passwords documented in script header) |
 | Units | м³, м², шт, т, кг, час, ярд³, компл., км, м, га, п.м. |
-| Physical volume types | БЭР, КФО |
+| Physical volume types | БЕР, КФО |
 | IIC work directions | Full tree from «Техас» sheet (`Копия ++++-1.xlsx`), codes `IIC-*` |
 | IIC norms | Norms per direction (performance / estimate / std dev where applicable) |
 | Projects | Не сидируются (создаются в UI) |

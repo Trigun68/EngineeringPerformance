@@ -59,6 +59,13 @@ export const REFERENCE_ROUTES: ReferenceRouteConfig[] = [
     isHierarchical: true,
   },
   {
+    path: 'work-costs',
+    resource: 'work-costs',
+    title: 'Стоимость работ',
+    permission: 'EngineeringWorkCosts',
+    isHierarchical: true,
+  },
+  {
     path: 'units-of-measurement',
     resource: 'units-of-measurement',
     title: 'Единицы измерения',

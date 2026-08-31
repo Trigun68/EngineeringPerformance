@@ -76,10 +76,12 @@ END;
 -- ============================================================================
 -- 4. Physical Volume Types
 -- ============================================================================
-IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'БЭР')
+UPDATE [PhysicalVolumeTypes] SET [Name] = N'БЕР' WHERE [Name] = N'БЭР';
+
+IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'БЕР')
 BEGIN
     INSERT INTO [PhysicalVolumeTypes] ([Name], [Description], [IsArchived], [CreatedAt])
-    VALUES (N'БЭР', N'Базовая единица ресурса', 0, SYSUTCDATETIME());
+    VALUES (N'БЕР', N'Базовая единица ресурса', 0, SYSUTCDATETIME());
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'КФО')

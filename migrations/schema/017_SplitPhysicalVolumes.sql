@@ -126,7 +126,7 @@ BEGIN
         pv.[IsArchived], pv.[CreatedAt], pv.[ModifiedAt]
     FROM [PhysicalVolumes] pv
     INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
-    WHERE pvt.[Name] LIKE N'БЭР%';
+    WHERE pvt.[Name] LIKE N'БЕР%' OR pvt.[Name] LIKE N'БЭР%';
     SET IDENTITY_INSERT [PhysicalVolumesBer] OFF;
 END;
 GO
@@ -154,7 +154,7 @@ BEGIN
     FROM [ProjectPhysicalVolumes] ppv
     INNER JOIN [PhysicalVolumes] pv ON pv.[Id] = ppv.[PhysicalVolumeId]
     INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
-    WHERE pvt.[Name] LIKE N''БЭР%'' AND ppv.[PhysicalVolumeBerId] IS NULL;
+    WHERE (pvt.[Name] LIKE N''БЕР%'' OR pvt.[Name] LIKE N''БЭР%'') AND ppv.[PhysicalVolumeBerId] IS NULL;
     ');
 END;
 GO
@@ -181,7 +181,7 @@ BEGIN
     FROM [ProjectLaborIntensities] li
     INNER JOIN [PhysicalVolumes] pv ON pv.[Id] = li.[PhysicalVolumeId]
     INNER JOIN [PhysicalVolumeTypes] pvt ON pvt.[Id] = pv.[VolumeTypeId]
-    WHERE pvt.[Name] LIKE N''БЭР%'' AND li.[PhysicalVolumeBerId] IS NULL;
+    WHERE (pvt.[Name] LIKE N''БЕР%'' OR pvt.[Name] LIKE N''БЭР%'') AND li.[PhysicalVolumeBerId] IS NULL;
     ');
 END;
 GO

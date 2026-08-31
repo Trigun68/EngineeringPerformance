@@ -141,3 +141,111 @@ export async function exportIicNormsExcel(): Promise<void> {
   );
   triggerBrowserDownload(blob, filename);
 }
+
+export interface WorkCostRow {
+  id: number;
+  workDirectionId: number;
+  parentId?: number | null;
+  sortOrder: number;
+  workDirectionName: string;
+  workDirectionCode?: string | null;
+  ratePerHour?: number | null;
+  effectiveFrom?: string | null;
+  periodId?: number | null;
+}
+
+const workCostRowSchema = z.object({
+  id: z.number().int(),
+  workDirectionId: z.number().int(),
+  parentId: z.number().int().nullable().optional(),
+  sortOrder: z.number().int(),
+  workDirectionName: z.string(),
+  workDirectionCode: z.string().nullable().optional(),
+  ratePerHour: z.number().nullable().optional(),
+  effectiveFrom: z.string().nullable().optional(),
+  periodId: z.number().int().nullable().optional(),
+});
+const workCostListSchema = z.array(workCostRowSchema);
+
+export async function fetchWorkCosts(asOf?: string): Promise<WorkCostRow[]> {
+  const { data } = await apiClient.get<WorkCostRow[]>('/registers/work-costs', {
+    params: asOf ? { asOf } : undefined,
+  });
+  return parseApiContract('/registers/work-costs', workCostListSchema, data) as WorkCostRow[];
+}
+
+export interface WorkCostBatchItem {
+  workDirectionId: number;
+  ratePerHour: number;
+}
+
+export interface WorkCostBatchRequest {
+  effectiveFrom: string;
+  level: 1 | 2 | 3 | 4;
+  items: WorkCostBatchItem[];
+}
+
+export interface WorkCostBatchResult {
+  writtenCount: number;
+}
+
+const workCostBatchResultSchema = z.object({
+  writtenCount: z.number().int(),
+});
+
+export async function saveWorkCostsBatch(body: WorkCostBatchRequest): Promise<WorkCostBatchResult> {
+  const { data } = await apiClient.post<WorkCostBatchResult>('/registers/work-costs/batch', body);
+  return parseApiContract('/registers/work-costs/batch', workCostBatchResultSchema, data);
+}
+
+export async function exportWorkCostsExcelFromGrid(
+  tabName: string,
+  headers: string[],
+  rows: string[][],
+): Promise<void> {
+  const { blob, filename } = await downloadBlobPost(
+    '/registers/work-costs/export',
+    { tabName, headers, rows },
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export interface WorkCostPeriod {
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  effectiveToVaries: boolean;
+  directionCount: number;
+  uniformRate?: number | null;
+}
+
+const workCostPeriodSchema = z.object({
+  effectiveFrom: z.string(),
+  effectiveTo: z.string().nullable().optional(),
+  effectiveToVaries: z.boolean(),
+  directionCount: z.number().int(),
+  uniformRate: z.number().nullable().optional(),
+});
+const workCostPeriodListSchema = z.array(workCostPeriodSchema);
+
+export async function fetchWorkCostPeriods(): Promise<WorkCostPeriod[]> {
+  const { data } = await apiClient.get<WorkCostPeriod[]>('/registers/work-costs/periods');
+  return parseApiContract('/registers/work-costs/periods', workCostPeriodListSchema, data);
+}
+
+export async function fetchWorkCostPeriod(effectiveFrom: string): Promise<WorkCostRow[]> {
+  const { data } = await apiClient.get<WorkCostRow[]>('/registers/work-costs', {
+    params: { effectiveFrom },
+  });
+  return parseApiContract('/registers/work-costs', workCostListSchema, data) as WorkCostRow[];
+}
+
+const workCostPeriodDeleteSchema = z.object({
+  deletedCount: z.number().int(),
+});
+
+export async function deleteWorkCostPeriod(effectiveFrom: string): Promise<{ deletedCount: number }> {
+  const { data } = await apiClient.delete('/registers/work-costs/periods', {
+    params: { effectiveFrom },
+  });
+  return parseApiContract('/registers/work-costs/periods', workCostPeriodDeleteSchema, data);
+}

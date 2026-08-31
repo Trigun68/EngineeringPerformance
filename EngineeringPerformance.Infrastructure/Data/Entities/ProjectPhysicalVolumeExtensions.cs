@@ -1,6 +1,6 @@
 namespace EngineeringPerformance.Infrastructure.Data;
 
-/// <summary>Единый доступ к полям каталога КФО/БЭР через ProjectPhysicalVolume.</summary>
+/// <summary>Единый доступ к полям каталога КФО/БЕР через ProjectPhysicalVolume.</summary>
 public static class ProjectPhysicalVolumeExtensions
 {
     public static string GetVolumeCode(this ProjectPhysicalVolume ppv) =>

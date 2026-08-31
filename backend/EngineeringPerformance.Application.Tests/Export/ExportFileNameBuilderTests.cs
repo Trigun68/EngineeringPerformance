@@ -103,6 +103,7 @@ public sealed class ExportFileNameBuilderTests
     public void DirectoryView_MapsKnownSlugs()
     {
         ExportFileNameBuilder.DirectoryView("iic-work-direction-norms").Should().Be("нормы_IIC");
+        ExportFileNameBuilder.DirectoryView("work-costs").Should().Be("стоимость_работ");
         ExportFileNameBuilder.DirectoryView("equipment").Should().Be("оборудование");
     }
 

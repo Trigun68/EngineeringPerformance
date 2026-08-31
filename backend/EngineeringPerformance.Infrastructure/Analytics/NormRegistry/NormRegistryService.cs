@@ -272,7 +272,7 @@ public sealed class NormRegistryService(
         if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
         {
             var sb = new StringBuilder();
-            sb.AppendLine("Id;Group;Formula;Mu;Sigma;From;To;Status;Versions;Issues");
+            sb.AppendLine("Id;Group;Formula;Performance;Mu;Sigma;From;To;Status;Versions;Issues");
             foreach (var r in items)
             {
                 sb.AppendLine(string.Join(';',
@@ -280,6 +280,7 @@ public sealed class NormRegistryService(
                     Escape(r.GroupName),
                     r.FormulaType,
                     r.MeanPerformance,
+                    r.Estimate,
                     r.StdDeviation,
                     r.EffectiveFrom.ToString("yyyy-MM-dd"),
                     r.EffectiveTo?.ToString("yyyy-MM-dd") ?? "",
@@ -301,13 +302,14 @@ public sealed class NormRegistryService(
         sheet.Cell(1, 2).Value = "Group";
         sheet.Cell(1, 3).Value = "Formula";
         sheet.Cell(1, 4).Value = "Display";
-        sheet.Cell(1, 5).Value = "Mu";
-        sheet.Cell(1, 6).Value = "Sigma";
-        sheet.Cell(1, 7).Value = "From";
-        sheet.Cell(1, 8).Value = "To";
-        sheet.Cell(1, 9).Value = "Status";
-        sheet.Cell(1, 10).Value = "Versions";
-        sheet.Cell(1, 11).Value = "Issues";
+        sheet.Cell(1, 5).Value = "Performance";
+        sheet.Cell(1, 6).Value = "Mu";
+        sheet.Cell(1, 7).Value = "Sigma";
+        sheet.Cell(1, 8).Value = "From";
+        sheet.Cell(1, 9).Value = "To";
+        sheet.Cell(1, 10).Value = "Status";
+        sheet.Cell(1, 11).Value = "Versions";
+        sheet.Cell(1, 12).Value = "Issues";
         var row = 2;
         foreach (var r in items)
         {
@@ -316,12 +318,13 @@ public sealed class NormRegistryService(
             sheet.Cell(row, 3).Value = r.FormulaType;
             sheet.Cell(row, 4).Value = r.FormulaDisplay;
             sheet.Cell(row, 5).Value = r.MeanPerformance;
-            sheet.Cell(row, 6).Value = r.StdDeviation;
-            sheet.Cell(row, 7).Value = r.EffectiveFrom;
-            sheet.Cell(row, 8).Value = r.EffectiveTo;
-            sheet.Cell(row, 9).Value = r.Status;
-            sheet.Cell(row, 10).Value = r.TotalVersions;
-            sheet.Cell(row, 11).Value = r.IssueCount;
+            sheet.Cell(row, 6).Value = r.Estimate;
+            sheet.Cell(row, 7).Value = r.StdDeviation;
+            sheet.Cell(row, 8).Value = r.EffectiveFrom;
+            sheet.Cell(row, 9).Value = r.EffectiveTo;
+            sheet.Cell(row, 10).Value = r.Status;
+            sheet.Cell(row, 11).Value = r.TotalVersions;
+            sheet.Cell(row, 12).Value = r.IssueCount;
             row++;
         }
 
@@ -549,7 +552,11 @@ public sealed class NormRegistryService(
         var status = NormDerivedStatus.Resolve(n.EffectiveFrom, n.EffectiveTo, today);
         hints.TryGetValue(n.Id, out var hint);
         issuesByNorm.TryGetValue(n.Id, out var iss);
-        var mu = n.Performance ?? (formula.Coefficients.TryGetValue("a", out var a) ? a : (decimal?)null);
+        var performance = n.Performance ?? (formula.Coefficients.TryGetValue("a", out var a) ? a : (decimal?)null);
+        var estimate = n.Estimate
+            ?? (n.FormulaType == FormulaType.KimCurve && performance is > 0
+                ? KimCurveMath.Ln(performance.Value)
+                : null);
         var sigma = n.StandardDeviation;
 
         return new NormListItemDto(
@@ -560,7 +567,8 @@ public sealed class NormRegistryService(
             n.FormulaType.ToString(),
             NormFormulaDisplay.Format(n.FormulaType, formula.Coefficients),
             formula.Coefficients.ToDictionary(kv => kv.Key, kv => kv.Value),
-            mu is null ? null : (double)mu.Value,
+            performance is null ? null : (double)performance.Value,
+            estimate is null ? null : (double)estimate.Value,
             sigma is null ? null : (double)sigma.Value,
             n.EffectiveFrom,
             n.EffectiveTo,

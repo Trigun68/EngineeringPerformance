@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace EngineeringPerformance.Api.Tests;
 
 /// <summary>
-/// Версия БЭР/КФО: AsOfDate → CreatedAt + снимок норм; импорт ФО → корректный FK;
+/// Версия БЕР/КФО: AsOfDate → CreatedAt + снимок норм; импорт ФО → корректный FK;
 /// смена каталога при уже импортированных PPV запрещена.
 /// Uses disposable <see cref="TestProjectScope"/> — never attaches to seed projects.
 /// </summary>
@@ -242,7 +242,7 @@ public sealed class ProjectVersionCatalogSnapshotApiTests : IClassFixture<ApiWeb
         foreach (var item in dictDoc.RootElement.GetProperty("physicalVolumeTypes").EnumerateArray())
         {
             var name = item.GetProperty("name").GetString();
-            if (name == "БЭР") ber = item.GetProperty("id").GetInt32();
+            if (name is "БЕР" or "БЭР") ber = item.GetProperty("id").GetInt32();
             if (name == "КФО") kfo = item.GetProperty("id").GetInt32();
         }
 

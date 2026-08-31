@@ -9,6 +9,7 @@ const OBJECT_NAME_RU: Record<string, string> = {
   LaborIntensities: 'Трудоёмкость',
   ProjectAnalysisVersions: 'Версии анализа проекта',
   IicWorkDirectionNorms: 'Нормы групп физ. объёмов (IIC)',
+  EngineeringWorkCosts: 'Стоимость работ',
   UnitsOfMeasurement: 'Единицы измерения',
   ProjectCharacteristics: 'Характеристики проекта',
   ProjectPhysicalVolumes: 'Физ. объёмы по проекту',

@@ -203,7 +203,7 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken)
     {
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, projectName, versionName, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, projectName, versionName, _, _) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
         return (data, $"{caption}: {projectCode} ({versionName})", TabularReportBanner.Lines(projectCode, projectName, versionName));
     }
 
@@ -213,7 +213,7 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken = default)
     {
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
 
         var assessed = data.Forecast.Detail
             .Where(r => string.Equals(r.IsAssessment, "Да", StringComparison.Ordinal))
@@ -315,7 +315,7 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken = default)
     {
         var data = await _dataFetcher.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _, directions) = await _summaryTableContext.LoadAsync(projectId, versionId, cancellationToken);
 
         var inputRows = data.Fact.Detail
             .Where(r => string.Equals(r.IsAssessment, "Да", StringComparison.Ordinal))

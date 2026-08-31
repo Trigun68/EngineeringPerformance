@@ -30,7 +30,7 @@
 2. **Оценка факта** — сравнение фактической производительности с нормативом (Z-score, интерпретация).
 3. **Сравнение версий** — анализ изменений между итерациями проекта (план/факт).
 4. **Тренды** — динамика показателей по версиям одного проекта.
-5. **Справочники** — номенклатура, нормы, единицы измерения, характеристики.
+5. **Справочники** — номенклатура, нормы, стоимость работ, единицы измерения, характеристики.
 
 Данные организованы вокруг **проекта** → **версии анализа** (`ProjectAnalysisVersion`) с направлением `Plan` (прогноз) или `Fact` (факт).
 
@@ -41,7 +41,7 @@
 | Термин | Описание |
 |--------|----------|
 | **ИИС / IIC** | Иерархия направлений работ (`IicWorkDirection`) — дисциплины проектирования |
-| **КФО / БЭР** | Типы номенклатуры физических объёмов (`PhysicalVolumeType`); версия привязана к одному типу |
+| **КФО / БЕР** | Типы номенклатуры физических объёмов (`PhysicalVolumeType`); версия привязана к одному типу |
 | **ФО / PPV** | Проектные физические объёмы (`ProjectPhysicalVolume`) |
 | **LI / PLI** | Проектные трудозатраты (`ProjectLaborIntensity`) |
 | **Норма** | `IicWorkDirectionNorm` — производительность N(V), отклонение σ, период действия |
@@ -60,7 +60,7 @@
 ```
 Project
  └── ProjectAnalysisVersion (Direction: Plan | Fact)
-      ├── PhysicalVolumeTypeId → КФО или БЭР
+      ├── PhysicalVolumeTypeId → КФО или БЕР
       ├── PlanningScenario (только Plan)
       ├── AnalysisVersionSnapshot[] → NormId по WorkDirectionId
       ├── ProjectVersionPlanningParameter[] → Z-параметры по IIC
@@ -101,9 +101,10 @@ Desktop (`EngineeringPerformance.App/`) **не рассматривается** 
 |------------|----------|----------|----------------|
 | Группы ИИС | `IicWorkDirection` | Да | `UnitId` → ед. изм.; целевая привязка для ClassifierId |
 | Нормы ИИС | `IicWorkDirectionNorm` | Регистр (периоды) | `WorkDirectionId` → IIC; формулы N(V), σ |
-| Типы ФО | `PhysicalVolumeType` | Плоский | КФО / БЭР → выбор каталога версии |
+| Стоимость работ | `IicWorkDirectionWorkCost` | Регистр (периоды) | `WorkDirectionId` → IIC; ставка ₽/ч на дату |
+| Типы ФО | `PhysicalVolumeType` | Плоский | КФО / БЕР → выбор каталога версии |
 | Номенклатура КФО | `PhysicalVolumeKfo` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `IicNormId`* |
-| Номенклатура БЭР | `PhysicalVolumeBer` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment` |
+| Номенклатура БЕР | `PhysicalVolumeBer` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment` |
 | Оборудование | `Equipment` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `CatalogKeyHash` |
 | Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта), `IicWorkDirectionId` |
 | Единицы измерения | `UnitOfMeasurement` | Плоский | Используется во всех номенклатурах |
@@ -148,7 +149,7 @@ flowchart LR
 
 ### 4.3. Правила привязки каталога к версии
 
-Версия хранит `PhysicalVolumeTypeId`. Имя типа строго **«КФО»** или **«БЭР»** — определяет, какой каталог номенклатуры используется при импорте и отображении (`PhysicalVolumeCatalogBinding`).
+Версия хранит `PhysicalVolumeTypeId`. Имя типа строго **«КФО»** или **«БЕР»** — определяет, какой каталог номенклатуры используется при импорте и отображении (`PhysicalVolumeCatalogBinding`).
 
 `ProjectPhysicalVolume` содержит **взаимоисключающие** FK: `PhysicalVolumeKfoId` **или** `PhysicalVolumeBerId`.
 
@@ -451,7 +452,7 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Шаг | Правило |
 |-----|---------|
-| Сопоставление | По `Code` каталога; нормализация EP-кодов (тире, zero-padding, regex БЭР/КФО) |
+| Сопоставление | По `Code` каталога; нормализация EP-кодов (тире, zero-padding, regex БЕР/КФО) |
 | Дубли кода | Эвристика: с ClassifierId → длиннейший Code → меньший Id |
 | Пропуск | Строки без EP-кода или без совпадения в каталоге |
 | Backfill | ClassifierId из цепочки предков, если у листа NULL |
@@ -499,7 +500,7 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 |--------|-------------|---------|--------|
 | `AnalyticsExportService` | `Export/` | xlsx, pdf | Анализ версии, прогноз |
 | `ProjectExportService` | `Export/` | xlsx, pdf | 9 гридов, сводные таблицы |
-| `VisualReportService` | `Export/` | pdf + графики | ScottPlot → PNG → QuestPDF |
+| `VisualReportService` | `Export/` | pdf + графики | ScottPlot → PNG → QuestPDF; на титуле прогноза под сценарием — ₽ (`ComputeScenarioWorkCosts`) |
 
 Экспорт **паритетен UI**: данные через `IProjectsPageDataFetcher` и сервисы аналитики.
 

@@ -23,7 +23,7 @@ BEGIN
     INSERT INTO @MatrixObjects ([ObjectName]) VALUES
         (N'Dashboard'), (N'Users'), (N'Projects'), (N'PhysicalVolumes'), (N'PhysicalVolumeTypes'),
         (N'Equipment'), (N'IicWorkDirections'), (N'ProjectAnalysisVersions'),
-        (N'IicWorkDirectionNorms'), (N'UnitsOfMeasurement'),
+        (N'IicWorkDirectionNorms'), (N'EngineeringWorkCosts'), (N'UnitsOfMeasurement'),
         (N'ProjectPhysicalVolumes'), (N'ProjectEquipments'), (N'ProjectLaborIntensities'),
         (N'ProjectDataUpload'), (N'Assessment'), (N'Planning'),
         (N'VersionComparison'), (N'GroupAnalysis'), (N'GroupTrend'),

@@ -48,6 +48,7 @@ public static class NormFormulaEvaluator
             FormulaType.Hyperbolic when v <= 0m => 0m,
             FormulaType.Hyperbolic => Math.Max(0m, Coeff(c, "a") + Coeff(c, "b") / v),
             FormulaType.Exponential => Math.Max(0m, Coeff(c, "a") * (decimal)Math.Exp((double)Coeff(c, "b") * (double)v)),
+            FormulaType.KimCurve => Math.Max(0m, Coeff(c, "a")),
             _ => throw new ArgumentOutOfRangeException(nameof(formula.Type)),
         };
     }

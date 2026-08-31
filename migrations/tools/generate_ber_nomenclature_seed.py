@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Генерирует seed/refresh SQL для PhysicalVolumesBer из листа «Спр_Номенклатура ФО».
 
-Иерархия БЭР: сборники «01»..«17» (корни) → отделы → группы → расценки «01-01-001-01».
+Иерархия БЕР: сборники «01»..«17» (корни) → отделы → группы → расценки «01-01-001-01».
 Связь с КФО: столбец «Код КФО» → [PhysicalVolumeKfoId].
 Связь с группами физ. объёмов (IIC): «Классификатор КИМ» → [ClassifierId].
 """
@@ -161,7 +161,7 @@ def node_values(meta: dict, *, sort_order: int) -> tuple[str, str, str, str, str
 
 def emit_post_link_sql() -> list[str]:
     return [
-        "-- ClassifierId: наследование от родителя в дереве БЭР",
+        "-- ClassifierId: наследование от родителя в дереве БЕР",
         "WHILE 1 = 1",
         "BEGIN",
         "    UPDATE pv",
@@ -183,7 +183,7 @@ def emit_post_link_sql() -> list[str]:
         "WHERE ber.[ClassifierId] IS NULL",
         "  AND kfo.[ClassifierId] IS NOT NULL;",
         "",
-        "-- Повторное наследование ClassifierId от родителя БЭР",
+        "-- Повторное наследование ClassifierId от родителя БЕР",
         "WHILE 1 = 1",
         "BEGIN",
         "    UPDATE pv",
@@ -206,7 +206,7 @@ def emit_seed(nodes: dict[str, dict], excel: Path) -> str:
     units = collect_units(nodes)
     lines: list[str] = [
         "-- ============================================================================",
-        "-- Номенклатура физических объёмов БЭР — лист «Спр_Номенклатура ФО»",
+        "-- Номенклатура физических объёмов БЕР — лист «Спр_Номенклатура ФО»",
         f"-- Источник: {excel.name}",
         "-- PhysicalVolumeKfoId ← «Код КФО»; ClassifierId ← «Классификатор КИМ».",
         "-- ============================================================================",

@@ -97,6 +97,7 @@ public sealed record NormListItemDto(
     string FormulaDisplay,
     IReadOnlyDictionary<string, decimal> Parameters,
     double? MeanPerformance,
+    double? Estimate,
     double? StdDeviation,
     DateTime EffectiveFrom,
     DateTime? EffectiveTo,

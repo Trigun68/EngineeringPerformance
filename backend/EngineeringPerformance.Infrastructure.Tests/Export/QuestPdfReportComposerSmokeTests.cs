@@ -59,6 +59,28 @@ public sealed class QuestPdfReportComposerSmokeTests
     }
 
     [Fact]
+    public void BuildLandscapeReport_CoverSubValue_StillProducesPdf()
+    {
+        var coverKpis = new[]
+        {
+            new ReportKpiItem(PdfScenarioLabels.Optimistic, "10,0 ч", "1 000 ₽"),
+            new ReportKpiItem(PdfScenarioLabels.Base, "20,0 ч", "2 000 ₽"),
+            new ReportKpiItem(PdfScenarioLabels.Pessimistic, "30,0 ч", "3 000 ₽"),
+        };
+
+        var pdf = QuestPdfReportComposer.BuildLandscapeReport(
+            col => col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, PdfScenarioKpis.HoursOnly(10, 20, 30))),
+            PdfReportKind.Forecast,
+            "Smoke cover cost",
+            "Тестовый проект",
+            "v1",
+            coverKpis);
+
+        pdf.Should().NotBeEmpty();
+        pdf[0].Should().Be((byte)'%');
+    }
+
+    [Fact]
     public void BuildPortraitReport_ProducesCoverAndContentPages()
     {
         var pdf = QuestPdfReportComposer.BuildPortraitReport(

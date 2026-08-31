@@ -1,6 +1,6 @@
 # PDF-отчёты с графиками
 
-**Дата обновления:** 2026-08-27  
+**Дата обновления:** 2026-08-30  
 **Код:** `VisualReportService.cs`, `QuestPdfReportComposer.cs`, `ScottPlotChartRenderer.cs`, `ReportVisualTheme.cs`, `PdfNumberFormat.cs`, `PdfScenarioLabels.cs`, `PdfTableColumn.cs`, `PdfInsightBuilder.cs`, `client/src/api/visualReportsApi.ts`  
 **Правило для агентов:** [`.cursor/rules/pdf-visual-design.mdc`](../../.cursor/rules/pdf-visual-design.mdc)
 
@@ -28,8 +28,8 @@
 
 ### Числа
 
-`PdfNumberFormat`: ru-RU (пробел групп, запятая), физобъём и трудоёмкость — 1 знак, производительность и Z — 2 знака.
-Числовые колонки выровнены вправо (`PdfTableColumn.Numeric`).
+`PdfNumberFormat`: ru-RU (пробел групп, запятая), физобъём и трудоёмкость — 1 знак, производительность и Z — 2 знака,
+стоимость на титуле — целые рубли (`CurrencyRub`). Числовые колонки выровнены вправо (`PdfTableColumn.Numeric`).
 
 ### Названия IIC
 
@@ -40,7 +40,8 @@
 Каждый PDF начинает с полноценной обложки `ComposeCoverPage`: тёмный фон (сплошной `CoverGradientBottom` —
 QuestPDF 2024.12 не поддерживает градиентные заливки), бейдж типа отчёта (`PdfReportKind`), метаданные
 (проект/версия/дата формирования, время московское), 2–4 тизер-KPI. Прогноз «По объектам» получает те же три
-KPI сценариев, что «Итого».
+KPI сценариев, что «Итого». Под часами сценария на **титуле** — стоимость ₽ (ставка справочника
+на дату версии `CreatedAt` × трудоёмкость направления). Контентные KPI — только часы.
 
 ### Хедер / футер контентных страниц
 
@@ -50,7 +51,7 @@ KPI сценариев, что «Итого».
 ### KPI, шкала Z-score, callout-блоки
 
 - `ComposeKpiStrip` / `ComposeProjectAssessmentKpis` — карточки с акцентной полосой и статус-точкой.
-- `ComposeZScoreScaleLegend(container, currentZ?)` — шкала Excellent…Critical с маркером текущего значения.
+- `ComposeZScoreScaleLegend(container, currentZ?)` — шкала слева `+3`/Критично → справа `−3`/Отлично, маркер текущего значения.
 - `ComposeCalloutBlock` / `ComposeCalloutList` — краткие авто-выводы (риск/внимание/сильная сторона/данные),
   максимум 3 на отчёт. Логика построения — `PdfInsightBuilder`.
 

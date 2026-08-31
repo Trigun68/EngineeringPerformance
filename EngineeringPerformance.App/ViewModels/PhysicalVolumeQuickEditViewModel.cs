@@ -139,7 +139,7 @@ public sealed partial class PhysicalVolumeQuickEditViewModel : ObservableObject
                 var entity = all.FirstOrDefault(p => p.Id == _entityId);
                 if (entity is null)
                 {
-                    ErrorMessage = "Запись БЭР не найдена";
+                    ErrorMessage = "Запись БЕР не найдена";
                     return;
                 }
                 entity.ClassifierId = SelectedClassifierId;

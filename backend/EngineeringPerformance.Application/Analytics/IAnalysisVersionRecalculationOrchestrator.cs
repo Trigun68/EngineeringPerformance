@@ -17,7 +17,7 @@ public interface IAnalysisVersionRecalculationOrchestrator
         DateTime? effectiveTo,
         CancellationToken cancellationToken = default);
 
-    /// <summary>Версии с привязкой к позиции каталога (КФО/БЭР/оборудование): пересчёт LI.</summary>
+    /// <summary>Версии с привязкой к позиции каталога (КФО/БЕР/оборудование): пересчёт LI.</summary>
     Task<int> AfterCatalogAssessmentOrCoefficientChangedAsync(
         string resource,
         int catalogId,

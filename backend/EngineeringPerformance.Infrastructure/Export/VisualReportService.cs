@@ -1,5 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Export;
+using EngineeringPerformance.Application.Registers;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
 using QuestPDF.Fluent;
@@ -19,6 +21,8 @@ public sealed class VisualReportService : IVisualReportService
     private readonly IForecastDetailSummaryTableContext _meta;
     private readonly IPerformanceReportService _performanceReport;
     private readonly IProjectReportSummaryService _reportSummary;
+    private readonly IWorkCostService _workCosts;
+    private readonly IPerformanceCalculationEngine _engine;
 
     public VisualReportService(
         IProjectsPageDataFetcher pageData,
@@ -28,7 +32,9 @@ public sealed class VisualReportService : IVisualReportService
         IChartImageRenderer charts,
         IForecastDetailSummaryTableContext meta,
         IPerformanceReportService performanceReport,
-        IProjectReportSummaryService reportSummary)
+        IProjectReportSummaryService reportSummary,
+        IWorkCostService workCosts,
+        IPerformanceCalculationEngine engine)
     {
         _pageData = pageData;
         _compare = compare;
@@ -38,13 +44,16 @@ public sealed class VisualReportService : IVisualReportService
         _meta = meta;
         _performanceReport = performanceReport;
         _reportSummary = reportSummary;
+        _workCosts = workCosts;
+        _engine = engine;
     }
 
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, createdAt, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
         var totals = data.Forecast.GrandTotals;
+        var (contentKpis, coverKpis) = await BuildForecastScenarioKpisAsync(data.Forecast, createdAt, cancellationToken);
 
         var scenarioChart = _charts.RenderScenarioTotalsChart(
             "Сценарии трудоёмкости (итого)",
@@ -66,8 +75,6 @@ public sealed class VisualReportService : IVisualReportService
                 XAxisLabel: "Часы",
                 MaxLabelLength: ReportVisualTheme.DefaultMaxLabelLength));
 
-        var kpis = ScenarioHourKpis(totals.OptimisticHours, totals.BaseHours, totals.PessimisticHours);
-
         var callout = PdfInsightBuilder.BuildForecastCallout(totals.BaseHours, totals.OptimisticHours, totals.PessimisticHours);
 
         var hierRows = data.Forecast.Summary
@@ -84,7 +91,7 @@ public sealed class VisualReportService : IVisualReportService
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, contentKpis));
             if (callout is not null)
                 col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeCalloutBlock(c, callout));
             col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Сравнение сценариев трудоёмкости", scenarioChart));
@@ -100,21 +107,20 @@ public sealed class VisualReportService : IVisualReportService
         "Прогноз — Итого",
         $"Проект: {projectCode}",
         $"Версия: {versionName}",
-        kpis);
+        coverKpis);
     }
 
     public async Task<byte[]> ExportForecastFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, createdAt, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (contentKpis, coverKpis) = await BuildForecastScenarioKpisAsync(data.Forecast, createdAt, cancellationToken);
 
         var chartItems = data.Forecast.Facility
             .OrderByDescending(f => f.BaseHours ?? 0)
             .Take(15)
             .Select(f => new ChartBarItem(f.FacilityName, (double)(f.BaseHours ?? 0), ReportVisualTheme.AccentA))
             .ToList();
-        var totals = data.Forecast.GrandTotals;
-        var kpis = ScenarioHourKpis(totals.OptimisticHours, totals.BaseHours, totals.PessimisticHours);
         var chart = _charts.RenderHorizontalBarChart(
             "Часы по объектам (базовый сценарий)",
             chartItems,
@@ -131,7 +137,7 @@ public sealed class VisualReportService : IVisualReportService
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
-            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, kpis));
+            col.Item().Element(c => QuestPdfReportComposer.ComposeKpiStrip(c, contentKpis));
             col.Item().PaddingTop(8).Element(c => QuestPdfReportComposer.ComposeChartImage(c, "Базовый сценарий по объектам", chart));
             col.Item().PageBreak();
             col.Item().Element(c => QuestPdfReportComposer.ComposeTable(
@@ -143,7 +149,7 @@ public sealed class VisualReportService : IVisualReportService
         "Прогноз — По объектам",
         $"Проект: {projectCode}",
         $"Версия: {versionName}",
-        kpis);
+        coverKpis);
     }
 
     public Task<byte[]> ExportAnalysisPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default) =>
@@ -153,7 +159,7 @@ public sealed class VisualReportService : IVisualReportService
     {
         var report = await _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
         var summary = report.Summary;
 
         var chartItems = data.Fact.Performance
@@ -232,7 +238,7 @@ public sealed class VisualReportService : IVisualReportService
     public async Task<byte[]> ExportFactFacilityPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var chartItems = data.Fact.Facility
             .OrderByDescending(f => f.LaborHours ?? 0)
@@ -803,7 +809,7 @@ public sealed class VisualReportService : IVisualReportService
     {
         var reportSummary = await _reportSummary.GetSummaryAsync(projectId, cancellationToken);
         var report = await _analysis.GenerateReportAsync(projectId, versionId, cancellationToken);
-        var (projectCode, _, versionName, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
+        var (projectCode, _, versionName, _, _) = await _meta.LoadAsync(projectId, versionId, cancellationToken);
 
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var allRows = data.Fact.Performance.Where(r => r.WorkDirectionId >= 0).ToList();
@@ -896,12 +902,40 @@ public sealed class VisualReportService : IVisualReportService
         teaserKpis);
     }
 
-    private static ReportKpiItem[] ScenarioHourKpis(decimal optimistic, decimal baseHours, decimal pessimistic) =>
-    [
-        new(PdfScenarioLabels.Optimistic, PdfNumberFormat.HoursWithUnit(optimistic)),
-        new(PdfScenarioLabels.Base, PdfNumberFormat.HoursWithUnit(baseHours)),
-        new(PdfScenarioLabels.Pessimistic, PdfNumberFormat.HoursWithUnit(pessimistic)),
-    ];
+    /// <summary>
+    /// Контент — только часы; титул — часы и стоимость (ставка as-of CreatedAt × собственные часы направления).
+    /// </summary>
+    private async Task<(ReportKpiItem[] Content, ReportKpiItem[] Cover)> BuildForecastScenarioKpisAsync(
+        ProjectsPageForecastGridsDto forecast,
+        DateTime versionCreatedAt,
+        CancellationToken cancellationToken)
+    {
+        var totals = forecast.GrandTotals;
+        var content = PdfScenarioKpis.HoursOnly(totals.OptimisticHours, totals.BaseHours, totals.PessimisticHours);
+        var costs = await ComputeScenarioWorkCostsAsync(forecast.Summary, versionCreatedAt, cancellationToken);
+        var cover = PdfScenarioKpis.HoursWithCost(
+            totals.OptimisticHours, totals.BaseHours, totals.PessimisticHours, costs);
+        return (content, cover);
+    }
+
+    private async Task<ScenarioWorkCostResult?> ComputeScenarioWorkCostsAsync(
+        IReadOnlyList<ProjectsPageForecastSummaryRowDto> summary,
+        DateTime versionCreatedAt,
+        CancellationToken cancellationToken)
+    {
+        var rows = await _workCosts.GetAsOfAsync(versionCreatedAt, cancellationToken);
+        var rates = rows
+            .Where(r => r.RatePerHour is not null)
+            .GroupBy(r => r.WorkDirectionId)
+            .ToDictionary(g => g.Key, g => g.First().RatePerHour!.Value);
+
+        var samples = summary
+            .Where(r => !r.IsTotal && r.WorkDirectionId >= 0)
+            .Select(r => new WorkCostHourSample(
+                r.WorkDirectionId, r.OptimisticHours, r.BaseHours, r.PessimisticHours));
+
+        return _engine.ComputeScenarioWorkCosts(samples, rates);
+    }
 
     private static readonly PdfTableColumn[] ForecastSummaryColumns =
     [

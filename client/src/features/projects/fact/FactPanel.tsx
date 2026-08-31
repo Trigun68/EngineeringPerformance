@@ -375,7 +375,7 @@ export function FactPanel({
   }
 
   const factNotifications = catalogTypeMissing && factVersionId
-    ? ['Выберите справочник физобъёмов (КФО или БЭР) в параметрах версии проекта перед импортом данных.']
+    ? ['Выберите справочник физобъёмов (КФО или БЕР) в параметрах версии проекта перед импортом данных.']
     : [];
 
   return (
@@ -444,7 +444,7 @@ export function FactPanel({
           <>
             <ToolbarActionButton
               disabled={importBlocked || loading}
-              title={catalogTypeMissing ? 'Укажите справочник КФО или БЭР в версии проекта' : undefined}
+              title={catalogTypeMissing ? 'Укажите справочник КФО или БЕР в версии проекта' : undefined}
               onClick={() => setImportDialogType('physical-volumes')}
               startIcon={<UploadFileIcon />}
             >

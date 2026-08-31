@@ -8,7 +8,7 @@ const CV_OUTLIER_FACTOR = 1.5;
 const LOW_USAGE_VERSIONS = 3;
 const MEDIUM_USAGE_VERSIONS = 8;
 
-/** CV = σ / μ по полям активной нормы. */
+/** CV = |σ / производительность| по полям активной нормы (не Estimate/μ лог-модели). */
 export function coefficientOfVariation(mean: number | null, sigma: number | null): number | null {
   if (mean == null || sigma == null || mean === 0) return null;
   return Math.abs(sigma / mean);

@@ -16,7 +16,8 @@ public sealed record ChartLineSeries(string Name, IReadOnlyList<(DateTime X, dou
 
 public sealed record ChartAreaSeries(string Name, IReadOnlyList<(DateTime X, double Y)> Points, string Color);
 
-public sealed record ReportKpiItem(string Label, string Value);
+/// <summary><paramref name="SubValue"/> — вторая строка на титуле (стоимость ₽); на контентных KPI не рисуется.</summary>
+public sealed record ReportKpiItem(string Label, string Value, string? SubValue = null);
 
 /// <summary>Одна колонка сводки «план/факт» (вкладка «Отчёт») — паритет PlanFactSummary.tsx.</summary>
 public sealed record PdfPlanFactColumn(

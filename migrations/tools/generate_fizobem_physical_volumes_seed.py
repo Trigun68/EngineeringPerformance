@@ -2,7 +2,7 @@
 """Генерирует migrations/data/005_PhysicalVolumes.sql из листа «Физ.объем» Excel.
 
 Code в справочнике — это «EP Код» без дополнительных префиксов. Коды корней
-блоков КФО и БЭР совпадают («01»..«17»), поэтому идентификатор строки
+блоков КФО и БЕР совпадают («01»..«17»), поэтому идентификатор строки
 в пределах справочника — это пара (VolumeType, Code): IF NOT EXISTS и поиск
 родителя выполняются с фильтром по VolumeTypeId.
 """
@@ -16,7 +16,7 @@ import pandas as pd
 EXCEL = Path(__file__).resolve().parents[1].parent / ".src" / "Копия ++++-1.xlsx"
 SHEET = "Физ.объем"
 HEADER_ROW = 3  # 0-based: строка 4 Excel — заголовки столбцов
-BLOCK_B_START = 285  # со строки 285 начинается второй блок (БЭР24-1)
+BLOCK_B_START = 285  # со строки 285 начинается второй блок (БЕР24-1)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from generate_iic_texas_seed import parse_no, parts_to_code  # noqa: E402
@@ -65,7 +65,7 @@ def parent_code_block_a(ep_code: str) -> str | None:
 
 
 def parent_code_block_b(ep_code: str) -> str | None:
-    """Иерархия БЭР: сборники «01»..«17» — корни; «01-01» → «01»; «01-01-001» → «01-01»; …"""
+    """Иерархия БЕР: сборники «01»..«17» — корни; «01-01» → «01»; «01-01-001» → «01-01»; …"""
     raw = ep_code.strip()
     parts = raw.split("-")
     if len(parts) == 1:
@@ -136,8 +136,8 @@ def main() -> int:
             vol = "КФО"
         else:
             ks = str(kind).strip()
-            if ks.startswith("БЭР") or ks.upper().startswith("BER"):
-                vol = "БЭР"
+            if ks.startswith("БЕР") or ks.startswith("БЭР") or ks.upper().startswith("BER"):
+                vol = "БЕР"
             else:
                 vol = "КФО"
 
@@ -195,9 +195,9 @@ def main() -> int:
     lines: list[str] = [
         "-- ============================================================================",
         "-- Номенклатура физических объёмов — лист «Физ.объем», файл «Копия ++++-1.xlsx»",
-        "-- Две независимые ветки дерева (без общего корня): КФО и БЭР.",
+        "-- Две независимые ветки дерева (без общего корня): КФО и БЕР.",
         "--   • КФО: корень «0» (Справочник Новый горизонт) → разделы «01»..«17» → работы «KQ.xx.YYY».",
-        "--   • БЭР: 17 корней «01»..«17» → отделы «01-01».. → группы → расценки «01-01-001-01».",
+        "--   • БЕР: 17 корней «01»..«17» → отделы «01-01».. → группы → расценки «01-01-001-01».",
         "-- Code = «EP Код» из Excel. Уникальность обеспечивается парой (VolumeTypeId, Code),",
         "-- поэтому все IF NOT EXISTS и поиски родителя фильтруют по VolumeTypeId.",
         "-- Оценка: столбец «Берем» (=1 → да, 0/пусто/иное → нет) → IsAssessment.",
@@ -311,7 +311,7 @@ def main() -> int:
     text = "\n".join(lines) + "\n"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     # utf-8-sig: BOM нужен, чтобы sqlcmd интерпретировал файл как UTF-8,
-    # иначе N'БЭР' / N'КФО' читаются в cp1251 и LOOKUP в PhysicalVolumeTypes
+    # иначе N'БЕР' / N'КФО' читаются в cp1251 и LOOKUP в PhysicalVolumeTypes
     # возвращает NULL → INSERT падает «Cannot insert NULL into VolumeTypeId».
     out_path.write_text(text, encoding="utf-8-sig")
     print(f"Wrote {out_path} ({len(order)} nodes)")

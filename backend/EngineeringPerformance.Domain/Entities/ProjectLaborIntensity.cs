@@ -22,10 +22,10 @@ public sealed class ProjectLaborIntensity : DataTableRecord
     /// </summary>
     public int? LaborIntensityId { get; set; }
 
-    /// <summary>FK на номенклатуру КФО. NULL — привязка к БЭР или отсутствует.</summary>
+    /// <summary>FK на номенклатуру КФО. NULL — привязка к БЕР или отсутствует.</summary>
     public int? PhysicalVolumeKfoId { get; set; }
 
-    /// <summary>FK на номенклатуру БЭР. NULL — привязка к КФО или отсутствует.</summary>
+    /// <summary>FK на номенклатуру БЕР. NULL — привязка к КФО или отсутствует.</summary>
     public int? PhysicalVolumeBerId { get; set; }
 
     /// <summary>FK на строку <see cref="ProjectPhysicalVolume"/> в версии (deep copy ремапит через ppvIdMap).</summary>

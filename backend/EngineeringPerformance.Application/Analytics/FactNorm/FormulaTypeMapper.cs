@@ -17,6 +17,7 @@ public static class FormulaTypeMapper
         FormulaType.ExponentialDecay => ReferenceFormulaCodes.Exponential,
         FormulaType.Polynomial => ReferenceFormulaCodes.Polynomial2,
         FormulaType.Hyperbolic => ReferenceFormulaCodes.Hyperbolic,
+        FormulaType.KimCurve => ReferenceFormulaCodes.KimCurve,
         _ => ReferenceFormulaCodes.Linear,
     };
 
@@ -30,6 +31,7 @@ public static class FormulaTypeMapper
             ReferenceFormulaCodes.Exponential => FormulaType.Exponential,
             ReferenceFormulaCodes.Polynomial2 => FormulaType.Polynomial,
             ReferenceFormulaCodes.Hyperbolic => FormulaType.Hyperbolic,
+            ReferenceFormulaCodes.KimCurve => FormulaType.KimCurve,
             _ => FormulaType.Linear,
         };
 

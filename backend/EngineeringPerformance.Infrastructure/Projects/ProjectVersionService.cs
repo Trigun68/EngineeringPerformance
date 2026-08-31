@@ -158,7 +158,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         var scenarioChanged = request.PlanningScenario.HasValue
             && request.PlanningScenario.Value != previousScenario;
 
-        // Снимок норм зависит от CreatedAt; смена справочника БЭР/КФО тоже требует
+        // Снимок норм зависит от CreatedAt; смена справочника БЕР/КФО тоже требует
         // явного пересоздания (единая политика версии).
         if (catalogChanged || createdAtChanged)
         {
@@ -265,7 +265,7 @@ public sealed class ProjectVersionService : IProjectVersionService
         _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
 
     /// <summary>
-    /// Смена БЭР↔КФО при уже импортированных ФО недопустима: FK указывают на другой каталог.
+    /// Смена БЕР↔КФО при уже импортированных ФО недопустима: FK указывают на другой каталог.
     /// </summary>
     private async Task EnsureCatalogChangeAllowedAsync(int versionId, CancellationToken cancellationToken)
     {
@@ -275,7 +275,7 @@ public sealed class ProjectVersionService : IProjectVersionService
             return;
 
         throw new InvalidOperationException(
-            "Нельзя сменить справочник физобъёмов (БЭР/КФО): для версии уже импортированы "
+            "Нельзя сменить справочник физобъёмов (БЕР/КФО): для версии уже импортированы "
             + "физические объёмы. Удалите данные ФО версии или создайте новую версию с нужным справочником.");
     }
 
@@ -333,7 +333,7 @@ public sealed class ProjectVersionService : IProjectVersionService
     {
         if (physicalVolumeTypeId is not int typeId)
             throw new InvalidOperationException(
-                "Не выбран справочник физобъёмов. Укажите КФО или БЭР для версии проекта.");
+                "Не выбран справочник физобъёмов. Укажите КФО или БЕР для версии проекта.");
 
         var typeName = await _context.PhysicalVolumeTypes.AsNoTracking()
             .Where(t => t.Id == typeId)
@@ -342,10 +342,10 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         if (string.IsNullOrWhiteSpace(typeName)
             || (!string.Equals(typeName, PhysicalVolumeCatalogBinding.KfoTypeName, StringComparison.Ordinal)
-                && !string.Equals(typeName, PhysicalVolumeCatalogBinding.BerTypeName, StringComparison.Ordinal)))
+                && !PhysicalVolumeCatalogBinding.IsBerTypeName(typeName)))
         {
             throw new InvalidOperationException(
-                "Справочник физобъёмов должен быть КФО или БЭР.");
+                "Справочник физобъёмов должен быть КФО или БЕР.");
         }
     }
 

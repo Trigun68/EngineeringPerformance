@@ -32,7 +32,8 @@ public enum PermissionType
     ProjectCharacteristics,
     UserActionLog,
     Reports,
-    Administration
+    Administration,
+    EngineeringWorkCosts
 }
 
 public static class PermissionTypeExtensions

@@ -4,11 +4,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Projects;
 
-/// <summary>Привязка ProjectPhysicalVolume к каталогу КФО или БЭР по виду версии.</summary>
+/// <summary>Привязка ProjectPhysicalVolume к каталогу КФО или БЕР по виду версии.</summary>
 public static class PhysicalVolumeCatalogBinding
 {
     public const string KfoTypeName = "КФО";
-    public const string BerTypeName = "БЭР";
+    public const string BerTypeName = "БЕР";
+
+    /// <summary>Каноническое «БЕР» и прежнее написание в уже существующей БД до миграции 114.</summary>
+    public static bool IsBerTypeName(string? name) =>
+        string.Equals(name, BerTypeName, StringComparison.Ordinal)
+        || string.Equals(name, "БЭР", StringComparison.Ordinal);
 
     public static async Task<bool> IsKfoVersionAsync(AppDbContext context, int versionId, CancellationToken cancellationToken = default)
     {
@@ -25,7 +30,7 @@ public static class PhysicalVolumeCatalogBinding
             .Select(v => v.PhysicalVolumeType != null ? v.PhysicalVolumeType.Name : null)
             .FirstOrDefaultAsync(cancellationToken);
 
-    /// <summary>Проверяет, что для версии выбран справочник КФО или БЭР.</summary>
+    /// <summary>Проверяет, что для версии выбран справочник КФО или БЕР.</summary>
     public static async Task EnsureCatalogTypeConfiguredAsync(
         AppDbContext context,
         int versionId,
@@ -34,10 +39,10 @@ public static class PhysicalVolumeCatalogBinding
         var typeName = await GetCatalogTypeNameAsync(context, versionId, cancellationToken);
         if (string.IsNullOrWhiteSpace(typeName)
             || (!string.Equals(typeName, KfoTypeName, StringComparison.Ordinal)
-                && !string.Equals(typeName, BerTypeName, StringComparison.Ordinal)))
+                && !IsBerTypeName(typeName)))
         {
             throw new InvalidOperationException(
-                "Для версии проекта не выбран справочник физобъёмов. Укажите КФО или БЭР в параметрах версии.");
+                "Для версии проекта не выбран справочник физобъёмов. Укажите КФО или БЕР в параметрах версии.");
         }
     }
 

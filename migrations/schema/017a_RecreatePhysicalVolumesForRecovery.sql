@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Восстановление таблицы PhysicalVolumes, если 017 выполнилась с пустым переносом
--- (типы БЭР24/КФО2 вместо БЭР/КФО). После этого — data/005_PhysicalVolumes.sql.
+-- (типы БЕР24/КФО2 вместо БЕР/КФО). После этого — data/005_PhysicalVolumes.sql.
 -- ============================================================================
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
@@ -48,13 +48,13 @@ BEGIN
 END;
 GO
 
--- Синонимы имён для idempotent seed 005 (БЭР / КФО).
-IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'БЭР')
-   AND EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] LIKE N'БЭР%')
+-- Синонимы имён для idempotent seed 005 (БЕР / КФО).
+IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'БЕР')
+   AND EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] LIKE N'БЕР%' OR [Name] LIKE N'БЭР%')
 BEGIN
     INSERT INTO [PhysicalVolumeTypes] ([Name], [Description], [IsArchived], [CreatedAt])
-    SELECT TOP 1 N'БЭР', [Description], [IsArchived], SYSUTCDATETIME()
-    FROM [PhysicalVolumeTypes] WHERE [Name] LIKE N'БЭР%';
+    SELECT TOP 1 N'БЕР', [Description], [IsArchived], SYSUTCDATETIME()
+    FROM [PhysicalVolumeTypes] WHERE [Name] LIKE N'БЕР%' OR [Name] LIKE N'БЭР%';
 END;
 
 IF NOT EXISTS (SELECT 1 FROM [PhysicalVolumeTypes] WHERE [Name] = N'КФО')

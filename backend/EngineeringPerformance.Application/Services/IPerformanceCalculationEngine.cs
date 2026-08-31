@@ -168,4 +168,12 @@ public interface IPerformanceCalculationEngine
     IReadOnlyList<NamedSCurveDto> BuildTopProjectSCurves(
         IReadOnlyList<ProjectHoursSeriesSample> series,
         int topCount = 8);
+
+    /// <summary>
+    /// Стоимость сценариев: Σ (часы направления × ставка ₽/ч). Дубликаты id суммируются.
+    /// Направления без ставки или с id &lt; 0 пропускаются. null — не было ни одной пары часы+ставка.
+    /// </summary>
+    ScenarioWorkCostResult? ComputeScenarioWorkCosts(
+        IEnumerable<WorkCostHourSample> hoursByDirection,
+        IReadOnlyDictionary<int, decimal> ratePerHourByDirection);
 }

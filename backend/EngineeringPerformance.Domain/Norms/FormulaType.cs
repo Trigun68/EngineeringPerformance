@@ -16,4 +16,6 @@ public enum FormulaType
     Hyperbolic = 10,
     /// <summary>N(V) = a · e^(b·V) — экспоненциальный рост/спад.</summary>
     Exponential = 11,
+    /// <summary>Логнормаль: P(z) = e^(μ + z·σ), μ = ln(P). Производительность не зависит от V.</summary>
+    KimCurve = 12,
 }

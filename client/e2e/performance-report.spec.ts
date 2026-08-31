@@ -47,6 +47,8 @@ test.describe('Performance report tab', () => {
     await expect(page.getByTestId('report-directions-table')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Направление' })).toBeVisible();
     await expect(page.getByTestId('report-z-tick')).toHaveCount(7);
+    await expect(page.getByTestId('report-z-tick').first()).toHaveText('+3');
+    await expect(page.getByTestId('report-z-tick').last()).toHaveText('−3');
     const planVersion = page.getByTestId('report-plan-version');
     if ((await planVersion.count()) > 0) {
       await expect(planVersion).toContainText('План:');

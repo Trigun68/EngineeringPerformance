@@ -1,6 +1,6 @@
 # Анализ факта и норм
 
-**Дата:** 2026-08-04  
+**Дата:** 2026-08-31  
 **Код:** `FactNormAnalysisEngine`, `FactNormAnalysisService`, вкладка `/analytics` → «Сравнение факта и норм»
 
 ## Назначение
@@ -24,6 +24,8 @@
 ## Математика
 
 Чистый движок `IFactNormAnalysisEngine` (Application): CONSTANT, LINEAR, POWER, LOGARITHMIC, EXPONENTIAL, POLYNOMIAL2, HYPERBOLIC; выбор по BIC при adj R² ≥ порога; вердикты ChangeFormulaType / AdjustParameters / NormIsActual.
+
+**Кривая Кима не входит в BIC-каталог** (`ReferenceFormulaCatalog.All`, 7 типов). Код `KIMCURVE` доступен через `TryGet` только чтобы посчитать R² текущей нормы. Для текущей Kim-нормы σ факта — `std(ln(Y))`, не линейное СКО производительности. Предложение «создать норму» никогда не пишет Kim.
 
 Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → `PerformanceRowDto` (x=объём, y=производительность). В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
 

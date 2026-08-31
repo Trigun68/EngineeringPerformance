@@ -4,12 +4,12 @@ import { shortCatalogName } from '../catalogShortName';
 describe('shortCatalogName', () => {
   it('takes text before first colon', () => {
     expect(shortCatalogName('КФО: Классификатор физических объёмов')).toBe('КФО');
-    expect(shortCatalogName('БЭР: Базовая единица')).toBe('БЭР');
+    expect(shortCatalogName('БЕР: Базовая единица')).toBe('БЕР');
   });
 
   it('returns full name when no colon', () => {
     expect(shortCatalogName('КФО')).toBe('КФО');
-    expect(shortCatalogName('БЭР')).toBe('БЭР');
+    expect(shortCatalogName('БЕР')).toBe('БЕР');
   });
 
   it('trims and handles empty', () => {

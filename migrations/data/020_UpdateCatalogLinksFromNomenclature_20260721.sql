@@ -2723,7 +2723,7 @@ BEGIN
     IF @@ROWCOUNT = 0 BREAK;
 END;
 
--- BER: ClassifierId из связанного КФО, если у БЭР всё ещё пусто
+-- BER: ClassifierId из связанного КФО, если у БЕР всё ещё пусто
 UPDATE ber SET [ClassifierId] = kfo.[ClassifierId], [ModifiedAt] = SYSUTCDATETIME()
 FROM [PhysicalVolumesBer] ber
 INNER JOIN [PhysicalVolumesKfo] kfo ON kfo.[Id] = ber.[PhysicalVolumeKfoId]

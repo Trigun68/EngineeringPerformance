@@ -41,8 +41,8 @@ test.describe('IIC Norms - History records', () => {
     await expect(dialog.getByText('Действует с', { exact: false }).first()).toBeVisible();
     await expect(dialog.getByText('Действует по', { exact: false }).first()).toBeVisible();
     await expect(dialog.getByText(/Производительность/i).first()).toBeVisible();
-    await expect(dialog.getByText(/Оценка/i).first()).toBeVisible();
-    await expect(dialog.getByText(/Станд\.? отклонение|Отклонение/i).first()).toBeVisible();
+    await expect(dialog.getByText('μ').first()).toBeVisible();
+    await expect(dialog.getByText('σ').first()).toBeVisible();
 
     await page.getByRole('button', { name: 'Отмена' }).click();
   });

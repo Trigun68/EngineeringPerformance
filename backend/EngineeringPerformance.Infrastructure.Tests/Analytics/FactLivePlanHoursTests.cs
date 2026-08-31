@@ -455,5 +455,10 @@ public sealed class FactLivePlanHoursTests
             IReadOnlyList<ProjectHoursSeriesSample> series,
             int topCount = 8) =>
             inner.BuildTopProjectSCurves(series, topCount);
+
+        public ScenarioWorkCostResult? ComputeScenarioWorkCosts(
+            IEnumerable<WorkCostHourSample> hoursByDirection,
+            IReadOnlyDictionary<int, decimal> ratePerHourByDirection) =>
+            inner.ComputeScenarioWorkCosts(hoursByDirection, ratePerHourByDirection);
     }
 }

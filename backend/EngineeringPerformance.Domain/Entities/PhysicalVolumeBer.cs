@@ -2,7 +2,7 @@ using EngineeringPerformance.Domain.Common;
 
 namespace EngineeringPerformance.Domain.Entities;
 
-/// <summary>Номенклатура физических объёмов БЭР (без VolumeTypeId — отдельная таблица).</summary>
+/// <summary>Номенклатура физических объёмов БЕР (без VolumeTypeId — отдельная таблица).</summary>
 public sealed class PhysicalVolumeBer : DirectoryItem
 {
     public string Code { get; set; } = string.Empty;
@@ -21,7 +21,7 @@ public sealed class PhysicalVolumeBer : DirectoryItem
     /// <summary>Переводит количество по проекту в единицы измерения группы физ. объёмов (ИИС).</summary>
     public decimal Coefficient { get; set; } = 1m;
 
-    /// <summary>Единица измерения из исходного справочника БЭР. FK на UnitsOfMeasurement.</summary>
+    /// <summary>Единица измерения из исходного справочника БЕР. FK на UnitsOfMeasurement.</summary>
     public int? UnitId { get; set; }
 
     public PhysicalVolumeBer? Parent { get; set; }

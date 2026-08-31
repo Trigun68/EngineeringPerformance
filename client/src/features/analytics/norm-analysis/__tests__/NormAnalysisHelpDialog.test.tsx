@@ -39,7 +39,7 @@ describe('NormAnalysisHelpDialog', () => {
     );
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Справка: анализ норм' })).toBeInTheDocument();
-    expect(screen.getByText(/CV = \|σ \/ μ\|/)).toBeInTheDocument();
+    expect(screen.getByText(/CV = \|σ \/ производительность\|/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Достоверность' })).toBeInTheDocument();
   });
 });

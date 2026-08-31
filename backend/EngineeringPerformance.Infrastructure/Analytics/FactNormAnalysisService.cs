@@ -648,6 +648,33 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
 
     private static double ExtractSigma(IicWorkDirectionNorm norm)
     {
+        if (norm.DeviationModelType == DeviationModelType.Lognormal
+            || norm.FormulaType == FormulaType.KimCurve)
+        {
+#pragma warning disable CS0618
+            if (norm.StandardDeviation is > 0)
+                return (double)norm.StandardDeviation.Value;
+#pragma warning restore CS0618
+            if (!string.IsNullOrWhiteSpace(norm.DeviationCoefficientsJson))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(norm.DeviationCoefficientsJson);
+                    if (doc.RootElement.TryGetProperty("sigma", out var sigmaEl)
+                        && sigmaEl.TryGetDouble(out var logSigma))
+                    {
+                        return Math.Abs(logSigma);
+                    }
+                }
+                catch
+                {
+                    // fall through
+                }
+            }
+
+            return 0;
+        }
+
         if (!string.IsNullOrWhiteSpace(norm.DeviationCoefficientsJson))
         {
             try

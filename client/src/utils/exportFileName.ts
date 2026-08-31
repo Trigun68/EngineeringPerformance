@@ -27,6 +27,7 @@ export const ExportViews = {
   trends: 'динамика',
   iicGroups: 'группы_IIC',
   iicNorms: 'нормы_IIC',
+  workCosts: 'стоимость_работ',
 } as const;
 
 export const ExportQualifiers = {
@@ -98,6 +99,9 @@ export function directoryExportView(tabOrSlug: string | null | undefined): strin
       return 'характеристики';
     case 'iic-work-direction-norms':
       return ExportViews.iicNorms;
+    case 'work-costs':
+    case 'iic-work-direction-work-costs':
+      return ExportViews.workCosts;
     default:
       return sanitizeExportToken(tabOrSlug) ?? ExportViews.catalog;
   }

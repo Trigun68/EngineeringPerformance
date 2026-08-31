@@ -160,6 +160,7 @@ erDiagram
 | 4 | Трудоёмкость | `LaborIntensities` | `LaborIntensity` | `IDirectoryService<LaborIntensity>` | Справочник (иерархия) | `/references/labor-intensities` |
 | 5 | Группы физ. объёмов (IIC) | `IicWorkDirections` | `IicWorkDirection` | `IDirectoryService<IicWorkDirection>` | Справочник (иерархия) | `/references/iic-work-directions` |
 | 6 | **Нормы ИИС** | `IicWorkDirectionNorms` | `IicWorkDirectionNorm` | `IDateFilteredRegisterService<IicWorkDirectionNorm>` | **Регистр** (периоды `EffectiveFrom`/`EffectiveTo`) | `/references/iic-norms` |
+| 6b | **Стоимость работ** | `EngineeringWorkCosts` | `IicWorkDirectionWorkCost` | `IWorkCostService` | **Регистр** (периоды `EffectiveFrom`/`EffectiveTo`, ставка ₽/ч) | `/references/work-costs` |
 | 7 | Единицы измерения | `UnitsOfMeasurement` | `UnitOfMeasurement` | `IDirectoryService<UnitOfMeasurement>` | Справочник | `/references/units` |
 | 8 | Характеристики проекта | `ProjectCharacteristics` | `ProjectCharacteristic` + `ProjectCharacteristicOption` | `IDirectoryService<ProjectCharacteristic>` + опции | Справочник + подтаблица | `/references/project-characteristics` |
 

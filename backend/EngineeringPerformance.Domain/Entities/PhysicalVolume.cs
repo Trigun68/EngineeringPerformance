@@ -23,7 +23,7 @@ public sealed class PhysicalVolume : DirectoryItem
     /// <summary>Переводит количество по проекту в единицы измерения группы физ. объёмов (ИИС).</summary>
     public decimal Coefficient { get; set; } = 1m;
 
-    /// <summary>Единица измерения из исходного справочника (БЭР24/КФО2). FK на UnitsOfMeasurement.</summary>
+    /// <summary>Единица измерения из исходного справочника (БЕР24/КФО2). FK на UnitsOfMeasurement.</summary>
     public int? UnitId { get; set; }
 
     public PhysicalVolume? Parent { get; set; }
