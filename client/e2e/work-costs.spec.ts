@@ -65,10 +65,8 @@ test.describe('Work costs directory', () => {
 
     const periodRow = page.getByTestId(`work-cost-period-${from}`);
     await expect(periodRow).toBeVisible({ timeout: 15_000 });
-    await periodRow.click();
+    await periodRow.dblclick();
     await expect(page.getByText(`Период с ${from}`)).toBeVisible();
-
-    await page.getByRole('button', { name: 'Изменить' }).click();
     await expect(dialog.getByText('Изменить стоимость')).toBeVisible();
     await expect(dialog.getByLabel('Действует с')).toBeDisabled();
     await dialog.getByLabel('Уровень').click();

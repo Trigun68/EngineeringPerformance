@@ -332,9 +332,11 @@ export function IicNormsPage() {
     setHistoryDialogOpen(true);
   };
 
-  const openEditHistory = () => {
-    if (!selectedHistory) return;
-    setHistoryDialogInitial(selectedHistory);
+  const openEditHistory = (row?: IicNormHistoryItem | null) => {
+    const target = row ?? selectedHistory;
+    if (!target) return;
+    setSelectedHistory(target);
+    setHistoryDialogInitial(target);
     setHistoryDialogOpen(true);
   };
 
@@ -605,7 +607,7 @@ export function IicNormsPage() {
                     <Button
                       size="small"
                       variant="outlined"
-                      onClick={openEditHistory}
+                      onClick={() => openEditHistory()}
                       disabled={!selectedHistory}
                     >
                       Редактировать
@@ -652,12 +654,16 @@ export function IicNormsPage() {
                     key={row.id ?? row.effectiveFrom}
                     direction="row"
                     spacing={1}
+                    data-testid={row.id != null ? `iic-norm-history-row-${row.id}` : 'iic-norm-history-row-new'}
                     onClick={() => setSelectedHistory(row)}
+                    onDoubleClick={() => {
+                      if (canEdit) openEditHistory(row);
+                    }}
                     sx={{
                       mb: 0.5,
                       px: 1,
                       py: 0.75,
-                      cursor: 'pointer',
+                      cursor: canEdit ? 'pointer' : 'default',
                       borderRadius: 1,
                       bgcolor: isSelected ? 'action.selected' : undefined,
                       '&:hover': { bgcolor: isSelected ? 'action.selected' : 'action.hover' },

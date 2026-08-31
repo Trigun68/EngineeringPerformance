@@ -1,5 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { loginAsAdmin } from './helpers';
+
+async function openNormPeriodsDialog(page: Page) {
+  await page.goto('/references/iic-norms');
+  await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
+
+  const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
+  await firstRow.dblclick();
+
+  const editDialogTitle = page.getByText('Редактирование нормы');
+  if (!(await editDialogTitle.isVisible().catch(() => false))) {
+    await firstRow.click();
+    await page.getByRole('button', { name: 'Редактировать' }).click();
+  }
+
+  await expect(editDialogTitle).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('IIC Norms - History records', () => {
   test.beforeEach(async ({ page }) => {
@@ -21,20 +37,7 @@ test.describe('IIC Norms - History records', () => {
   });
 
   test('edit dialog shows read-only group, unit and history table', async ({ page }) => {
-    await page.goto('/references/iic-norms');
-    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-
-    const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
-    await firstRow.dblclick();
-
-    const editDialogTitle = page.getByText('Редактирование нормы');
-    const openedByDoubleClick = await editDialogTitle.isVisible().catch(() => false);
-    if (!openedByDoubleClick) {
-      await firstRow.click();
-      await page.getByRole('button', { name: 'Изменить' }).click();
-    }
-
-    await expect(editDialogTitle).toBeVisible();
+    await openNormPeriodsDialog(page);
     await expect(page.getByText('Исторические записи')).toBeVisible();
 
     const dialog = page.locator('[role="dialog"]').first();
@@ -48,19 +51,7 @@ test.describe('IIC Norms - History records', () => {
   });
 
   test('can open sub-dialog to add history row from edit mode', async ({ page }) => {
-    await page.goto('/references/iic-norms');
-    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 15_000 });
-
-    const firstRow = page.locator('.ag-center-cols-container .ag-row').first();
-    await firstRow.dblclick();
-
-    const editDialogTitle = page.getByText('Редактирование нормы');
-    if (!(await editDialogTitle.isVisible().catch(() => false))) {
-      await firstRow.click();
-      await page.getByRole('button', { name: 'Изменить' }).click();
-    }
-
-    await expect(editDialogTitle).toBeVisible();
+    await openNormPeriodsDialog(page);
 
     const addRowButton = page.getByRole('button', { name: 'Добавить строку' });
     await expect(addRowButton).toBeVisible();
@@ -70,5 +61,18 @@ test.describe('IIC Norms - History records', () => {
 
     await page.getByRole('button', { name: 'Отмена' }).last().click();
     await page.getByRole('button', { name: 'Отмена' }).first().click();
+  });
+
+  test('double-click on a history row opens the record editor', async ({ page }) => {
+    await openNormPeriodsDialog(page);
+    await expect(page.getByText('Исторические записи')).toBeVisible();
+
+    const historyRow = page.getByTestId(/iic-norm-history-row-/).first();
+    await expect(historyRow).toBeVisible({ timeout: 10_000 });
+    await historyRow.dblclick();
+
+    await expect(page.getByTestId('iic-norm-history-dialog')).toBeVisible();
+    await expect(page.getByText('Редактирование записи')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Сохранить' })).toBeVisible();
   });
 });

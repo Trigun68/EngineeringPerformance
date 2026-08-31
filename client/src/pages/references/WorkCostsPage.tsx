@@ -290,6 +290,14 @@ export function WorkCostsPage() {
                   ]
                 : []
             }
+            onRowDoubleClicked={
+              canEdit
+                ? (row) => {
+                    const from = selectedFrom ?? (row.effectiveFrom ? periodDateKey(row.effectiveFrom) : null);
+                    if (from) openEdit(from);
+                  }
+                : undefined
+            }
           />
         </Box>
       </Box>

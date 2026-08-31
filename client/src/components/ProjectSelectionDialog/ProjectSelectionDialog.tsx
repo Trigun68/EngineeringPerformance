@@ -63,12 +63,14 @@ export function ProjectSelectionDialog({
     );
   }, [projects, search]);
 
+  const confirmProject = (projectId: number) => {
+    onSelect(projectId);
+    setSelectedId(null);
+    setSearch('');
+  };
+
   const handleSelect = () => {
-    if (selectedId) {
-      onSelect(selectedId);
-      setSelectedId(null);
-      setSearch('');
-    }
+    if (selectedId) confirmProject(selectedId);
   };
 
   const handleClose = () => {
@@ -110,6 +112,7 @@ export function ProjectSelectionDialog({
                   <ListItemButton
                     selected={selectedId === project.id}
                     onClick={() => setSelectedId(project.id)}
+                    onDoubleClick={() => confirmProject(project.id)}
                   >
                     <ListItemText
                       primary={`${project.code} — ${project.name}`}

@@ -32,7 +32,7 @@ test.describe('Dictionary hierarchy', () => {
     const editDialogTitle = page.getByText('Редактирование нормы');
     if (!(await editDialogTitle.isVisible().catch(() => false))) {
       await firstRow.click();
-      await page.getByRole('button', { name: 'Изменить' }).click();
+      await page.getByRole('button', { name: 'Редактировать' }).click();
     }
 
     await expect(editDialogTitle).toBeVisible({ timeout: 10_000 });
