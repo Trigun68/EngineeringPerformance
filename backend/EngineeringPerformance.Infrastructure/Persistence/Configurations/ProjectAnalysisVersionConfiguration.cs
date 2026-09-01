@@ -25,5 +25,7 @@ public class ProjectAnalysisVersionConfiguration : IEntityTypeConfiguration<Proj
         builder.HasIndex(v => new { v.ProjectId, v.Direction }).IsUnique(false);
 
         builder.HasIndex(v => v.SortOrder);
+
+        builder.Property(v => v.RowVersion).IsRowVersion();
     }
 }

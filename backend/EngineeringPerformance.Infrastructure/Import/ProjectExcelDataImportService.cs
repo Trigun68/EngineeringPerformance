@@ -49,7 +49,8 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         string FacilityName,
         string WorkId);
 
-    private readonly record struct PvCatalogRow(int Id, string Code, string Name, int? ClassifierId, int? ParentId);
+    private readonly record struct PvCatalogRow(
+        int Id, string Code, string Name, int? ClassifierId, int? ParentId, decimal Coefficient, bool? IsAssessment);
 
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<ProjectExcelDataImportService> _logger;

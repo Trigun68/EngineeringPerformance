@@ -135,7 +135,7 @@ internal static class FactTableDocumentBuilder
         new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
         new("План.Труд.Баз.", 1.2f, Numeric: true),
         new("План.Труд.Песс.", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
-        new("Z-оценка", 1.1f, Numeric: true),
+        new("Оценка Z", 1.1f, Numeric: true),
         new("Интерпретация", 1.8f),
     ];
 

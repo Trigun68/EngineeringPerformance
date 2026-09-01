@@ -35,4 +35,7 @@ public sealed class ProjectAnalysisVersion : DirectoryItem
     public ICollection<ProjectLaborIntensity> LaborIntensities { get; set; } = [];
 
     public ICollection<DataImportIteration> ImportIterations { get; set; } = [];
+
+    /// <summary>Optimistic concurrency (SQL Server rowversion).</summary>
+    public byte[] RowVersion { get; set; } = [];
 }

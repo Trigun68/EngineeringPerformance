@@ -44,6 +44,12 @@ export const REFERENCE_ROUTES: ReferenceRouteConfig[] = [
     parentFormOrder: 35,
   },
   {
+    path: 'doc-sets',
+    resource: 'doc-sets',
+    title: 'Комплекты документации',
+    permission: 'DocSets',
+  },
+  {
     path: 'iic-work-directions',
     resource: 'iic-work-directions',
     title: 'Группы физ. объёмов (IIC)',

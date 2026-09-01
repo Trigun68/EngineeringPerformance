@@ -12,6 +12,7 @@ public sealed class ProjectPhysicalVolumeConfiguration : IEntityTypeConfiguratio
         builder.HasKey(pv => pv.Id);
 
         builder.Property(pv => pv.Quantity).HasPrecision(18, 4);
+        builder.Property(pv => pv.CatalogCoefficient).HasPrecision(18, 4);
         builder.Property(pv => pv.FacilityCode).HasMaxLength(100);
         builder.Property(pv => pv.FacilityName).HasMaxLength(500);
         builder.Property(pv => pv.DocumentSet).HasMaxLength(100);

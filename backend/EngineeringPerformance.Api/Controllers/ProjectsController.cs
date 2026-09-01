@@ -7,11 +7,9 @@ using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Domain.Enums;
-using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Api.Controllers;
 
@@ -30,7 +28,6 @@ public sealed class ProjectsController : ControllerBase
     private readonly IProjectExportService _exportService;
     private readonly IProjectsCatalogExportService _catalogExportService;
     private readonly IVisualReportService _visualReports;
-    private readonly AppDbContext _context;
     private readonly IExportFileNameService _fileNames;
 
     public ProjectsController(
@@ -44,7 +41,6 @@ public sealed class ProjectsController : ControllerBase
         IProjectExportService exportService,
         IProjectsCatalogExportService catalogExportService,
         IVisualReportService visualReports,
-        AppDbContext context,
         IExportFileNameService fileNames)
     {
         _getProjects = getProjects;
@@ -57,7 +53,6 @@ public sealed class ProjectsController : ControllerBase
         _exportService = exportService;
         _catalogExportService = catalogExportService;
         _visualReports = visualReports;
-        _context = context;
         _fileNames = fileNames;
     }
 
@@ -202,24 +197,6 @@ public sealed class ProjectsController : ControllerBase
         [FromQuery] bool includeAppendix = false,
         CancellationToken cancellationToken = default)
     {
-        // Validate that all versionIds belong to the requested project.
-        var expectedProjectId = id;
-        var versionIds = new[] { planVersionId, factVersionId, compareVersionAId, compareVersionBId };
-        var versions = await _context.ProjectAnalysisVersions
-            .AsNoTracking()
-            .Where(v => versionIds.Contains(v.Id))
-            .Select(v => new { v.Id, v.ProjectId })
-            .ToListAsync(cancellationToken);
-
-        foreach (var vid in versionIds)
-        {
-            var found = versions.FirstOrDefault(v => v.Id == vid);
-            if (found is null)
-                throw new InvalidOperationException($"Версия с идентификатором {vid} не найдена.");
-            if (found.ProjectId != expectedProjectId)
-                throw new InvalidOperationException($"Версия {vid} принадлежит другому проекту.");
-        }
-
         var bytes = await _visualReports.ExportCombinedPdfAsync(
             id,
             planVersionId,

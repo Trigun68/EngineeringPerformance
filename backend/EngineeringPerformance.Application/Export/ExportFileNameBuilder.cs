@@ -114,6 +114,7 @@ public static class ExportFileNameBuilder
             "labor-intensities" => "трудоемкость",
             "iic-work-directions" => Views.IicGroups,
             "units-of-measurement" => "единицы",
+            "doc-sets" => "комплекты_документации",
             "project-characteristics" => "характеристики",
             "iic-work-direction-norms" => Views.IicNorms,
             "work-costs" => Views.WorkCosts,

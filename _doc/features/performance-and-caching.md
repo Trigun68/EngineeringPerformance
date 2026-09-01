@@ -78,7 +78,7 @@ encoded-гриды, строки приходят отдельным `GET page-d
 |----------------|------|-----|
 | Полный упакованный `page-data` (HTTP режет detail) | `page-data-encoded-v2:v{versionId}:c{compareVersionId}` | 12 ч (свежесть — generation) |
 | `GET /projects/{id}/performance-report` | `report:p{planVersionId}:f{factVersionId}` | 10 мин |
-| `GET /dictionaries/all` | `dictionaries:all:v3` + HTTP `ETag` / 304 | 30 мин |
+| `GET /dictionaries/all` | `dictionaries:all:v4` + HTTP `ETag` / 304 | 30 мин |
 
 Полный ключ в кэше — `analytics:p{projectId}:g{globalGen}.{projectGen}:{key}`. Инвалидация
 инкрементирует поколение, старые записи становятся недостижимыми и истекают сами: перебирать

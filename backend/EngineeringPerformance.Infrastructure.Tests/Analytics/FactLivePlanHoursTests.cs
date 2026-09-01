@@ -346,6 +346,17 @@ public sealed class FactLivePlanHoursTests
             return inner.RecalculateLaborIntensities(scenario, lines, normsByDirection, planningZByDirection);
         }
 
+        public LaborIntensityCalculator.PlanHoursResult RecalculatePlanHours(
+            PlanningScenario scenario,
+            IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
+            IReadOnlyList<LaborIntensityCalculator.EquipmentLine> equipmentLines,
+            IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+            IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
+        {
+            RecalculateCalls++;
+            return inner.RecalculatePlanHours(scenario, ppvLines, equipmentLines, normsByDirection, planningZByDirection);
+        }
+
         public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
             PlanningScenario scenario,
             IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
@@ -369,12 +380,14 @@ public sealed class FactLivePlanHoursTests
         }
 
         public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
+            PlanningScenario scenario,
             IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+            IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
             IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
             IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
         {
             EquipmentHoursCalls++;
-            return inner.ComputeEquipmentForecastHours(lines, normsByDirection, planningZByDirection);
+            return inner.ComputeEquipmentForecastHours(scenario, lines, ppvLines, normsByDirection, planningZByDirection);
         }
 
         public decimal? ComputeWeightedZFromPerformanceRows(

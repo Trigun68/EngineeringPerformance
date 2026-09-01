@@ -460,17 +460,13 @@ public static class ProjectsPageGridBuilder
         IReadOnlyList<PerformanceRowDto> performance,
         IPerformanceCalculationEngine engine)
     {
-        static string ExtractDocSet(string? code)
-        {
-            if (string.IsNullOrEmpty(code)) return string.Empty;
-            var pipeIdx = code.IndexOf('|');
-            return pipeIdx >= 0 ? code[(pipeIdx + 1)..].Trim() : string.Empty;
-        }
+        static string DocSetCode(ProjectLaborIntensity li) =>
+            li.DocSetId is null ? string.Empty : (li.DocSet?.Code ?? string.Empty);
 
         var laborIntensities = bundle.LaborIntensities
             .Where(li => li.WorkDirectionId.HasValue)
             .Select(li => new FactLaborIntensityRow(
-                ExtractDocSet(li.DocumentationCode),
+                DocSetCode(li),
                 li.WorkDirectionId,
                 li.PlannedHours))
             .ToList();

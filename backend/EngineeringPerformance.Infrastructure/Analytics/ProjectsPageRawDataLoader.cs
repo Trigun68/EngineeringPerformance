@@ -126,6 +126,7 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
 
             var laborIntensities = await context.ProjectLaborIntensities
                 .AsNoTracking()
+                .Include(li => li.DocSet)
                 .Where(li => versionIds.Contains(li.ProjectAnalysisVersionId))
                 .ToListAsync(cancellationToken);
 
@@ -225,6 +226,7 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
 
         var laborIntensities = await context.ProjectLaborIntensities
             .AsNoTracking()
+            .Include(li => li.DocSet)
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
 

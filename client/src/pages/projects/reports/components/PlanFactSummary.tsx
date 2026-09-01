@@ -87,7 +87,9 @@ function PlanFactBlock({
           </Typography>
         </Box>
         <Box>
-          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>Z-оценка</Typography>
+          <Typography sx={{ fontSize: 11, color: MUTED_COLOR, mb: 0.3 }}>
+            {kind === 'plan' ? 'Заложенный Z' : 'Оценка Z'}
+          </Typography>
           <Typography sx={{ fontSize: 26, fontWeight: 800, color: zColor, lineHeight: 1.1 }}>
             {fmtSigned(z)}
           </Typography>

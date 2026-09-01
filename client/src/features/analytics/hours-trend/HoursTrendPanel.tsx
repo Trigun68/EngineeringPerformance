@@ -197,7 +197,7 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
       },
       {
         field: 'zScore',
-        headerName: 'Z',
+        headerName: 'Оценка Z',
         width: 90,
         valueFormatter: (p) =>
           p.value == null

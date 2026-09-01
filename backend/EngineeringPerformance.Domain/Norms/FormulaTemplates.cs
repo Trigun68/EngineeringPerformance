@@ -130,7 +130,7 @@ public static class FormulaTemplates
 
     public static readonly FormulaTemplate KimCurve = new(
         FormulaType.KimCurve,
-        "Кривая Кима",
+        "Логнормальное распределение",
         @"P(z) = e^{\mu + z \cdot \sigma},\ \mu = \ln(P)",
         [
             new("a", "Производительность", true, 0),

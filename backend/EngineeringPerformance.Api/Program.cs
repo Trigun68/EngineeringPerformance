@@ -4,14 +4,18 @@ using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Configuration;
 using EngineeringPerformance.Api.Middleware;
 using EngineeringPerformance.Api.Validators;
+using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Validators;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Auth;
 using EngineeringPerformance.Infrastructure.Logging;
+using EngineeringPerformance.Infrastructure.Monitoring;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.StackExchangeRedis;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -40,6 +44,7 @@ try
             options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         });
     builder.Services.AddScoped<AuthCookieHelper>();
+    builder.Services.AddSingleton<ITrustedProxyValidator, TrustedProxyValidator>();
 
     // FluentValidation: авто-регистрация валидаторов из Assembly (S1-01)
     builder.Services.AddFluentValidationAutoValidation();
@@ -155,6 +160,7 @@ try
     builder.Services.AddHealthChecks();
 
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddHostedService<ResourceMetricsSampler>();
 
     ConfigureDataProtection(builder);
 
@@ -254,7 +260,7 @@ app.MapControllers();
 // Health check endpoint для Redis и других зависимостей (доступен без аутентификации)
 app.MapHealthChecks("/api/health").AllowAnonymous();
 app.MapHealthChecks("/health").AllowAnonymous();
-app.MapMetrics("/metrics").AllowAnonymous();
+app.MapMetrics("/metrics").RequireAuthorization();
 
 app.Run();
 }
@@ -270,7 +276,7 @@ finally
 
 static void ConfigureDataProtection(WebApplicationBuilder builder)
 {
-    var dataProtection = builder.Services
+    builder.Services
         .AddDataProtection()
         .SetApplicationName("EngineeringPerformance");
 
@@ -278,8 +284,14 @@ static void ConfigureDataProtection(WebApplicationBuilder builder)
     if (string.IsNullOrWhiteSpace(redisConnection))
         return;
 
-    var redis = ConnectionMultiplexer.Connect(redisConnection);
-    dataProtection.PersistKeysToStackExchangeRedis(redis, "EngineeringPerformance-DataProtection-Keys");
+    // Тот же IConnectionMultiplexer, что кэш и вкладка «Ресурсы» — без лишнего Redis-клиента.
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure<IConnectionMultiplexer>((options, mux) =>
+        {
+            options.XmlRepository = new RedisXmlRepository(
+                () => mux.GetDatabase(),
+                "EngineeringPerformance-DataProtection-Keys");
+        });
 }
 
 static void ValidateRequiredConfiguration(IConfiguration configuration, IHostEnvironment environment)

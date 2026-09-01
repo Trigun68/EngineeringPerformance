@@ -405,8 +405,18 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
+        RecalculatePlanHours(
+            scenario, lines, Array.Empty<LaborIntensityCalculator.EquipmentLine>(),
+            normsByDirection, planningZByDirection).Ppv;
+
+    public LaborIntensityCalculator.PlanHoursResult RecalculatePlanHours(
+        PlanningScenario scenario,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> equipmentLines,
+        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
+        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
         LaborIntensityCalculator.Recalculate(
-            scenario, lines, normsByDirection, planningZByDirection, _deviationCalculator);
+            scenario, ppvLines, equipmentLines, normsByDirection, planningZByDirection, _deviationCalculator);
 
     public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
         PlanningScenario scenario,
@@ -426,11 +436,12 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             lines, ppvHoursById, equipmentVolumes, normsByDirection, planningZByDirection, _deviationCalculator);
 
     public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
+        PlanningScenario scenario,
         IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection) =>
-        ForecastHoursAggregator.ComputeEquipmentHours(
-            lines, normsByDirection, planningZByDirection, _deviationCalculator);
+        RecalculatePlanHours(scenario, ppvLines, lines, normsByDirection, planningZByDirection).Equipment;
 
     public decimal? ComputeWeightedZFromPerformanceRows(
         IReadOnlyList<PerformanceRowDto> performanceRows,

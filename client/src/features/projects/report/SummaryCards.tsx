@@ -83,7 +83,7 @@ export function SummaryCards({ plan, fact, accuracyPercent }: Props) {
       data-testid="report-summary-cards"
     >
       <MetricCard
-        title="Z-оценка план"
+        title="Заложенный Z"
         empty={!plan || planZ == null}
         value={plan ? fmtSigned(planZ) : '—'}
         subtitle={
@@ -94,7 +94,7 @@ export function SummaryCards({ plan, fact, accuracyPercent }: Props) {
         testId="report-plan-z"
       />
       <MetricCard
-        title="Z-оценка факт"
+        title="Оценка Z"
         empty={!fact || factZ == null}
         value={fact ? fmtSigned(factZ) : '—'}
         subtitle={

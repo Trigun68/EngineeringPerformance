@@ -88,6 +88,9 @@ export function getApiErrorMessage(error: unknown, fallback = 'Произошл�
   if (response?.status === 404) {
     return 'Ресурс не найден.';
   }
+  if (response?.status === 409) {
+    return 'Версия изменена другим пользователем. Обновите данные и повторите.';
+  }
   if (response?.status === 429) {
     return 'Слишком много запросов. Повторите позже.';
   }

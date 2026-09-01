@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Infrastructure.Import;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -129,6 +130,7 @@ public sealed class ProjectDataService : IProjectDataService
             EstimationBasis = request.EstimationBasis,
         };
         PhysicalVolumeCatalogBinding.AssignCatalogId(entity, request.PhysicalVolumeId, isKfo);
+        await FillPpvCatalogSnapshotAsync(entity, isKfo, request.PhysicalVolumeId, cancellationToken);
 
         _context.ProjectPhysicalVolumes.Add(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
@@ -147,6 +149,7 @@ public sealed class ProjectDataService : IProjectDataService
 
         var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(_context, versionId, cancellationToken);
         PhysicalVolumeCatalogBinding.AssignCatalogId(entity, request.PhysicalVolumeId, isKfo);
+        await FillPpvCatalogSnapshotAsync(entity, isKfo, request.PhysicalVolumeId, cancellationToken);
         entity.Quantity = request.Quantity;
         entity.FacilityCode = request.FacilityCode;
         entity.FacilityName = request.FacilityName;
@@ -197,6 +200,7 @@ public sealed class ProjectDataService : IProjectDataService
             Brand = request.Brand,
             Notes = request.Notes,
         };
+        entity.DocSetId = await new DocSetImportBinder(_context).ResolveAsync(entity.DocumentationCode, cancellationToken);
 
         _context.ProjectLaborIntensities.Add(entity);
         await SaveAndInvalidateAsync(projectId, cancellationToken);
@@ -221,6 +225,7 @@ public sealed class ProjectDataService : IProjectDataService
             entity.DocumentationCode = request.DocumentationCode;
         entity.Brand = request.Brand;
         entity.Notes = request.Notes;
+        entity.DocSetId = await new DocSetImportBinder(_context).ResolveAsync(entity.DocumentationCode, cancellationToken);
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndInvalidateAsync(projectId, cancellationToken);
@@ -317,6 +322,24 @@ public sealed class ProjectDataService : IProjectDataService
         _context.ProjectEquipments.Remove(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
         return true;
+    }
+
+    private async Task FillPpvCatalogSnapshotAsync(
+        ProjectPhysicalVolume entity, bool isKfo, int catalogId, CancellationToken cancellationToken)
+    {
+        if (isKfo)
+        {
+            var row = await _context.PhysicalVolumesKfo.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == catalogId, cancellationToken);
+            if (row is not null)
+                PhysicalVolumeCatalogBinding.FillCatalogSnapshot(entity, row.Coefficient, row.IsAssessment, row.ClassifierId);
+            return;
+        }
+
+        var ber = await _context.PhysicalVolumesBer.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == catalogId, cancellationToken);
+        if (ber is not null)
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(entity, ber.Coefficient, ber.IsAssessment, ber.ClassifierId);
     }
 
     private Task<bool> VersionBelongsToProjectAsync(int projectId, int versionId, CancellationToken cancellationToken) =>

@@ -1,6 +1,6 @@
 # Единый SoT часов и Z-оценки
 
-**Дата:** 2026-08-31  
+**Дата:** 2026-09-01  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
 Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
@@ -35,9 +35,9 @@ Web-путь: **движок → persist в БД → invalidate кэша → GET
 | Модель | LI(z) |
 |--------|--------|
 | Multiplicative (по умолчанию) | `N · (1 + σ_rel · z) · V` |
-| Lognormal («Кривая Кима») | `e^(μ + z · σ) · V`, `μ = ln(P)`, `N = P` независимо от V |
+| Lognormal («Логнормальное распределение») | `e^(μ + z · σ) · V`, `μ = ln(P)`, `N = P` независимо от V |
 
-При z = 0 Ким совпадает с Constant: `P · V`. Z-оценка не ветвится: `Estimate = μ`, `StandardDeviation = σ` (лог).
+При z = 0 логнормаль совпадает с Constant: `P · V`. Z-оценка не ветвится: `Estimate = μ`, `StandardDeviation = σ` (лог).
 
 | Сценарий | Как берётся N |
 |----------|----------------|
@@ -47,7 +47,7 @@ Web-путь: **движок → persist в БД → invalidate кэша → GET
 
 Эквивалент: групповые часы `N_g·(1+σz)·V_g`, доля строки `V_i/V_g`.
 
-Оборудование **не** группируется по сценарию: `N(V_eq)×z` на позицию. Колонки: `ProjectEquipment.LaborIntensityBase/Pessimistic/Optimistic`.
+Оборудование в том же `V_g`, что ФО: `ByProjectIicGroup` / `ByObjectIicGroup` — `V_g = Σ V_ФО + Σ V_об` (assessed, с ClassifierId). `ByEachValue` — `N(V_i)` на каждой линии. Пустой `FacilityCode` у оборудования в `ByObjectIicGroup` — своя корзина `""`. Колонки: `ProjectEquipment.LaborIntensityBase/Pessimistic/Optimistic`. GET не пересчитывает `N(V)` — только `StoredPlanHours`.
 
 Строка с оценкой «Нет» не входит в `V_g` и не получает LI (колонки `null`).
 
@@ -105,7 +105,7 @@ Z = (ln(hours / volume) − Estimate) / σ
 
 Одинаковые часы, объём и норма → одинаковый Z на прогнозе, факте и сравнении.
 
-**Исключение — вкладка «Отчёт»:** KPI и колонка «Z план» показывают заложенный `zBase` параметров планирования (`IPerformanceCalculationEngine.ResolvePlanningZ` / `PlanningScenarioReportMetrics`), а не live Z грида. Грид прогноза по-прежнему считает Z от сохранённых часов.
+**Исключение — вкладка «Отчёт»:** KPI плана — **«Заложенный Z»** (`zBase` параметров планирования). Грид прогноза и факт — **«Оценка Z»** от сохранённых часов / PlannedHours.
 
 ---
 
@@ -134,6 +134,6 @@ Z = (ln(hours / volume) − Estimate) / σ
 ## 5. Что не входит
 
 - Удаление колонки `ActualHours`.
-- Группировка оборудования по сценарию.
+- Заморозка норм / снимок ставок ₽ на версии.
 - WPF / `EngineeringPerformance.Core`.
 - Стилизация Excel факта/сравнения.

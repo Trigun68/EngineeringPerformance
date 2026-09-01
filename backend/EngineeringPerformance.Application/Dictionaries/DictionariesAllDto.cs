@@ -23,4 +23,5 @@ public sealed record DictionariesAllDto(
     IReadOnlyList<DictionaryItemDto> IicWorkDirections,
     IReadOnlyList<DictionaryItemDto> IicWorkDirectionNorms,
     IReadOnlyList<DictionaryItemDto> UnitsOfMeasurement,
+    IReadOnlyList<DictionaryItemDto> DocSets,
     IReadOnlyList<DictionaryItemDto> ProjectCharacteristics);

@@ -197,10 +197,10 @@ public sealed partial class ProjectExcelDataImportService
         var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, versionId);
         var physicalVolumeRows = isKfo
             ? await context.PhysicalVolumesKfo.AsNoTracking()
-                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId, pv.Coefficient, pv.IsAssessment))
                 .ToListAsync()
             : await context.PhysicalVolumesBer.AsNoTracking()
-                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId, pv.Coefficient, pv.IsAssessment))
                 .ToListAsync();
         var catalogName = isKfo ? "PhysicalVolumesKfo" : "PhysicalVolumesBer";
         var physicalVolumes = BuildCodeLookup(physicalVolumeRows, catalogName);
@@ -275,12 +275,14 @@ public sealed partial class ProjectExcelDataImportService
             {
                 draft.ApplyTo(existing);
                 PhysicalVolumeCatalogBinding.AssignCatalogId(existing, catalogRow.Id, isKfo);
+                PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                    existing, catalogRow.Coefficient, catalogRow.IsAssessment, catalogRow.ClassifierId);
                 existing.ModifiedAt = DateTime.UtcNow;
                 imported++;
                 continue;
             }
 
-            var entity = draft.ToNewEntity(projectId, versionId, catalogRow.Id, isKfo, importTimestamp);
+            var entity = draft.ToNewEntity(projectId, versionId, catalogRow.Id, isKfo, importTimestamp, catalogRow);
             newEntities.Add(entity);
             existingByKey[key] = entity;
             imported++;
@@ -554,6 +556,7 @@ public sealed partial class ProjectExcelDataImportService
                 .GroupBy(x => x.DocumentationCode ?? string.Empty, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
 
+        var docSetBinder = new DocSetImportBinder(context);
         var newEntities = new List<ProjectLaborIntensity>();
         var unmatched = new SortedSet<string>(StringComparer.Ordinal);
         var imported = 0;
@@ -584,6 +587,7 @@ public sealed partial class ProjectExcelDataImportService
                 existing.ActualHours = item.ActualHours;
                 existing.Brand = brand;
                 existing.Notes = item.Notes;
+                existing.DocSetId = await docSetBinder.ResolveAsync(documentationCode);
                 existing.ModifiedAt = DateTime.UtcNow;
                 imported++;
                 continue;
@@ -602,6 +606,7 @@ public sealed partial class ProjectExcelDataImportService
                 Notes = item.Notes,
                 CreatedAt = importTimestamp,
             };
+            entity.DocSetId = await docSetBinder.ResolveAsync(documentationCode);
             newEntities.Add(entity);
             existingByCode[documentationCode] = entity;
             imported++;

@@ -44,6 +44,7 @@ VALUES
     (N'HelpPage'),
     (N'LaborIntensities'),
     (N'ProjectCharacteristics'),
+    (N'DocSets'),
     (N'UserActionLog');
 
 INSERT INTO [AccessRights] ([RoleId], [ObjectName], [AccessLevel])

@@ -29,6 +29,7 @@ export const PERMISSION_MATRIX_NODES: readonly PermissionMatrixObjectNode[] = [
   { objectName: 'IicWorkDirections', displayName: 'Группы физ. объёмов (IIC)', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'IicWorkDirections'], isGroupHeader: false },
   { objectName: 'IicWorkDirectionNorms', displayName: 'Нормы групп физ. объёмов (IIC)', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'IicWorkDirectionNorms'], isGroupHeader: false },
   { objectName: 'EngineeringWorkCosts', displayName: 'Стоимость работ', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'EngineeringWorkCosts'], isGroupHeader: false },
+  { objectName: 'DocSets', displayName: 'Комплекты документации', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'DocSets'], isGroupHeader: false },
   { objectName: 'UnitsOfMeasurement', displayName: 'Единицы измерения', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'UnitsOfMeasurement'], isGroupHeader: false },
   { objectName: 'ProjectCharacteristics', displayName: 'Характеристики проекта', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'ProjectCharacteristics'], isGroupHeader: false },
   { objectName: 'SettingsPage', displayName: 'Настройки', parentGroup: null, level: 0, hierarchyPath: ['SettingsPage'], isGroupHeader: true },

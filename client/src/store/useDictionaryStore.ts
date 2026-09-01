@@ -80,6 +80,7 @@ function pickLists(data: DictionariesAllResponse): Record<DictionaryKey, Diction
     iicWorkDirections: data.iicWorkDirections ?? [],
     iicWorkDirectionNorms: data.iicWorkDirectionNorms ?? [],
     unitsOfMeasurement: data.unitsOfMeasurement ?? [],
+    docSets: data.docSets ?? [],
     projectCharacteristics: data.projectCharacteristics ?? [],
   };
 }

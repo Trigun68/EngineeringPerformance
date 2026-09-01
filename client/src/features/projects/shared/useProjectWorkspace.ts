@@ -6,8 +6,9 @@ import {
 import { fetchProjectVersions, type ProjectVersion } from '@/api/projectVersionsApi';
 import { fetchProjectPermissions, type ProjectPermission } from '@/api/projectPermissionsApi';
 import { fetchProjectCharacteristics, type ProjectCharacteristicSelection } from '@/api/projectCharacteristicsApi';
-import { canReadPermission } from '@/utils/permissionAccess';
+import { usePermission } from '@/hooks/usePermission';
 import { useAuthStore } from '@/store/useAuthStore';
+import { canReadPermission } from '@/utils/permissionAccess';
 import type { Project } from '@/types/project';
 
 export interface ProjectWorkspaceData {
@@ -65,6 +66,7 @@ export function useProjectWorkspace(projectId: number | null, canRead: boolean) 
   const user = useAuthStore((s) => s.user);
   const permissions = user?.permissions;
   const roleName = user?.roleName;
+  const { canEdit: canEditProject } = usePermission('Projects');
 
   const visibleWorkspaceTabs = useMemo(
     () =>
@@ -120,7 +122,7 @@ export function useProjectWorkspace(projectId: number | null, canRead: boolean) 
     error,
     visibleWorkspaceTabs,
     canRead,
-    canEdit: canRead,
+    canEdit: canRead && canEditProject,
   };
 }
 

@@ -96,7 +96,7 @@ export function DirectionsTable({ projectId, rows }: Props) {
             <th className="px-2 py-2.5 text-right font-semibold">Произв. факт</th>
             <th className="px-2 py-2.5 text-right font-semibold">Норма</th>
             <th className="px-2 py-2.5 text-right font-semibold">σ</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Z план</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Заложенный Z</th>
             <th className="px-2 py-2.5 text-right font-semibold">Z факт</th>
           </tr>
         </thead>

@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Common.Exceptions;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -99,6 +100,9 @@ public sealed class ProjectVersionService : IProjectVersionService
         if (entity is null)
             return null;
 
+        if (request.RowVersion is { Length: > 0 })
+            _context.Entry(entity).Property(v => v.RowVersion).OriginalValue = request.RowVersion;
+
         await ValidatePhysicalVolumeTypeAsync(request.PhysicalVolumeTypeId, cancellationToken);
 
         var catalogChanged = entity.PhysicalVolumeTypeId != request.PhysicalVolumeTypeId;
@@ -166,12 +170,19 @@ public sealed class ProjectVersionService : IProjectVersionService
                 _context, entity.Id, entity.CreatedAt, cancellationToken);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("Версия изменена другим пользователем. Обновите данные и повторите.");
+        }
 
         var recalcCount = 0;
         if (catalogChanged || createdAtChanged || scenarioChanged)
         {
-            await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+            await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, "scenario", cancellationToken);
             recalcCount = 1;
         }
 
@@ -378,5 +389,6 @@ public sealed class ProjectVersionService : IProjectVersionService
             v.PlanningScenario,
             v.ZParameterLevel,
             v.IsPrimary,
-            0);
+            0,
+            v.RowVersion);
 }

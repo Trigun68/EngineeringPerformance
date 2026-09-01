@@ -33,7 +33,8 @@ public enum PermissionType
     UserActionLog,
     Reports,
     Administration,
-    EngineeringWorkCosts
+    EngineeringWorkCosts,
+    DocSets
 }
 
 public static class PermissionTypeExtensions

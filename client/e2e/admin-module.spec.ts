@@ -27,6 +27,7 @@ test.describe('Admin module', () => {
     await expect(page.getByRole('link', { name: 'Логи системы' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Состояние сервисов' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Мониторинг' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ресурсы' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Аудит настроек' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Журнал действий' })).toBeVisible();
 
@@ -39,6 +40,15 @@ test.describe('Admin module', () => {
     await page.getByRole('link', { name: 'Мониторинг' }).click();
     await expect(page).toHaveURL(/\/admin\/monitoring$/);
     await expect(page.getByText('Системный мониторинг (RED)')).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole('link', { name: 'Ресурсы' }).click();
+    await expect(page).toHaveURL(/\/admin\/resources$/);
+    await expect(page.getByTestId('resource-dashboard')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Ресурсы сервера')).toBeVisible();
+    await expect(page.getByTestId('resource-period-select')).toBeVisible();
+    await page.getByLabel('Отчёт за').click();
+    await page.getByTestId('resource-period-1440').click();
+    await expect(page.getByTestId('resource-dashboard')).toBeVisible();
 
     await page.getByRole('link', { name: 'Аудит настроек' }).click();
     await expect(page).toHaveURL(/\/admin\/audit$/);

@@ -155,7 +155,7 @@ export function createFacilityColumns(): ColDef<ProjectsPageFacilityRow>[] {
     { field: 'facilityCode', headerName: 'Код объекта', minWidth: 120 },
     { field: 'facilityName', headerName: 'Объект', minWidth: 180 },
     { field: 'laborHours', headerName: 'Часы' },
-    { field: 'zScore', headerName: 'Z' },
+    { field: 'zScore', headerName: 'Оценка Z' },
     { field: 'interpretation', headerName: 'Интерпретация', minWidth: 140 },
   ];
 }
@@ -303,7 +303,7 @@ export function createDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
       ...rightAlign,
       valueFormatter: (p) => num0(p.value),
     },
-    { field: 'zScore', headerName: 'Z', width: 80 },
+    { field: 'zScore', headerName: 'Оценка Z', width: 80 },
   ];
 }
 
@@ -321,7 +321,7 @@ export function createPerformanceColumns(
     { field: 'factPhysicalVolume', headerName: 'ФО' },
     { field: 'factLaborHours', headerName: 'Часы' },
     { field: 'factProductivity', headerName: 'Произв.' },
-    { field: 'zScore', headerName: 'Z' },
+    { field: 'zScore', headerName: 'Оценка Z' },
     { field: 'interpretation', headerName: 'Интерпретация' },
   ];
 }
@@ -391,7 +391,7 @@ export function createFactFacilityColumns(): ColDef<ProjectsPageFacilityRow>[] {
     ...factPlanHourColumns<ProjectsPageFacilityRow>(),
     {
       field: 'zScore',
-      headerName: 'Z-score',
+      headerName: 'Оценка Z',
       width: 100,
       ...rightAlign,
       valueFormatter: (p) => num4(p.value),
@@ -492,7 +492,7 @@ export function createFactDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
     },
     {
       field: 'zScore',
-      headerName: 'Z-score',
+      headerName: 'Оценка Z',
       width: 100,
       ...rightGroupable,
       valueFormatter: (p) => num4(p.value),

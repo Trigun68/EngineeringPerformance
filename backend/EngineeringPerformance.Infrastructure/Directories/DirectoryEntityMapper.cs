@@ -25,7 +25,7 @@ internal static class DirectoryEntityMapper
     /// <summary>Навигационные коллекции EF — не отдаём в properties справочника.</summary>
     private static readonly HashSet<string> NavigationPropertyNames =
     [
-        "children", "parent", "projectPhysicalVolumes", "laborIntensities",
+        "children", "parent", "projectPhysicalVolumes", "laborIntensities", "docSet",
         "classifier", "unit", "iicWorkDirection", "options", "physicalVolumeKfo",
         "project", "projectEquipments",
         // UnitOfMeasurement ↔ IIC (цикл при SerializeToNode, если nav подгружены)

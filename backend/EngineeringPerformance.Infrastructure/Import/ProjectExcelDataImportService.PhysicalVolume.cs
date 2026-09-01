@@ -47,10 +47,10 @@ public sealed partial class ProjectExcelDataImportService
         var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(context, versionId);
         var physicalVolumeRows = isKfo
             ? await context.PhysicalVolumesKfo.AsNoTracking()
-                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId, pv.Coefficient, pv.IsAssessment))
                 .ToListAsync()
             : await context.PhysicalVolumesBer.AsNoTracking()
-                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId))
+                .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId, pv.Coefficient, pv.IsAssessment))
                 .ToListAsync();
         var catalogName = isKfo ? "PhysicalVolumesKfo" : "PhysicalVolumesBer";
         var physicalVolumes = BuildCodeLookup(physicalVolumeRows, catalogName);
@@ -119,7 +119,7 @@ public sealed partial class ProjectExcelDataImportService
 
             var draft = PhysicalVolumeImportDraft.FromRow(row, columnMap, ParseDecimal, GetCellValue, catalogRow.Value);
             draft.ApplyTruncation();
-            newEntities.Add(draft.ToNewEntity(projectId, versionId, catalogRow.Value.Id, isKfo, importTimestamp));
+            newEntities.Add(draft.ToNewEntity(projectId, versionId, catalogRow.Value.Id, isKfo, importTimestamp, catalogRow.Value));
         }
 
         if (newEntities.Count == 0)
@@ -1303,7 +1303,8 @@ public sealed partial class ProjectExcelDataImportService
             entity.CatalogName = CatalogName;
         }
 
-        public ProjectPhysicalVolume ToNewEntity(int projectId, int versionId, int physicalVolumeId, bool isKfo, DateTime createdAt)
+        public ProjectPhysicalVolume ToNewEntity(
+            int projectId, int versionId, int physicalVolumeId, bool isKfo, DateTime createdAt, PvCatalogRow catalog)
         {
             var entity = new ProjectPhysicalVolume
             {
@@ -1325,6 +1326,8 @@ public sealed partial class ProjectExcelDataImportService
                 CatalogName = CatalogName,
             };
             PhysicalVolumeCatalogBinding.AssignCatalogId(entity, physicalVolumeId, isKfo);
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                entity, catalog.Coefficient, catalog.IsAssessment, catalog.ClassifierId);
             return entity;
         }
 

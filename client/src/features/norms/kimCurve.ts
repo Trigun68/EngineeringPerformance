@@ -15,7 +15,7 @@ export const FORMULA_TYPE_LABELS: Record<number, string> = {
   9: 'Постоянная',
   10: 'Гиперболическая',
   11: 'Экспоненциальная',
-  12: 'Кривая Кима',
+  12: 'Логнормальное распределение',
 };
 
 export function formulaTypeLabel(type: number | undefined | null): string {

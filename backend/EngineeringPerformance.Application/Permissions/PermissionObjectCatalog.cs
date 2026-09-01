@@ -16,7 +16,7 @@ public static class PermissionObjectCatalog
     [
         "Dashboard", "Users", "Projects", "PhysicalVolumes", "PhysicalVolumeTypes",
         "Equipment", "IicWorkDirections", "ProjectAnalysisVersions",
-        "IicWorkDirectionNorms", "EngineeringWorkCosts", "UnitsOfMeasurement",
+        "IicWorkDirectionNorms", "EngineeringWorkCosts", "DocSets", "UnitsOfMeasurement",
         "ProjectPhysicalVolumes", "ProjectEquipments", "ProjectLaborIntensities",
         "ProjectDataUpload", "Assessment", "Planning",
         "VersionComparison", "GroupAnalysis", "GroupTrend",

@@ -89,7 +89,7 @@ public static class NormDtoMapper
     }
 
     /// <summary>
-    /// Кривая Кима: P, μ=ln(P), σ в лог-пространстве. Не пересчитывает линейное СКО как σ·P.
+    /// Логнормальное распределение: P, μ=ln(P), σ в лог-пространстве. Не пересчитывает линейное СКО как σ·P.
     /// </summary>
     private static void ApplyKimCurve(
         IicWorkDirectionNorm entity,
@@ -101,11 +101,11 @@ public static class NormDtoMapper
         if (performance <= 0 && request.Performance is > 0)
             performance = request.Performance.Value;
         if (performance <= 0)
-            throw new InvalidOperationException("Кривая Кима: производительность должна быть больше 0.");
+            throw new InvalidOperationException("Логнормальное распределение: производительность должна быть больше 0.");
 
         var sigma = ResolveKimSigma(normFormula, devFormula, request.StandardDeviation);
         if (sigma <= 0)
-            throw new InvalidOperationException("Кривая Кима: σ должна быть больше 0.");
+            throw new InvalidOperationException("Логнормальное распределение: σ должна быть больше 0.");
 
         var mu = KimCurveMath.Ln(performance);
         normFormula.Coefficients["a"] = performance;

@@ -65,6 +65,7 @@ Administrator **обходит обе** проверки на уровне се�
 | Настройки → Пользователи | Просмотр/редактирование | ✅ | ⚠️ Read Users (seed) | ❌ | `SettingsPageViewModel` → object `Users` |
 | Настройки → Матрица прав | Редактирование | ✅ только Admin | ❌ | ❌ | API: `AccessRightsController` `Forbid`; WPF: вкладка при `CanRead("Settings")` |
 | Журнал действий | Просмотр | ✅ | ✅* | ✅* | Web: `AppLayout.canAccessAudit`; WPF: `UserActionLog` в навигации |
+| Админка (логи, health, RED, **Ресурсы**, аудит настроек) | Просмотр | ✅ (UI + API) | ❌ UI (скрыто) / ⚠️ API при Read `Administration` | ❌ UI | Web: `AppLayout` супер-админ; API: `[HasPermission(Administration, Read)]` на `/api/monitoring/*` |
 | `GET /api/dictionaries/all` | Bulk-справочники | ✅ любой auth | ✅ любой auth | ✅ любой auth | ⚠️ **GAP: нет проверки прав** |
 | Участники проекта | Назначение | ✅ | ✅ Edit проекта (UI) | ❌ | `ProjectParticipantsDialogViewModel` |
 

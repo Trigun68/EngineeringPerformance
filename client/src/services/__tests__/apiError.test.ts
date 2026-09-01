@@ -32,4 +32,9 @@ describe('getApiErrorMessage', () => {
     const message = getApiErrorMessage({ response: { status: 403, data: {} } });
     expect(message).toBe('Недостаточно прав для выполнения операции.');
   });
+
+  it('maps 409 to concurrency message when body empty', () => {
+    const message = getApiErrorMessage({ response: { status: 409, data: {} } });
+    expect(message).toBe('Версия изменена другим пользователем. Обновите данные и повторите.');
+  });
 });

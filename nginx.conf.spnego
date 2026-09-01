@@ -51,7 +51,7 @@ http {
             # Проброс аутентифицированного пользователя в backend
             auth_gss_authorized_principal $remote_user;
 
-            client_max_body_size 50m;
+            client_max_body_size 10m;
             proxy_pass http://backend:8080/api/;
             proxy_http_version 1.1;
             proxy_set_header Host $host;

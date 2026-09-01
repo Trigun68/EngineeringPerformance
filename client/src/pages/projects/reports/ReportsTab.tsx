@@ -194,12 +194,12 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
                 <DirectionBars
                   rows={roots}
-                  title="Z-оценка по корневым направлениям"
+                  title="Оценка Z по корневым направлениям"
                   description="Агрегированная оценка по поддереву, взвешенная по трудозатратам."
                 />
                 <DirectionBars
                   rows={leaves}
-                  title="Z-оценка по дисциплинам"
+                  title="Оценка Z по дисциплинам"
                   description="Листовые направления работ — источник фактической производительности."
                 />
               </Box>

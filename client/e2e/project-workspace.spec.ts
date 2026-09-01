@@ -179,7 +179,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByTestId('report-v1-page')).toBeVisible({ timeout: 40_000 });
     await expect(page.getByText('Сводка по проекту')).toBeVisible();
     await expect(page.getByText('Трудоёмкость').first()).toBeVisible();
-    await expect(page.getByText('Z-оценка').first()).toBeVisible();
+    await expect(page.getByText('Заложенный Z').first()).toBeVisible();
+    await expect(page.getByText('Оценка Z').first()).toBeVisible();
     await expect(page.getByTestId('report-v1-z-scale')).toBeVisible();
     await expect(page.getByTestId('report-z-zone-Critical')).toBeVisible();
     await expect(page.getByTestId('report-z-zone-Excellent')).toBeVisible();

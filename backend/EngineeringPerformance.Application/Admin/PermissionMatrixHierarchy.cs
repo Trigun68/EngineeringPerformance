@@ -25,6 +25,7 @@ public static class PermissionMatrixHierarchy
         ["ProjectAnalysisVersions"] = "Версии анализа проекта",
         ["IicWorkDirectionNorms"] = "Нормы групп физ. объёмов (IIC)",
         ["EngineeringWorkCosts"] = "Стоимость работ",
+        ["DocSets"] = "Комплекты документации",
         ["UnitsOfMeasurement"] = "Единицы измерения",
         ["ProjectCharacteristics"] = "Характеристики проекта",
         ["ProjectPhysicalVolumes"] = "Физ. объёмы по проекту",
@@ -70,6 +71,7 @@ public static class PermissionMatrixHierarchy
         "IicWorkDirections",
         "IicWorkDirectionNorms",
         "EngineeringWorkCosts",
+        "DocSets",
         "UnitsOfMeasurement",
         "ProjectCharacteristics",
     ];

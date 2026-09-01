@@ -61,14 +61,14 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
 
         if (rows.Count > 0)
         {
-            var first = rows[0];
-            var k = first.GetCoefficient();
-            first.Quantity = ProjectPhysicalVolumeIicUnits.ProjectQuantityFromIicGroupUnits(quantity, k);
-            first.ModifiedAt = DateTime.UtcNow;
+            var newQuantities = PlannedVolumeDistributor.Distribute(
+                version.PlanningScenario,
+                quantity,
+                rows.Select(r => (r.GetCoefficient(), r.Quantity)).ToList());
 
-            for (var i = 1; i < rows.Count; i++)
+            for (var i = 0; i < rows.Count; i++)
             {
-                rows[i].Quantity = 0m;
+                rows[i].Quantity = newQuantities[i];
                 rows[i].ModifiedAt = DateTime.UtcNow;
             }
 
@@ -102,6 +102,8 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
                 CreatedAt = DateTime.UtcNow,
             };
             PhysicalVolumeCatalogBinding.AssignCatalogId(entity, catalogKfo.Id, isKfo: true);
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                entity, catalogKfo.Coefficient, catalogKfo.IsAssessment, catalogKfo.ClassifierId);
             context.ProjectPhysicalVolumes.Add(entity);
         }
         else
@@ -127,6 +129,8 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
                 CreatedAt = DateTime.UtcNow,
             };
             PhysicalVolumeCatalogBinding.AssignCatalogId(entity, catalogBer.Id, isKfo: false);
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                entity, catalogBer.Coefficient, catalogBer.IsAssessment, catalogBer.ClassifierId);
             context.ProjectPhysicalVolumes.Add(entity);
         }
 

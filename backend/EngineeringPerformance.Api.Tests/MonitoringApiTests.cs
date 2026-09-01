@@ -31,10 +31,50 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
     }
 
     [Fact]
+    public async Task ResourceMetrics_Admin_Returns200WithSeries()
+    {
+        if (!_sqlAvailable) return;
+
+        var response = await _client.GetAsync("/api/monitoring/resource-metrics?windowMinutes=15");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadFromJsonAsync<ResourceMetricsResponse>();
+        payload.Should().NotBeNull();
+        payload!.Snapshot.Should().NotBeNull();
+        payload.Snapshot.Backend.Available.Should().BeTrue();
+        payload.Series.BackendCpuCores.Should().NotBeNull();
+        payload.Verdicts.Should().NotBeEmpty();
+        payload.WindowMinutes.Should().Be(15);
+        payload.BucketSeconds.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task ResourceMetrics_SevenDayWindow_Returns200()
+    {
+        if (!_sqlAvailable) return;
+
+        var response = await _client.GetAsync("/api/monitoring/resource-metrics?windowMinutes=10080");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var payload = await response.Content.ReadFromJsonAsync<ResourceMetricsResponse>();
+        payload.Should().NotBeNull();
+        payload!.WindowMinutes.Should().Be(10080);
+        payload.BucketSeconds.Should().Be(600);
+    }
+
+    [Fact]
     public async Task SystemMetrics_Unauthenticated_Returns401()
     {
         var client = new ApiWebApplicationFactory().CreateClient();
         var response = await client.GetAsync("/api/monitoring/system-metrics");
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task ResourceMetrics_Unauthenticated_Returns401()
+    {
+        var client = new ApiWebApplicationFactory().CreateClient();
+        var response = await client.GetAsync("/api/monitoring/resource-metrics");
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
@@ -60,4 +100,17 @@ public sealed class MonitoringApiTests : IClassFixture<ApiWebApplicationFactory>
     private sealed record DependencyHealthResponse(bool IsConfigured, bool IsConnected, string Status);
 
     private sealed record PermissionDriftResponse(bool HasDrift, string[] UnknownObjects, DateTime CheckedAtUtc);
+
+    private sealed record ResourceMetricsResponse(
+        ResourceSnapshotResponse Snapshot,
+        ResourceSeriesResponse Series,
+        string[] Verdicts,
+        int WindowMinutes,
+        int BucketSeconds);
+
+    private sealed record ResourceSnapshotResponse(ServiceResourceResponse Backend);
+
+    private sealed record ServiceResourceResponse(bool Available);
+
+    private sealed record ResourceSeriesResponse(object[] BackendCpuCores);
 }

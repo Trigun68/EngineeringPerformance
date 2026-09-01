@@ -31,6 +31,9 @@ public sealed class ProjectLaborIntensity : DataTableRecord
     /// <summary>FK на строку <see cref="ProjectPhysicalVolume"/> в версии (deep copy ремапит через ppvIdMap).</summary>
     public int? ProjectPhysicalVolumeId { get; set; }
 
+    /// <summary>FK на справочник комплектов документации. NULL — карантин, часы не распределяются.</summary>
+    public int? DocSetId { get; set; }
+
     public decimal PlannedHours { get; set; }
 
     public decimal ActualHours { get; set; }
@@ -52,4 +55,6 @@ public sealed class ProjectLaborIntensity : DataTableRecord
     public PhysicalVolumeBer? PhysicalVolumeBer { get; set; }
 
     public ProjectPhysicalVolume? ProjectPhysicalVolume { get; set; }
+
+    public DocSet? DocSet { get; set; }
 }

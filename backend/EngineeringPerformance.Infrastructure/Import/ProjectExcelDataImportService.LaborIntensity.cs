@@ -288,6 +288,10 @@ public sealed partial class ProjectExcelDataImportService
             laborFileRowsAccepted++;
         }
 
+        var docSetBinder = new DocSetImportBinder(context);
+        foreach (var entity in newEntities)
+            entity.DocSetId = await docSetBinder.ResolveAsync(entity.DocumentationCode);
+
         // Массовая вставка всех строк без группировок (построчно, как в импорте ФО)
         if (newEntities.Count > 0)
         {

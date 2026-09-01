@@ -2,6 +2,7 @@ using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OtpNet;
 using System.Security.Cryptography;
@@ -87,6 +88,11 @@ public sealed class MfaService(
 
     public async Task ResetMfaAsync(User user, CancellationToken cancellationToken = default) =>
         await DisableMfaAsync(user, cancellationToken);
+
+    public async Task<User?> GetActiveUserByIdAsync(int userId, CancellationToken cancellationToken = default) =>
+        await context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
 
     private static bool IsValidCode(string code) =>
         code.Length == 6 && code.All(char.IsAsciiDigit);

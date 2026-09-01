@@ -4,6 +4,8 @@ using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
+using EngineeringPerformance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -23,6 +25,7 @@ public sealed class VisualReportService : IVisualReportService
     private readonly IProjectReportSummaryService _reportSummary;
     private readonly IWorkCostService _workCosts;
     private readonly IPerformanceCalculationEngine _engine;
+    private readonly AppDbContext _context;
 
     public VisualReportService(
         IProjectsPageDataFetcher pageData,
@@ -34,7 +37,8 @@ public sealed class VisualReportService : IVisualReportService
         IPerformanceReportService performanceReport,
         IProjectReportSummaryService reportSummary,
         IWorkCostService workCosts,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine engine,
+        AppDbContext context)
     {
         _pageData = pageData;
         _compare = compare;
@@ -46,6 +50,7 @@ public sealed class VisualReportService : IVisualReportService
         _reportSummary = reportSummary;
         _workCosts = workCosts;
         _engine = engine;
+        _context = context;
     }
 
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -391,6 +396,11 @@ public sealed class VisualReportService : IVisualReportService
         bool includeAppendix = false,
         CancellationToken cancellationToken = default)
     {
+        await EnsureVersionsBelongToProjectAsync(
+            projectId,
+            [planVersionId, factVersionId, compareVersionAId, compareVersionBId],
+            cancellationToken);
+
         var planData = await _pageData.GetProjectsPageDataAsync(projectId, planVersionId, null, cancellationToken);
         var factData = await _pageData.GetProjectsPageDataAsync(projectId, factVersionId, null, cancellationToken);
         var analysis = await _analysis.GenerateReportAsync(projectId, factVersionId, cancellationToken);
@@ -720,7 +730,7 @@ public sealed class VisualReportService : IVisualReportService
 
         var kpis = new List<ReportKpiItem>
         {
-            new("Z-оценка план", FmtZ(report.Plan?.WeightedZScore)),
+            new("Заложенный Z", FmtZ(report.Plan?.WeightedZScore)),
             new("Z-оценка факт", FmtZ(report.Fact?.WeightedZScore)),
             new("Трудоёмкость план", FmtHours(report.Plan?.TotalLaborHours)),
             new("Трудоёмкость факт", FmtHours(report.Fact?.TotalLaborHours)),
@@ -1017,7 +1027,7 @@ public sealed class VisualReportService : IVisualReportService
         PdfTableColumn.Number("Произв. факт"),
         PdfTableColumn.Number("Норма"),
         PdfTableColumn.Number("σ"),
-        PdfTableColumn.Number("Z план"),
+        PdfTableColumn.Number("Заложенный Z"),
         PdfTableColumn.Number("Z факт"),
     ];
 
@@ -1109,4 +1119,25 @@ public sealed class VisualReportService : IVisualReportService
 
     private static string SumNullableDisplay(IEnumerable<decimal?> values, int decimals) =>
         PdfNumberFormat.Format(SumNullable(values), decimals);
+
+    private async Task EnsureVersionsBelongToProjectAsync(
+        int projectId,
+        IReadOnlyList<int> versionIds,
+        CancellationToken cancellationToken)
+    {
+        var versions = await _context.ProjectAnalysisVersions
+            .AsNoTracking()
+            .Where(v => versionIds.Contains(v.Id))
+            .Select(v => new { v.Id, v.ProjectId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var vid in versionIds)
+        {
+            var found = versions.FirstOrDefault(v => v.Id == vid);
+            if (found is null)
+                throw new InvalidOperationException($"Версия с идентификатором {vid} не найдена.");
+            if (found.ProjectId != projectId)
+                throw new InvalidOperationException($"Версия {vid} принадлежит другому проекту.");
+        }
+    }
 }

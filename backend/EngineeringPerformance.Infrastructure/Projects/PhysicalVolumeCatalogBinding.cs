@@ -71,6 +71,17 @@ public static class PhysicalVolumeCatalogBinding
         }
     }
 
+    public static void FillCatalogSnapshot(
+        ProjectPhysicalVolume entity,
+        decimal coefficient,
+        bool? isAssessment,
+        int? classifierId)
+    {
+        entity.CatalogCoefficient = coefficient <= 0m ? 1m : coefficient;
+        entity.CatalogIsAssessment = isAssessment;
+        entity.CatalogClassifierId = classifierId;
+    }
+
     public static void AssignLaborCatalogId(ProjectLaborIntensity entity, int? catalogId, bool isKfo)
     {
         if (!catalogId.HasValue)

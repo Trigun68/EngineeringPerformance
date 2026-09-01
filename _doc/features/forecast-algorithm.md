@@ -1,6 +1,6 @@
 # Алгоритм прогнозирования трудозатрат
 
-**Дата обновления:** 2026-08-31  
+**Дата обновления:** 2026-09-01  
 Реализация: `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `ForecastHoursAggregator`, `ProjectsPageGridBuilder.BuildPlanPerformance`  
 Архитектура: [_doc/architecture/hours-and-z-ssot.md](../../_doc/architecture/hours-and-z-ssot.md)
 
@@ -14,13 +14,13 @@
 
 ### Прогнозная трудоёмкость (LI)
 
-Мультипликативная модель (Linear и остальные, кроме Кима):
+Мультипликативная модель (Linear и остальные, кроме логнормального распределения):
 
 ```
 LI(z) = N · (1 + σ_rel · z) · V_eff
 ```
 
-**Кривая Кима** (`FormulaType.KimCurve`, `DeviationModelType.Lognormal`): производительность не зависит от V (`N = P = a`), σ — в лог-пространстве:
+**Логнормальное распределение** (`FormulaType.KimCurve`, `DeviationModelType.Lognormal`): производительность не зависит от V (`N = P = a`), σ — в лог-пространстве:
 
 ```
 μ = ln(P)
@@ -32,9 +32,9 @@ LI(z) = P(z) · V_eff
 
 `N` берётся по сценарию версии (см. ниже). `z` — `ZBase` / `ZOptimistic` / `ZPessimistic` из `ProjectVersionPlanningParameters` (входы в часы, не колонка оценки).
 
-Только строки ФО с оценкой «Да». Оборудование: `N(V_eq)×z` без группировки сценария.
+Только строки ФО и оборудования с оценкой «Да». Оборудование в том же `V_g`, что ФО (`ByProjectIicGroup` / `ByObjectIicGroup`); `ByEachValue` — `N(V_i)` на линии. GET читает сохранённые колонки.
 
-`Estimate` и `StandardDeviation` — для log-модели Z-оценки (`Z = (ln(P_факт) − μ) / σ`). Для Кима `Estimate = μ`, `StandardDeviation = σ` (лог); ветка Z в движке не нужна.
+`Estimate` и `StandardDeviation` — для log-модели Z-оценки (`Z = (ln(P_факт) − μ) / σ`). Для логнормального распределения `Estimate = μ`, `StandardDeviation = σ` (лог); ветка Z в движке не нужна.
 
 Линейная формула `ФО × (Performance + Z × StdDev)` на web-пути не применяется.
 
@@ -57,7 +57,7 @@ LI(z) = P(z) · V_eff
 | Источник | Описание |
 |---|---|
 | `ProjectPhysicalVolumes` | ФО версии + `LaborIntensity*`; GET суммирует колонки, только `IsAssessment = true` |
-| `ProjectEquipments` | Оборудование версии + `LaborIntensity*` (без группировки сценария) |
+| `ProjectEquipments` | Оборудование версии + `LaborIntensity*` (в том же `V_g`, что ФО) |
 | `AnalysisVersionSnapshots` | Снимок норм на дату версии (persist) |
 | `ProjectVersionPlanningParameters` | Z-параметры по группе IIC (persist) |
 | `ProjectLaborIntensity.PlannedHours` | Часы **факта**; не fallback плана |
@@ -83,6 +83,6 @@ LI(z) = P(z) · V_eff
 | до 2026-05-06 | — | Лог-нормальное пространство: `base = ФО × exp(Estimate)` |
 | 2026-05-06 | — | Линейный алгоритм: `ФО × (Performance + Z × StdDev)` |
 | 2026-06-08 | — | Параметрические нормы: `LI = N(V)·(1+σ·z)·V_eff`; сценарии планирования |
-| **2026-08-31** | **текущий** | Тип «Кривая Кима»: `LI(z) = e^(μ+zσ)·V`; Z без новой ветки |
+| **2026-08-31** | **текущий** | Тип «Логнормальное распределение» (`KimCurve`): `LI(z) = e^(μ+zσ)·V`; Z без новой ветки |
 | **2026-08-24** | — | Часы плана: persist ФО+оборудование, GET только из БД; Z плана = `CalculatePerformance(stored)`; факт = `PlannedHours` |
 | 2026-08-23 | — | Live N(V)×сценарий на вкладках (снято 2026-08-24) |

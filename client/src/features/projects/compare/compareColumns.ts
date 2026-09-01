@@ -226,14 +226,14 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Z-оценка (v. А)',
+      headerName: 'Оценка Z (v. А)',
       width: 130,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZScore(params.data, 'A') : null,
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Z-оценка (v. Б)',
+      headerName: 'Оценка Z (v. Б)',
       width: 130,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZScore(params.data, 'B') : null,
@@ -241,7 +241,7 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
     },
     {
       colId: zDeltaColumnId,
-      headerName: 'Δ Z-score',
+      headerName: 'Δ оценка Z',
       width: 110,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZDelta(params.data) : null,
@@ -276,14 +276,14 @@ export function createCompareSummaryColumns(scenario: CompareScenario = 'base'):
       zDeltaColumnId: 'factZDelta',
     }),
     {
-      headerName: 'Пл.Z (v. А)',
+      headerName: 'Оценка Z плана (v. А)',
       width: 120,
       ...rightAlign,
       valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'A') : null,
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Пл.Z (v. Б)',
+      headerName: 'Оценка Z плана (v. Б)',
       width: 120,
       ...rightAlign,
       valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'B') : null,
@@ -291,7 +291,7 @@ export function createCompareSummaryColumns(scenario: CompareScenario = 'base'):
     },
     {
       colId: 'planZDelta',
-      headerName: 'Δ Пл.Z',
+      headerName: 'Δ оценка Z плана',
       width: 110,
       ...rightAlign,
       valueGetter: (params) => {

@@ -213,6 +213,8 @@ public sealed class DirectoryFacade : IDirectoryFacade
                 || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
                 || await _context.Equipments.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
                 || await _context.IicWorkDirections.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken),
+            "doc-sets" =>
+                await _context.ProjectLaborIntensities.AsNoTracking().AnyAsync(x => x.DocSetId == id, cancellationToken),
             _ => false,
         };
 
@@ -345,6 +347,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             nameof(LaborIntensity) => ctx => (DbSet<T>)(object)ctx.LaborIntensities,
             nameof(IicWorkDirection) => ctx => (DbSet<T>)(object)ctx.IicWorkDirections,
             nameof(UnitOfMeasurement) => ctx => (DbSet<T>)(object)ctx.UnitsOfMeasurement,
+            nameof(DocSet) => ctx => (DbSet<T>)(object)ctx.DocSets,
             nameof(ProjectCharacteristic) => ctx => (DbSet<T>)(object)ctx.ProjectCharacteristics,
             _ => throw new InvalidOperationException($"Unsupported directory entity {typeof(T).Name}")
         };
@@ -394,6 +397,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => (await Repo<LaborIntensity>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "doc-sets" => (await Repo<DocSet>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "project-characteristics" => (await Repo<ProjectCharacteristic>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -418,6 +422,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => (await Repo<LaborIntensity>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "doc-sets" => (await Repo<DocSet>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "project-characteristics" => (await Repo<ProjectCharacteristic>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -434,6 +439,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await Repo<LaborIntensity>().GetByIdAsync(id, ct),
             "iic-work-directions" => await Repo<IicWorkDirection>().GetByIdAsync(id, ct),
             "units-of-measurement" => await Repo<UnitOfMeasurement>().GetByIdAsync(id, ct),
+            "doc-sets" => await Repo<DocSet>().GetByIdAsync(id, ct),
             "project-characteristics" => await Repo<ProjectCharacteristic>().GetByIdAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -450,6 +456,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await Repo<LaborIntensity>().CreateAsync(Prepare(new LaborIntensity(), request), ct),
             "iic-work-directions" => await Repo<IicWorkDirection>().CreateAsync(Prepare(new IicWorkDirection(), request), ct),
             "units-of-measurement" => await Repo<UnitOfMeasurement>().CreateAsync(Prepare(new UnitOfMeasurement(), request), ct),
+            "doc-sets" => await Repo<DocSet>().CreateAsync(Prepare(new DocSet(), request), ct),
             "project-characteristics" => await Repo<ProjectCharacteristic>().CreateAsync(Prepare(new ProjectCharacteristic(), request), ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -466,6 +473,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await UpdateTyped<LaborIntensity>(id, request, ct),
             "iic-work-directions" => await UpdateTyped<IicWorkDirection>(id, request, ct),
             "units-of-measurement" => await UpdateTyped<UnitOfMeasurement>(id, request, ct),
+            "doc-sets" => await UpdateTyped<DocSet>(id, request, ct),
             "project-characteristics" => await UpdateTyped<ProjectCharacteristic>(id, request, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -492,6 +500,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().ArchiveAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().ArchiveAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().ArchiveAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().ArchiveAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().ArchiveAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -508,6 +517,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().UnarchiveAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().UnarchiveAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().UnarchiveAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().UnarchiveAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().UnarchiveAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -524,6 +534,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().DeleteAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().DeleteAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().DeleteAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().DeleteAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().DeleteAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -540,6 +551,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
+            "doc-sets" => Repo<DocSet>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };

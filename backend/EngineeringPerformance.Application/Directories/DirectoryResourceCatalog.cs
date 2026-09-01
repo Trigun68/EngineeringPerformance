@@ -17,6 +17,7 @@ public static class DirectoryResourceCatalog
         new("labor-intensities", PermissionType.LaborIntensities, true),
         new("iic-work-directions", PermissionType.IicWorkDirections, true),
         new("units-of-measurement", PermissionType.UnitsOfMeasurement, false),
+        new("doc-sets", PermissionType.DocSets, false),
         new("project-characteristics", PermissionType.ProjectCharacteristics, false),
     ];
 

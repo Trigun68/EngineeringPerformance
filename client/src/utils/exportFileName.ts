@@ -95,6 +95,8 @@ export function directoryExportView(tabOrSlug: string | null | undefined): strin
       return ExportViews.iicGroups;
     case 'units-of-measurement':
       return 'единицы';
+    case 'doc-sets':
+      return 'комплекты_документации';
     case 'project-characteristics':
       return 'характеристики';
     case 'iic-work-direction-norms':

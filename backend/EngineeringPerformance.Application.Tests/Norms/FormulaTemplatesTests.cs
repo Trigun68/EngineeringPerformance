@@ -13,5 +13,6 @@ public sealed class FormulaTemplatesTests
         Assert.Equal(declaredTypes.Length, FormulaTemplates.All.Count);
         Assert.All(FormulaTemplates.All, template => Assert.NotNull(template.DisplayName));
         Assert.All(declaredTypes, type => Assert.NotNull(FormulaTemplates.Get(type)));
+        Assert.Equal("Логнормальное распределение", FormulaTemplates.KimCurve.DisplayName);
     }
 }

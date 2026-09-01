@@ -279,7 +279,10 @@ export function ProjectVersionPickerDialog({
         asOfDate: `${form.asOfDate}T12:00:00Z`,
       };
       if (editMode === 'edit' && editTarget) {
-        const updated = await updateProjectVersion(projectId, editTarget.id, body);
+        const updated = await updateProjectVersion(projectId, editTarget.id, {
+          ...body,
+          rowVersion: editTarget.rowVersion ?? null,
+        });
         pickVersion(updated, true);
       } else {
         if (form.isPrimary) body.isPrimary = true;

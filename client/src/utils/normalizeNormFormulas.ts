@@ -22,7 +22,7 @@ export function normalizeNormFormula(
     polynomialCoeffs: base.polynomialCoeffs ?? null,
   };
 
-  // type 12 = Кривая Кима; без импорта features/, чтобы utils не зависел от UI-модуля.
+  // type 12 = логнормальное распределение; без импорта features/, чтобы utils не зависел от UI-модуля.
   if (normalized.type === 12) {
     const sigma = normalized.coefficients.sigma ?? 0;
     return {

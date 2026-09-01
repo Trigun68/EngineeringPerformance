@@ -24,6 +24,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<IicWorkDirectionNorm> IicWorkDirectionNorms => Set<IicWorkDirectionNorm>();
     public DbSet<IicWorkDirectionWorkCost> IicWorkDirectionWorkCosts => Set<IicWorkDirectionWorkCost>();
     public DbSet<UnitOfMeasurement> UnitsOfMeasurement => Set<UnitOfMeasurement>();
+    public DbSet<DocSet> DocSets => Set<DocSet>();
+    public DbSet<VersionCalculationLog> VersionCalculationLogs => Set<VersionCalculationLog>();
     public DbSet<ProjectPhysicalVolume> ProjectPhysicalVolumes => Set<ProjectPhysicalVolume>();
     public DbSet<ProjectEquipment> ProjectEquipments => Set<ProjectEquipment>();
     public DbSet<ProjectLaborIntensity> ProjectLaborIntensities => Set<ProjectLaborIntensity>();
@@ -39,6 +41,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<UserSetting> UserSettings => Set<UserSetting>();
     public DbSet<UserActionLog> UserActionLogs => Set<UserActionLog>();
     public DbSet<SqlQueryMetric> SqlQueryMetrics => Set<SqlQueryMetric>();
+    public DbSet<ResourceMetricSample> ResourceMetricSamples => Set<ResourceMetricSample>();
     public DbSet<NormSuggestion> NormSuggestions => Set<NormSuggestion>();
     public DbSet<NormChangeAudit> NormChangeAudits => Set<NormChangeAudit>();
 
@@ -52,16 +55,31 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new UserActionLogConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectPhysicalVolumeConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectLaborIntensityConfiguration());
+        modelBuilder.ApplyConfiguration(new DocSetConfiguration());
+        modelBuilder.ApplyConfiguration(new VersionCalculationLogConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeKfoConfiguration());
         modelBuilder.ApplyConfiguration(new PhysicalVolumeBerConfiguration());
         modelBuilder.ApplyConfiguration(new ProjectVersionPlanningParameterConfiguration());
         modelBuilder.ApplyConfiguration(new EquipmentConfiguration());
         modelBuilder.ApplyConfiguration(new SqlQueryMetricConfiguration());
+        modelBuilder.ApplyConfiguration(new ResourceMetricSampleConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionWorkCostConfiguration());
         modelBuilder.ApplyConfiguration(new DataImportIterationConfiguration());
         modelBuilder.ApplyConfiguration(new NormSuggestionConfiguration());
         modelBuilder.ApplyConfiguration(new NormChangeAuditConfiguration());
+
+        var rowVersion = modelBuilder.Entity<ProjectAnalysisVersion>().Property(v => v.RowVersion);
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.SqlServer")
+        {
+            rowVersion.IsRowVersion();
+        }
+        else
+        {
+            // InMemory / тесты: не SQL rowversion, иначе SaveChanges падает без значения.
+            rowVersion.IsConcurrencyToken();
+            rowVersion.HasDefaultValue(new byte[] { 0, 0, 0, 0, 0, 0, 0, 1 });
+        }
 
         foreach (var property in modelBuilder.Model.GetEntityTypes()
                      .SelectMany(entityType => entityType.GetProperties())

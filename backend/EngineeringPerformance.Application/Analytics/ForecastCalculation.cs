@@ -7,7 +7,7 @@ namespace EngineeringPerformance.Application.Analytics;
 /// <summary>
 /// Единая формула прогнозных часов через <see cref="IDeviationCalculator"/>.
 /// Мультипликативная: LI = N(V) · (1 + σ·z) · V_eff.
-/// Логнормаль (Кривая Кима): LI = e^(μ + z·σ) · V_eff.
+/// Логнормальное распределение: LI = e^(μ + z·σ) · V_eff.
 /// Internal-деталь <see cref="Services.PerformanceCalculationEngine"/> — прямые вызовы
 /// из Infrastructure запрещены, наружу торчит только IPerformanceCalculationEngine.
 /// </summary>

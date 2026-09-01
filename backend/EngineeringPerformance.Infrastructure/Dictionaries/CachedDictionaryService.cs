@@ -17,7 +17,7 @@ namespace EngineeringPerformance.Infrastructure.Dictionaries;
 /// </summary>
 public sealed class CachedDictionaryService : IDictionaryService
 {
-    public const string CacheKey = "dictionaries:all:v3";
+    public const string CacheKey = "dictionaries:all:v4";
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(30);
 
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
@@ -151,10 +151,11 @@ public sealed class CachedDictionaryService : IDictionaryService
         var laborTask = LoadWithNewContextAsync(LoadLaborIntensitiesAsync, cancellationToken);
         var normsTask = LoadWithNewContextAsync(LoadNormsAsync, cancellationToken);
         var characteristicsTask = LoadWithNewContextAsync(LoadCharacteristicsAsync, cancellationToken);
+        var docSetsTask = LoadWithNewContextAsync(LoadDocSetsAsync, cancellationToken);
 
         await Task.WhenAll(
             volumeTypesTask, volumesKfoTask, volumesBerTask, equipmentsTask,
-            directionsTask, unitsTask, laborTask, normsTask, characteristicsTask
+            directionsTask, unitsTask, laborTask, normsTask, characteristicsTask, docSetsTask
         );
 
         // Объединяем KFO и BER для legacy-ключа physicalVolumes (ID могут совпадать — не для FK).
@@ -170,6 +171,7 @@ public sealed class CachedDictionaryService : IDictionaryService
             IicWorkDirections: directionsTask.Result,
             IicWorkDirectionNorms: normsTask.Result,
             UnitsOfMeasurement: unitsTask.Result,
+            DocSets: docSetsTask.Result,
             ProjectCharacteristics: characteristicsTask.Result);
     }
 
@@ -240,6 +242,13 @@ public sealed class CachedDictionaryService : IDictionaryService
                 x.EffectiveFrom.ToString("yyyy-MM-dd"),
                 x.WorkDirectionId,
                 null))
+            .ToListAsync(ct);
+
+    private static Task<List<DictionaryItemDto>> LoadDocSetsAsync(AppDbContext context, CancellationToken ct) =>
+        context.DocSets.AsNoTracking()
+            .Where(x => !x.IsArchived)
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new DictionaryItemDto(x.Id, x.Name, x.Code, null, x.ParentId, null))
             .ToListAsync(ct);
 
     private static Task<List<DictionaryItemDto>> LoadCharacteristicsAsync(AppDbContext context, CancellationToken ct) =>

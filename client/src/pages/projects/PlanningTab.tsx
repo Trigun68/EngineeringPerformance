@@ -26,8 +26,9 @@ import {
 import { DataTable } from '../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
-import { collectNormFallbackWarnings } from '../../features/projects/forecast/normFallbackWarning';
+import { getApiErrorMessage } from '../../services/apiError';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
+import { collectNormFallbackWarnings } from '../../features/projects/forecast/normFallbackWarning';
 
 interface PlanningTabProps {
   projectId: number;
@@ -170,8 +171,8 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
       }));
       await saveForecastPlannedVolumes(projectId, versionId, items);
       await load();
-    } catch {
-      setError('Не удалось сохранить плановые объёмы.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось сохранить плановые объёмы.'));
       setLoading(false);
     }
   };

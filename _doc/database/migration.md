@@ -308,3 +308,17 @@ After running this script, the `__EFMigrationsHistory` table will contain entrie
 Applied automatically via `FullMigration_01_Structure.sql` after `006`. For production SQL-only deploys, run the full part 1 chain so `007` is not skipped.
 
 **Related:** [PhysicalVolume entity](./entities/PhysicalVolume.md), `PerformanceService`, `ProjectForecastService`, `ForecastPlannedVolumePersistenceService` (planned volumes in UI are in IIC units; persistence divides by `Coefficient` when writing `Quantity`).
+
+## Docker additive schema (`ep-db-init`, 116–120)
+
+На живом стеке схема наращивается идемпотентными скриптами в `scripts/docker-db-init.sh` (`SCHEMA_FILES` и ветка «БД уже есть»). Не EF `MigrateAsync`.
+
+| Script | Table / change |
+|--------|----------------|
+| `116_PpvCatalogSnapshot.sql` | Снимок каталога ФО на версии анализа |
+| `117_DocSets.sql` | Справочник комплектов документации |
+| `118_VersionCalculationLogs.sql` | Журнал пересчёта версии |
+| `119_ProjectAnalysisVersionRowVersion.sql` | `RowVersion` версии анализа (конкурентное сохранение → 409) |
+| `120_ResourceMetricSamples.sql` | История вкладки «Ресурсы», кластерный PK `TimestampUtc`, 90 суток |
+
+`120` не сидирует данные: точки пишет `ResourceMetricsSampler`. См. [_doc/features/server-resource-monitoring.md](../features/server-resource-monitoring.md).

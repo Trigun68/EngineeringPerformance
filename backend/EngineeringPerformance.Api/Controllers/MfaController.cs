@@ -3,21 +3,20 @@ using EngineeringPerformance.Api.Auth;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Permissions;
+using EngineeringPerformance.Application.Users;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
-using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Api.Controllers;
 
 [ApiController]
 [Route("api/auth/mfa")]
 public sealed class MfaController(
-    AppDbContext context,
     IMfaService mfaService,
+    IUserManagementService users,
     IAuthService authService,
     IAuthAuditService authAuditService,
     AuthCookieHelper authCookieHelper) : ControllerBase
@@ -122,18 +121,21 @@ public sealed class MfaController(
     [HasPermission(PermissionType.Users, AccessLevel.Edit)]
     public async Task<IActionResult> Reset(int userId, CancellationToken cancellationToken)
     {
-        var user = await context.Users
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
-        if (user is null)
+        var target = await users.GetByIdAsync(userId, cancellationToken);
+        if (target is null)
             return NotFound();
 
-        await mfaService.ResetMfaAsync(user, cancellationToken);
+        var result = await users.ResetMfaAsync(userId, cancellationToken);
+        if (result == MfaResetStatus.Disabled)
+            return BadRequest("Многофакторная аутентификация отключена.");
+        if (result == MfaResetStatus.UserNotFound)
+            return NotFound();
+
         await authAuditService.WriteAsync(
             AuthEventType.MfaReset,
             success: true,
-            user.Id,
-            user.Username,
+            target.Id,
+            target.Username,
             cancellationToken: cancellationToken);
         return NoContent();
     }
@@ -152,7 +154,7 @@ public sealed class MfaController(
     {
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(userId, out var parsedUserId)
-            ? await context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Id == parsedUserId && u.IsActive, cancellationToken)
+            ? await mfaService.GetActiveUserByIdAsync(parsedUserId, cancellationToken)
             : null;
     }
 

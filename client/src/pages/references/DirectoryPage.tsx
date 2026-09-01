@@ -72,11 +72,8 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const fieldDefs = useMemo(() => getDirectoryFields(config.resource), [config.resource]);
   const formFields = useMemo(() => getFormFields(config.resource), [config.resource]);
 
-  const [rows, setRows] = useState<DirectoryEntry[]>([]);
-  const [treeRows, setTreeRows] = useState<DirectoryTreeRow[]>([]);
-  const [loading, setLoading] = useState(false);
   const [mutating, setMutating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [equipmentProjects, setEquipmentProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
@@ -139,8 +136,6 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const [characteristicModalOpen, setCharacteristicModalOpen] = useState(false);
   const [characteristicEditing, setCharacteristicEditing] = useState<DirectoryEntry | null>(null);
 
-  const [optionCounts, setOptionCounts] = useState<Record<number, number>>({});
-
   const gridApiRef = useRef<GridApi | null>(null);
 
   useEffect(() => {
@@ -187,35 +182,26 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     await directoryQuery.refetch();
   }, [directoryQuery]);
 
-  useEffect(() => {
-    if (!directoryQuery.data) return;
-    if (directoryQuery.data.kind === 'tree') {
-      setTreeRows(directoryQuery.data.treeRows);
-    } else {
-      setRows(directoryQuery.data.rows);
-      setOptionCounts(directoryQuery.data.optionCounts);
-    }
-    setSelected(null);
-  }, [directoryQuery.data]);
-
-  useEffect(() => {
-    setLoading(directoryQuery.isFetching);
-    if (directoryQuery.error) {
-      const err = directoryQuery.error;
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      const hint =
-        status === 401
-          ? ' Сессия истекла — войдите снова.'
-          : status === 403
-            ? ' Недостаточно прав.'
-            : status === 410
-              ? ' Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).'
-              : '';
-      setError(`${getApiErrorMessage(err, 'Не удалось загрузить справочник.')}${hint}`);
-    } else if (!directoryQuery.isFetching) {
-      setError(null);
-    }
-  }, [directoryQuery.error, directoryQuery.isFetching]);
+  const treeRows = directoryQuery.data?.kind === 'tree' ? directoryQuery.data.treeRows : [];
+  const rows = directoryQuery.data?.kind === 'flat' ? directoryQuery.data.rows : [];
+  const optionCounts = directoryQuery.data?.kind === 'flat' ? directoryQuery.data.optionCounts : {};
+  const loading = directoryQuery.isFetching;
+  const queryError = directoryQuery.error
+    ? (() => {
+        const err = directoryQuery.error;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        const hint =
+          status === 401
+            ? ' Сессия истекла — войдите снова.'
+            : status === 403
+              ? ' Недостаточно прав.'
+              : status === 410
+                ? ' Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).'
+                : '';
+        return `${getApiErrorMessage(err, 'Не удалось загрузить справочник.')}${hint}`;
+      })()
+    : null;
+  const error = formError ?? queryError;
 
   const { flatColumnDefs, treeColumnDefs, autoGroupColumnDef } = useDirectoryColumnDefs({
     resource: config.resource,

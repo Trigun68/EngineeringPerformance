@@ -112,6 +112,15 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             Version(1, 20, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), archived: false),
             Version(1, 21, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), archived: true),
             Version(2, 22, new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc), archived: false));
+        context.PhysicalVolumesKfo.Add(new PhysicalVolumeKfo
+        {
+            Id = 100,
+            Code = "K100",
+            Name = "K100",
+            Coefficient = 3m,
+            IsAssessment = true,
+            ClassifierId = 7,
+        });
         context.ProjectPhysicalVolumes.AddRange(
             new ProjectPhysicalVolume
             {
@@ -151,6 +160,12 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             catalogId: 100);
 
         count.Should().Be(1);
+        context.ChangeTracker.Clear();
+        var active = await context.ProjectPhysicalVolumes.AsNoTracking().SingleAsync(p => p.Id == 1);
+        var archived = await context.ProjectPhysicalVolumes.AsNoTracking().SingleAsync(p => p.Id == 2);
+        active.CatalogCoefficient.Should().Be(3m);
+        active.CatalogIsAssessment.Should().BeTrue();
+        archived.CatalogCoefficient.Should().BeNull();
         recalculation.Verify(
             x => x.RecalculateAsync(1, 20, It.IsAny<CancellationToken>()),
             Times.Once);
@@ -220,6 +235,41 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
         cache.Verify(
             x => x.InvalidateProjectAsync(It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.AtLeast(5));
+    }
+
+    [Fact]
+    public async Task RecalculateVersionAsync_WritesCalculationLogWithHourSums()
+    {
+        await using var context = CreateContext();
+        SeedProject(context, projectId: 1);
+        context.ProjectAnalysisVersions.Add(
+            Version(1, 50, new DateTime(2026, 3, 15, 0, 0, 0, DateTimeKind.Utc), archived: false));
+        context.ProjectPhysicalVolumes.Add(new ProjectPhysicalVolume
+        {
+            Id = 1,
+            ProjectId = 1,
+            ProjectAnalysisVersionId = 50,
+            Quantity = 1,
+            LaborIntensityBase = 10m,
+            LaborIntensityOptimistic = 8m,
+            LaborIntensityPessimistic = 12m,
+        });
+        await context.SaveChangesAsync();
+
+        var recalculation = new Mock<ILaborIntensityRecalculationService>();
+        recalculation
+            .Setup(x => x.RecalculateAsync(1, 50, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+
+        var orchestrator = CreateOrchestrator(context, recalculation.Object);
+        await orchestrator.RecalculateVersionAsync(1, 50, "button");
+
+        var log = await context.VersionCalculationLogs.AsNoTracking().SingleAsync();
+        log.Trigger.Should().Be("button");
+        log.PpvRowCount.Should().Be(1);
+        log.BaseHoursSum.Should().Be(10m);
+        log.OptimisticHoursSum.Should().Be(8m);
+        log.PessimisticHoursSum.Should().Be(12m);
     }
 
     private static AnalysisVersionRecalculationOrchestrator CreateOrchestrator(

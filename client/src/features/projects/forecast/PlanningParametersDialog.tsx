@@ -449,6 +449,7 @@ export function PlanningParametersDialog({
         physicalVolumeTypeId: meta.physicalVolumeTypeId ?? null,
         planningScenario: scenario,
         zParameterLevel: zLevel,
+        rowVersion: meta.rowVersion ?? null,
       });
 
       onSaved?.();
@@ -477,7 +478,12 @@ export function PlanningParametersDialog({
           planVersionSelected={Boolean(versionId)}
         />
         <Box sx={{ mb: 2, maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <PlanningScenarioSelector value={scenario} onChange={setScenario} disabled={!canEdit || saving} />
+          <PlanningScenarioSelector
+            value={scenario}
+            onChange={setScenario}
+            disabled={!canEdit || saving}
+            helperText="Группировка объёма включает физические объёмы и оборудование одной группы ИИС."
+          />
           <TextField
             select
             size="small"

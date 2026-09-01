@@ -20,11 +20,25 @@ internal static class StoredPlanHoursTestHelper
                 pv.GetIsAssessment() == true))
             .ToList();
 
-        var ppvHours = engine.ComputePpvForecastHours(
+        var equipmentLines = bundle.Equipment
+            .Select(eq => new LaborIntensityCalculator.EquipmentLine(
+                eq.Id,
+                eq.Equipment?.ClassifierId,
+                eq.QuantityInIicGroupUnits(),
+                eq.Equipment?.IsAssessment == true,
+                eq.FacilityCode))
+            .ToList();
+
+        var planHours = engine.RecalculatePlanHours(
             bundle.PlanningScenario,
             lines,
+            equipmentLines,
             bundle.NormsByDirection,
             bundle.PlanningZByDirection);
+
+        var ppvHours = planHours.Ppv.ToDictionary(
+            r => r.PpvId,
+            r => (r.Base, r.Optimistic, r.Pessimistic));
 
         foreach (var pv in bundle.PhysicalVolumes)
         {
@@ -42,22 +56,9 @@ internal static class StoredPlanHoursTestHelper
             }
         }
 
-        var equipmentLines = bundle.Equipment
-            .Select(eq => new LaborIntensityCalculator.EquipmentLine(
-                eq.Id,
-                eq.Equipment?.ClassifierId,
-                eq.QuantityInIicGroupUnits(),
-                eq.Equipment?.IsAssessment == true))
-            .ToList();
-
-        var equipmentHours = engine.ComputeEquipmentForecastHours(
-            equipmentLines,
-            bundle.NormsByDirection,
-            bundle.PlanningZByDirection);
-
         foreach (var eq in bundle.Equipment)
         {
-            if (equipmentHours.TryGetValue(eq.Id, out var hours))
+            if (planHours.Equipment.TryGetValue(eq.Id, out var hours))
             {
                 eq.LaborIntensityBase = hours.Base;
                 eq.LaborIntensityOptimistic = hours.Optimistic;

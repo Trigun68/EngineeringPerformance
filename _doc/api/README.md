@@ -1,6 +1,6 @@
 # HTTP API Engineering Performance
 
-Дата обновления: 2026-08-24.
+Дата обновления: 2026-09-01.
 
 Один REST-контракт для SPA и внешних модулей. Отдельного public API, gateway и роли «integration» нет: `Authorization: Bearer` после `POST /api/auth/login`, права `PermissionType` + ACL проекта.
 
@@ -33,6 +33,7 @@
 | [ingest-equipment.md](ingest-equipment.md) | Excel и JSON-пакет оборудования |
 | [ingest-labor.md](ingest-labor.md) | Excel и JSON-пакет трудоёмкости |
 | [lifecycle.md](lifecycle.md) | Сценарий внешнего модуля от проекта до readiness |
+| [monitoring.md](monitoring.md) | Админский мониторинг, `GET /resource-metrics` |
 | [external-integration.md](external-integration.md) | Краткий обзор (оглавление) |
 
 Excel-загрузка (`POST …/import/*`) **не заменяется**: JSON-пакет живёт на `POST …/ingest/*`.

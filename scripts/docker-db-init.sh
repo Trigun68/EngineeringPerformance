@@ -42,6 +42,11 @@ SCHEMA_FILES=(
   schema/113_EquipmentLaborIntensity.sql
   schema/114_RenameBerTypeSpelling.sql
   schema/115_WorkDirectionWorkCosts.sql
+  schema/116_PpvCatalogSnapshot.sql
+  schema/117_DocSets.sql
+  schema/118_VersionCalculationLogs.sql
+  schema/119_ProjectAnalysisVersionRowVersion.sql
+  schema/120_ResourceMetricSamples.sql
 )
 
 DATA_FILES=(
@@ -147,6 +152,11 @@ if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Use
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/113_EquipmentLaborIntensity.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/114_RenameBerTypeSpelling.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/115_WorkDirectionWorkCosts.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/116_PpvCatalogSnapshot.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/117_DocSets.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/118_VersionCalculationLogs.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/119_ProjectAnalysisVersionRowVersion.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/120_ResourceMetricSamples.sql
   echo ">>> Re-applying seed data scripts (idempotent)..."
   for file in "${DATA_FILES[@]}"; do
     # Не воскрешать CI demo-проекты на существующей рабочей БД после ручного удаления.

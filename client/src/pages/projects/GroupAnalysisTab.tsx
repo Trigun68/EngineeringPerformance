@@ -50,7 +50,7 @@ export function GroupAnalysisTab({ projectId }: GroupAnalysisTabProps) {
       { field: 'projectName', headerName: 'Проект', minWidth: 180 },
       { field: 'versionName', headerName: 'Версия факта', minWidth: 140 },
       { field: 'totalFactLaborHours', headerName: 'Часы факта', width: 120 },
-      { field: 'weightedZScore', headerName: 'Z', width: 90 },
+      { field: 'weightedZScore', headerName: 'Оценка Z', width: 90 },
       { field: 'weightedZInterpretation', headerName: 'Интерпретация', minWidth: 140 },
     ],
     [],

@@ -48,7 +48,7 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
             <TableCell align="right">Факт. произв.</TableCell>
             <TableCell align="right">Норма</TableCell>
             <TableCell align="right">σ нормы</TableCell>
-            <TableCell align="right">Z-оценка</TableCell>
+            <TableCell align="right">Оценка Z</TableCell>
             <TableCell>Интерпретация</TableCell>
           </TableRow>
         </TableHead>

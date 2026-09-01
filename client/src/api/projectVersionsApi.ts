@@ -16,6 +16,7 @@ export interface ProjectVersion {
   planningScenario?: number;
   zParameterLevel?: number;
   isPrimary?: boolean;
+  rowVersion?: string | null;
 }
 
 export interface ProjectVersionWriteRequest {
@@ -30,6 +31,7 @@ export interface ProjectVersionWriteRequest {
   asOfDate?: string | null;
   /** Только create: сделать версию основной. */
   isPrimary?: boolean | null;
+  rowVersion?: string | null;
 }
 
 export interface CopyVersionRequest {
@@ -53,6 +55,7 @@ const projectVersionSchema = z.object({
   planningScenario: z.number().int().optional(),
   zParameterLevel: z.number().int().optional(),
   isPrimary: z.boolean().optional(),
+  rowVersion: z.string().nullable().optional(),
 });
 const projectVersionListSchema = z.array(projectVersionSchema);
 

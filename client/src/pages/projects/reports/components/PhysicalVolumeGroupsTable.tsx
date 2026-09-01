@@ -103,7 +103,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
       },
       {
         field: 'zScore',
-        headerName: 'Z',
+        headerName: 'Оценка Z',
         width: 90,
         type: 'rightAligned',
         valueFormatter: numberFormatter(2),
