@@ -265,7 +265,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
             if (norm.Performance is { } perf)
                 mean = (double)perf;
             else if (norm.Estimate is { } est)
-                mean = Math.Exp((double)est);
+                mean = (double)PerformanceCalculationEngine.EstimateToProductivity(est);
 #pragma warning restore CS0618
             var sigma = ExtractSigma(norm);
 

@@ -5,7 +5,7 @@ using EngineeringPerformance.Domain.Enums;
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
 /// <summary>
-/// Единая точка оценки: факт — PLI.PlannedHours; план/прогноз — live N(V)×сценарий.
+/// Единая точка оценки: факт — PLI.PlannedHours; план/прогноз — сохранённые LaborIntensity* (N(V) пересчитывается только при сохранении, GET не пересчитывает).
 /// Z всегда через CalculatePerformance / ComputeWeightedZFromPerformanceRows.
 /// </summary>
 public sealed class FactAssessmentPipeline : IFactAssessmentPipeline

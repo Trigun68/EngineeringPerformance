@@ -61,6 +61,18 @@ public sealed class KimCurveAndAllFormulasTests
     }
 
     [Fact]
+    public void EstimateToProductivity_IsInverseOfProductivityToEstimate()
+    {
+        foreach (var p in new[] { 0.5m, 1m, 12.5m })
+        {
+            PerformanceCalculationEngine
+                .EstimateToProductivity(PerformanceCalculationEngine.ProductivityToEstimate(p))
+                .Should()
+                .BeApproximately(p, 0.0001m);
+        }
+    }
+
+    [Fact]
     public void KimCurve_Band_IsLognormalNotMultiplicative()
     {
         var band = _dev.GenerateBand(KimNorm(10m), KimDev(0.2m), 10);

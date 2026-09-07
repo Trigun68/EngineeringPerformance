@@ -50,14 +50,14 @@ internal static class ForecastCalculation
         decimal volume,
         decimal? productivity,
         decimal? stdDev,
-        PlanningZParameters z)
+        PlanningZParameters z,
+        IDeviationCalculator calculator)
     {
         if (volume <= 0 || !productivity.HasValue)
             return (null, null, null);
 
         var norm = NormFormulaMapper.FromLegacyPerformance(productivity);
         var dev = NormFormulaMapper.FromLegacyStdDev(productivity, stdDev);
-        var calculator = new DeviationCalculator(new NormCalculator());
         var hours = ComputeForecastHours(norm, dev, volume, volume, z, calculator);
         return ClampNonNegativeHours(hours);
     }

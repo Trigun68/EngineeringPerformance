@@ -20,6 +20,13 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
     public static decimal ProductivityToEstimate(decimal productivity) =>
         productivity > 0 ? (decimal)Math.Log((double)productivity) : 0m;
 
+    /// <summary>
+    /// Обратный переход estimate → производительность: P = e^estimate.
+    /// Единственный SoT; прямые <c>Math.Exp</c> над estimate вне движка запрещены.
+    /// </summary>
+    public static decimal EstimateToProductivity(decimal estimate) =>
+        (decimal)Math.Exp((double)estimate);
+
     public PerformanceCalculationEngine(IDeviationCalculator deviationCalculator)
     {
         _deviationCalculator = deviationCalculator;
@@ -588,7 +595,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         decimal? productivity,
         decimal? stdDev,
         PlanningZParameters z) =>
-        ForecastCalculation.ComputeForecastHours(volume, productivity, stdDev, z);
+        ForecastCalculation.ComputeForecastHours(volume, productivity, stdDev, z, _deviationCalculator);
 
     public IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
         PlanningScenario scenario,
