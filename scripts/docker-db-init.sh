@@ -47,6 +47,7 @@ SCHEMA_FILES=(
   schema/118_VersionCalculationLogs.sql
   schema/119_ProjectAnalysisVersionRowVersion.sql
   schema/120_ResourceMetricSamples.sql
+  schema/121_ProjectAnalysisVersionPrimaryFilteredIndex.sql
 )
 
 DATA_FILES=(
@@ -158,6 +159,7 @@ if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Use
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/118_VersionCalculationLogs.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/119_ProjectAnalysisVersionRowVersion.sql
   "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/120_ResourceMetricSamples.sql
+  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/121_ProjectAnalysisVersionPrimaryFilteredIndex.sql
   echo ">>> Re-applying seed data scripts (idempotent)..."
   for file in "${DATA_FILES[@]}"; do
     # Не воскрешать CI demo-проекты на существующей рабочей БД после ручного удаления.

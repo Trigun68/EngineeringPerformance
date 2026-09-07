@@ -1,7 +1,7 @@
 # Бизнес-логика Engineering Performance
 
-**Дата ревизии:** 2026-08-23  
-**Версия документа:** 1.2  
+**Дата ревизии:** 2026-09-07  
+**Версия документа:** 1.3  
 **Статус:** актуально **только для web-стека** (`backend/`, `client/`). WPF вне scope разработки.
 
 **Политика:** см. [План развития: только Web](../plans/web-only-development-plan.md).
@@ -69,6 +69,8 @@ Project
       ├── ProjectEquipment[]
       └── DataImportIteration[] (аудит импортов)
 ```
+
+**Основная версия (`IsPrimary`).** На пару `(ProjectId, Direction)` допускается не более одной неархивной основной версии. Инвариант держит БД: filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (`IsPrimary=1 AND IsArchived=0`), миграция `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql`. Смена primary (создание, «Сделать основной», смена направления) в `ProjectVersionService` идёт **двумя `SaveChanges` в одной транзакции** (execution strategy): сначала снять флаг со старой, затем назначить новой — индекс проверяется на каждый statement. Смена направления у primary больше не оставляет старое направление без основной: `PromotePrimaryIfMissingAsync` раньше видел ещё несохранённую сущность как primary.
 
 ### 3.2. Снимок норм и live-recalc
 
@@ -544,13 +546,15 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 | Тренды | `GroupTrend` |
 | Импорт Excel | `ProjectDataUpload` (Edit) |
 | Справочники (UI) | `References` + объектные права |
-| Матрица прав | Administrator only |
+| Матрица прав / access-rights / permission-matrix | `Administration` (Read/Edit) |
+| Системные настройки PUT | `Administration` (Edit); GET — любой аутентифицированный (heartbeat) |
+| `GET /metrics` | `Administration` (Read) |
 
 ### 11.3. Известные пробелы ACL
 
 - `GET /api/dictionaries/all` без ролевой фильтрации по справочникам
 - Вкладки проекта в UI видны без проверки permission
-- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два паттерна
+- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два паттерна (остальные контроллеры закрывает `FallbackPolicy` + `ControllerAuthorizationCoverageTests`)
 
 ---
 

@@ -1,9 +1,9 @@
 # Permissions Inventory — Engineering Performance
 
-**Дата:** 2026-06-08  
-**Версия:** 1.0  
+**Дата:** 2026-09-07  
+**Версия:** 1.1  
 **Связанные документы:** [data_access_inventory.md](./data_access_inventory.md), [business_logic_inventory.md](./business_logic_inventory.md)  
-**Источник тестов:** `EngineeringPerformance.Tests/AccessControlServiceTests.cs`, `ProjectVisibilityServiceTests.cs`
+**Источник тестов:** `EngineeringPerformance.Tests/AccessControlServiceTests.cs`, `ProjectVisibilityServiceTests.cs`, `EngineeringPerformance.Api.Tests/ControllerAuthorizationCoverageTests.cs`
 
 ---
 
@@ -33,7 +33,7 @@ Administrator **обходит обе** проверки на уровне се�
 **Администратор (`Administrator`)**
 - Полный доступ ко всем объектам UI (`AccessControlConstants.AllObjectNames`) без записей в `AccessRights`.
 - Видит все неархивные проекты; `ProjectPermissions` не требуется.
-- Единственная роль, редактирующая глобальную матрицу прав (`AccessRightsController`, вкладка «Права пользователей»).
+- Полный доступ к матрице прав; web API проверяет объект `Administration`, не роль в контроллере (`AccessRightsController`, вкладка «Права пользователей»).
 
 **Менеджер проектов (`ProjectManager`)** — аналог «Редактора»
 - Seed: **Edit (2)** на все объекты из `AccessControlConstants` (`DatabaseSeeder.SeedAccessRightsAsync`).
@@ -63,9 +63,9 @@ Administrator **обходит обе** проверки на уровне се�
 | Справочники | CRUD | ✅ | ✅ Edit на объект | ❌ | `DirectoryPage` `canEdit` |
 | Нормы IIC | Редактирование | ✅ | ✅ Edit `IicWorkDirectionNorms` | ❌ | `IicNormsPage` |
 | Настройки → Пользователи | Просмотр/редактирование | ✅ | ⚠️ Read Users (seed) | ❌ | `SettingsPageViewModel` → object `Users` |
-| Настройки → Матрица прав | Редактирование | ✅ только Admin | ❌ | ❌ | API: `AccessRightsController` `Forbid`; WPF: вкладка при `CanRead("Settings")` |
+| Настройки → Матрица прав | Редактирование | ✅ | ⚠️ по объекту `Administration` (Read — просмотр, Edit — правка) | ❌ | API: `AccessRightsController` / `PermissionMatrixController` — `[HasPermission(Administration, Read)]` на GET, `Edit` на PUT (больше не `Forbid` / `IsAdministrator()`); `PUT /api/system-settings` — `Administration:Edit`; WPF: вкладка при `CanRead("Settings")` |
 | Журнал действий | Просмотр | ✅ | ✅* | ✅* | Web: `AppLayout.canAccessAudit`; WPF: `UserActionLog` в навигации |
-| Админка (логи, health, RED, **Ресурсы**, аудит настроек) | Просмотр | ✅ (UI + API) | ❌ UI (скрыто) / ⚠️ API при Read `Administration` | ❌ UI | Web: `AppLayout` супер-админ; API: `[HasPermission(Administration, Read)]` на `/api/monitoring/*` |
+| Админка (логи, health, RED, **Ресурсы**, аудит настроек, `/metrics`) | Просмотр | ✅ (UI + API) | ❌ UI (скрыто) / ⚠️ API при Read `Administration` | ❌ UI | Web: `AppLayout` супер-админ; API: `[HasPermission(Administration, Read)]` на `/api/monitoring/*` и `GET /metrics` |
 | `GET /api/dictionaries/all` | Bulk-справочники | ✅ любой auth | ✅ любой auth | ✅ любой auth | ⚠️ **GAP: нет проверки прав** |
 | Участники проекта | Назначение | ✅ | ✅ Edit проекта (UI) | ❌ | `ProjectParticipantsDialogViewModel` |
 
@@ -182,7 +182,7 @@ return permission is not null && permission.Level >= requiredLevel;
 | 5 | `GET /api/dictionaries/all` только `[Authorize]` | Утечка справочников | Gate по роли или минимум Read на `References` |
 | 6 | `AccessDeniedException` не используется | Нет единого контракта ошибок | Throw из сервисов / middleware |
 | 7 | Copy version в WPF без Edit-check | Observer может копировать локально | `CanExecute` на `CopyVersionCommand` |
-| 8 | Матрица прав WPF: вкладка «Права» при `CanRead("Settings")` | Не-админ может открыть UI матрицы | Ограничить `Administrator` как в API |
+| 8 | Матрица прав WPF: вкладка «Права» при `CanRead("Settings")` | Не-админ может открыть UI матрицы | Web API уже на `Administration` Read/Edit; WPF выровнять |
 | 9 | Seed SQL `002_SeedData.sql` устарел (нет Equipment, UserActionLog, …) | Расхождение dev/prod прав | Синхронизировать с `DatabaseSeeder` |
 
 ---
@@ -210,10 +210,16 @@ return permission is not null && permission.Level >= requiredLevel;
 
 ## 9. Объекты `AccessControlConstants` (полный список для матрицы)
 
-`Dashboard`, `Users`, `Projects`, `PhysicalVolumes`, `PhysicalVolumeTypes`, `Equipment`, `IicWorkDirections`, `ProjectAnalysisVersions`, `IicWorkDirectionNorms`, `EngineeringWorkCosts`, `UnitsOfMeasurement`, `ProjectPhysicalVolumes`, `ProjectEquipments`, `ProjectLaborIntensities`, `ProjectDataUpload`, `Assessment`, `Planning`, `VersionComparison`, `GroupAnalysis`, `GroupTrend`, `References`, `DataPage`, `SettingsPage`, `HelpPage`, `LaborIntensities`, `ProjectCharacteristics`, `UserActionLog`.
+`Dashboard`, `Users`, `Projects`, `PhysicalVolumes`, `PhysicalVolumeTypes`, `Equipment`, `IicWorkDirections`, `ProjectAnalysisVersions`, `IicWorkDirectionNorms`, `EngineeringWorkCosts`, `UnitsOfMeasurement`, `ProjectPhysicalVolumes`, `ProjectEquipments`, `ProjectLaborIntensities`, `ProjectDataUpload`, `Assessment`, `Planning`, `VersionComparison`, `GroupAnalysis`, `GroupTrend`, `References`, `DataPage`, `SettingsPage`, `HelpPage`, `LaborIntensities`, `ProjectCharacteristics`, `UserActionLog`, **`Administration`**.
 
 Уровни: `None=0`, `Read=1`, `Edit=2` (`AccessLevel` enum).
 
+## 10. Единый паттерн авторизации API (2026-09-07)
+
+- `FallbackPolicy = RequireAuthenticatedUser`: любой endpoint без атрибутов требует вход; аноним только с `[AllowAnonymous]`.
+- На действиях — `[HasPermission]` (или allowlist самообслуживания); `[Authorize(Roles=…)]` запрещён. Guard: `backend/EngineeringPerformance.Api.Tests/ControllerAuthorizationCoverageTests.cs`.
+- `GET /metrics` — аутентификация и `Administration:Read` (не публичный scrape).
+
 ---
 
-*Документ сформирован по WPF (`AccessControlService`, `ProjectVisibilityService`, ViewModels) и backend (`PermissionService`, `RequireProjectAccess`, controllers) с перекрёстной проверкой `EngineeringPerformance.Tests`.*
+*Документ сформирован по WPF (`AccessControlService`, `ProjectVisibilityService`, ViewModels) и backend (`PermissionService`, `RequireProjectAccess`, controllers) с перекрёстной проверкой `EngineeringPerformance.Tests` и `ControllerAuthorizationCoverageTests`.*

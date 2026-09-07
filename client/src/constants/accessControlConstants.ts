@@ -29,6 +29,8 @@ const OBJECT_NAME_RU: Record<string, string> = {
   SettingsPage: 'Настройки',
   Dashboard: 'Главная',
   UserActionLog: 'Журнал действий',
+  /** Только SuperAdmin (мониторинг, admin API); в AccessRights не сеется — зеркало PermissionMatrixHierarchy.cs. */
+  Administration: 'Администрирование',
 };
 
 export function toRussianObjectName(objectName: string): string {

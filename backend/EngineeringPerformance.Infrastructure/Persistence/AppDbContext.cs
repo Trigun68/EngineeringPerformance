@@ -68,6 +68,8 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new DataImportIterationConfiguration());
         modelBuilder.ApplyConfiguration(new NormSuggestionConfiguration());
         modelBuilder.ApplyConfiguration(new NormChangeAuditConfiguration());
+        modelBuilder.ApplyConfiguration(new ProjectEquipmentConfiguration());
+        modelBuilder.ApplyConfiguration(new ProjectAnalysisVersionConfiguration());
 
         var rowVersion = modelBuilder.Entity<ProjectAnalysisVersion>().Property(v => v.RowVersion);
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.SqlServer")

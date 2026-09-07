@@ -45,6 +45,8 @@ As of the latest EF migration (`ExpandEquipmentTextFields`, 2026-06-01), the SQL
 
 **Recommendation:** use EF migrations for all new environments. Use `sqlcmd` only when .NET SDK is unavailable; after any schema change, regenerate scripts with `scripts/Regenerate-SqlSchema.ps1` or extend the master chain manually — never mix EF-applied DB with partial sqlcmd updates.
 
+**EF `IEntityTypeConfiguration` (2026-09-07):** `ProjectEquipmentConfiguration` и `ProjectAnalysisVersionConfiguration` применяются из `AppDbContext.OnModelCreating` (классы существовали, но раньше не вызывались — дрейф модели относительно SQL). В конфигурации версии: `VersionName` max 200, `Description` max 2000, filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (см. скрипт `121` ниже). На живом Docker-стеке индекс создаёт additive SQL, не EF `MigrateAsync`.
+
 ## Migration Files
 
 ### Location
@@ -309,7 +311,7 @@ Applied automatically via `FullMigration_01_Structure.sql` after `006`. For prod
 
 **Related:** [PhysicalVolume entity](./entities/PhysicalVolume.md), `PerformanceService`, `ProjectForecastService`, `ForecastPlannedVolumePersistenceService` (planned volumes in UI are in IIC units; persistence divides by `Coefficient` when writing `Quantity`).
 
-## Docker additive schema (`ep-db-init`, 116–120)
+## Docker additive schema (`ep-db-init`, 116–121)
 
 На живом стеке схема наращивается идемпотентными скриптами в `scripts/docker-db-init.sh` (`SCHEMA_FILES` и ветка «БД уже есть»). Не EF `MigrateAsync`.
 
@@ -320,5 +322,6 @@ Applied automatically via `FullMigration_01_Structure.sql` after `006`. For prod
 | `118_VersionCalculationLogs.sql` | Журнал пересчёта версии |
 | `119_ProjectAnalysisVersionRowVersion.sql` | `RowVersion` версии анализа (конкурентное сохранение → 409) |
 | `120_ResourceMetricSamples.sql` | История вкладки «Ресурсы», кластерный PK `TimestampUtc`, 90 суток |
+| `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql` | Filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (`ProjectId`, `Direction` при `IsPrimary=1 AND IsArchived=0`); перед созданием понижает дубликаты primary, оставляя новейший `Id`. Идемпотентно; `SET QUOTED_IDENTIFIER ON` в скрипте. Зарегистрирован в `scripts/docker-db-init.sh`. |
 
-`120` не сидирует данные: точки пишет `ResourceMetricsSampler`. См. [_doc/features/server-resource-monitoring.md](../features/server-resource-monitoring.md).
+`120` не сидирует данные: точки пишет `ResourceMetricsSampler`. См. [_doc/features/server-resource-monitoring.md](../features/server-resource-monitoring.md). `121` только индекс/данные primary, сидов нет.

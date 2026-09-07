@@ -1,47 +1,40 @@
+using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Admin;
-using EngineeringPerformance.Application.Auth;
-using EngineeringPerformance.Application.Permissions;
+using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringPerformance.Api.Controllers;
 
+/// <summary>
+/// Права доступа по объектам. Объект <see cref="PermissionType.Administration"/> выдаётся только
+/// SuperAdmin (bypass в PermissionService), поэтому [HasPermission(Administration)] ≡ «только SuperAdmin».
+/// </summary>
 [ApiController]
 [Route("api/access-rights")]
 [Authorize]
 public sealed class AccessRightsController : ControllerBase
 {
     private readonly IAccessRightsService _accessRights;
-    private readonly ICurrentUserService _currentUser;
 
-    public AccessRightsController(IAccessRightsService accessRights, ICurrentUserService currentUser)
+    public AccessRightsController(IAccessRightsService accessRights)
     {
         _accessRights = accessRights;
-        _currentUser = currentUser;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<AccessRightDto>>> GetAll(CancellationToken cancellationToken)
-    {
-        if (!IsAdministrator())
-            return Forbid();
-
-        return Ok(await _accessRights.GetAllAsync(cancellationToken));
-    }
+    [HasPermission(PermissionType.Administration, AccessLevel.Read)]
+    public async Task<ActionResult<IReadOnlyList<AccessRightDto>>> GetAll(CancellationToken cancellationToken) =>
+        Ok(await _accessRights.GetAllAsync(cancellationToken));
 
     [HttpPut("{id:int}")]
+    [HasPermission(PermissionType.Administration, AccessLevel.Edit)]
     public async Task<IActionResult> Update(
         int id,
         [FromBody] UpdateAccessRightRequest request,
         CancellationToken cancellationToken)
     {
-        if (!IsAdministrator())
-            return Forbid();
-
         var updated = await _accessRights.UpdateAsync(id, request.AccessLevel, cancellationToken);
         return updated ? NoContent() : NotFound();
     }
-
-    private bool IsAdministrator() =>
-        PermissionObjectCatalog.IsSuperAdmin(_currentUser.RoleName, _currentUser.RoleId);
 }

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-07, единая авторизация и инвариант основной версии)
+- API: вместо `[Authorize(Roles=…)]` и ручных `IsAdministrator()` / `Forbid` — `[HasPermission]`. Матрица прав и access-rights (`GET` — `Administration:Read`, `PUT` — `Administration:Edit`); `PUT /api/system-settings` — `Administration:Edit` (классовый `[Authorize(Roles="SuperAdmin,Administrator")]` снят); `GET /api/system-settings` остаётся `[Authorize]` (heartbeat). Шаблоны формул норм (`GetFormulaTemplates` / `Preview`) — `IicWorkDirectionNorms:Read`.
+- Глобальная `FallbackPolicy` = `RequireAuthenticatedUser`: любой endpoint без атрибутов требует вход; аноним только с `[AllowAnonymous]`. `GET /metrics` — аутентификация **и** `Administration:Read`. Guard-тест `ControllerAuthorizationCoverageTests` (рефлексия по контроллерам).
+- Объект **Администрирование** (`Administration`) в матрице клиента (`accessControlConstants`, `permissionObjectHierarchy`).
+- Одна основная неархивная версия на проект и направление: миграция `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql` (filtered unique index `UX_ProjectAnalysisVersions_OnePrimary`; дубликаты понижаются, остаётся новейший `Id`). EF-конфиги `ProjectAnalysisVersionConfiguration` и `ProjectEquipmentConfiguration` подключены в `OnModelCreating` (раньше были мёртвым кодом); `VersionName` ≤ 200, `Description` ≤ 2000.
+- Смена основной версии (создание, «Сделать основной», смена направления) — два `SaveChanges` в транзакции (индекс проверяется на каждый statement). Исправлено: смена направления у primary больше не оставляет старое направление без основной.
+
 ### Fixed (2026-09-07, факт трудоёмкости в отчёте и анализе норм)
 - Таблицы вкладки **Отчет** (топ-5, «Все группы физобъёмов IIC», дерево на корнях, PDF сводных, «Сводный вер 2») показывают группы IIC **первого уровня**: часы факта после `RollHoursToFirstLevel` и объём **поддерева** (`SubtreePhysicalVolume`). Листья больше не отфильтровывают часы в «—».
 - **Анализ факта и норм** и симулятор «Анализа норм» берут точки с корней IIC (X = объём поддерева, Y = производительность). Фильтр по потомку поднимается на L1; норма снимка — с корня или с потомка. Кэш FactNorm: ключ `fact-norm:v2`.

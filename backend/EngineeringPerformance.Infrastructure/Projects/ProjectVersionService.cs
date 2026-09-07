@@ -77,15 +77,23 @@ public sealed class ProjectVersionService : IProjectVersionService
             CreatedAt = asOf,
         };
 
-        if (makePrimary && hasPeers)
-            await ClearPrimaryAsync(projectId, request.Direction, excludeVersionId: null, cancellationToken);
+        await RunInTransactionAsync(async () =>
+        {
+            // Filtered unique index UX_ProjectAnalysisVersions_OnePrimary проверяется per-statement:
+            // сначала снимаем primary с соседей и сохраняем, затем вставляем новую основную.
+            if (makePrimary && hasPeers)
+            {
+                await ClearPrimaryAsync(projectId, request.Direction, excludeVersionId: null, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
-        _context.ProjectAnalysisVersions.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+            _context.ProjectAnalysisVersions.Add(entity);
+            await _context.SaveChangesAsync(cancellationToken);
 
-        await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
-            _context, entity.Id, entity.CreatedAt, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+            await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
+                _context, entity.Id, entity.CreatedAt, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }, cancellationToken);
 
         await _planningParameters.SeedForVersionAsync(entity.Id, cancellationToken);
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
@@ -131,22 +139,22 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.ModifiedAt = DateTime.UtcNow;
         // IsPrimary не меняется через Update — только Create / SetPrimary / Archive.
 
-        if (previousDirection != request.Direction && entity.IsPrimary)
-        {
-            // Смена направления: снять primary здесь и при необходимости восстановить у старого направления.
-            entity.IsPrimary = false;
-            await PromotePrimaryIfMissingAsync(projectId, previousDirection, cancellationToken);
+        var scenarioChanged = request.PlanningScenario.HasValue
+            && request.PlanningScenario.Value != previousScenario;
 
-            var targetHasPrimary = await _context.ProjectAnalysisVersions
-                .AnyAsync(
-                    v => v.ProjectId == projectId
-                         && v.Direction == request.Direction
-                         && !v.IsArchived
-                         && v.IsPrimary
-                         && v.Id != versionId,
-                    cancellationToken);
-            if (!targetHasPrimary)
+        var directionChangedFromPrimary = previousDirection != request.Direction && entity.IsPrimary;
+
+        await RunInTransactionAsync(async () =>
+        {
+            if (directionChangedFromPrimary)
             {
+                // Смена направления: сначала снять primary и сохранить (сущность в БД ещё числится
+                // primary старого направления), затем восстановить основную у старого направления.
+                // Порядок важен из-за filtered unique index UX_ProjectAnalysisVersions_OnePrimary.
+                entity.IsPrimary = false;
+                await SaveWithConcurrencyCheckAsync(cancellationToken);
+                await PromotePrimaryIfMissingAsync(projectId, previousDirection, cancellationToken);
+
                 var hasPeers = await _context.ProjectAnalysisVersions
                     .AnyAsync(
                         v => v.ProjectId == projectId
@@ -154,30 +162,21 @@ public sealed class ProjectVersionService : IProjectVersionService
                              && !v.IsArchived
                              && v.Id != versionId,
                         cancellationToken);
+                // Единственная версия нового направления — становится его основной.
                 if (!hasPeers)
                     entity.IsPrimary = true;
             }
-        }
 
-        var scenarioChanged = request.PlanningScenario.HasValue
-            && request.PlanningScenario.Value != previousScenario;
+            // Снимок норм зависит от CreatedAt; смена справочника БЕР/КФО тоже требует
+            // явного пересоздания (единая политика версии).
+            if (catalogChanged || createdAtChanged)
+            {
+                await AnalysisVersionSnapshotService.RepopulateSnapshotAsync(
+                    _context, entity.Id, entity.CreatedAt, cancellationToken);
+            }
 
-        // Снимок норм зависит от CreatedAt; смена справочника БЕР/КФО тоже требует
-        // явного пересоздания (единая политика версии).
-        if (catalogChanged || createdAtChanged)
-        {
-            await AnalysisVersionSnapshotService.RepopulateSnapshotAsync(
-                _context, entity.Id, entity.CreatedAt, cancellationToken);
-        }
-
-        try
-        {
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            throw new ConflictException("Версия изменена другим пользователем. Обновите данные и повторите.");
-        }
+            await SaveWithConcurrencyCheckAsync(cancellationToken);
+        }, cancellationToken);
 
         var recalcCount = 0;
         if (catalogChanged || createdAtChanged || scenarioChanged)
@@ -239,10 +238,16 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         if (!entity.IsPrimary)
         {
-            await ClearPrimaryAsync(projectId, entity.Direction, excludeVersionId: versionId, cancellationToken);
-            entity.IsPrimary = true;
-            entity.ModifiedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            await RunInTransactionAsync(async () =>
+            {
+                // Два SaveChanges: unique-индекс по primary проверяется на каждом UPDATE отдельно.
+                await ClearPrimaryAsync(projectId, entity.Direction, excludeVersionId: versionId, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                entity.IsPrimary = true;
+                entity.ModifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+            }, cancellationToken);
             await InvalidateAnalyticsAsync(projectId, cancellationToken);
         }
 
@@ -290,6 +295,27 @@ public sealed class ProjectVersionService : IProjectVersionService
             + "физические объёмы. Удалите данные ФО версии или создайте новую версию с нужным справочником.");
     }
 
+    /// <summary>
+    /// Пользовательская транзакция внутри execution strategy (EnableRetryOnFailure).
+    /// Если транзакция уже открыта вызывающим кодом — просто выполняем действие.
+    /// </summary>
+    private async Task RunInTransactionAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (_context.Database.CurrentTransaction is not null || !_context.Database.IsRelational())
+        {
+            await action();
+            return;
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await action();
+            await transaction.CommitAsync(cancellationToken);
+        });
+    }
+
     private async Task ClearPrimaryAsync(
         int projectId,
         AnalysisDirection direction,
@@ -309,6 +335,18 @@ public sealed class ProjectVersionService : IProjectVersionService
         {
             other.IsPrimary = false;
             other.ModifiedAt = DateTime.UtcNow;
+        }
+    }
+
+    private async Task SaveWithConcurrencyCheckAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("Версия изменена другим пользователем. Обновите данные и повторите.");
         }
     }
 

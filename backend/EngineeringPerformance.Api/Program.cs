@@ -6,6 +6,7 @@ using EngineeringPerformance.Api.Middleware;
 using EngineeringPerformance.Api.Validators;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Validators;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure;
 using EngineeringPerformance.Infrastructure.Auth;
 using EngineeringPerformance.Infrastructure.Logging;
@@ -172,7 +173,15 @@ try
     });
 
     builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
-builder.Services.AddAuthorization(options => options.AddPermissionPolicies());
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPermissionPolicies();
+    // ADR-006: любой endpoint без явной политики требует аутентификации.
+    // Анонимные точки (login, health) помечаются [AllowAnonymous] / .AllowAnonymous() явно.
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 var corsOrigins = builder.Configuration.GetSection(CorsOptions.SectionName).Get<CorsOptions>()?.AllowedOrigins ?? [];
 builder.Services.AddCors(options =>
@@ -260,7 +269,9 @@ app.MapControllers();
 // Health check endpoint для Redis и других зависимостей (доступен без аутентификации)
 app.MapHealthChecks("/api/health").AllowAnonymous();
 app.MapHealthChecks("/health").AllowAnonymous();
-app.MapMetrics("/metrics").RequireAuthorization();
+// Prometheus scrape — только SuperAdmin (объект Administration); инфраструктурный сбор идёт через
+// авторизованный сервисный аккаунт, анонимного /metrics нет.
+app.MapMetrics("/metrics").RequireAuthorization($"Permission:{PermissionType.Administration}:{AccessLevel.Read}");
 
 app.Run();
 }

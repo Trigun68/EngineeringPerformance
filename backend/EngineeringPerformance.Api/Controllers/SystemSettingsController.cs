@@ -1,12 +1,18 @@
+using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Settings;
+using EngineeringPerformance.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EngineeringPerformance.Api.Controllers;
 
+/// <summary>
+/// Системные настройки. GET читает любой авторизованный пользователь (AppLayout — heartbeat
+/// таймаута сессии); изменение — только объект Administration (SuperAdmin).
+/// </summary>
 [ApiController]
 [Route("api/admin/system-settings")]
-[Authorize(Roles = "SuperAdmin,Administrator")]
+[Authorize]
 public sealed class SystemSettingsController : ControllerBase
 {
     private readonly ISystemSettingsService _settings;
@@ -24,6 +30,7 @@ public sealed class SystemSettingsController : ControllerBase
     }
 
     [HttpPut]
+    [HasPermission(PermissionType.Administration, AccessLevel.Edit)]
     public async Task<IActionResult> Put([FromBody] SystemSettingsDto dto, CancellationToken cancellationToken)
     {
         await _settings.SetSessionExpirationMinutesAsync(dto.SessionExpirationMinutes, cancellationToken);

@@ -35,6 +35,7 @@ export const PERMISSION_MATRIX_NODES: readonly PermissionMatrixObjectNode[] = [
   { objectName: 'SettingsPage', displayName: 'Настройки', parentGroup: null, level: 0, hierarchyPath: ['SettingsPage'], isGroupHeader: true },
   { objectName: 'Users', displayName: 'Пользователи', parentGroup: 'SettingsPage', level: 1, hierarchyPath: ['SettingsPage', 'Users'], isGroupHeader: false },
   { objectName: 'UserActionLog', displayName: 'Журнал действий', parentGroup: null, level: 0, hierarchyPath: ['UserActionLog'], isGroupHeader: false },
+  { objectName: 'Administration', displayName: 'Администрирование', parentGroup: null, level: 0, hierarchyPath: ['Administration'], isGroupHeader: false },
   { objectName: 'HelpPage', displayName: 'Справка', parentGroup: null, level: 0, hierarchyPath: ['HelpPage'], isGroupHeader: false },
 ] as const;
 
