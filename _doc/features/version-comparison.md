@@ -1,12 +1,13 @@
 # Сравнение версий анализа
 
-**Дата обновления:** 2026-08-25  
+**Дата обновления:** 2026-09-05  
 **Статус:** ✅ Реализовано  
 **Связанные файлы:**
 - `client/src/features/projects/compare/ComparePanel.tsx`
 - `client/src/features/projects/compare/compareColumns.ts`
-- `backend/EngineeringPerformance.Infrastructure/Export/VisualReportService.cs`
+- `backend/EngineeringPerformance.Infrastructure/Export/CompareTableDocumentBuilder.cs`
 - `backend/EngineeringPerformance.Infrastructure/Export/ProjectExportService.cs`
+- `backend/EngineeringPerformance.Infrastructure/Export/VisualReportService.cs`
 
 ---
 
@@ -115,9 +116,11 @@ PDF «По объектам» содержит ту же строку **ИТОГ
 | Кнопка | Что выгружается |
 |--------|-----------------|
 | **Выгрузить Excel (выделенное)** | Видимые колонки текущего грида (всегда шесть план. часов) |
-| **Выгрузить Excel** | Итого / По объектам — снимок грида; Детально — серверный `BuildCompareDetailWorkbook` |
-| **Выгрузить Excel (сводная)** (Детально) | Тот же workbook, что полная выгрузка детально: шесть колонок после ФО A/B |
+| **Выгрузить Excel** | Полная серверная таблица (`CompareTableDocumentBuilder` → `ForecastTableRenderers.ToExcel`): Итого ~21 кол., По объектам ~19, Детально ~37 как грид. Пастель сценариев, баннер, ширины. `PlannedLaborHoursA/B` = базовый сценарий; ФО детально = `QuantityA/B` |
+| **Выгрузить Excel (сводная)** (Детально) | Компактная сводная `BuildCompareDetailWorkbook` (~24 кол.), **не** полный грид |
 | **Выгрузить PDF** | Таблицы Итого / По объектам / Детально через `VisualReportService` (`ComparePlanHourHeaders`) |
+
+Эндпоинты полной Excel-выгрузки: `GET /api/projects/{id}/compare/export/{summary\|facility\|detail}/excel`. Сводная: `…/compare/export/detail/summary-table`.
 
 Фильтр «Показывать различия» на PDF Итого — как в web: FactZ + PlanZ + любая из трёх пар часов (`CompareReportFilter`).
 
@@ -219,6 +222,7 @@ PDF «По объектам» содержит ту же строку **ИТОГ
 
 | Дата | Изменение |
 |------|-----------|
+| 2026-09-05 | **Выгрузить Excel** на всех трёх вкладках — серверный полный грид (`CompareTableDocumentBuilder`); сводная детализации остаётся компактной |
 | 2026-08-25 | Тулбар без «Таблица»/«График»; выгрузка справа у табов; чип — дельта плана B−A по сценарию и подвкладке |
 | 2026-08-25 | Порядок шести колонок плана: Опт./Баз./Песс. × A, затем то же для B |
 | 2026-08-23 | ИТОГО плана = прогноз `SumAllForecastScenarioHours`; own+потомки на «Итого:»; факт-часы на итогах; pinned ИТОГО на «По объектам» |

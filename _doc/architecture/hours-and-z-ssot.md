@@ -1,6 +1,6 @@
 # Единый SoT часов и Z-оценки
 
-**Дата:** 2026-09-01  
+**Дата:** 2026-09-07  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
 Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
@@ -82,6 +82,8 @@ Backfill после миграции колонок оборудования: `s
 
 Неотнесённые строки (`WorkDirectionId` пуст) не входят в выделенные часы факта; KPI неотнесённых — отдельно (`UnallocatedPlannedHours`).
 
+Импорт TF без строки номенклатуры ФО (типичный Excel): часы **поднимаются на IIC первого уровня** (`RollHoursToFirstLevel` в `CalculatePerformance`). Производительность узла с часами — `hours / (объём узла + потомки)`. Движок отдаёт `SubtreePhysicalVolume` (уже посчитанный объём поддерева): таблицы **Отчета** и точки **FactNorm** на L1 показывают его, а не own `FactPhysicalVolume` (часто пуст, ФО на потомках). На «По объектам / Детально» `CalculateFactAssessment` сначала режет точное `(DocSet, ClassifierId)`, иначе бакет `(марка=DocumentSet, L1)` или без марки — по всем объектам поддерева L1. «(пусто)» только у LI без направления.
+
 ---
 
 ## 3. Z-оценка (план и факт — одна формула)
@@ -137,3 +139,4 @@ Z = (ln(hours / volume) − Estimate) / σ
 - Заморозка норм / снимок ставок ₽ на версии.
 - WPF / `EngineeringPerformance.Core`.
 - Стилизация Excel факта/сравнения.
+- Excel/PDF **Факт → Итого** (`FactTableDocumentBuilder`): колонка часов по-прежнему own `FactLaborHours` на всех уровнях дерева (не вкладка «Отчет»). Follow-up: те же L1-часы и объём поддерева, что в таблицах отчёта.

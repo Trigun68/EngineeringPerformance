@@ -55,6 +55,7 @@ DATA_FILES=(
   data/011_RefreshIicFromTexasV2.sql
   data/022_IicNormsEpms20260701.sql
   data/004_LaborIntensity.sql
+  data/024_BackfillLaborIntensityDocumentTypeName.sql
   data/005_PhysicalVolumes.sql
   data/005_PhysicalVolumesKfo.sql
   data/012_RefreshPhysicalVolumesKfoFromNomenclature.sql

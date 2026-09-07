@@ -355,7 +355,8 @@ public static class ProjectsPageGridBuilder
             engine,
             bundle.LaborIntensities
                 .Select(li => new LaborIntensityCalculationLine(li.WorkDirectionId, li.PlannedHours))
-                .ToList());
+                .ToList(),
+            rollHoursToFirstLevel: true);
 
     /// <summary>
     /// Z и производительность плана: сохранённые часы выбранного варианта (по умолчанию базовый)
@@ -373,7 +374,7 @@ public static class ProjectsPageGridBuilder
                 SelectPlanHours(kv.Value, kind) ?? 0m))
             .Where(l => l.PlannedHours > 0)
             .ToList();
-        return BuildPerformanceFromLabor(bundle, engine, labor);
+        return BuildPerformanceFromLabor(bundle, engine, labor, rollHoursToFirstLevel: false);
     }
 
     public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeLivePlanHoursByDirection(
@@ -397,7 +398,8 @@ public static class ProjectsPageGridBuilder
     private static IReadOnlyList<PerformanceRowDto> BuildPerformanceFromLabor(
         ProjectsPageVersionBundle bundle,
         IPerformanceCalculationEngine engine,
-        IReadOnlyList<LaborIntensityCalculationLine> labor)
+        IReadOnlyList<LaborIntensityCalculationLine> labor,
+        bool rollHoursToFirstLevel)
     {
         var directionById = bundle.WorkDirections.ToDictionary(d => d.Id);
         var input = new PerformanceCalculationInput(
@@ -426,7 +428,8 @@ public static class ProjectsPageGridBuilder
                     e.Equipment?.Coefficient ?? 1m))
                 .ToList(),
             LaborIntensities: labor,
-            NormsByDirection: bundle.NormsByDirection);
+            NormsByDirection: bundle.NormsByDirection,
+            RollHoursToFirstLevel: rollHoursToFirstLevel);
 
         var rows = engine.CalculatePerformance(input);
         return ApplyFormattedWorkDirectionNames(rows, bundle.ClassifierMap);
@@ -460,13 +463,17 @@ public static class ProjectsPageGridBuilder
         IReadOnlyList<PerformanceRowDto> performance,
         IPerformanceCalculationEngine engine)
     {
-        static string DocSetCode(ProjectLaborIntensity li) =>
-            li.DocSetId is null ? string.Empty : (li.DocSet?.Code ?? string.Empty);
+        // Марка Excel = PPV.DocumentSet. DocSet.Code — тот же код после '|'; Brand надёжнее, если навигация не загружена.
+        static string FactDocSet(ProjectLaborIntensity li)
+        {
+            if (!string.IsNullOrWhiteSpace(li.Brand))
+                return li.Brand.Trim();
+            return li.DocSet?.Code ?? string.Empty;
+        }
 
         var laborIntensities = bundle.LaborIntensities
-            .Where(li => li.WorkDirectionId.HasValue)
             .Select(li => new FactLaborIntensityRow(
-                DocSetCode(li),
+                FactDocSet(li),
                 li.WorkDirectionId,
                 li.PlannedHours))
             .ToList();
@@ -1215,9 +1222,14 @@ public static class ProjectsPageGridBuilder
             .GroupBy(d => d.FacilityCode)
             .ToDictionary(
                 g => g.Key,
-                g => (
-                    Name: g.First().FacilityName,
-                    Volume: g.Sum(d => d.Quantity)));
+                g =>
+                {
+                    var hoursVol = g.Where(d => d.FactLaborHours is > 0).Sum(d => d.Quantity);
+                    var allVol = g.Sum(d => d.Quantity);
+                    return (
+                        Name: g.First().FacilityName,
+                        Volume: hoursVol > 0 ? hoursVol : allVol);
+                });
 
         var result = facility
             .Select(f =>

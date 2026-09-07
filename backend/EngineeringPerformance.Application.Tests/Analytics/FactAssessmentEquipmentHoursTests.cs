@@ -109,7 +109,7 @@ public sealed class FactAssessmentEquipmentHoursTests
     }
 
     [Fact]
-    public void CalculateFactAssessment_EmptyDocSet_DoesNotAllocateHours()
+    public void CalculateFactAssessment_EmptyDocSet_AllocatesCoarseWhenClassifierInTree()
     {
         var normByDirection = new Dictionary<int, PerformanceRowDto>
         {
@@ -131,8 +131,8 @@ public sealed class FactAssessmentEquipmentHoursTests
                 [11] = new(11, "A", "leaf-A", "ед."),
             }));
 
-        result.Detail.Single(r => r.PvCode == "PV-A").FactLaborHours.Should().BeNull();
-        result.Facility.Where(f => f.Code != string.Empty).Sum(f => f.FactLaborHours ?? 0m)
-            .Should().Be(0m);
+        result.Detail.Single(r => r.PvCode == "PV-A").FactLaborHours.Should().Be(200m);
+        result.Facility.Single(f => f.Code == "F1").FactLaborHours.Should().Be(200m);
+        result.Facility.Should().NotContain(f => f.Name == "(пусто)");
     }
 }

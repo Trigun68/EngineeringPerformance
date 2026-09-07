@@ -50,6 +50,9 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             .GroupBy(li => li.WorkDirectionId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(li => li.PlannedHours));
 
+        if (input.RollHoursToFirstLevel)
+            hoursByDirection = RollHoursToFirstLevel(hoursByDirection, input.WorkDirections);
+
         var rootDirections = input.WorkDirections.Where(d => !d.ParentId.HasValue).ToList();
         var result = new List<PerformanceRowDto>();
         var visited = new HashSet<int>();
@@ -78,50 +81,117 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
 
     public FactAssessmentCalculationResult CalculateFactAssessment(FactAssessmentCalculationInput input)
     {
+        var parentById = BuildParentLookup(input);
+        var orderedPv = input.PhysicalVolumes
+            .Select((pv, index) => (pv, index))
+            .OrderBy(x => x.pv.FacilityCode)
+            .ThenBy(x => x.pv.FacilityName)
+            .ThenBy(x => x.pv.PvCode)
+            .Select(x => x.pv)
+            .ToList();
+
+        var n = orderedPv.Count;
+        var hoursAcc = new decimal?[n];
+        var fromExact = new bool[n];
+        var fromCoarse = new bool[n];
+
         var hoursByDocSetDir = input.LaborIntensities
             .Where(li => li.WorkDirectionId.HasValue && !string.IsNullOrEmpty(li.DocSet))
-            .GroupBy(li => (Set: li.DocSet, Dir: li.WorkDirectionId!.Value))
+            .GroupBy(li => (Set: NormalizeDocSetKey(li.DocSet), Dir: li.WorkDirectionId!.Value))
             .ToDictionary(g => g.Key, g => g.Sum(li => li.Hours));
 
-        var docSetVolumes = input.PhysicalVolumes
+        var docSetVolumes = orderedPv
             .Where(pv => pv.IsAssessment && pv.ClassifierId.HasValue && !string.IsNullOrEmpty(pv.DocumentSet))
-            .GroupBy(pv => (Set: pv.DocumentSet, Dir: pv.ClassifierId!.Value))
+            .GroupBy(pv => (Set: NormalizeDocSetKey(pv.DocumentSet), Dir: pv.ClassifierId!.Value))
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.Coefficient));
 
-        var detailRows = new List<FactAssessmentDetailRowDto>();
-        decimal totalMatchedHours = 0m;
+        var exactKeysAllocated = new HashSet<(string Set, int Dir)>();
 
-        foreach (var pv in input.PhysicalVolumes
-                     .OrderBy(pv => pv.FacilityCode)
-                     .ThenBy(pv => pv.FacilityName)
-                     .ThenBy(pv => pv.PvCode))
+        for (var i = 0; i < n; i++)
         {
-            input.NormByDirection.TryGetValue(pv.ClassifierId ?? -1, out var norm);
-
+            var pv = orderedPv[i];
             var vol = pv.Quantity * pv.Coefficient;
-            decimal? factHours = null;
+            if (!pv.IsAssessment || !pv.ClassifierId.HasValue || vol <= 0 || string.IsNullOrEmpty(pv.DocumentSet))
+                continue;
+
+            var key = (Set: NormalizeDocSetKey(pv.DocumentSet), Dir: pv.ClassifierId.Value);
+            if (!docSetVolumes.TryGetValue(key, out var setVol)
+                || setVol <= 0
+                || !hoursByDocSetDir.TryGetValue(key, out var setHours)
+                || setHours <= 0)
+            {
+                continue;
+            }
+
+            hoursAcc[i] = Math.Round(setHours * (vol / setVol), 2);
+            fromExact[i] = true;
+            exactKeysAllocated.Add(key);
+        }
+
+        var coarseBranded = new Dictionary<(string Set, int L1), decimal>();
+        var coarseOpen = new Dictionary<int, decimal>();
+        foreach (var li in input.LaborIntensities.Where(x => x.WorkDirectionId.HasValue))
+        {
+            var dir = li.WorkDirectionId!.Value;
+            if (!string.IsNullOrEmpty(li.DocSet)
+                && exactKeysAllocated.Contains((NormalizeDocSetKey(li.DocSet), dir)))
+                continue;
+
+            var l1 = IicHierarchy.ToFirstLevelId(dir, parentById);
+            if (!string.IsNullOrEmpty(li.DocSet))
+            {
+                var key = (li.DocSet, l1);
+                coarseBranded[key] = coarseBranded.GetValueOrDefault(key) + li.Hours;
+            }
+            else
+            {
+                coarseOpen[l1] = coarseOpen.GetValueOrDefault(l1) + li.Hours;
+            }
+        }
+
+        AllocateCoarseBuckets(
+            orderedPv,
+            hoursAcc,
+            fromExact,
+            fromCoarse,
+            coarseBranded,
+            parentById,
+            matchDocumentSet: true);
+
+        AllocateCoarseOpen(
+            orderedPv,
+            hoursAcc,
+            fromExact,
+            fromCoarse,
+            coarseOpen,
+            parentById);
+
+        var detailRows = new List<FactAssessmentDetailRowDto>();
+
+        for (var i = 0; i < n; i++)
+        {
+            var pv = orderedPv[i];
+            var vol = pv.Quantity * pv.Coefficient;
+            var normKey = fromCoarse[i] && pv.ClassifierId is int cid
+                ? IicHierarchy.ToFirstLevelId(cid, parentById)
+                : pv.ClassifierId ?? -1;
+            input.NormByDirection.TryGetValue(normKey, out var norm);
+            if (norm is null && pv.ClassifierId is int rowCid)
+                input.NormByDirection.TryGetValue(rowCid, out norm);
+
+            decimal? factHours = hoursAcc[i] is > 0 ? hoursAcc[i] : null;
             decimal? factProductivity = null;
             decimal? zScore = null;
-
-            if (pv.IsAssessment && pv.ClassifierId.HasValue && vol > 0 && !string.IsNullOrEmpty(pv.DocumentSet))
+            if (factHours is > 0 && vol > 0)
             {
-                var key = (Set: pv.DocumentSet, Dir: pv.ClassifierId.Value);
-                if (docSetVolumes.TryGetValue(key, out var setVol)
-                    && setVol > 0
-                    && hoursByDocSetDir.TryGetValue(key, out var setHours)
-                    && setHours > 0)
+                factProductivity = Math.Max(0m, Math.Round(factHours.Value / vol, 4));
+                if (factProductivity > 0
+                    && norm?.NormEstimate is decimal ne
+                    && norm.NormStdDev is decimal nsd
+                    && nsd > 0)
                 {
-                    factHours = Math.Round(setHours * (vol / setVol), 2);
-                    totalMatchedHours += factHours.Value;
-                    factProductivity = Math.Max(0m, Math.Round(setHours / setVol, 4));
-                    if (factProductivity > 0
-                        && norm?.NormEstimate is decimal ne
-                        && norm.NormStdDev is decimal nsd
-                        && nsd > 0)
-                    {
-                        var factEstimate = ProductivityToEstimate(factProductivity.Value);
-                        zScore = Math.Round((factEstimate - ne) / nsd, 4);
-                    }
+                    var factEstimate = ProductivityToEstimate(factProductivity.Value);
+                    zScore = Math.Round((factEstimate - ne) / nsd, 4);
                 }
             }
 
@@ -195,8 +265,10 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             })
             .ToList();
 
-        var totalLiHours = input.LaborIntensities.Sum(li => li.Hours);
-        var unmatchedHours = Math.Round(totalLiHours - totalMatchedHours, 2);
+        var totalLiHoursWithoutDirection = input.LaborIntensities
+            .Where(li => !li.WorkDirectionId.HasValue)
+            .Sum(li => li.Hours);
+        var unmatchedHours = Math.Round(totalLiHoursWithoutDirection, 2);
         if (unmatchedHours > 0)
         {
             facilityRows.Add(new FactAssessmentFacilityRowDto(
@@ -225,6 +297,116 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         }
 
         return new FactAssessmentCalculationResult(detailRows, facilityRows);
+    }
+
+    private static Dictionary<int, int?> BuildParentLookup(FactAssessmentCalculationInput input)
+    {
+        var parentById = new Dictionary<int, int?>();
+        foreach (var kv in input.ClassifierMap)
+            parentById[kv.Key] = kv.Value.ParentId;
+        foreach (var pv in input.PhysicalVolumes)
+        {
+            if (pv.ClassifierId is int cid)
+                parentById.TryAdd(cid, null);
+        }
+
+        foreach (var li in input.LaborIntensities)
+        {
+            if (li.WorkDirectionId is int dir)
+                parentById.TryAdd(dir, null);
+        }
+
+        return parentById;
+    }
+
+    private static void AllocateCoarseBuckets(
+        IReadOnlyList<FactPhysicalVolumeLine> orderedPv,
+        decimal?[] hoursAcc,
+        bool[] fromExact,
+        bool[] fromCoarse,
+        Dictionary<(string Set, int L1), decimal> buckets,
+        IReadOnlyDictionary<int, int?> parentById,
+        bool matchDocumentSet)
+    {
+        foreach (var ((set, l1), setHours) in buckets)
+        {
+            if (setHours <= 0)
+                continue;
+
+            decimal setVol = 0m;
+            var indices = new List<int>();
+            for (var i = 0; i < orderedPv.Count; i++)
+            {
+                if (fromExact[i])
+                    continue;
+                var pv = orderedPv[i];
+                if (!pv.IsAssessment || pv.ClassifierId is not int cid)
+                    continue;
+                if (IicHierarchy.ToFirstLevelId(cid, parentById) != l1)
+                    continue;
+                if (matchDocumentSet
+                    && !string.Equals(pv.DocumentSet, set, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var vol = pv.Quantity * pv.Coefficient;
+                if (vol <= 0)
+                    continue;
+                setVol += vol;
+                indices.Add(i);
+            }
+
+            if (setVol <= 0 || indices.Count == 0)
+                continue;
+
+            foreach (var i in indices)
+            {
+                var pv = orderedPv[i];
+                var vol = pv.Quantity * pv.Coefficient;
+                hoursAcc[i] = (hoursAcc[i] ?? 0m) + Math.Round(setHours * (vol / setVol), 2);
+                fromCoarse[i] = true;
+            }
+        }
+    }
+
+    private static void AllocateCoarseOpen(
+        IReadOnlyList<FactPhysicalVolumeLine> orderedPv,
+        decimal?[] hoursAcc,
+        bool[] fromExact,
+        bool[] fromCoarse,
+        Dictionary<int, decimal> hoursByL1,
+        IReadOnlyDictionary<int, int?> parentById)
+    {
+        var buckets = hoursByL1.ToDictionary(kv => (Set: string.Empty, L1: kv.Key), kv => kv.Value);
+        AllocateCoarseBuckets(
+            orderedPv,
+            hoursAcc,
+            fromExact,
+            fromCoarse,
+            buckets,
+            parentById,
+            matchDocumentSet: false);
+    }
+
+    private static string NormalizeDocSetKey(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
+
+    private static Dictionary<int, decimal> RollHoursToFirstLevel(
+        Dictionary<int, decimal> hoursByDirection,
+        IReadOnlyList<WorkDirectionCalculationNode> directions)
+    {
+        var parentById = directions.ToDictionary(d => d.Id, d => d.ParentId);
+        var rolled = new Dictionary<int, decimal>();
+        foreach (var (id, hours) in hoursByDirection)
+        {
+            var target = parentById.ContainsKey(id)
+                ? IicHierarchy.ToFirstLevelId(id, parentById)
+                : id;
+            rolled[target] = rolled.GetValueOrDefault(target) + hours;
+        }
+
+        return rolled;
     }
 
     private static PerformanceRowDto CreateUnallocatedPlaceholderRow(decimal unallocatedVolume) =>
@@ -276,7 +458,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         return IicWorkDirectionDisplayUnit.FormatCodeNameWithUnit(node.Code, node.Name, node.UnitName);
     }
 
-    private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate) BuildHierarchy(
+    private static (decimal SubtreeEstimateHours, decimal SubtreeWeightedEstimate, decimal SubtreeVolume) BuildHierarchy(
         WorkDirectionCalculationNode direction,
         int level,
         ILookup<int, WorkDirectionCalculationNode> parentIdLookup,
@@ -287,30 +469,21 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         HashSet<int> visited)
     {
         if (!visited.Add(direction.Id))
-            return (0m, 0m);
+            return (0m, 0m, 0m);
 
-        var factVolume = volumeByDirection.GetValueOrDefault(direction.Id);
+        var ownVolume = volumeByDirection.GetValueOrDefault(direction.Id);
         var factHours = hoursByDirection.GetValueOrDefault(direction.Id);
-
-        decimal? factProductivity = factVolume > 0 && factHours > 0
-            ? Math.Round(factHours / factVolume, 4)
-            : null;
-
-        decimal? ownFactEstimate = null;
-        if (factProductivity is > 0)
-            ownFactEstimate = ProductivityToEstimate(factProductivity.Value);
-
-        decimal subtreeEstimateHours = ownFactEstimate.HasValue && factHours > 0 ? factHours : 0m;
-        decimal subtreeWeightedEstimate = ownFactEstimate.HasValue && factHours > 0
-            ? ownFactEstimate.Value * factHours
-            : 0m;
 
         var rowIndex = result.Count;
         result.Add(null!);
 
+        decimal subtreeVolume = ownVolume;
+        decimal subtreeEstimateHours = 0m;
+        decimal subtreeWeightedEstimate = 0m;
+
         foreach (var child in parentIdLookup[direction.Id])
         {
-            var (childEstimateHours, childWeighted) = BuildHierarchy(
+            var (childEstimateHours, childWeighted, childVolume) = BuildHierarchy(
                 child,
                 level + 1,
                 parentIdLookup,
@@ -321,6 +494,22 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
                 visited);
             subtreeEstimateHours += childEstimateHours;
             subtreeWeightedEstimate += childWeighted;
+            subtreeVolume += childVolume;
+        }
+
+        var volumeForProductivity = factHours > 0 ? subtreeVolume : ownVolume;
+        decimal? factProductivity = volumeForProductivity > 0 && factHours > 0
+            ? Math.Round(factHours / volumeForProductivity, 4)
+            : null;
+
+        decimal? ownFactEstimate = null;
+        if (factProductivity is > 0)
+            ownFactEstimate = ProductivityToEstimate(factProductivity.Value);
+
+        if (ownFactEstimate.HasValue && factHours > 0)
+        {
+            subtreeEstimateHours += factHours;
+            subtreeWeightedEstimate += ownFactEstimate.Value * factHours;
         }
 
         decimal? aggregatedFactEstimate = subtreeEstimateHours > 0
@@ -347,7 +536,7 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             ParentId: direction.ParentId,
             Level: level,
             NormUnitName: direction.NormUnitName,
-            FactPhysicalVolume: factVolume > 0 ? factVolume : null,
+            FactPhysicalVolume: ownVolume > 0 ? ownVolume : null,
             FactLaborHours: factHours > 0 ? factHours : null,
             FactProductivity: factProductivity,
             FactEstimate: aggregatedFactEstimate,
@@ -356,9 +545,10 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
             NormStdDev: norm?.StandardDeviation,
             ZScore: zScore,
             Interpretation: interpretation,
-            SubtreeHours: subtreeEstimateHours > 0 ? subtreeEstimateHours : null);
+            SubtreeHours: subtreeEstimateHours > 0 ? subtreeEstimateHours : null,
+            SubtreePhysicalVolume: subtreeVolume > 0 ? subtreeVolume : null);
 
-        return (subtreeEstimateHours, subtreeWeightedEstimate);
+        return (subtreeEstimateHours, subtreeWeightedEstimate, subtreeVolume);
     }
 
     public decimal ComputeForecastBaseHours(
@@ -474,12 +664,14 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         {
             if (row.IsTotal || row.WorkDirectionId < 0)
                 continue;
-            if (row.FactPhysicalVolume is not > 0m || row.NormProductivity is not > 0m)
-                continue;
-            if (row.FactLaborHours is not > 0m)
+            if (row.NormProductivity is not > 0m || row.FactLaborHours is not > 0m)
                 continue;
 
-            normHours += row.FactPhysicalVolume.Value * row.NormProductivity.Value;
+            var volume = VolumeForHoursRow(row);
+            if (volume is not > 0m)
+                continue;
+
+            normHours += volume.Value * row.NormProductivity.Value;
             hours += row.FactLaborHours.Value;
         }
 
@@ -874,6 +1066,18 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         return Math.Round(sortedAscending[^1].ZScore, 2, MidpointRounding.ToEven);
     }
 
+    /// <summary>
+    /// Объём для строк с часами: свой ФО, иначе hours/P (после подъёма часов на L1 объём лежит у потомков).
+    /// </summary>
+    private static decimal? VolumeForHoursRow(PerformanceRowDto row)
+    {
+        if (row.FactPhysicalVolume is > 0m)
+            return row.FactPhysicalVolume;
+        if (row.FactLaborHours is > 0m && row.FactProductivity is > 0m)
+            return row.FactLaborHours.Value / row.FactProductivity.Value;
+        return null;
+    }
+
     private static Dictionary<int, (decimal Volume, decimal Hours)> IndexEligible(IReadOnlyList<PerformanceRowDto> rows)
     {
         var map = new Dictionary<int, (decimal Volume, decimal Hours)>();
@@ -881,9 +1085,12 @@ public sealed class PerformanceCalculationEngine : IPerformanceCalculationEngine
         {
             if (row.IsTotal || row.WorkDirectionId < 0)
                 continue;
-            if (row.FactPhysicalVolume is not > 0m || row.FactLaborHours is not decimal hours)
+            if (row.FactLaborHours is not decimal hours)
                 continue;
-            map[row.WorkDirectionId] = (row.FactPhysicalVolume.Value, hours);
+            var volume = VolumeForHoursRow(row);
+            if (volume is not > 0m)
+                continue;
+            map[row.WorkDirectionId] = (volume.Value, hours);
         }
 
         return map;

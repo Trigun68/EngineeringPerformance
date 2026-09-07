@@ -20,6 +20,8 @@ public sealed record PerformanceRowDto(
     PerformanceInterpretation? Interpretation,
     /// <summary>Часы поддерева, участвующие в средневзвешенной FactEstimate (и в весе Z родителя).</summary>
     decimal? SubtreeHours = null,
+    /// <summary>Физ. объём узла + потомки. Own <see cref="FactPhysicalVolume"/> на L1 часто пуст после rollup часов.</summary>
+    decimal? SubtreePhysicalVolume = null,
     /// <summary>Синтетическая строка «Итого» / «ИТОГО» (сумма часов и ФО по ЕИ).</summary>
     bool IsTotal = false,
     /// <summary>Отображение ФО на строках итогов: «число (ЕИ); …».</summary>

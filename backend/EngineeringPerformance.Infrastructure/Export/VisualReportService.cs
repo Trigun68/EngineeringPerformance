@@ -746,19 +746,23 @@ public sealed class VisualReportService : IVisualReportService
 
         var treeRows = report.Directions
             .Take(40)
-            .Select(d => (string[])
-            [
-                d.Name,
-                d.PhysicalVolume is null ? "—" : $"{PdfNumberFormat.Volume(d.PhysicalVolume)} {d.UnitName ?? ""}".Trim(),
-                PdfNumberFormat.Hours(d.PlanLaborHours),
-                PdfNumberFormat.Hours(d.FactLaborHours),
-                PdfNumberFormat.Productivity(d.PlanProductivity),
-                PdfNumberFormat.Productivity(d.FactProductivity),
-                PdfNumberFormat.Productivity(d.NormProductivity),
-                PdfNumberFormat.Productivity(d.NormStdDev),
-                FmtZ(d.PlanZScore),
-                FmtZ(d.FactZScore),
-            ])
+            .Select(d =>
+            {
+                var volume = PerformanceDisplayVolume.ForMergedRow(d);
+                return (string[])
+                [
+                    d.Name,
+                    volume is null ? "—" : $"{PdfNumberFormat.Volume(volume)} {d.UnitName ?? ""}".Trim(),
+                    PdfNumberFormat.Hours(d.PlanLaborHours),
+                    PdfNumberFormat.Hours(d.FactLaborHours),
+                    PdfNumberFormat.Productivity(d.PlanProductivity),
+                    PdfNumberFormat.Productivity(d.FactProductivity),
+                    PdfNumberFormat.Productivity(d.NormProductivity),
+                    PdfNumberFormat.Productivity(d.NormStdDev),
+                    FmtZ(d.PlanZScore),
+                    FmtZ(d.FactZScore),
+                ];
+            })
             .ToList();
 
         var insightLines = report.Insights.Items
@@ -811,9 +815,8 @@ public sealed class VisualReportService : IVisualReportService
     }
 
     /// <summary>
-    /// Сводный отчёт «план/факт» по основным версиям (вкладка «Отчёт»).
-    /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService);
-    /// таблицы листьев — из факт-грида текущей версии, паритет client ReportsTab.
+    /// Таблицы групп IIC — первый уровень (часы факта после rollup на ParentId == null).
+    /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService).
     /// </summary>
     public async Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
@@ -823,14 +826,12 @@ public sealed class VisualReportService : IVisualReportService
 
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var allRows = data.Fact.Performance.Where(r => r.WorkDirectionId >= 0).ToList();
-        var parentIds = allRows.Where(r => r.ParentId.HasValue).Select(r => r.ParentId!.Value).ToHashSet();
-        // Лист дерева = узел, который никто не указывает своим родителем — паритет
-        // client reportCalc.ts::flattenTree + ReportsTab.tsx (leaves = flat.filter(children.length === 0)).
-        var leaves = allRows.Where(r => !parentIds.Contains(r.WorkDirectionId)).ToList();
+        // Таблицы отчёта — IIC первого уровня: часы факта после RollHoursToFirstLevel живут на корнях.
+        var firstLevel = PerformanceDisplayVolume.FirstLevel(allRows).ToList();
 
-        var scoredLeaves = leaves.Where(r => r.ZScore.HasValue).ToList();
-        var best = scoredLeaves.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
-        var worst = scoredLeaves.OrderByDescending(r => r.ZScore!.Value).Take(5).ToList();
+        var scoredRoots = firstLevel.Where(r => r.ZScore.HasValue).ToList();
+        var best = scoredRoots.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
+        var worst = scoredRoots.OrderByDescending(r => r.ZScore!.Value).Take(5).ToList();
 
         static IEnumerable<string[]> RankRows(IReadOnlyList<PerformanceRowDto> rows) =>
             rows.Select((r, i) => new[]
@@ -842,12 +843,12 @@ public sealed class VisualReportService : IVisualReportService
                 r.Interpretation?.ToRussian() ?? "—",
             });
 
-        var volumeRows = leaves.Select(r => new HierarchicalPdfRow(
+        var volumeRows = firstLevel.Select(r => new HierarchicalPdfRow(
             0,
             [
                 r.WorkDirectionName,
-                PdfNumberFormat.Volume(r.FactPhysicalVolume),
-                PdfNumberFormat.Hours(r.FactLaborHours),
+                PdfNumberFormat.Volume(PerformanceDisplayVolume.ForReportRow(r)),
+                PdfNumberFormat.Hours(r.FactLaborHours ?? r.SubtreeHours),
                 PdfNumberFormat.Productivity(r.FactProductivity),
                 PdfNumberFormat.Productivity(r.NormProductivity),
                 PdfNumberFormat.Z(r.ZScore),

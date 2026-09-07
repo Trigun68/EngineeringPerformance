@@ -22,6 +22,8 @@ internal static class ForecastTableRenderers
 
         var excelRow = 2 + headerLines.Count + 1;
         var maxColumns = 1;
+        IReadOnlyList<ForecastTableColumn>? widthColumns = null;
+        var lastUsedRow = excelRow;
         foreach (var section in document.Sections)
         {
             if (!string.IsNullOrWhiteSpace(section.Title))
@@ -40,7 +42,13 @@ internal static class ForecastTableRenderers
                 excelRow++;
             }
 
-            maxColumns = Math.Max(maxColumns, section.Columns.Count);
+            lastUsedRow = excelRow - 1;
+            if (section.Columns.Count >= maxColumns)
+            {
+                maxColumns = section.Columns.Count;
+                widthColumns = section.Columns;
+            }
+
             excelRow++;
         }
 
@@ -49,6 +57,8 @@ internal static class ForecastTableRenderers
         for (var r = 1; r <= bannerLastRow; r++)
             sheet.Range(r, 1, r, mergeTo).Merge();
         sheet.SheetView.FreezeRows(bannerLastRow);
+        if (widthColumns is { Count: > 0 })
+            ApplyColumnWidths(sheet, widthColumns, lastUsedRow);
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         return stream.ToArray();
@@ -133,9 +143,10 @@ internal static class ForecastTableRenderers
             cell.Style.Font.FontColor = XLColor.White;
             cell.Style.Fill.BackgroundColor = XLColor.FromHtml(ForecastTableTheme.HeaderFillHex);
             cell.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            cell.Style.Alignment.WrapText = true;
         }
 
-        sheet.Row(row).Height = ForecastTableTheme.RowHeightExcel;
+        sheet.Row(row).Height = ForecastTableTheme.HeaderRowHeightExcel;
     }
 
     private static void WriteDataRow(
@@ -172,17 +183,10 @@ internal static class ForecastTableRenderers
 
     private static void ApplyFill(IXLCell cell, ForecastHourTone tone, bool isTotal, int excelRow)
     {
-        if (tone == ForecastHourTone.Optimistic)
+        if (tone is ForecastHourTone.Optimistic or ForecastHourTone.Base or ForecastHourTone.Pessimistic)
         {
-            cell.Style.Fill.BackgroundColor = XLColor.FromHtml(ForecastTableTheme.OptimisticFillHex);
-            cell.Style.Font.FontColor = XLColor.White;
-            return;
-        }
-
-        if (tone == ForecastHourTone.Pessimistic)
-        {
-            cell.Style.Fill.BackgroundColor = XLColor.FromHtml(ForecastTableTheme.PessimisticFillHex);
-            cell.Style.Font.FontColor = XLColor.White;
+            cell.Style.Fill.BackgroundColor = XLColor.FromHtml(FillHex(tone));
+            cell.Style.Font.FontColor = XLColor.FromHtml(ForecastTableTheme.ContentTextHex);
             return;
         }
 
@@ -195,6 +199,33 @@ internal static class ForecastTableRenderers
 
         if (excelRow % 2 == 0)
             cell.Style.Fill.BackgroundColor = XLColor.FromHtml(ForecastTableTheme.StripeFillHex);
+    }
+
+    private static void ApplyColumnWidths(
+        IXLWorksheet sheet,
+        IReadOnlyList<ForecastTableColumn> columns,
+        int lastRow)
+    {
+        var sampleEnd = Math.Max(1, Math.Min(lastRow, 200));
+        sheet.Columns(1, columns.Count).AdjustToContents(1, sampleEnd);
+
+        var relativeSum = columns.Sum(c => (double)c.RelativeWidth);
+        if (relativeSum <= 0)
+            relativeSum = columns.Count;
+
+        for (var i = 0; i < columns.Count; i++)
+        {
+            var column = columns[i];
+            var minWidth = column.Numeric
+                ? ForecastTableTheme.ExcelMinNumericWidth
+                : column.RelativeWidth >= 3f
+                    ? ForecastTableTheme.ExcelMinNameWidth
+                    : ForecastTableTheme.ExcelMinCodeWidth;
+            var scaled = column.RelativeWidth / relativeSum * ForecastTableTheme.ExcelSheetWidth;
+            var width = Math.Max(minWidth, sheet.Column(i + 1).Width);
+            width = Math.Max(width, scaled);
+            sheet.Column(i + 1).Width = Math.Min(width, ForecastTableTheme.ExcelMaxColumnWidth);
+        }
     }
 
     private static void RenderSection(IContainer container, ForecastTableSection section)
@@ -250,10 +281,8 @@ internal static class ForecastTableRenderers
 
     private static Color CellBackground(ForecastHourTone tone, bool isTotal)
     {
-        if (tone == ForecastHourTone.Optimistic)
-            return Color.FromHex(ForecastTableTheme.OptimisticFillHex);
-        if (tone == ForecastHourTone.Pessimistic)
-            return Color.FromHex(ForecastTableTheme.PessimisticFillHex);
+        if (tone is ForecastHourTone.Optimistic or ForecastHourTone.Base or ForecastHourTone.Pessimistic)
+            return Color.FromHex(FillHex(tone));
         if (isTotal)
             return Color.FromHex(ForecastTableTheme.TotalFillHex);
         return Colors.White;
@@ -261,8 +290,18 @@ internal static class ForecastTableRenderers
 
     private static Color CellForeground(ForecastHourTone tone, bool isTotal)
     {
-        if (tone is ForecastHourTone.Optimistic or ForecastHourTone.Pessimistic || isTotal)
+        if (tone is ForecastHourTone.Optimistic or ForecastHourTone.Base or ForecastHourTone.Pessimistic)
+            return Color.FromHex(ForecastTableTheme.ContentTextHex);
+        if (isTotal)
             return Colors.White;
         return Colors.Black;
     }
+
+    private static string FillHex(ForecastHourTone tone) => tone switch
+    {
+        ForecastHourTone.Optimistic => ForecastTableTheme.OptimisticFillHex,
+        ForecastHourTone.Base => ForecastTableTheme.BaseFillHex,
+        ForecastHourTone.Pessimistic => ForecastTableTheme.PessimisticFillHex,
+        _ => ForecastTableTheme.StripeFillHex,
+    };
 }

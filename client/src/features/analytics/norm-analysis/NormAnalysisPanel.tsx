@@ -267,7 +267,9 @@ export function NormAnalysisPanel({ dateFrom, dateTo, onOpenFactNorms }: Props) 
       ac.signal,
     )
       .then((data) => {
-        const match = data.comparisons.find((c) => c.workDirectionId === selectedRow.groupId);
+        const match =
+          data.comparisons.find((c) => c.workDirectionId === selectedRow.groupId) ??
+          (data.comparisons.length === 1 ? data.comparisons[0] : undefined);
         const ys = (match?.chartPoints ?? []).map((p) => p.y).filter((y) => Number.isFinite(y));
         setFactYs(ys);
       })

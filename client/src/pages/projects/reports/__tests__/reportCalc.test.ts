@@ -4,6 +4,8 @@ import {
   ACCENT_PLAN,
   DIRECTION_FACT,
   DIRECTION_PLAN,
+  buildInsights,
+  displayPhysicalVolume,
   formatFactSourceLabel,
   formatPlanSourceLabel,
   formatTrendPointLabel,
@@ -16,12 +18,80 @@ import {
   INTERPRETATION_BG,
   INTERPRETATION_COLOR,
   INTERPRETATION_SHORT_RU,
+  keyDisciplines,
+  resolveSubtreePhysicalVolume,
   selectVersionTrendPoints,
   ZONE_COLOR,
   zScaleVisualPct,
   type Interpretation,
+  type PerformanceTreeRow,
   type VersionTrendPoint,
 } from '../reportCalc';
+
+describe('displayPhysicalVolume / insights at IIC first level', () => {
+  const root = (partial: Partial<PerformanceTreeRow>): PerformanceTreeRow => ({
+    workDirectionId: 1,
+    workDirectionName: 'Автоматизация',
+    workDirectionCode: 'IIC-5',
+    parentId: null,
+    level: 0,
+    normUnitName: 'ед.',
+    factPhysicalVolume: null,
+    factLaborHours: 100,
+    factProductivity: 10,
+    factEstimate: null,
+    normProductivity: 8,
+    normEstimate: null,
+    normStdDev: 1,
+    zScore: 1.2,
+    interpretation: null,
+    subtreeHours: 100,
+    subtreePhysicalVolume: 10,
+    children: [],
+    ...partial,
+  });
+
+  it('uses subtree volume on roots and own volume on leaves', () => {
+    const r = root({});
+    const leaf: PerformanceTreeRow = {
+      ...r,
+      workDirectionId: 52,
+      parentId: 1,
+      level: 1,
+      factPhysicalVolume: 10,
+      factLaborHours: null,
+      factProductivity: null,
+      zScore: null,
+      subtreeHours: null,
+      subtreePhysicalVolume: 10,
+      children: [],
+    };
+    expect(displayPhysicalVolume(r)).toBe(10);
+    expect(displayPhysicalVolume(leaf)).toBe(10);
+    expect(resolveSubtreePhysicalVolume({ ...r, subtreePhysicalVolume: null })).toBe(10);
+  });
+
+  it('buildInsights ranks first-level rows and computes overrun from subtree volume', () => {
+    const insights = buildInsights(
+      [root({})],
+      {
+        totalFactLaborHours: 100,
+        weightedZScore: 1.2,
+        weightedZScorePercentile: '',
+        weightedZScoreInterpretation: null,
+        unallocatedLaborHours: 0,
+        physicalVolumeTotalsByUnit: [],
+      },
+      90,
+    );
+    expect(insights.some((i) => i.kind === 'risk')).toBe(true);
+    expect(insights[0].detail).toContain('ч');
+  });
+
+  it('keyDisciplines keeps roots with subtree hours', () => {
+    expect(keyDisciplines([root({}), root({ workDirectionId: 2, subtreeHours: 0 })])).toHaveLength(1);
+  });
+});
 
 describe('fmt / fmtSigned (ru-RU, 1 vs 2 decimals)', () => {
   it('formats volume and hours with one decimal and grouping', () => {

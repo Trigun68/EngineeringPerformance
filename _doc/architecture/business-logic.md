@@ -468,13 +468,13 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Шаг | Правило |
 |-----|---------|
-| Сопоставление | `DocumentTypeName` → `LaborIntensity` (case-insensitive, trim) |
+| Сопоставление | `DocumentTypeName` **или** `Name` → `LaborIntensity` (case-insensitive, trim) |
 | WorkDirectionId | Из `LaborIntensity.IicWorkDirectionId` (может остаться NULL) |
 | DocumentationCode | `DocumentTypeName` или `DocumentTypeName\|Brand` |
-| Merge | По (DocumentationCode, WorkDirectionId) с **суммированием** часов (ISS-006) |
-| Опция | `addMissingToCatalog` — создаёт корневые LI **без** IIC-направления |
+| Merge Excel | **Не вызывается.** Replace: строка файла = строка БД |
+| Опция | `addMissingToCatalog` (UI по умолчанию вкл.) — карточка с TF-именем, без IIC |
 
-**Примечание:** поле `Techas` в каталоге `LaborIntensity` — legacy; web-импорт использует только `DocumentTypeName`.
+**Примечание:** поле `Techas` в каталоге `LaborIntensity` — legacy. Web-импорт сопоставляет TF по `DocumentTypeName` или `Name`.
 
 ### 9.4. Импорт оборудования
 

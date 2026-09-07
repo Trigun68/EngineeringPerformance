@@ -19,15 +19,7 @@ public sealed partial class ProjectExcelDataImportService
 
         await using var context = await _contextFactory.CreateDbContextAsync();
         var laborCatalogRows = await context.LaborIntensities.AsNoTracking().ToListAsync();
-        var knownDocTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var li in laborCatalogRows)
-        {
-            var key = (li.DocumentTypeName ?? string.Empty).Trim();
-            if (key.Length > 0)
-            {
-                knownDocTypes.Add(key);
-            }
-        }
+        var knownDocTypes = LaborCatalogLookup.KnownKeys(laborCatalogRows);
 
         using var workbook = new XLWorkbook(filePath);
         var worksheet = GetLaborIntensityImportWorksheet(workbook);
@@ -105,21 +97,8 @@ public sealed partial class ProjectExcelDataImportService
         // больше не происходит: это приводило к появлению мусорных записей
         // (направлений/типов документа), не согласованных с главным справочником.
         var laborCatalogRows = await context.LaborIntensities.ToListAsync();
-        var laborByDocumentType = new Dictionary<string, LaborIntensity>(StringComparer.OrdinalIgnoreCase);
-        foreach (var li in laborCatalogRows)
-        {
-            var key = (li.DocumentTypeName ?? string.Empty).Trim();
-            if (key.Length == 0)
-            {
-                continue;
-            }
-
-            // При коллизиях DocumentTypeName приоритет у первой встретившейся «активной» (не архив) записи.
-            if (!laborByDocumentType.ContainsKey(key) || (laborByDocumentType[key].IsArchived && !li.IsArchived))
-            {
-                laborByDocumentType[key] = li;
-            }
-        }
+        var laborByDocumentType = LaborCatalogLookup.BuildMap(laborCatalogRows);
+        var folderIdsByName = LaborCatalogLookup.FolderIdsByName(laborCatalogRows);
 
         var importTimestamp = iteration.ImportedAt;
         // Накапливаем строки для массовой вставки (без группировок — построчно, как в импорте ФО)
@@ -157,6 +136,7 @@ public sealed partial class ProjectExcelDataImportService
         if (addMissingToCatalog)
         {
             var docTypesInFile = new SortedSet<string>(StringComparer.Ordinal);
+            var directionByDocType = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             for (var rowNumber = layout.FirstDataRowNumber; rowNumber <= lastRowNumber; rowNumber++)
             {
                 if (!LaborIntensityImportRowHasAnyData(worksheet, rowNumber, layout))
@@ -168,6 +148,12 @@ public sealed partial class ProjectExcelDataImportService
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     docTypesInFile.Add(name);
+                    if (!directionByDocType.ContainsKey(name) && layout.WorkDirectionColumn > 0)
+                    {
+                        var direction = GetWorksheetCellString(worksheet, rowNumber, layout.WorkDirectionColumn)?.Trim();
+                        if (!string.IsNullOrWhiteSpace(direction))
+                            directionByDocType[name] = direction;
+                    }
                 }
             }
 
@@ -179,17 +165,21 @@ public sealed partial class ProjectExcelDataImportService
                     continue;
                 }
 
-                // Code: ограничение длины 100 (см. LaborIntensityConfiguration). В качестве
-                // шифра берём сам «Тип документа» — это наиболее узнаваемая подсказка для
-                // последующего ручного редактирования. Уникальность Code не требуется.
                 var code = docType.Length <= 100 ? docType : docType[..100];
                 var name = docType.Length <= 500 ? docType : docType[..500];
+                int? parentId = null;
+                if (directionByDocType.TryGetValue(docType, out var folderName)
+                    && folderIdsByName.TryGetValue(folderName, out var folderId))
+                {
+                    parentId = folderId;
+                }
 
                 var newCatalogItem = new LaborIntensity
                 {
                     Code = code,
                     Name = name,
                     DocumentTypeName = name,
+                    ParentId = parentId,
                     IsArchived = false,
                     SortOrder = 0,
                     CreatedAt = importTimestamp,

@@ -361,6 +361,13 @@ public sealed class DirectoryFacade : IDirectoryFacade
     private static T Prepare<T>(T entity, DirectoryWriteRequest request) where T : DirectoryItem, new()
     {
         var merged = DirectoryEntityMapper.Merge(request, entity);
+        if (merged is LaborIntensity labor && string.IsNullOrWhiteSpace(labor.DocumentTypeName))
+        {
+            var name = (labor.Name ?? string.Empty).Trim();
+            if (name.Length > 0)
+                labor.DocumentTypeName = name;
+        }
+
         if (merged is Equipment equipment)
         {
             if (equipment.ProjectId is null

@@ -13,6 +13,8 @@ vi.mock('../../../../api/analyticsApi', () => ({
   exportCompareDetailExcel: vi.fn(),
   exportCompareDetailSummaryTable: vi.fn(),
   exportCompareExcelVisible: vi.fn(),
+  exportCompareFacilityExcel: vi.fn(),
+  exportCompareSummaryExcel: vi.fn(),
 }));
 
 vi.mock('../../../../api/visualReportsApi', () => ({

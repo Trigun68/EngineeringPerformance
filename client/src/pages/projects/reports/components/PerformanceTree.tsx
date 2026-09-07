@@ -14,7 +14,7 @@ import {
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { PerformanceTreeRow } from '../reportCalc';
-import { fmt, fmtSigned, getInterpretation, INTERPRETATION_SHORT_RU, interpretationColor } from '../reportCalc';
+import { fmt, fmtSigned, getInterpretation, INTERPRETATION_SHORT_RU, interpretationColor, displayPhysicalVolume } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
 interface PerformanceTreeProps {
@@ -58,6 +58,7 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
             const isCollapsed = collapsed.includes(row.workDirectionId);
             const color = interpretationColor(row.zScore);
             const interpretation = getInterpretation(row.zScore);
+            const volume = displayPhysicalVolume(row);
             return (
               <TableRow key={row.workDirectionId} sx={row.level === 0 ? { bgcolor: wpColors.pageBg } : undefined}>
                 <TableCell>
@@ -81,9 +82,9 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                    {row.factPhysicalVolume === null
+                    {volume === null
                       ? '—'
-                      : `${fmt(row.factPhysicalVolume, 1)} ${row.normUnitName ?? ''}`.trim()}
+                      : `${fmt(volume, 1)} ${row.normUnitName ?? ''}`.trim()}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">

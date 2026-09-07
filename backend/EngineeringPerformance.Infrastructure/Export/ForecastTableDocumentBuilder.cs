@@ -22,7 +22,7 @@ internal static class ForecastTableDocumentBuilder
             new("Факт ФО", 1.3f, Numeric: true),
             new("Норма производительности", 1.4f, Numeric: true),
             new("Оптимистический, ч", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-            new("Базовый, ч", 1.2f, Numeric: true),
+            new("Базовый, ч", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
             new("Пессимистический, ч", 1.4f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
         };
 
@@ -85,11 +85,12 @@ internal static class ForecastTableDocumentBuilder
             new("СО", 0.8f, Numeric: true),
             new("Кол-во", 0.9f, Numeric: true),
             new("Оптимистический", 1.2f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-            new("Базовый", 1.1f, Numeric: true),
+            new("Базовый", 1.1f, Numeric: true, Tone: ForecastHourTone.Base),
             new("Пессимистический", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
         };
 
         var tableRows = rows.Select(MapDetailRow).ToList();
+        tableRows.Add(DetailTotalRow(rows));
         return new ForecastTableDocument(
             title,
             "Детально",
@@ -102,7 +103,7 @@ internal static class ForecastTableDocumentBuilder
         new("Шифр объекта", 1.2f),
         new("Наименование объекта", 4.2f),
         new("Оптимистический", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-        new("Базовый", 1.2f, Numeric: true),
+        new("Базовый", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
         new("Пессимистический", 1.4f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
     ];
 
@@ -119,7 +120,7 @@ internal static class ForecastTableDocumentBuilder
                 new ForecastTableCell(factText, row.FactPhysicalVolume),
                 Number(row.NormProductivity, 4),
                 Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 1),
-                Hour(row.BaseHours, ForecastHourTone.None, 1),
+                Hour(row.BaseHours, ForecastHourTone.Base, 1),
                 Hour(row.PessimisticHours, ForecastHourTone.Pessimistic, 1),
             ],
             IsTotal: row.IsTotal);
@@ -133,7 +134,7 @@ internal static class ForecastTableDocumentBuilder
                 Text(row.FacilityCode),
                 Text(row.FacilityName),
                 Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 0),
-                Hour(baseH, ForecastHourTone.None, 0),
+                Hour(baseH, ForecastHourTone.Base, 0),
                 Hour(row.PessimisticHours, ForecastHourTone.Pessimistic, 0),
             ]);
     }
@@ -153,7 +154,7 @@ internal static class ForecastTableDocumentBuilder
                 new ForecastTableCell("ИТОГО", Bold: true),
                 new ForecastTableCell(string.Empty, Bold: true),
                 Hour(totalOpt, ForecastHourTone.Optimistic, 0),
-                Hour(totalBase, ForecastHourTone.None, 0),
+                Hour(totalBase, ForecastHourTone.Base, 0),
                 Hour(totalPes, ForecastHourTone.Pessimistic, 0),
             ],
             IsTotal: true);
@@ -182,9 +183,29 @@ internal static class ForecastTableDocumentBuilder
             DecimalCell(row.NormStdDev),
             DecimalCell(row.Quantity),
             DecimalCell(row.OptimisticHours, ForecastHourTone.Optimistic),
-            DecimalCell(row.BaseHours),
+            DecimalCell(row.BaseHours, ForecastHourTone.Base),
             DecimalCell(row.PessimisticHours, ForecastHourTone.Pessimistic),
         ]);
+
+    private static ForecastTableRow DetailTotalRow(IReadOnlyList<ProjectsPageDetailRowDto> rows)
+    {
+        decimal totalOpt = 0m, totalBase = 0m, totalPes = 0m;
+        foreach (var row in rows)
+        {
+            totalOpt += row.OptimisticHours ?? 0m;
+            totalBase += row.BaseHours ?? 0m;
+            totalPes += row.PessimisticHours ?? 0m;
+        }
+
+        var cells = new ForecastTableCell[22];
+        for (var i = 0; i < cells.Length; i++)
+            cells[i] = new ForecastTableCell(string.Empty, Bold: true);
+        cells[0] = new ForecastTableCell("ИТОГО", Bold: true);
+        cells[19] = DecimalCell(totalOpt, ForecastHourTone.Optimistic);
+        cells[20] = DecimalCell(totalBase, ForecastHourTone.Base);
+        cells[21] = DecimalCell(totalPes, ForecastHourTone.Pessimistic);
+        return new ForecastTableRow(cells, IsTotal: true);
+    }
 
     private static ForecastTableCell Text(string? value) =>
         new(value ?? string.Empty);

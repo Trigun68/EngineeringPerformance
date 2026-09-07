@@ -130,12 +130,13 @@ public sealed class PerformanceService : IPerformanceService
                     e.Quantity,
                     e.Equipment?.Coefficient ?? 1m))
                 .ToList(),
-            LaborIntensities: laborIntensities
+                    LaborIntensities: laborIntensities
                 .Select(li => new LaborIntensityCalculationLine(
                     li.WorkDirectionId,
                     hoursKind == LaborHoursKind.Actual ? li.ActualHours : li.PlannedHours))
                 .ToList(),
-            NormsByDirection: normsByDirection);
+            NormsByDirection: normsByDirection,
+            RollHoursToFirstLevel: true);
 
         // GAP: математика только в PerformanceCalculationEngine, не в LINQ/циклах сервиса.
         var rows = _calculationEngine.CalculatePerformance(input);

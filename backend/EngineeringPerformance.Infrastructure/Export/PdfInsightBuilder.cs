@@ -17,8 +17,10 @@ public static class PdfInsightBuilder
         IReadOnlyList<PerformanceRowDto> rows,
         ProjectVersionAnalysisSummaryDto summary)
     {
-        var leaves = FilterLeaves(rows);
-        var scored = leaves.Where(r => r.ZScore.HasValue).OrderByDescending(r => r.ZScore!.Value).ToList();
+        var scored = PerformanceDisplayVolume.FirstLevel(rows)
+            .Where(r => r.ZScore.HasValue)
+            .OrderByDescending(r => r.ZScore!.Value)
+            .ToList();
 
         var result = new List<PdfCallout>();
 
@@ -120,19 +122,13 @@ public static class PdfInsightBuilder
             $"Факт {direction} на {Math.Abs(top.Delta.Value):N0} ч. Проверить причины расхождения перед актуализацией следующей версии прогноза.");
     }
 
-    private static IReadOnlyList<PerformanceRowDto> FilterLeaves(IReadOnlyList<PerformanceRowDto> rows)
+    private static decimal? ComputeOverrun(PerformanceRowDto row)
     {
-        var parentIds = rows
-            .Where(r => r.ParentId.HasValue)
-            .Select(r => r.ParentId!.Value)
-            .ToHashSet();
-        return rows.Where(r => r.WorkDirectionId >= 0 && !parentIds.Contains(r.WorkDirectionId)).ToList();
-    }
-
-    private static decimal? ComputeOverrun(PerformanceRowDto row) =>
-        row.FactLaborHours.HasValue && row.NormProductivity.HasValue && row.FactPhysicalVolume.HasValue
-            ? row.FactLaborHours.Value - row.NormProductivity.Value * row.FactPhysicalVolume.Value
+        var volume = PerformanceDisplayVolume.ResolveSubtree(row);
+        return row.FactLaborHours.HasValue && row.NormProductivity.HasValue && volume.HasValue
+            ? row.FactLaborHours.Value - row.NormProductivity.Value * volume.Value
             : null;
+    }
 
     private static string FormatSigned(decimal? value) =>
         value is null ? "—" : (value.Value > 0 ? "+" : string.Empty) + value.Value.ToString("N2");

@@ -31,7 +31,6 @@ import { getApiErrorMessage } from '../../../services/apiError';
 import {
   buildInsights,
   buildTree,
-  flattenTree,
   historyToTrendPoints,
   keyDisciplines,
   MUTED_COLOR,
@@ -100,8 +99,6 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
     () => buildTree(query.data?.performance ?? ([] as PerformanceRow[])),
     [query.data?.performance],
   );
-  const flat = useMemo(() => flattenTree(roots), [roots]);
-  const leaves = useMemo(() => flat.filter((r) => r.children.length === 0), [flat]);
 
   const accuracyScore = useMemo(() => {
     const withValue = (query.data?.characteristics ?? []).filter(
@@ -114,10 +111,10 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   const summary = query.data?.analysis.summary;
 
   const insights = useMemo(
-    () => (summary ? buildInsights(leaves, summary, accuracyScore) : []),
-    [leaves, summary, accuracyScore],
+    () => (summary ? buildInsights(roots, summary, accuracyScore) : []),
+    [roots, summary, accuracyScore],
   );
-  const keyRows = useMemo(() => keyDisciplines(leaves), [leaves]);
+  const keyRows = useMemo(() => keyDisciplines(roots), [roots]);
   const totalSubtreeHours = useMemo(
     () => roots.reduce((s, r) => s + (r.subtreeHours ?? 0), 0),
     [roots],
@@ -189,20 +186,13 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
           </AccordionSummary>
           <AccordionDetails sx={{ px: 0, pt: 1 }}>
             <Stack spacing={3}>
-              <TopPerformersPanel leaves={leaves} />
+              <TopPerformersPanel rows={roots} />
 
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: '1fr 1fr' }, gap: 2 }}>
-                <DirectionBars
-                  rows={roots}
-                  title="Оценка Z по корневым направлениям"
-                  description="Агрегированная оценка по поддереву, взвешенная по трудозатратам."
-                />
-                <DirectionBars
-                  rows={leaves}
-                  title="Оценка Z по дисциплинам"
-                  description="Листовые направления работ — источник фактической производительности."
-                />
-              </Box>
+              <DirectionBars
+                rows={roots}
+                title="Оценка Z по корневым направлениям"
+                description="Агрегированная оценка по поддереву, взвешенная по трудозатратам. Группы IIC первого уровня."
+              />
 
               <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: { xs: 2, md: 3 }, bgcolor: '#FFFFFF' }}>
                 <Stack spacing={0.5} sx={{ mb: 1 }}>
@@ -240,10 +230,11 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
                         Все группы физобъёмов IIC
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Плоский список листовых направлений работ с сортировкой, поиском и фильтром по интерпретации.
+                        Плоский список групп IIC первого уровня с сортировкой, поиском и фильтром по интерпретации.
+                        Часы факта и объём — по поддереву направления.
                       </Typography>
                     </Stack>
-                    <PhysicalVolumeGroupsTable leaves={leaves} />
+                    <PhysicalVolumeGroupsTable rows={roots} />
                   </Stack>
                 )}
               </Box>

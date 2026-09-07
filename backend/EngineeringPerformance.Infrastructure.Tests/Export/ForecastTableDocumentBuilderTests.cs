@@ -33,6 +33,7 @@ public sealed class ForecastTableDocumentBuilderTests
         cells[4].Number.Should().Be(80m);
         cells[4].Tone.Should().Be(ForecastHourTone.Optimistic);
         cells[5].Number.Should().Be(100m);
+        cells[5].Tone.Should().Be(ForecastHourTone.Base);
         cells[6].Number.Should().Be(120m);
         cells[6].Tone.Should().Be(ForecastHourTone.Pessimistic);
     }
@@ -67,6 +68,7 @@ public sealed class ForecastTableDocumentBuilderTests
         document.Sections[0].Rows[0].Cells[2].Number.Should().Be(96m);
         document.Sections[0].Rows[0].Cells[2].Tone.Should().Be(ForecastHourTone.Optimistic);
         document.Sections[0].Rows[0].Cells[3].Number.Should().Be(120m);
+        document.Sections[0].Rows[0].Cells[3].Tone.Should().Be(ForecastHourTone.Base);
         document.Sections[0].Rows[0].Cells[4].Number.Should().Be(144m);
         document.Sections[0].Rows[0].Cells[4].Tone.Should().Be(ForecastHourTone.Pessimistic);
         document.Sections[1].Rows.Should().HaveCount(13);
@@ -105,12 +107,17 @@ public sealed class ForecastTableDocumentBuilderTests
 
         var document = ForecastTableDocumentBuilder.BuildDetail([row], "Детализация прогноза: P (v1)");
         document.Sections[0].Columns.Should().HaveCount(22);
-        document.Sections[0].Rows.Should().ContainSingle();
+        document.Sections[0].Rows.Should().HaveCount(2);
+        document.Sections[0].Rows[0].Cells.Should().HaveCount(22);
+        document.Sections[0].Rows[^1].IsTotal.Should().BeTrue();
+        document.Sections[0].Rows[^1].Cells[0].Text.Should().Be("ИТОГО");
         document.Sections[0].Columns[^3].Header.Should().Be("Оптимистический");
         document.Sections[0].Columns[^2].Header.Should().Be("Базовый");
         document.Sections[0].Columns[^1].Header.Should().Be("Пессимистический");
         document.Sections[0].Rows[0].Cells[^3].Number.Should().Be(8m);
+        document.Sections[0].Rows[0].Cells[^3].Tone.Should().Be(ForecastHourTone.Optimistic);
         document.Sections[0].Rows[0].Cells[^2].Number.Should().Be(10m);
+        document.Sections[0].Rows[0].Cells[^2].Tone.Should().Be(ForecastHourTone.Base);
         document.Sections[0].Rows[0].Cells[^1].Number.Should().Be(12m);
 
         var pdf = ForecastTableRenderers.ToPdf(document);
@@ -126,5 +133,25 @@ public sealed class ForecastTableDocumentBuilderTests
         sheet.Cell(3, 1).GetString().Should().Be("Шифр объекта");
         sheet.Cell(3, 22).GetString().Should().Be("Пессимистический");
         sheet.Cell(4, 1).GetString().Should().Be("F01");
+        sheet.Cell(5, 1).GetString().Should().Be("ИТОГО");
+        sheet.Column(1).Width.Should().BeGreaterThan(8.43);
+        sheet.Column(2).Width.Should().BeGreaterThan(8.43);
+        AssertPastel(sheet.Cell(4, 20), 0xE3, 0xF2, 0xFD);
+        AssertPastel(sheet.Cell(4, 21), 0xE8, 0xF5, 0xE9);
+        AssertPastel(sheet.Cell(4, 22), 0xFF, 0xEB, 0xEE);
+        sheet.Cell(4, 20).Style.Fill.BackgroundColor.Should().NotBe(XLColor.FromHtml("#27AE60"));
+        sheet.Cell(4, 22).Style.Fill.BackgroundColor.Should().NotBe(XLColor.FromHtml("#E74C3C"));
+    }
+
+    private static void AssertPastel(IXLCell cell, byte r, byte g, byte b)
+    {
+        var color = cell.Style.Fill.BackgroundColor.Color;
+        color.R.Should().Be(r);
+        color.G.Should().Be(g);
+        color.B.Should().Be(b);
+        var font = cell.Style.Font.FontColor.Color;
+        font.R.Should().Be(0x1B);
+        font.G.Should().Be(0x2A);
+        font.B.Should().Be(0x38);
     }
 }

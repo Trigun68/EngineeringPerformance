@@ -9,6 +9,7 @@ import {
   INTERPRETATION_COLOR,
   INTERPRETATION_SHORT_RU,
   MUTED_COLOR,
+  resolveSubtreePhysicalVolume,
   type Interpretation,
 } from '../reportCalc';
 
@@ -24,7 +25,7 @@ interface PhysicalVolumeGroupsRow {
 }
 
 interface PhysicalVolumeGroupsTableProps {
-  leaves: PerformanceTreeRow[];
+  rows: PerformanceTreeRow[];
 }
 
 const INTERPRETATION_FILTERS: Interpretation[] = ['Excellent', 'Good', 'Satisfactory', 'NeedsAttention', 'Critical'];
@@ -38,37 +39,37 @@ function numberFormatter(digits: number) {
 }
 
 /**
- * Плоская таблица всех групп физобъёмов IIC (листовые направления работ) — дополняет
+ * Плоская таблица групп физобъёмов IIC первого уровня — дополняет
  * иерархическое дерево PerformanceTree, но допускает сортировку и фильтрацию по любому
  * столбцу и быстрый поиск по коду/наименованию, что в дереве неудобно на крупных проектах.
  */
-export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableProps) {
+export function PhysicalVolumeGroupsTable({ rows }: PhysicalVolumeGroupsTableProps) {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<Interpretation | null>(null);
 
-  const rows = useMemo<PhysicalVolumeGroupsRow[]>(
+  const tableRows = useMemo<PhysicalVolumeGroupsRow[]>(
     () =>
-      leaves.map((row) => ({
+      rows.map((row) => ({
         id: row.workDirectionId,
         name: row.workDirectionName,
-        physicalVolume: row.factPhysicalVolume,
-        laborHours: row.factLaborHours,
+        physicalVolume: resolveSubtreePhysicalVolume(row),
+        laborHours: row.factLaborHours ?? row.subtreeHours,
         productivity: row.factProductivity,
         normProductivity: row.normProductivity,
         zScore: row.zScore,
         interpretation: getInterpretation(row.zScore),
       })),
-    [leaves],
+    [rows],
   );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((row) => {
+    return tableRows.filter((row) => {
       if (activeFilter && row.interpretation !== activeFilter) return false;
       if (!term) return true;
       return row.name.toLowerCase().includes(term);
     });
-  }, [rows, search, activeFilter]);
+  }, [tableRows, search, activeFilter]);
 
   const columnDefs = useMemo<ColDef<PhysicalVolumeGroupsRow>[]>(
     () => [
@@ -128,7 +129,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
   );
 
   return (
-    <Stack spacing={1.5} sx={{ height: 520 }}>
+    <Stack spacing={1.5} sx={{ height: 520 }} data-testid="report-physical-volume-groups">
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
         <TextField
           size="small"
@@ -161,7 +162,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
           ))}
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ ml: { sm: 'auto' } }}>
-          Показано {filtered.length} из {rows.length} групп
+          Показано {filtered.length} из {tableRows.length} групп
         </Typography>
       </Stack>
 

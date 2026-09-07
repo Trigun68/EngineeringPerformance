@@ -25,7 +25,7 @@ public sealed class PerformanceReportService(
         CancellationToken cancellationToken = default)
     {
         // v5: Z плана в таблице направлений = zBase параметров планирования; факт = PLI.PlannedHours.
-        var cacheKey = $"report:v5:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
+        var cacheKey = $"report:v6:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
         var cached = await cache.GetAsync<PerformanceReportDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -324,6 +324,7 @@ public sealed class PerformanceReportService(
                     FactPhysicalVolume: r.FactPhysicalVolume,
                     FactLaborHours: r.FactLaborHours,
                     SubtreeHours: r.SubtreeHours,
+                    SubtreePhysicalVolume: r.SubtreePhysicalVolume,
                     FactProductivity: r.FactProductivity,
                     NormProductivity: r.NormProductivity,
                     NormStdDev: r.NormStdDev,
@@ -350,7 +351,8 @@ public sealed class PerformanceReportService(
                 NormProductivity: r.NormProductivity,
                 NormStdDev: r.NormStdDev,
                 ZScore: r.ZScore,
-                Interpretation: r.Interpretation?.ToRussian()))
+                Interpretation: r.Interpretation?.ToRussian(),
+                SubtreePhysicalVolume: r.SubtreePhysicalVolume))
             .ToList();
 
     private async Task<Dictionary<int, string?>> LoadSnapshotKeysAsync(
@@ -491,7 +493,8 @@ public sealed class PerformanceReportService(
                 PlanZScore: plan?.ZScore,
                 FactZScore: fact?.ZScore,
                 PlanInterpretation: plan?.Interpretation,
-                FactInterpretation: fact?.Interpretation));
+                FactInterpretation: fact?.Interpretation,
+                SubtreePhysicalVolume: fact?.SubtreePhysicalVolume ?? plan?.SubtreePhysicalVolume));
         }
 
         return merged

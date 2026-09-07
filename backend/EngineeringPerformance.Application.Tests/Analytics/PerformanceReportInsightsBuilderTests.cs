@@ -11,11 +11,10 @@ public sealed class PerformanceReportInsightsBuilderTests
     {
         var directions = new List<PerformanceReportMergedDirectionRowDto>
         {
-            Merged(1, null, 0, "ROOT", "Корень", z: null, hours: 100, volume: 10),
-            Merged(2, 1, 1, "A", "Плохое тяжёлое", z: 1.5m, hours: 100, volume: 50),
-            Merged(3, 1, 1, "B", "Плохое лёгкое", z: 2.0m, hours: 10, volume: 5),
-            Merged(4, 1, 1, "C", "Хорошее тяжёлое", z: -1.2m, hours: 80, volume: 40),
-            Merged(5, 1, 1, "D", "Хорошее лёгкое", z: -2.0m, hours: 5, volume: 2),
+            Merged(1, null, 0, "A", "Плохое тяжёлое", z: 1.5m, hours: 100, volume: 50),
+            Merged(2, null, 0, "B", "Плохое лёгкое", z: 2.0m, hours: 10, volume: 5),
+            Merged(3, null, 0, "C", "Хорошее тяжёлое", z: -1.2m, hours: 80, volume: 40),
+            Merged(4, null, 0, "D", "Хорошее лёгкое", z: -2.0m, hours: 5, volume: 2),
         };
 
         var insights = PerformanceReportInsightsBuilder.Build(directions);
@@ -91,6 +90,7 @@ public sealed class PerformanceReportInsightsBuilderTests
             FactLaborHours: hours,
             PlanSubtreeHours: hours,
             FactSubtreeHours: hours,
+            SubtreePhysicalVolume: volume,
             PlanProductivity: null,
             FactProductivity: null,
             NormProductivity: null,

@@ -52,7 +52,8 @@ public sealed record PerformanceReportDirectionRowDto(
     decimal? NormProductivity,
     decimal? NormStdDev,
     decimal? ZScore,
-    string? Interpretation);
+    string? Interpretation,
+    decimal? SubtreePhysicalVolume = null);
 
 /// <summary>Merged-строка дерева «Направление»: объём факт←план, dual труд/произв/Z.</summary>
 public sealed record PerformanceReportMergedDirectionRowDto(
@@ -74,7 +75,8 @@ public sealed record PerformanceReportMergedDirectionRowDto(
     decimal? PlanZScore,
     decimal? FactZScore,
     string? PlanInterpretation,
-    string? FactInterpretation);
+    string? FactInterpretation,
+    decimal? SubtreePhysicalVolume = null);
 
 public sealed record PerformanceReportVersionHistoryPointDto(
     int VersionId,

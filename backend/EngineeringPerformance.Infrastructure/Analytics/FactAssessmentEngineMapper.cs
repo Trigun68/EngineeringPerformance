@@ -69,7 +69,8 @@ internal static class FactAssessmentEngineMapper
                 kv.Value.Id,
                 kv.Value.Code,
                 kv.Value.Name,
-                IicWorkDirectionDisplayUnit.ResolveUnitName(kv.Value, classifierMap)));
+                IicWorkDirectionDisplayUnit.ResolveUnitName(kv.Value, classifierMap),
+                kv.Value.ParentId));
 
         return new FactAssessmentCalculationInput(
             physicalVolumes

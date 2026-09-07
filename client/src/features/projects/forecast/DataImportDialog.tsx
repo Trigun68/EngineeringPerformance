@@ -62,7 +62,7 @@ export function DataImportDialog({
   const [error, setError] = useState<string | null>(null);
   const [laborPreview, setLaborPreview] = useState<string[]>([]);
   const [laborPreviewInfo, setLaborPreviewInfo] = useState<string | null>(null);
-  const [addMissingLabor, setAddMissingLabor] = useState(false);
+  const [addMissingLabor, setAddMissingLabor] = useState(true);
   const [previewing, setPreviewing] = useState(false);
 
   const title = useMemo(
@@ -78,7 +78,7 @@ export function DataImportDialog({
     setError(null);
     setLaborPreview([]);
     setLaborPreviewInfo(null);
-    setAddMissingLabor(false);
+    setAddMissingLabor(true);
     setPreviewing(false);
   }, []);
 
@@ -195,7 +195,24 @@ export function DataImportDialog({
         {laborPreviewInfo && (
           <Alert severity="info" sx={{ mt: 2 }}>{laborPreviewInfo}</Alert>
         )}
-        {dataType === 'labor-intensities' && laborPreview.length > 0 && (
+        {laborPreview.length > 0 && (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              Типы не найдены в справочнике:
+            </Typography>
+            <List dense disablePadding>
+              {laborPreview.slice(0, 12).map((name) => (
+                <ListItem key={name} disablePadding sx={{ py: 0.25 }}>
+                  <ListItemText primary={name} primaryTypographyProps={{ variant: 'body2' }} />
+                </ListItem>
+              ))}
+            </List>
+            {laborPreview.length > 12 ? (
+              <Typography variant="caption">… и ещё {laborPreview.length - 12}</Typography>
+            ) : null}
+          </Alert>
+        )}
+        {dataType === 'labor-intensities' && pendingFile && (
           <FormControlLabel
             sx={{ mt: 1, display: 'block' }}
             control={

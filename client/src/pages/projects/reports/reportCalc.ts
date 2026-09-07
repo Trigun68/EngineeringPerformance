@@ -89,6 +89,37 @@ export interface PerformanceTreeRow extends PerformanceRow {
   children: PerformanceTreeRow[];
 }
 
+/** Объём поддерева (L1 после rollup часов) либо реконструкция hours/productivity. */
+export function resolveSubtreePhysicalVolume(
+  row: Pick<
+    PerformanceRow,
+    'subtreePhysicalVolume' | 'factPhysicalVolume' | 'factLaborHours' | 'factProductivity'
+  >,
+): number | null {
+  if (row.subtreePhysicalVolume != null && row.subtreePhysicalVolume > 0) {
+    return row.subtreePhysicalVolume;
+  }
+  const hours = row.factLaborHours;
+  const productivity = row.factProductivity;
+  if (hours != null && hours > 0 && productivity != null && productivity > 0) {
+    return hours / productivity;
+  }
+  return row.factPhysicalVolume ?? null;
+}
+
+/** На корне IIC — объём поддерева; на потомках — собственный объём. */
+export function displayPhysicalVolume(
+  row: Pick<
+    PerformanceRow,
+    'parentId' | 'subtreePhysicalVolume' | 'factPhysicalVolume' | 'factLaborHours' | 'factProductivity'
+  >,
+): number | null {
+  if (row.parentId != null) {
+    return row.factPhysicalVolume ?? null;
+  }
+  return resolveSubtreePhysicalVolume(row);
+}
+
 export function buildTree(rows: PerformanceRow[]): PerformanceTreeRow[] {
   const byId = new Map<number, PerformanceTreeRow>();
   rows.forEach((r) => byId.set(r.workDirectionId, { ...r, children: [] }));
@@ -117,19 +148,20 @@ export interface Insight {
   detail: string;
 }
 
-/** Порт lib/performance/insights.ts из прототипа (без поля «ответственный» — в реальных данных его нет). */
+/** Выводы по группам IIC первого уровня (часы факта после rollup). */
 export function buildInsights(
-  leaves: PerformanceTreeRow[],
+  firstLevel: PerformanceTreeRow[],
   summary: ProjectVersionAnalysisSummary,
   accuracyScore: number | null,
 ): Insight[] {
   const insights: Insight[] = [];
-  const scored = leaves.filter((r) => r.zScore !== null).sort((a, b) => b.zScore! - a.zScore!);
+  const scored = firstLevel.filter((r) => r.zScore !== null).sort((a, b) => b.zScore! - a.zScore!);
 
   for (const row of scored.filter((r) => r.zScore! > 1)) {
+    const volume = resolveSubtreePhysicalVolume(row);
     const overrun =
-      row.factLaborHours && row.normProductivity && row.factPhysicalVolume
-        ? row.factLaborHours - row.normProductivity * row.factPhysicalVolume
+      row.factLaborHours && row.normProductivity && volume
+        ? row.factLaborHours - row.normProductivity * volume
         : null;
     insights.push({
       kind: 'risk',
@@ -185,8 +217,8 @@ export function buildInsights(
   return insights;
 }
 
-export function keyDisciplines(leaves: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
-  return leaves
+export function keyDisciplines(firstLevel: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
+  return firstLevel
     .filter((r) => (r.subtreeHours ?? 0) > 0)
     .sort((a, b) => b.subtreeHours! - a.subtreeHours!)
     .slice(0, top);

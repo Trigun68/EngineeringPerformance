@@ -40,6 +40,7 @@ public sealed class FactTableDocumentBuilderTests
         section.Rows[0].Cells[4].Number.Should().Be(20m);
         section.Rows[0].Cells[4].Tone.Should().Be(ForecastHourTone.Optimistic);
         section.Rows[0].Cells[5].Number.Should().Be(25m);
+        section.Rows[0].Cells[5].Tone.Should().Be(ForecastHourTone.Base);
         section.Rows[0].Cells[6].Number.Should().Be(30m);
         section.Rows[0].Cells[6].Tone.Should().Be(ForecastHourTone.Pessimistic);
 
@@ -98,8 +99,11 @@ public sealed class FactTableDocumentBuilderTests
         document.Sections[0].Columns[6].Header.Should().Be("План.Труд.Баз.");
         document.Sections[0].Columns[7].Header.Should().Be("План.Труд.Песс.");
         cells[5].Number.Should().Be(8m);
+        cells[5].Tone.Should().Be(ForecastHourTone.Optimistic);
         cells[6].Number.Should().Be(10m);
+        cells[6].Tone.Should().Be(ForecastHourTone.Base);
         cells[7].Number.Should().Be(12m);
+        cells[7].Tone.Should().Be(ForecastHourTone.Pessimistic);
     }
 
     [Fact]
@@ -141,13 +145,22 @@ public sealed class FactTableDocumentBuilderTests
         var document = FactTableDocumentBuilder.BuildDetail([row], "Детализация оценки факта: P (v1)");
         var columns = document.Sections[0].Columns;
         columns.Should().HaveCount(26);
+        columns[19].Header.Should().Be("Факт.трудоёмк., ч");
         columns[^6].Header.Should().Be("План.Труд.Оптим.");
         columns[^5].Header.Should().Be("План.Труд.Баз.");
         columns[^4].Header.Should().Be("План.Труд.Песс.");
+        columns[^3].Header.Should().Be("Факт производит.");
+        columns[^2].Header.Should().Be("Оценка Z");
+
+        document.Sections[0].Rows.Should().HaveCount(2);
+        document.Sections[0].Rows[^1].IsTotal.Should().BeTrue();
+        document.Sections[0].Rows[^1].Cells[0].Text.Should().Be("ИТОГО");
 
         var cells = document.Sections[0].Rows[0].Cells;
         cells[20].Number.Should().Be(8m);
+        cells[20].Tone.Should().Be(ForecastHourTone.Optimistic);
         cells[21].Number.Should().Be(10m);
+        cells[21].Tone.Should().Be(ForecastHourTone.Base);
         cells[22].Number.Should().Be(12m);
 
         var pdf = ForecastTableRenderers.ToPdf(

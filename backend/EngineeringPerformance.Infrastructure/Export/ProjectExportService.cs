@@ -196,6 +196,21 @@ public sealed class ProjectExportService : IProjectExportService
     private static ForecastTableDocument WithBanner(ForecastTableDocument document, IReadOnlyList<string> headerLines) =>
         document with { HeaderLines = headerLines };
 
+    private async Task<(string Title, IReadOnlyList<string> HeaderLines)> LoadCompareBannerAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        string caption,
+        CancellationToken cancellationToken)
+    {
+        var versionA = await _summaryTableContext.LoadAsync(projectId, versionAId, cancellationToken);
+        var versionB = await _summaryTableContext.LoadAsync(projectId, versionBId, cancellationToken);
+        var versionLabel = $"{versionA.VersionName} / {versionB.VersionName}";
+        return (
+            $"{caption}: {versionA.ProjectCode} ({versionLabel})",
+            TabularReportBanner.Lines(versionA.ProjectCode, versionA.ProjectName, versionLabel));
+    }
+
     private async Task<(ProjectsPageDataDto Data, string Title, IReadOnlyList<string> HeaderLines)> LoadForecastTableAsync(
         int projectId,
         int versionId,
@@ -248,6 +263,32 @@ public sealed class ProjectExportService : IProjectExportService
         return stream.ToArray();
     }
 
+    public async Task<byte[]> ExportCompareSummaryExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default)
+    {
+        var compare = await _compare.CompareAsync(projectId, versionAId, versionBId, cancellationToken);
+        var (title, headerLines) = await LoadCompareBannerAsync(
+            projectId, versionAId, versionBId, "Сравнение версий", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(CompareTableDocumentBuilder.BuildSummary(compare.Summary, title), headerLines));
+    }
+
+    public async Task<byte[]> ExportCompareFacilityExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default)
+    {
+        var compare = await _compare.CompareAsync(projectId, versionAId, versionBId, cancellationToken);
+        var (title, headerLines) = await LoadCompareBannerAsync(
+            projectId, versionAId, versionBId, "Сравнение по объектам", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(CompareTableDocumentBuilder.BuildFacility(compare.Facility, title), headerLines));
+    }
+
     public async Task<byte[]> ExportCompareDetailExcelAsync(
         int projectId,
         int versionAId,
@@ -255,9 +296,10 @@ public sealed class ProjectExportService : IProjectExportService
         CancellationToken cancellationToken = default)
     {
         var compare = await _compare.CompareAsync(projectId, versionAId, versionBId, cancellationToken);
-        return BuildCompareDetailWorkbook(
-            CompareDetailSummaryTableBuilder.Build(compare.Detail),
-            $"Детализация сравнения версий {versionAId} / {versionBId}");
+        var (title, headerLines) = await LoadCompareBannerAsync(
+            projectId, versionAId, versionBId, "Детализация сравнения", cancellationToken);
+        return ForecastTableRenderers.ToExcel(
+            WithBanner(CompareTableDocumentBuilder.BuildDetail(compare.Detail, title), headerLines));
     }
 
     public async Task<byte[]> ExportCompareDetailSummaryTableAsync(

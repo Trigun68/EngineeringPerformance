@@ -125,13 +125,8 @@ public sealed partial class ProjectExcelDataImportService
             .ToList();
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var li in await context.LaborIntensities.AsNoTracking().ToListAsync(cancellationToken))
-        {
-            var key = (li.DocumentTypeName ?? string.Empty).Trim();
-            if (key.Length > 0)
-                known.Add(key);
-        }
+        var known = LaborCatalogLookup.KnownKeys(
+            await context.LaborIntensities.AsNoTracking().ToListAsync(cancellationToken));
 
         var unmatched = names
             .Where(n => !known.Contains(n))
@@ -506,15 +501,7 @@ public sealed partial class ProjectExcelDataImportService
             context, projectId, versionId, DataImportType.LaborIntensity, description, source);
 
         var laborCatalogRows = await context.LaborIntensities.ToListAsync();
-        var laborByDocumentType = new Dictionary<string, LaborIntensity>(StringComparer.OrdinalIgnoreCase);
-        foreach (var li in laborCatalogRows)
-        {
-            var key = (li.DocumentTypeName ?? string.Empty).Trim();
-            if (key.Length == 0)
-                continue;
-            if (!laborByDocumentType.ContainsKey(key) || (laborByDocumentType[key].IsArchived && !li.IsArchived))
-                laborByDocumentType[key] = li;
-        }
+        var laborByDocumentType = LaborCatalogLookup.BuildMap(laborCatalogRows);
 
         var importTimestamp = iteration.ImportedAt;
         if (addMissingToCatalog)

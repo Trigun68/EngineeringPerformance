@@ -23,6 +23,8 @@ import {
   exportCompareDetailExcel,
   exportCompareDetailSummaryTable,
   exportCompareExcelVisible,
+  exportCompareFacilityExcel,
+  exportCompareSummaryExcel,
   fetchVersionCompare,
   fetchVersionCompareDetail,
   type CompareExportSection,
@@ -239,32 +241,12 @@ export function ComparePanel({ projectId, workspaceVersions, workspaceCompareVer
     setExporting(true);
     setError(null);
     try {
-      if (subTab === 'compare-detail') {
+      if (subTab === 'compare-facility') {
+        await exportCompareFacilityExcel(projectId, versionAId, versionBId);
+      } else if (subTab === 'compare-detail') {
         await exportCompareDetailExcel(projectId, versionAId, versionBId);
       } else {
-        // Итого / По объектам: полный набор из текущего грида (как «все» при отсутствии серверного full).
-        const api = gridApiRef.current;
-        if (!api) {
-          setError('Таблица ещё не загружена.');
-          return;
-        }
-        const { headers, rows: exportRows } = collectGridExportData(api, { includeGroups: true });
-        if (headers.length === 0 || exportRows.length === 0) {
-          setError('Нет данных для экспорта.');
-          return;
-        }
-        const section = subTabToExportSection(subTab);
-        const tabLabel = section === 'facility' ? 'Сравнение_По_объектам' : 'Сравнение_Итого';
-        await exportCompareExcelVisible(
-          projectId,
-          section,
-          `${tabLabel}_все`,
-          headers,
-          exportRows,
-          versionAId,
-          versionBId,
-          false,
-        );
+        await exportCompareSummaryExcel(projectId, versionAId, versionBId);
       }
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт Excel.'));

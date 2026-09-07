@@ -136,7 +136,12 @@ export function DirectionsTable({ projectId, rows }: Props) {
                   </div>
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
-                  {fmt(row.physicalVolume, 1)}
+                  {fmt(
+                    row.level === 0
+                      ? (row.subtreePhysicalVolume ?? row.physicalVolume)
+                      : row.physicalVolume,
+                    1,
+                  )}
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
                   {fmt(row.planLaborHours, 1)}

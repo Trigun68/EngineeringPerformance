@@ -12,7 +12,12 @@ public sealed record PerformanceCalculationInput(
     IReadOnlyList<PhysicalVolumeCalculationLine> PhysicalVolumes,
     IReadOnlyList<EquipmentCalculationLine> Equipment,
     IReadOnlyList<LaborIntensityCalculationLine> LaborIntensities,
-    IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection);
+    IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection,
+    /// <summary>
+    /// Факт PLI без поэлементного ключа: часы поднимаются на IIC первого уровня.
+    /// План (сохранённые часы по classifier) — false, иначе сценарии смешаются с L1.
+    /// </summary>
+    bool RollHoursToFirstLevel = false);
 
 public sealed record WorkDirectionCalculationNode(
     int Id,
@@ -85,7 +90,12 @@ public sealed record FactLaborIntensityLine(
     int? WorkDirectionId,
     decimal Hours);
 
-public sealed record ClassifierDisplayNode(int Id, string Code, string Name, string? UnitName);
+public sealed record ClassifierDisplayNode(
+    int Id,
+    string Code,
+    string Name,
+    string? UnitName,
+    int? ParentId = null);
 
 public sealed record FactAssessmentDetailRowDto(
     string FacilityCode,

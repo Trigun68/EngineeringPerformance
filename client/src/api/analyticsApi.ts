@@ -18,6 +18,7 @@ export interface PerformanceRow {
   zScore: number | null;
   interpretation: string | null;
   subtreeHours: number | null;
+  subtreePhysicalVolume?: number | null;
   isTotal?: boolean;
   factPhysicalVolumeDisplay?: string | null;
   pessimisticHours?: number | null;
@@ -474,6 +475,30 @@ export async function exportCompareExcelVisible(
     { tabName, headers, rows },
     'download',
     { versionA, versionB, visibleOnly },
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportCompareSummaryExcel(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/compare/export/summary/excel`,
+    { versionA, versionB },
+  );
+  triggerBrowserDownload(blob, filename);
+}
+
+export async function exportCompareFacilityExcel(
+  projectId: number,
+  versionA: number,
+  versionB: number,
+): Promise<void> {
+  const { blob, filename } = await downloadBlob(
+    `/projects/${projectId}/compare/export/facility/excel`,
+    { versionA, versionB },
   );
   triggerBrowserDownload(blob, filename);
 }

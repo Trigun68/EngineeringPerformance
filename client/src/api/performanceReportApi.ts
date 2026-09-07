@@ -56,6 +56,7 @@ export interface PerformanceReportDirectionRow {
   factPhysicalVolume: number | null;
   factLaborHours: number | null;
   subtreeHours: number | null;
+  subtreePhysicalVolume?: number | null;
   factProductivity: number | null;
   normProductivity: number | null;
   normStdDev: number | null;
@@ -83,6 +84,7 @@ export interface PerformanceReportMergedDirectionRow {
   factZScore: number | null;
   planInterpretation: string | null;
   factInterpretation: string | null;
+  subtreePhysicalVolume?: number | null;
 }
 
 export interface PerformanceReportHistoryPoint {
