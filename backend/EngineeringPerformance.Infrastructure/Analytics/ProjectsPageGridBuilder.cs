@@ -974,7 +974,7 @@ public static class ProjectsPageGridBuilder
         return new ProjectsPageCompareGridsDto(
             summary,
             VersionCompareMerge.BuildFacilityRows(facilityA, facilityB),
-            VersionCompareMerge.BuildDetailRows(detailA, detailB));
+            VersionCompareMerge.BuildDetailRows(detailA, detailB, engine));
     }
 
     /// <summary>

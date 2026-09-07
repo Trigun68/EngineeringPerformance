@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Services;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
 
@@ -66,7 +67,8 @@ internal static class VersionCompareMerge
 
     public static List<VersionCompareDetailRowDto> BuildDetailRows(
         IReadOnlyList<FactDetailRowInternal> detailA,
-        IReadOnlyList<FactDetailRowInternal> detailB)
+        IReadOnlyList<FactDetailRowInternal> detailB,
+        IPerformanceCalculationEngine engine)
     {
         static decimal? AverageNullable(IEnumerable<decimal?> values)
         {
@@ -75,14 +77,8 @@ internal static class VersionCompareMerge
         }
 
         // ISS-010: Z в compare «Детально» — только Σ(Z×часы)/Σ(часы); без часов → null.
-        static decimal? WeightedZ(IEnumerable<FactDetailRowInternal> rows)
-        {
-            var aggregator = new WeightedZAggregator();
-            foreach (var row in rows)
-                aggregator.Add(row.ZScore, row.FactLaborHours);
-
-            return aggregator.Result(4);
-        }
+        decimal? WeightedZ(IEnumerable<FactDetailRowInternal> rows) =>
+            engine.ComputeWeightedZ(rows.Select(r => (r.ZScore, r.FactLaborHours)), decimalPlaces: 4);
 
         static decimal? SumNullable(IEnumerable<decimal?> values)
         {

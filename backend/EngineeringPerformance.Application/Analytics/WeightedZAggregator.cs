@@ -2,11 +2,11 @@ namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Единственная реализация формулы взвешенного Z: Σ(Z×вес)/Σ(вес).
-/// Примитив движка расчётов (<c>IPerformanceCalculationEngine</c>): разовые выборки
-/// считаются через <c>ComputeWeightedZ</c>, потоковые сайты накапливают через <see cref="Add"/>.
-/// Собственные реализации этой формулы в сервисах и билдерах запрещены (ISS-010).
+/// Internal-примитив движка расчётов: наружу (Infrastructure, билдеры, сервисы) доступен
+/// только <c>IPerformanceCalculationEngine.ComputeWeightedZ</c> / <c>ComputeWeightedZFromPerformanceRows</c>.
+/// Собственные реализации этой формулы вне движка запрещены (ISS-010).
 /// </summary>
-public struct WeightedZAggregator
+internal struct WeightedZAggregator
 {
     private decimal _weightedSum;
     private decimal _weightSum;

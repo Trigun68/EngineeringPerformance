@@ -2,6 +2,7 @@ using System.Globalization;
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Export;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -18,15 +19,18 @@ public sealed class ProjectExportService : IProjectExportService
     private readonly IProjectsPageDataFetcher _dataFetcher;
     private readonly IForecastDetailSummaryTableContext _summaryTableContext;
     private readonly IProjectCompareService _compare;
+    private readonly IPerformanceCalculationEngine _calculationEngine;
 
     public ProjectExportService(
         IProjectsPageDataFetcher dataFetcher,
         IForecastDetailSummaryTableContext summaryTableContext,
-        IProjectCompareService compare)
+        IProjectCompareService compare,
+        IPerformanceCalculationEngine calculationEngine)
     {
         _dataFetcher = dataFetcher;
         _summaryTableContext = summaryTableContext;
         _compare = compare;
+        _calculationEngine = calculationEngine;
         QuestPDF.Settings.License = LicenseType.Community;
     }
 
@@ -378,7 +382,8 @@ public sealed class ProjectExportService : IProjectExportService
             inputRows,
             directions,
             projectCode,
-            versionName);
+            versionName,
+            _calculationEngine);
 
         using var workbook = BuildFactDetailSummaryTableWorkbook(table);
         using var stream = new MemoryStream();
