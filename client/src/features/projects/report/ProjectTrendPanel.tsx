@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Alert, Chip, Paper, Skeleton, Stack, Typography } from '@mui/material';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
 import { fetchProjectTrend, type ProjectTrendDto } from '../../../api/projectTrendApi';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
 import { AnalyticsExtraAccordion } from '../../analytics/shared/AnalyticsExtraAccordion';
 import { FactorWaterfallChart } from '../../analytics/shared/FactorWaterfallChart';
@@ -16,7 +18,6 @@ const PORTFOLIO_COLOR = '#64748B';
 
 interface Props {
   projectId: number;
-  refreshNonce?: number;
 }
 
 function formatDate(iso: string | null): string {
@@ -31,36 +32,20 @@ function formatRawDelta(n: number | null): string {
   return `${sign}${n.toLocaleString('ru-RU', { maximumFractionDigits: 1 })} ч`;
 }
 
-export function ProjectTrendPanel({ projectId, refreshNonce = 0 }: Props) {
-  const [data, setData] = useState<ProjectTrendDto | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+export function ProjectTrendPanel({ projectId }: Props) {
+  const trendQuery = useQuery({
+    queryKey: queryKeys.analytics.projectTrend(projectId),
+    queryFn: ({ signal }) => fetchProjectTrend(projectId, signal),
+    enabled: Boolean(projectId),
+    placeholderData: keepPreviousData,
+  });
 
-  const load = useCallback(() => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    void fetchProjectTrend(projectId, ac.signal)
-      .then((dto) => {
-        if (!ac.signal.aborted) {
-          setData(dto);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        setError(getApiErrorMessage(err, 'Не удалось загрузить тренд проекта.'));
-        setLoading(false);
-      });
-  }, [projectId]);
-
-  useEffect(() => {
-    void load();
-    return () => abortRef.current?.abort();
-  }, [load, refreshNonce]);
+  const data: ProjectTrendDto | null = trendQuery.data ?? null;
+  const loading = trendQuery.isFetching;
+  const error =
+    trendQuery.isError && !isRequestCanceled(trendQuery.error)
+      ? getApiErrorMessage(trendQuery.error, 'Не удалось загрузить тренд проекта.')
+      : null;
 
   const zSeries = useMemo<DynamicsSeries[]>(() => {
     if (!data) return [];

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Alert,
@@ -42,6 +42,7 @@ import {
   writeHeaderExpanded,
 } from '../../utils/projectWorkspacePrefs';
 import { putUserPreferences } from '../../api/userPreferencesApi';
+import { getApiErrorMessage } from '../../services/apiError';
 import { queryKeys } from '../../services/queryKeys';
 
 type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'report';
@@ -105,6 +106,7 @@ export function FullProjectsPage() {
   const navProject = (location.state as { project?: Project } | null)?.project ?? null;
 
   const { canRead, canEdit } = usePermission('Projects');
+  const queryClient = useQueryClient();
 
   const projectsQuery = useQuery<Project[]>({
     queryKey: queryKeys.projects.all(),
@@ -175,6 +177,33 @@ export function FullProjectsPage() {
   const [projectEditingId, setProjectEditingId] = useState<number | null>(null);
   const [projectForm, setProjectForm] = useState<ProjectFormData>(EMPTY_PROJECT_FORM);
   const [projectSubmitting, setProjectSubmitting] = useState(false);
+  const [projectSaveError, setProjectSaveError] = useState<string | null>(null);
+
+  const saveProjectMutation = useMutation({
+    mutationFn: async (vars: { mode: 'create' | 'edit'; id: number | null; form: ProjectFormData }) => {
+      if (vars.mode === 'edit' && vars.id) {
+        const updated = await updateProject(vars.id, vars.form);
+        return { mode: 'edit' as const, project: updated };
+      }
+      const created = await createProject(vars.form);
+      return { mode: 'create' as const, project: created };
+    },
+    onSuccess: async (result) => {
+      // Префикс ['projects','all'] обновляет и список с showArchived.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
+      if (result.mode === 'edit') {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.project(result.project.id) });
+      }
+      setProjectModalOpen(false);
+      setProjectSaveError(null);
+      if (result.mode === 'create') {
+        navigate(`/projects/${result.project.id}`);
+      }
+    },
+    onError: (err) => {
+      setProjectSaveError(getApiErrorMessage(err, 'Не удалось сохранить проект.'));
+    },
+  });
 
   // Обработчики
   const handleSelectProject = (pid: number) => {
@@ -187,6 +216,7 @@ export function FullProjectsPage() {
     setProjectModalMode('create');
     setProjectEditingId(null);
     setProjectForm(EMPTY_PROJECT_FORM);
+    setProjectSaveError(null);
     setProjectModalOpen(true);
   };
 
@@ -194,6 +224,7 @@ export function FullProjectsPage() {
     setProjectModalMode('edit');
     setProjectEditingId(project.id);
     setProjectForm(toProjectForm(project));
+    setProjectSaveError(null);
     setProjectModalOpen(true);
   };
 
@@ -206,6 +237,7 @@ export function FullProjectsPage() {
       code: copyCode,
       name: `${project.name} (копия)`,
     });
+    setProjectSaveError(null);
     setProjectModalOpen(true);
   };
 
@@ -213,16 +245,13 @@ export function FullProjectsPage() {
     if (!canEdit) return;
     setProjectSubmitting(true);
     try {
-      if (projectModalMode === 'edit' && projectEditingId) {
-        await updateProject(projectEditingId, projectForm);
-        setProjectModalOpen(false);
-        void projectsQuery.refetch();
-      } else {
-        const created = await createProject(projectForm);
-        setProjectModalOpen(false);
-        void projectsQuery.refetch();
-        navigate(`/projects/${created.id}`);
-      }
+      await saveProjectMutation.mutateAsync({
+        mode: projectModalMode,
+        id: projectEditingId,
+        form: projectForm,
+      });
+    } catch {
+      // onError уже записал projectSaveError через getApiErrorMessage
     } finally {
       setProjectSubmitting(false);
     }
@@ -534,6 +563,11 @@ export function FullProjectsPage() {
         maxWidth="md"
       >
         <Stack spacing={2}>
+          {projectSaveError && (
+            <Alert severity="error" data-testid="project-save-error">
+              {projectSaveError}
+            </Alert>
+          )}
           <TextField
             label="Код"
             value={projectForm.code}

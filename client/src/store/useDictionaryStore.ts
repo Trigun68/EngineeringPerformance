@@ -48,11 +48,16 @@ function clearStoredDictionaries(): void {
   }
 }
 
-async function requestDictionaries(useHttpCache: boolean): Promise<DictionariesAllResponse> {
-  const stored = useHttpCache ? readStoredDictionaries() : null;
+/**
+ * HTTP-загрузка GET /api/dictionaries/all. Сеть — только через React Query
+ * (useDictionaries); Zustand хранит производные lookup'и.
+ */
+export async function fetchDictionariesAll(signal?: AbortSignal): Promise<DictionariesAllResponse> {
+  const stored = readStoredDictionaries();
   const response = await apiClient.get<DictionariesAllResponse>('/dictionaries/all', {
     headers: stored ? { 'If-None-Match': stored.etag } : undefined,
     validateStatus: (status) => status === 200 || status === 304,
+    signal,
   });
   if (response.status === 304 && stored) {
     return stored.data;
@@ -64,9 +69,14 @@ async function requestDictionaries(useHttpCache: boolean): Promise<DictionariesA
   return response.data;
 }
 
+/** Сброс ETag-кэша перед invalidateQueries после правок справочников. */
+export function clearDictionariesHttpCache(): void {
+  clearStoredDictionaries();
+}
+
 /**
- * Справочники загружаются один раз при старте приложения (см. AppLayout.tsx)
- * и кэшируются в Zustand до явного invalidate() после правок справочников.
+ * Справочники загружаются один раз при старте (useDictionaries в AppLayout)
+ * и кэшируются React Query; Zustand — слой lookup'ов.
  */
 
 function pickLists(data: DictionariesAllResponse): Record<DictionaryKey, DictionaryItem[]> {
@@ -92,10 +102,8 @@ interface DictionaryState {
   error: string | null;
   caches: Record<DictionaryKey, Map<number, DictionaryItem>>;
   lists: Record<DictionaryKey, DictionaryItem[]>;
-  /** @alias fetchDictionaries */
-  fetchAll: () => Promise<void>;
-  fetchDictionaries: () => Promise<void>;
-  invalidate: () => Promise<void>;
+  /** Гидратация lookup-слоя из React Query (см. useDictionaries). */
+  setData: (data: DictionariesAllResponse) => void;
   getById: (key: DictionaryKey, id: number) => DictionaryItem | undefined;
   getList: (key: DictionaryKey) => DictionaryItem[];
   getName: (key: DictionaryKey, id: number | null | undefined) => string;
@@ -137,38 +145,9 @@ export const useDictionaryStore = create<DictionaryState>((set, get) => ({
   isLoaded: false,
   error: null,
 
-  fetchAll: async () => {
-    if (get().isLoaded || get().isLoading) {
-      return;
-    }
-    set({ isLoading: true, error: null });
-    try {
-      const data = await requestDictionaries(true);
-      const { caches, lists } = buildCaches(data);
-      set({ dictionaries: data, caches, lists, isLoaded: true });
-    } catch {
-      set({ error: 'Не удалось загрузить справочники.' });
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-
-  fetchDictionaries: async () => {
-    await get().fetchAll();
-  },
-
-  invalidate: async () => {
-    clearStoredDictionaries();
-    set({ isLoading: true, error: null, isLoaded: false });
-    try {
-      const data = await requestDictionaries(false);
-      const { caches, lists } = buildCaches(data);
-      set({ dictionaries: data, caches, lists, isLoaded: true });
-    } catch {
-      set({ error: 'Не удалось загрузить справочники.' });
-    } finally {
-      set({ isLoading: false });
-    }
+  setData: (data) => {
+    const { caches, lists } = buildCaches(data);
+    set({ dictionaries: data, caches, lists, isLoaded: true, isLoading: false, error: null });
   },
 
   getById: (key, id) => get().caches[key].get(id),

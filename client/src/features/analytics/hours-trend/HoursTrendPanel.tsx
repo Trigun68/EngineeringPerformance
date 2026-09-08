@@ -73,13 +73,15 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
 
   const trendsQuery = useQuery({
     queryKey: queryKeys.analytics.hoursTrend(projectId ?? undefined, dateFrom, dateTo),
-    // fetchTrends не принимает AbortSignal — без { signal }.
-    queryFn: () =>
-      fetchTrends({
-        projectId: projectId!,
-        dateFrom: dateFrom || undefined,
-        dateTo: dateTo || undefined,
-      }),
+    queryFn: ({ signal }) =>
+      fetchTrends(
+        {
+          projectId: projectId!,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+        },
+        signal,
+      ),
     enabled: !!projectId,
     placeholderData: keepPreviousData,
   });
@@ -87,7 +89,7 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
   // Ленивая детализация версии: запрос только после клика по точке графика.
   const detailQuery = useQuery({
     queryKey: queryKeys.analytics.hoursTrendDetail(projectId ?? undefined, detailVersionId ?? undefined),
-    queryFn: () => fetchTrendDetail(projectId!, detailVersionId!),
+    queryFn: ({ signal }) => fetchTrendDetail(projectId!, detailVersionId!, undefined, signal),
     enabled: projectId != null && detailVersionId != null,
   });
 

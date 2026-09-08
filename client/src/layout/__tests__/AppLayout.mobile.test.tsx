@@ -36,9 +36,8 @@ vi.mock('../../store/useAuthStore', () => ({
     sel({ user: { roleName: 'SuperAdmin' } }),
 }));
 
-vi.mock('../../store/useDictionaryStore', () => ({
-  useDictionaryStore: (sel: (s: { fetchDictionaries: () => void; isLoading: boolean }) => unknown) =>
-    sel({ fetchDictionaries: vi.fn(), isLoading: false }),
+vi.mock('../../hooks/useDictionaries', () => ({
+  useDictionaries: () => ({ isFetching: false }),
 }));
 
 vi.mock('../../components/auth/UserMenu', () => ({

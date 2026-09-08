@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -39,12 +40,26 @@ import {
 import { DataTable } from '../DataTable/DataTable';
 import { WorkingOverlay } from '../WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import { useConfirmation } from '../../hooks/useConfirmation';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { formatDateTime } from '../../utils/formatDateTime';
 
 const ANALYSIS_PLAN = 1;
 const ANALYSIS_FACT = 2;
+
+/** Сброс списка версий и pageData факта/прогноза/сравнения после CRUD версии. */
+export async function invalidateAfterVersionMutation(
+  queryClient: QueryClient,
+  projectId: number,
+): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.projectVersions(projectId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.fact.root(projectId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.forecast.root(projectId) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.compare.root(projectId) }),
+  ]);
+}
 
 export type VersionPickerDirection = typeof ANALYSIS_PLAN | typeof ANALYSIS_FACT | 'any';
 
@@ -106,6 +121,7 @@ export function ProjectVersionPickerDialog({
   onClose,
   onVersionsChanged,
 }: ProjectVersionPickerDialogProps) {
+  const queryClient = useQueryClient();
   const [versions, setVersions] = useState<ProjectVersion[]>(versionsProp ?? []);
   const [selected, setSelected] = useState<ProjectVersion | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -153,6 +169,11 @@ export function ProjectVersionPickerDialog({
       return [] as ProjectVersion[];
     }
   }, [onVersionsChanged, projectId]);
+
+  const refreshAfterMutation = useCallback(async () => {
+    await invalidateAfterVersionMutation(queryClient, projectId);
+    return loadVersions();
+  }, [loadVersions, projectId, queryClient]);
 
   // При открытии всегда грузим с API — иначе после удаления/копирования
   // устаревший versionsProp из родителя «возвращал» удалённую версию.
@@ -291,7 +312,7 @@ export function ProjectVersionPickerDialog({
       }
       setEditOpen(false);
       setActionTarget(null);
-      await loadVersions();
+      await refreshAfterMutation();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось сохранить версию.'));
     } finally {
@@ -306,7 +327,7 @@ export function ProjectVersionPickerDialog({
     try {
       const updated = await setPrimaryProjectVersion(projectId, selected.id);
       pickVersion(updated, true);
-      await loadVersions();
+      await refreshAfterMutation();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось назначить основную версию.'));
     } finally {
@@ -325,7 +346,7 @@ export function ProjectVersionPickerDialog({
       userPickedIdRef.current = null;
       setActionTarget(null);
       pickVersion(null);
-      const list = await loadVersions();
+      const list = await refreshAfterMutation();
       const stillVisible = list.filter((v) =>
         directionFilter === 'any' ? true : v.direction === directionFilter,
       );
@@ -372,7 +393,7 @@ export function ProjectVersionPickerDialog({
       setActionTarget(null);
       setPlanSource(null);
       pickVersion(copy, true);
-      await loadVersions();
+      await refreshAfterMutation();
     } catch (err) {
       setError(
         getApiErrorMessage(

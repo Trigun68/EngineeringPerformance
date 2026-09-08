@@ -598,14 +598,17 @@ export async function fetchTrendFormulas(): Promise<{ id: string; displayName: s
   return data;
 }
 
-export async function fetchTrends(params: {
-  projectId: number;
-  dateFrom?: string;
-  dateTo?: string;
-  granularity?: string;
-  formulaId?: string;
-}): Promise<TrendAnalyticsResult> {
-  const { data } = await apiClient.get<TrendAnalyticsResult>('/analytics/trends', { params });
+export async function fetchTrends(
+  params: {
+    projectId: number;
+    dateFrom?: string;
+    dateTo?: string;
+    granularity?: string;
+    formulaId?: string;
+  },
+  signal?: AbortSignal,
+): Promise<TrendAnalyticsResult> {
+  const { data } = await apiClient.get<TrendAnalyticsResult>('/analytics/trends', { params, signal });
   return data;
 }
 
@@ -613,9 +616,11 @@ export async function fetchTrendDetail(
   projectId: number,
   versionId: number,
   formulaId?: string,
+  signal?: AbortSignal,
 ): Promise<TrendDetailRow[]> {
   const { data } = await apiClient.get<TrendDetailRow[]>('/analytics/trends/detail', {
     params: { projectId, versionId, formulaId },
+    signal,
   });
   return data;
 }

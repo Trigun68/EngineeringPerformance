@@ -1,6 +1,10 @@
 /**
  * Фабрики ключей React Query.
  * Формы должны совпадать с уже существующими queryKey, иначе кэш «протухает».
+ *
+ * fact/forecast/compare: projectId — второй элемент, чтобы root(projectId)
+ * был префиксом pageData/detail/report и сбрасывал кэш удалённых версий.
+ * projects.all() без аргумента = ['projects','all'] — префикс для showArchived.
  */
 export const queryKeys = {
   projects: {
@@ -18,6 +22,9 @@ export const queryKeys = {
     ['projectCharacteristics', projectId] as const,
   projectPermissions: (projectId: number | string | undefined) =>
     ['projectPermissions', projectId] as const,
+  dictionaries: {
+    all: () => ['dictionaries', 'all'] as const,
+  },
   registers: {
     // Нормы IIC и стоимость работ — массивы совпадают с уже существующими queryKey.
     iicNormsRoot: ['registers', 'iic-norms'] as const,
@@ -34,22 +41,27 @@ export const queryKeys = {
     },
   },
   fact: {
+    root: (projectId: number | string | undefined) => ['fact', projectId] as const,
     pageData: (projectId: number | undefined, versionId: number | undefined) =>
-      ['fact', 'page-data', projectId, versionId] as const,
+      ['fact', projectId, 'page-data', versionId] as const,
     detail: (projectId: number | undefined, versionId: number | undefined, subKey?: string) =>
-      ['fact', 'detail', projectId, versionId, subKey] as const,
+      ['fact', projectId, 'detail', versionId, subKey] as const,
   },
   forecast: {
+    root: (projectId: number | string | undefined) => ['forecast', projectId] as const,
     pageData: (projectId: number | undefined, versionId: number | undefined) =>
-      ['forecast', 'page-data', projectId, versionId] as const,
+      ['forecast', projectId, 'page-data', versionId] as const,
     detail: (projectId: number | undefined, versionId: number | undefined, subKey?: string) =>
-      ['forecast', 'detail', projectId, versionId, subKey] as const,
+      ['forecast', projectId, 'detail', versionId, subKey] as const,
     report: (projectId: number | undefined, versionId: number | undefined) =>
-      ['forecast', 'report', projectId, versionId] as const,
+      ['forecast', projectId, 'report', versionId] as const,
     planningParameters: (projectId: number | undefined, versionId: number | undefined) =>
-      ['forecast', 'planning-parameters', projectId, versionId] as const,
+      ['forecast', projectId, 'planning-parameters', versionId] as const,
   },
   analytics: {
+    root: ['analytics'] as const,
+    projectTrend: (projectId: number | undefined) =>
+      ['analytics', 'project-trend', projectId] as const,
     groupAnalysis: (projectId: number | undefined) =>
       ['analytics', 'group-analysis', projectId] as const,
     hoursTrend: (projectId: number | undefined, dateFrom: string, dateTo: string) =>
@@ -68,17 +80,18 @@ export const queryKeys = {
       ['analytics', 'fact-norm', dateFrom, dateTo, scopeKey] as const,
   },
   compare: {
+    root: (projectId: number | string | undefined) => ['compare', projectId] as const,
     pageData: (
       projectId: number | undefined,
       versionAId: number | undefined,
       versionBId: number | undefined,
-    ) => ['compare', 'page-data', projectId, versionAId, versionBId] as const,
+    ) => ['compare', projectId, 'page-data', versionAId, versionBId] as const,
     detail: (
       projectId: number | undefined,
       versionAId: number | undefined,
       versionBId: number | undefined,
       subKey?: string,
-    ) => ['compare', 'detail', projectId, versionAId, versionBId, subKey] as const,
+    ) => ['compare', projectId, 'detail', versionAId, versionBId, subKey] as const,
   },
   directory: {
     root: (resource: string) => ['directory-page', resource] as const,

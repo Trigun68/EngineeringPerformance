@@ -106,6 +106,7 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
     void queryClient.invalidateQueries({
       queryKey: queryKeys.reports.performance(projectId),
     });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.projectTrend(projectId) });
     void queryClient.invalidateQueries({ queryKey: ['reports-tab', projectId] });
   }, [queryClient, projectId]);
 

@@ -180,17 +180,12 @@ export function ForecastReportView({
 }: ForecastReportViewProps) {
   const getById = useDictionaryStore((s) => s.getById);
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
-  const fetchAll = useDictionaryStore((s) => s.fetchAll);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pvByDirection, setPvByDirection] = useState<Record<string, ProjectVersionPhysicalVolume[]>>({});
   const [eqByDirection, setEqByDirection] = useState<Record<string, ProjectVersionPhysicalVolume[]>>({});
   const [exporting, setExporting] = useState(false);
-
-  useEffect(() => {
-    void fetchAll();
-  }, [fetchAll]);
 
   const loadVolumes = useCallback(async () => {
     setLoading(true);

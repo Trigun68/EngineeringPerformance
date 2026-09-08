@@ -16,12 +16,11 @@ vi.mock('../../../../api/analyticsApi', () => ({
   })),
 }));
 
-vi.mock('../../../../store/useDictionaryStore', () => ({
-  useDictionaryStore: (selector: (s: { getById: () => null; getUnitName: () => string; fetchAll: () => void }) => unknown) =>
+  vi.mock('../../../../store/useDictionaryStore', () => ({
+  useDictionaryStore: (selector: (s: { getById: () => null; getUnitName: () => string }) => unknown) =>
     selector({
       getById: () => null,
       getUnitName: () => '',
-      fetchAll: () => undefined,
     }),
 }));
 

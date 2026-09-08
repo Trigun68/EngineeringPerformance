@@ -20,7 +20,7 @@ import { usePermission } from '../../hooks/usePermission';
 import { useConfirmation } from '../../hooks/useConfirmation';
 import { getApiErrorMessage } from '../../services/apiError';
 import { queryKeys } from '../../services/queryKeys';
-import { useDictionaryStore } from '../../store/useDictionaryStore';
+import { clearDictionariesHttpCache, useDictionaryStore } from '../../store/useDictionaryStore';
 import type { DictionaryItem } from '../../types/dictionary';
 import { formatIisNorm } from '../../utils/formatIisNorm';
 import { formatDate } from '../../utils/formatDateTime';
@@ -117,7 +117,6 @@ export function IicNormsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const directions = useDictionaryStore((s) => s.getList('iicWorkDirections'));
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
-  const fetchAll = useDictionaryStore((s) => s.fetchAll);
 
   const getUnitLabel = useCallback(
     (directionId: number) => resolveIicDirectionUnitName(directionId, directions, getUnitName),
@@ -186,7 +185,12 @@ export function IicNormsPage() {
   }, [directions, form.workDirectionId, getUnitLabel]);
 
   const invalidateIicNormQueries = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.registers.iicNormsRoot });
+    clearDictionariesHttpCache();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.registers.iicNormsRoot }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.root }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dictionaries.all() }),
+    ]);
   }, [queryClient]);
 
   const createNormMutation = useMutation({
@@ -210,10 +214,6 @@ export function IicNormsPage() {
     ?? (historyDirectionId != null && historyQuery.isError
       ? getApiErrorMessage(historyQuery.error, 'Не удалось загрузить историю норм.')
       : null);
-
-  useEffect(() => {
-    void fetchAll();
-  }, [fetchAll]);
 
   useEffect(() => {
     if (!editing) {

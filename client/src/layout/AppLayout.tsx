@@ -34,8 +34,8 @@ import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
 import { isSuperAdmin } from '../utils/permissionAccess';
 import { wpColors } from '../theme/wpColors';
+import { useDictionaries } from '../hooks/useDictionaries';
 import { useAuthStore } from '../store/useAuthStore';
-import { useDictionaryStore } from '../store/useDictionaryStore';
 
 const SIDEBAR_WIDTH = 280;
 
@@ -145,8 +145,7 @@ export function AppLayout() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [navOpen, setNavOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
-  const fetchDictionaries = useDictionaryStore((s) => s.fetchDictionaries);
-  const dictionariesLoading = useDictionaryStore((s) => s.isLoading);
+  const { isFetching: dictionariesLoading } = useDictionaries(Boolean(user));
   const location = useLocation();
   const projectMatch = useMatch('/projects/:projectId');
   const { visibleItems } = useAccessibleNavigation();
@@ -190,12 +189,6 @@ export function AppLayout() {
       window.clearInterval(intervalId);
     };
   }, [user, isAdmin]);
-
-  useEffect(() => {
-    if (user) {
-      void fetchDictionaries();
-    }
-  }, [user, fetchDictionaries]);
 
   const navItems = useMemo(
     () =>

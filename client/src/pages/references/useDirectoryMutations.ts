@@ -11,6 +11,7 @@ import {
 } from '../../api/directoriesApi';
 import { getApiErrorMessage } from '../../services/apiError';
 import { queryKeys } from '../../services/queryKeys';
+import { clearDictionariesHttpCache } from '../../store/useDictionaryStore';
 
 /** Префикс ключа списка справочника — без showArchived/projectId, чтобы сбросить все срезы. */
 export function directoryPageQueryKey(resource: string) {
@@ -25,7 +26,6 @@ export interface DirectorySubmitVariables {
 
 interface UseDirectoryMutationsOptions {
   resource: string;
-  invalidateDictionaries: () => void | Promise<void>;
   onError: (message: string) => void;
 }
 
@@ -51,15 +51,17 @@ async function submitDirectoryEntry(
 
 export function useDirectoryMutations({
   resource,
-  invalidateDictionaries,
   onError,
 }: UseDirectoryMutationsOptions) {
   const queryClient = useQueryClient();
 
   const invalidateAfterWrite = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: directoryPageQueryKey(resource) });
-    await invalidateDictionaries();
-  }, [queryClient, resource, invalidateDictionaries]);
+    clearDictionariesHttpCache();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: directoryPageQueryKey(resource) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dictionaries.all() }),
+    ]);
+  }, [queryClient, resource]);
 
   const submitMutation = useMutation({
     mutationFn: (vars: DirectorySubmitVariables) => submitDirectoryEntry(resource, vars),

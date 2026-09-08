@@ -521,7 +521,8 @@ export function FactNormAnalysisPanel({
         chartPoints={selected?.chartPoints ?? []}
         onClose={() => setDialogOpen(false)}
         onSaved={() => {
-          void queryClient.invalidateQueries({ queryKey: analysisQueryKey });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.root });
+          void queryClient.invalidateQueries({ queryKey: queryKeys.registers.iicNormsRoot });
         }}
       />
     </Box>

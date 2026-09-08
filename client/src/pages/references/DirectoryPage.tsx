@@ -51,8 +51,6 @@ interface DirectoryPageProps {
 export function DirectoryPage({ config }: DirectoryPageProps) {
   const { canRead, canEdit } = usePermission(config.permission);
   const { confirm, Dialog: ConfirmDialog } = useConfirmation();
-  const invalidateDictionaries = useDictionaryStore((s) => s.invalidate);
-  const fetchAllDictionaries = useDictionaryStore((s) => s.fetchAll);
   const getName = useDictionaryStore((s) => s.getName);
   const getById = useDictionaryStore((s) => s.getById);
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
@@ -134,15 +132,10 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
 
   const gridApiRef = useRef<GridApi | null>(null);
 
-  useEffect(() => {
-    void fetchAllDictionaries();
-  }, [fetchAllDictionaries]);
-
   // Сброс выбора при смене вкладки справочника.
   useEffect(() => {
     setSelected(null);
-    void fetchAllDictionaries();
-  }, [config.resource, fetchAllDictionaries]);
+  }, [config.resource]);
 
   const directoryQuery = useQuery({
     queryKey: queryKeys.directory.page(config.resource, showArchived, selectedProjectId),
@@ -186,7 +179,6 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     isMutating,
   } = useDirectoryMutations({
     resource: config.resource,
-    invalidateDictionaries,
     onError: setError,
   });
 
