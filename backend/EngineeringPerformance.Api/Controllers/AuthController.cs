@@ -260,6 +260,7 @@ public sealed class AuthController : ControllerBase
             return Unauthorized();
 
         await _refreshTokenService.RevokeAllAsync(userId, "Logout all devices", cancellationToken);
+        await _actionLogger.LogForUserAsync(userId, UserActionType.Logout, cancellationToken: cancellationToken);
         await _authAuditService.WriteAsync(
             AuthEventType.LogoutAllDevices,
             success: true,

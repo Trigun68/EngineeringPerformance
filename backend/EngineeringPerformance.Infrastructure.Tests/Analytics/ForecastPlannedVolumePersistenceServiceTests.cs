@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
@@ -17,7 +18,8 @@ public sealed class ForecastPlannedVolumePersistenceServiceTests
     {
         var seeded = await SeedAsync(PlanningScenario.ByProjectIicGroup);
         var recalc = new Mock<IAnalysisVersionRecalculationOrchestrator>();
-        var service = new ForecastPlannedVolumePersistenceService(seeded.Factory, recalc.Object);
+        var service = new ForecastPlannedVolumePersistenceService(
+            seeded.Factory, recalc.Object, Mock.Of<IUserActionLogger>());
 
         await service.SavePlannedVolumeAsync(1, 10, 7, 20m);
 
@@ -33,7 +35,8 @@ public sealed class ForecastPlannedVolumePersistenceServiceTests
     {
         var seeded = await SeedAsync(PlanningScenario.ByEachValue);
         var recalc = new Mock<IAnalysisVersionRecalculationOrchestrator>();
-        var service = new ForecastPlannedVolumePersistenceService(seeded.Factory, recalc.Object);
+        var service = new ForecastPlannedVolumePersistenceService(
+            seeded.Factory, recalc.Object, Mock.Of<IUserActionLogger>());
 
         var act = () => service.SavePlannedVolumeAsync(1, 10, 7, 20m);
 

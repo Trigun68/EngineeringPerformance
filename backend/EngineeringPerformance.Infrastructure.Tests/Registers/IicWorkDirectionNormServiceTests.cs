@@ -1,6 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Analytics.FactNorm;
 using EngineeringPerformance.Application.Analytics.NormRegistry;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Domain.Entities;
@@ -56,7 +57,8 @@ public sealed class IicWorkDirectionNormServiceTests
             cache.Object,
             recalc.Object,
             registry.Object,
-            factNormCache.Object);
+            factNormCache.Object,
+            Mock.Of<IUserActionLogger>());
 
         var created = await service.CreateAsync(new IicNormWriteRequest(
             WorkDirectionId: 7,
@@ -126,7 +128,8 @@ public sealed class IicWorkDirectionNormServiceTests
             cache.Object,
             recalc.Object,
             registry.Object,
-            factNormCache.Object);
+            factNormCache.Object,
+            Mock.Of<IUserActionLogger>());
 
         var updated = await service.UpdateAsync(10, new IicNormWriteRequest(
             WorkDirectionId: 5,

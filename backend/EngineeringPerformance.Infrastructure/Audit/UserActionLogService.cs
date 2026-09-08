@@ -4,6 +4,7 @@ using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace EngineeringPerformance.Infrastructure.Audit;
@@ -15,13 +16,17 @@ public sealed class UserActionLogService : IUserActionLogService
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ILogger<UserActionLogService> _logger;
+    private readonly Lazy<IUserActionLogger> _actionLogger;
 
     public UserActionLogService(
         IDbContextFactory<AppDbContext> contextFactory,
-        ILogger<UserActionLogService> logger)
+        ILogger<UserActionLogService> logger,
+        IServiceProvider services)
     {
         _contextFactory = contextFactory;
         _logger = logger;
+        // Lazy: UserActionLogger зависит от IUserActionLogService — разрываем цикл DI.
+        _actionLogger = new Lazy<IUserActionLogger>(() => services.GetRequiredService<IUserActionLogger>());
     }
 
     public async Task LogAsync(
@@ -119,6 +124,15 @@ public sealed class UserActionLogService : IUserActionLogService
             log.IsArchived = true;
 
         await context.SaveChangesAsync(cancellationToken);
+        if (logs.Count > 0)
+        {
+            await _actionLogger.Value.LogAsync(
+                UserActionType.AuditLogArchive,
+                entityType: "UserActionLog",
+                description: $"Archived {logs.Count} audit log entries",
+                cancellationToken: cancellationToken);
+        }
+
         return logs.Count;
     }
 
@@ -136,6 +150,15 @@ public sealed class UserActionLogService : IUserActionLogService
             log.IsArchived = false;
 
         await context.SaveChangesAsync(cancellationToken);
+        if (logs.Count > 0)
+        {
+            await _actionLogger.Value.LogAsync(
+                UserActionType.AuditLogRestore,
+                entityType: "UserActionLog",
+                description: $"Restored {logs.Count} audit log entries",
+                cancellationToken: cancellationToken);
+        }
+
         return logs.Count;
     }
 

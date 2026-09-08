@@ -1,5 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using EngineeringPerformance.Infrastructure.Projects;
@@ -12,12 +14,14 @@ public sealed class AnalysisVersionRecalculationOrchestrator(
     AppDbContext context,
     ILaborIntensityRecalculationService recalculation,
     IProjectAnalyticsCache analyticsCache,
-    ILogger<AnalysisVersionRecalculationOrchestrator> logger) : IAnalysisVersionRecalculationOrchestrator
+    ILogger<AnalysisVersionRecalculationOrchestrator> logger,
+    IUserActionLogger actionLogger) : IAnalysisVersionRecalculationOrchestrator
 {
     private readonly AppDbContext _context = context;
     private readonly ILaborIntensityRecalculationService _recalculation = recalculation;
     private readonly IProjectAnalyticsCache _analyticsCache = analyticsCache;
     private readonly ILogger<AnalysisVersionRecalculationOrchestrator> _logger = logger;
+    private readonly IUserActionLogger _actionLogger = actionLogger;
 
     public Task<int> RecalculateVersionAsync(
         int projectId,
@@ -231,6 +235,18 @@ public sealed class AnalysisVersionRecalculationOrchestrator(
             projectId,
             versionId,
             updated);
+
+        // Журнал аудита — только кнопка «Пересчитать», не каскад import/scenario/catalog.
+        if (string.Equals(trigger, "button", StringComparison.Ordinal))
+        {
+            await _actionLogger.LogAsync(
+                UserActionType.VersionRecalculate,
+                entityType: "ProjectAnalysisVersion",
+                entityId: versionId,
+                description: $"Recalculated version {versionId}",
+                cancellationToken: cancellationToken);
+        }
+
         return updated;
     }
 

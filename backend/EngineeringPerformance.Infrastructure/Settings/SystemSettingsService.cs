@@ -1,7 +1,9 @@
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Settings;
+using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.Auth;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using EngineeringPerformance.Infrastructure.Auth;
 
 namespace EngineeringPerformance.Infrastructure.Settings;
 
@@ -15,11 +17,16 @@ public sealed class SystemSettingsService : ISystemSettingsService
 
     private readonly IDistributedCache _cache;
     private readonly JwtSettings _jwtDefaults;
+    private readonly IUserActionLogger _actionLogger;
 
-    public SystemSettingsService(IDistributedCache cache, IOptions<JwtSettings> jwtDefaults)
+    public SystemSettingsService(
+        IDistributedCache cache,
+        IOptions<JwtSettings> jwtDefaults,
+        IUserActionLogger actionLogger)
     {
         _cache = cache;
         _jwtDefaults = jwtDefaults.Value;
+        _actionLogger = actionLogger;
     }
 
     public async Task<int> GetSessionExpirationMinutesAsync(CancellationToken cancellationToken = default)
@@ -40,5 +47,11 @@ public sealed class SystemSettingsService : ISystemSettingsService
             SessionExpirationKey,
             minutes.ToString(),
             cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.SystemSettingUpdate,
+            entityType: "SystemSetting",
+            description: $"Session expiration set to {minutes} minutes",
+            cancellationToken: cancellationToken);
     }
 }

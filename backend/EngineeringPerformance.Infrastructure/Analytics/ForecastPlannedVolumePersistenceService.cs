@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -11,13 +12,16 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ForecastPlannedVolumePersistenceService(
         IDbContextFactory<AppDbContext> contextFactory,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _contextFactory = contextFactory;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     public async Task SavePlannedVolumeAsync(
@@ -73,6 +77,7 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
             }
 
             await context.SaveChangesAsync(cancellationToken);
+            await LogPlannedVolumeEditAsync(projectAnalysisVersionId, workDirectionId, cancellationToken);
             await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
             return;
         }
@@ -135,6 +140,18 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await LogPlannedVolumeEditAsync(projectAnalysisVersionId, workDirectionId, cancellationToken);
         await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
     }
+
+    private Task LogPlannedVolumeEditAsync(
+        int versionId,
+        int workDirectionId,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            UserActionType.PlannedVolumeEdit,
+            entityType: "ProjectPhysicalVolume",
+            entityId: versionId,
+            description: $"Planned volume for work direction {workDirectionId}",
+            cancellationToken: cancellationToken);
 }

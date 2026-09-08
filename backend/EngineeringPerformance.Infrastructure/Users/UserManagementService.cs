@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Users;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,12 +12,15 @@ namespace EngineeringPerformance.Infrastructure.Users;
 public sealed class UserManagementService(
     AppDbContext context,
     IAccountLockoutService accountLockoutService,
-    IMfaService mfaService) : IUserManagementService
+    IMfaService mfaService,
+    IUserActionLogger actionLogger) : IUserManagementService
 {
     private const string TemporaryPasswordAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+    private const string UserEntityType = "User";
     private readonly AppDbContext _context = context;
     private readonly IAccountLockoutService _accountLockoutService = accountLockoutService;
     private readonly IMfaService _mfaService = mfaService;
+    private readonly IUserActionLogger _actionLogger = actionLogger;
 
     public async Task<IReadOnlyList<UserDto>> GetAllAsync(bool includeArchived, CancellationToken cancellationToken = default)
     {
@@ -76,6 +81,11 @@ public sealed class UserManagementService(
 
         _context.Users.Add(user);
         await _context.SaveChangesAsync(cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserCreate,
+            user.Id,
+            $"Created user '{user.Username}'",
+            cancellationToken);
 
         return (await GetByIdAsync(user.Id, cancellationToken), null);
     }
@@ -111,6 +121,11 @@ public sealed class UserManagementService(
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserEdit,
+            user.Id,
+            $"Updated user '{user.Username}'",
+            cancellationToken);
         return (await GetByIdAsync(id, cancellationToken), null);
     }
 
@@ -122,8 +137,15 @@ public sealed class UserManagementService(
 
         try
         {
+            var username = user.Username;
+            var userId = user.Id;
             _context.Users.Remove(user);
             await _context.SaveChangesAsync(cancellationToken);
+            await LogUserActionAsync(
+                UserActionType.UserDelete,
+                userId,
+                $"Deleted user '{username}'",
+                cancellationToken);
             return (true, null);
         }
         catch (DbUpdateException)
@@ -141,6 +163,11 @@ public sealed class UserManagementService(
         user.IsArchived = true;
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserArchive,
+            user.Id,
+            $"Archived user '{user.Username}'",
+            cancellationToken);
         return true;
     }
 
@@ -153,6 +180,11 @@ public sealed class UserManagementService(
         user.IsArchived = false;
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserRestore,
+            user.Id,
+            $"Restored user '{user.Username}'",
+            cancellationToken);
         return true;
     }
 
@@ -180,6 +212,7 @@ public sealed class UserManagementService(
         user.MustChangePassword = false;
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogPasswordChangeAsync(user, cancellationToken);
         return (true, null);
     }
 
@@ -199,6 +232,7 @@ public sealed class UserManagementService(
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogPasswordChangeAsync(user, cancellationToken);
         return (true, null);
     }
 
@@ -209,6 +243,11 @@ public sealed class UserManagementService(
             return false;
 
         await _accountLockoutService.UnlockAsync(user, cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserUnlock,
+            user.Id,
+            $"Unlocked user '{user.Username}'",
+            cancellationToken);
         return true;
     }
 
@@ -222,6 +261,11 @@ public sealed class UserManagementService(
             return MfaResetStatus.UserNotFound;
 
         await _mfaService.ResetMfaAsync(user, cancellationToken);
+        await LogUserActionAsync(
+            UserActionType.UserMfaReset,
+            user.Id,
+            $"Reset MFA for user '{user.Username}'",
+            cancellationToken);
         return MfaResetStatus.Success;
     }
 
@@ -238,9 +282,29 @@ public sealed class UserManagementService(
         user.MustChangePassword = true;
         user.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogPasswordChangeAsync(user, cancellationToken);
 
         return (temporaryPassword, null);
     }
+
+    private Task LogPasswordChangeAsync(User user, CancellationToken cancellationToken) =>
+        LogUserActionAsync(
+            UserActionType.UserPasswordChange,
+            user.Id,
+            $"Changed password for user '{user.Username}'",
+            cancellationToken);
+
+    private Task LogUserActionAsync(
+        UserActionType actionType,
+        int entityId,
+        string description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            actionType,
+            entityType: UserEntityType,
+            entityId: entityId,
+            description: description,
+            cancellationToken: cancellationToken);
 
     private static string? ValidateNewPassword(string newPassword) =>
         string.IsNullOrWhiteSpace(newPassword) ? "Новый пароль обязателен" : null;

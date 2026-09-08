@@ -1,6 +1,7 @@
-using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Common.Exceptions;
+using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -16,19 +17,22 @@ public sealed class ProjectVersionService : IProjectVersionService
     private readonly IProjectVersionPlanningParameterService _planningParameters;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly IProjectAnalyticsCache _analyticsCache;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectVersionService(
         AppDbContext context,
         IProjectVersionDeepCopyService deepCopy,
         IProjectVersionPlanningParameterService planningParameters,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
-        IProjectAnalyticsCache analyticsCache)
+        IProjectAnalyticsCache analyticsCache,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _deepCopy = deepCopy;
         _planningParameters = planningParameters;
         _recalcOrchestrator = recalcOrchestrator;
         _analyticsCache = analyticsCache;
+        _actionLogger = actionLogger;
     }
 
     public async Task<IReadOnlyList<ProjectVersionDto>> ListAsync(int projectId, CancellationToken cancellationToken = default)
@@ -94,6 +98,13 @@ public sealed class ProjectVersionService : IProjectVersionService
                 _context, entity.Id, entity.CreatedAt, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
         }, cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionCreate,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
 
         await _planningParameters.SeedForVersionAsync(entity.Id, cancellationToken);
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
@@ -178,6 +189,13 @@ public sealed class ProjectVersionService : IProjectVersionService
             await SaveWithConcurrencyCheckAsync(cancellationToken);
         }, cancellationToken);
 
+        await _actionLogger.LogAsync(
+            UserActionType.VersionEdit,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
+
         var recalcCount = 0;
         if (catalogChanged || createdAtChanged || scenarioChanged)
         {
@@ -205,6 +223,13 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
 
+        await _actionLogger.LogAsync(
+            UserActionType.VersionDelete,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
+
         if (wasPrimary)
             await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
 
@@ -222,6 +247,14 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.IsArchived = false;
         entity.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionRestore,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
+
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
 
         return await GetByIdAsync(projectId, versionId, cancellationToken);
@@ -248,6 +281,14 @@ public sealed class ProjectVersionService : IProjectVersionService
                 entity.ModifiedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync(cancellationToken);
             }, cancellationToken);
+
+            await _actionLogger.LogAsync(
+                UserActionType.VersionSetPrimary,
+                entityType: "ProjectAnalysisVersion",
+                entityId: entity.Id,
+                description: entity.VersionName,
+                cancellationToken);
+
             await InvalidateAnalyticsAsync(projectId, cancellationToken);
         }
 
@@ -269,6 +310,14 @@ public sealed class ProjectVersionService : IProjectVersionService
             newDescription,
             targetDirection,
             cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionCopy,
+            entityType: "ProjectAnalysisVersion",
+            entityId: copy.Id,
+            description: copy.VersionName,
+            cancellationToken);
+
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return copy;
     }

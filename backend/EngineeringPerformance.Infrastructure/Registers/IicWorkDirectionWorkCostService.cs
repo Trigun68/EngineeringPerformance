@@ -1,12 +1,16 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace EngineeringPerformance.Infrastructure.Registers;
 
-public sealed class IicWorkDirectionWorkCostService(AppDbContext context) : IWorkCostService
+public sealed class IicWorkDirectionWorkCostService(
+    AppDbContext context,
+    IUserActionLogger actionLogger) : IWorkCostService
 {
     public async Task<IReadOnlyList<WorkCostRowDto>> GetAsOfAsync(
         DateTime? asOf,
@@ -132,6 +136,12 @@ public sealed class IicWorkDirectionWorkCostService(AppDbContext context) : IWor
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await actionLogger.LogAsync(
+            UserActionType.WorkCostEdit,
+            entityType: "IicWorkDirectionWorkCost",
+            entityId: null,
+            description: $"EffectiveFrom={effectiveFrom:yyyy-MM-dd} written={written}",
+            cancellationToken: cancellationToken);
         return new WorkCostBatchResult(written);
     }
 
@@ -173,6 +183,12 @@ public sealed class IicWorkDirectionWorkCostService(AppDbContext context) : IWor
 
         context.IicWorkDirectionWorkCosts.RemoveRange(block);
         await context.SaveChangesAsync(cancellationToken);
+        await actionLogger.LogAsync(
+            UserActionType.WorkCostDelete,
+            entityType: "IicWorkDirectionWorkCost",
+            entityId: null,
+            description: $"EffectiveFrom={from:yyyy-MM-dd} deleted={block.Count}",
+            cancellationToken: cancellationToken);
         return new WorkCostPeriodDeleteResult(block.Count);
     }
 

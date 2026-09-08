@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Persistence;
 using EngineeringPerformance.Infrastructure.Projects;
@@ -35,7 +36,7 @@ public sealed class ProjectDataServiceRecalcTests
         recalc.Setup(x => x.RecalculateVersionAsync(1, 10, It.IsAny<CancellationToken>()))
             .ReturnsAsync(1);
         var cache = new Mock<IProjectAnalyticsCache>();
-        var service = new ProjectDataService(context, cache.Object, recalc.Object);
+        var service = new ProjectDataService(context, cache.Object, recalc.Object, Mock.Of<IUserActionLogger>());
 
         (await service.DeletePhysicalVolumeAsync(1, 10, 100)).Should().BeTrue();
 
@@ -72,7 +73,8 @@ public sealed class ProjectDataServiceRecalcTests
         var service = new ProjectDataService(
             context,
             new Mock<IProjectAnalyticsCache>().Object,
-            recalc.Object);
+            recalc.Object,
+            Mock.Of<IUserActionLogger>());
 
         (await service.DeleteEquipmentAsync(1, 10, 200)).Should().BeTrue();
         recalc.Verify(x => x.RecalculateVersionAsync(1, 10, It.IsAny<CancellationToken>()), Times.Once);

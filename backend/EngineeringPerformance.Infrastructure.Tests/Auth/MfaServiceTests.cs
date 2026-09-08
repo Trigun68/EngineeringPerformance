@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Infrastructure.Auth;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -5,6 +6,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Moq;
 using OtpNet;
 
 namespace EngineeringPerformance.Infrastructure.Tests.Auth;
@@ -25,7 +27,8 @@ public sealed class MfaServiceTests
         var service = new MfaService(
             context,
             DataProtectionProvider.Create("mfa-service-tests"),
-            Options.Create(new MfaOptions()));
+            Options.Create(new MfaOptions()),
+            new Mock<IUserActionLogger>().Object);
         const string secret = "JBSWY3DPEHPK3PXP";
         var code = new Totp(Base32Encoding.ToBytes(secret)).ComputeTotp(DateTime.UtcNow);
 

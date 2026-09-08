@@ -57,7 +57,7 @@ NGINX передаёт `X-Remote-User` только после `auth_gss`.
 
 ## Admin endpoints
 
-- `GET/PUT /api/access-rights` — только Administrator (Forbid иначе).
+- `GET/PUT /api/access-rights` — `[HasPermission(Administration, Read)]` на GET, `Edit` на PUT (не `Forbid` / `IsAdministrator`). То же для `GET/PUT /api/permissions/matrix` (`PermissionMatrixController`).
 - `GET /api/audit/user-actions` — `PermissionType.UserActionLog` Read.
 
 ---

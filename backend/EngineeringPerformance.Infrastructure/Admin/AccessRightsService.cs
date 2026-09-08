@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Admin;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -9,10 +10,12 @@ namespace EngineeringPerformance.Infrastructure.Admin;
 public sealed class AccessRightsService : IAccessRightsService
 {
     private readonly AppDbContext _context;
+    private readonly IUserActionLogger _actionLogger;
 
-    public AccessRightsService(AppDbContext context)
+    public AccessRightsService(AppDbContext context, IUserActionLogger actionLogger)
     {
         _context = context;
+        _actionLogger = actionLogger;
     }
 
     public async Task<IReadOnlyList<AccessRightDto>> GetAllAsync(CancellationToken cancellationToken = default) =>
@@ -32,6 +35,12 @@ public sealed class AccessRightsService : IAccessRightsService
 
         entity.AccessLevel = accessLevel;
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.AccessRightUpdate,
+            entityType: "AccessRight",
+            entityId: id,
+            description: $"Access level set to {accessLevel} for {entity.ObjectName}",
+            cancellationToken: cancellationToken);
         return true;
     }
 

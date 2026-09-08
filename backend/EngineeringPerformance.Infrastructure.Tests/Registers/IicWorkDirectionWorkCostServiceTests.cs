@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Norms;
@@ -5,6 +6,7 @@ using EngineeringPerformance.Infrastructure.Persistence;
 using EngineeringPerformance.Infrastructure.Registers;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Moq;
 
 namespace EngineeringPerformance.Infrastructure.Tests.Registers;
 
@@ -28,7 +30,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
         });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         var result = await service.SaveBatchAsync(new WorkCostBatchRequest(
             new DateTime(2021, 6, 15, 0, 0, 0, DateTimeKind.Utc),
             WorkCostLevel.Organization,
@@ -53,7 +55,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
         context.IicWorkDirections.Add(new IicWorkDirection { Id = 7, Name = "Dir", Code = "D7" });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         var from = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc);
         await service.SaveBatchAsync(new WorkCostBatchRequest(
             from,
@@ -76,7 +78,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
         context.IicWorkDirections.Add(new IicWorkDirection { Id = 3, Name = "Empty", Code = "E3" });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         var rows = await service.GetAsOfAsync(DateTime.UtcNow);
 
         rows.Should().ContainSingle();
@@ -116,7 +118,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
             });
         await context.SaveChangesAsync();
 
-        var periods = await new IicWorkDirectionWorkCostService(context).ListPeriodsAsync();
+        var periods = await new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>()).ListPeriodsAsync();
 
         periods.Should().HaveCount(2);
         periods[0].EffectiveFrom.Date.Should().Be(new DateTime(2025, 6, 1));
@@ -151,7 +153,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
             });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         var block = await service.GetByEffectiveFromAsync(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
         block.Should().HaveCount(2);
@@ -185,7 +187,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
             });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         await service.SaveBatchAsync(new WorkCostBatchRequest(
             new DateTime(2024, 6, 15, 0, 0, 0, DateTimeKind.Utc),
             WorkCostLevel.EachElement,
@@ -231,7 +233,7 @@ public sealed class IicWorkDirectionWorkCostServiceTests
             });
         await context.SaveChangesAsync();
 
-        var service = new IicWorkDirectionWorkCostService(context);
+        var service = new IicWorkDirectionWorkCostService(context, Mock.Of<IUserActionLogger>());
         var result = await service.DeletePeriodAsync(new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
         result.DeletedCount.Should().Be(1);

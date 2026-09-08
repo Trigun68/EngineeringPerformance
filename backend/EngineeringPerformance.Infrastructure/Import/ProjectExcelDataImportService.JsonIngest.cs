@@ -39,7 +39,14 @@ public sealed partial class ProjectExcelDataImportService
             cancellationToken);
 
         if (result.Success)
+        {
+            await LogImportPersistedAsync(
+                UserActionType.PhysicalVolumeImport,
+                result.IterationId,
+                $"{request.Description ?? "json-ingest"}; records={result.RecordsImported}",
+                cancellationToken);
             await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+        }
 
         return result;
     }
@@ -71,7 +78,14 @@ public sealed partial class ProjectExcelDataImportService
             cancellationToken);
 
         if (result.Success)
+        {
+            await LogImportPersistedAsync(
+                UserActionType.EquipmentImport,
+                result.IterationId,
+                $"{request.Description ?? "json-ingest"}; records={result.RecordsImported}",
+                cancellationToken);
             await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+        }
 
         return result;
     }
@@ -110,7 +124,14 @@ public sealed partial class ProjectExcelDataImportService
             cancellationToken);
 
         if (result.Success)
+        {
+            await LogImportPersistedAsync(
+                UserActionType.LaborIntensityImport,
+                result.IterationId,
+                $"{request.Description ?? "json-ingest"}; records={result.RecordsImported}",
+                cancellationToken);
             await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+        }
 
         return result;
     }

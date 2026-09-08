@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -193,7 +194,8 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             context,
             recalculation.Object,
             cache.Object,
-            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance);
+            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance,
+            Mock.Of<IUserActionLogger>());
 
         var count = await orchestrator.RecalculateVersionAsync(5, 50);
 
@@ -281,7 +283,8 @@ public sealed class AnalysisVersionRecalculationOrchestratorTests
             context,
             recalculation,
             cache ?? new Mock<IProjectAnalyticsCache>().Object,
-            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance);
+            NullLogger<AnalysisVersionRecalculationOrchestrator>.Instance,
+            Mock.Of<IUserActionLogger>());
     }
 
     private static AppDbContext CreateContext()

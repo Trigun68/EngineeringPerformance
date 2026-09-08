@@ -172,6 +172,11 @@ public sealed class AuthService(
         await context.SaveChangesAsync(cancellationToken);
         var accessToken = jwtTokenService.GenerateToken(user);
 
+        await actionLogger.LogForUserAsync(
+            user.Id,
+            UserActionType.Login,
+            description: $"MFA login: {user.Username}",
+            cancellationToken: cancellationToken);
         await authAuditService.WriteAsync(
             AuthEventType.MfaVerifySuccess,
             success: true,

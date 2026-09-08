@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Import;
@@ -20,6 +21,7 @@ public sealed partial class ProjectExcelDataImportService
     private readonly IDictionaryService _dictionaryService;
     private readonly IProjectAnalyticsCache _analyticsCache;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectExcelDataImportService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -29,7 +31,8 @@ public sealed partial class ProjectExcelDataImportService
         IProjectVisibilityService visibility,
         IDictionaryService dictionaryService,
         IProjectAnalyticsCache analyticsCache,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _contextFactory = contextFactory;
         _logger = logger;
@@ -39,6 +42,7 @@ public sealed partial class ProjectExcelDataImportService
         _dictionaryService = dictionaryService;
         _analyticsCache = analyticsCache;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     public async Task<DataImportResultDto> ImportProjectDataAsync(
@@ -83,6 +87,12 @@ public sealed partial class ProjectExcelDataImportService
 
             if (result.Success)
             {
+                await LogImportPersistedAsync(
+                    ToImportActionType(dataType),
+                    result.IterationId,
+                    $"{Path.GetFileName(fileName)}; records={result.RecordsImported}",
+                    cancellationToken);
+
                 if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
                     await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
                 else
@@ -129,6 +139,13 @@ public sealed partial class ProjectExcelDataImportService
         var deleted = await DeleteIterationCoreAsync(projectId, versionId, dataType, importedAt, cancellationToken);
         if (deleted > 0)
         {
+            await _actionLogger.LogAsync(
+                UserActionType.ImportRollback,
+                entityType: "DataImportIteration",
+                entityId: versionId,
+                description: $"{dataType}; importedAt={importedAt:O}; deleted={deleted}",
+                cancellationToken: cancellationToken);
+
             if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
                 await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
             else
@@ -171,4 +188,26 @@ public sealed partial class ProjectExcelDataImportService
             // Временный файл — не критично при сбое удаления.
         }
     }
+
+    private static UserActionType ToImportActionType(DataImportType dataType) =>
+        dataType switch
+        {
+            DataImportType.PhysicalVolume => UserActionType.PhysicalVolumeImport,
+            DataImportType.LaborIntensity => UserActionType.LaborIntensityImport,
+            DataImportType.Equipment => UserActionType.EquipmentImport,
+            _ => throw new ArgumentOutOfRangeException(nameof(dataType), dataType, null),
+        };
+
+    /// <summary>Журнал только после успешного persist; предпросмотры не пишем.</summary>
+    private Task LogImportPersistedAsync(
+        UserActionType actionType,
+        int? entityId,
+        string description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            actionType,
+            entityType: "DataImportIteration",
+            entityId: entityId is > 0 ? entityId : null,
+            description: description,
+            cancellationToken: cancellationToken);
 }

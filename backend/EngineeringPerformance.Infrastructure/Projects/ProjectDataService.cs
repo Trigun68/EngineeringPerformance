@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Import;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -12,15 +14,18 @@ public sealed class ProjectDataService : IProjectDataService
     private readonly AppDbContext _context;
     private readonly IProjectAnalyticsCache _analyticsCache;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectDataService(
         AppDbContext context,
         IProjectAnalyticsCache analyticsCache,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _analyticsCache = analyticsCache;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     /// <summary>
@@ -134,6 +139,12 @@ public sealed class ProjectDataService : IProjectDataService
 
         _context.ProjectPhysicalVolumes.Add(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeCreate,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName),
+            cancellationToken);
         return MapPpv(entity);
     }
 
@@ -165,6 +176,12 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeEdit,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName),
+            cancellationToken);
         return MapPpv(entity);
     }
 
@@ -174,8 +191,15 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName);
         _context.ProjectPhysicalVolumes.Remove(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeDelete,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
     }
 
@@ -204,6 +228,12 @@ public sealed class ProjectDataService : IProjectDataService
 
         _context.ProjectLaborIntensities.Add(entity);
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityCreate,
+            "ProjectLaborIntensity",
+            entity.Id,
+            Describe(entity.Id, entity.DocumentationCode, entity.Brand),
+            cancellationToken);
         return MapLi(entity);
     }
 
@@ -229,6 +259,12 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityEdit,
+            "ProjectLaborIntensity",
+            entity.Id,
+            Describe(entity.Id, entity.DocumentationCode, entity.Brand),
+            cancellationToken);
         return MapLi(entity);
     }
 
@@ -238,8 +274,15 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.DocumentationCode, entity.Brand);
         _context.ProjectLaborIntensities.Remove(entity);
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityDelete,
+            "ProjectLaborIntensity",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
     }
 
@@ -277,6 +320,12 @@ public sealed class ProjectDataService : IProjectDataService
 
         _context.ProjectEquipments.Add(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentCreate,
+            "ProjectEquipment",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName),
+            cancellationToken);
         return MapEq(entity);
     }
 
@@ -310,6 +359,12 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentEdit,
+            "ProjectEquipment",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName),
+            cancellationToken);
         return MapEq(entity);
     }
 
@@ -319,8 +374,15 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName);
         _context.ProjectEquipments.Remove(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentDelete,
+            "ProjectEquipment",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
     }
 
@@ -359,6 +421,23 @@ public sealed class ProjectDataService : IProjectDataService
         _context.ProjectEquipments.FirstOrDefaultAsync(
             x => x.Id == id && x.ProjectId == projectId && x.ProjectAnalysisVersionId == versionId,
             cancellationToken);
+
+    /// <summary>
+    /// Журнал только самой мутации после persist; пересчёт версии в журнал не пишем.
+    /// </summary>
+    private Task LogMutationAsync(
+        UserActionType actionType,
+        string entityType,
+        int entityId,
+        string description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(actionType, entityType, entityId, description, cancellationToken);
+
+    private static string Describe(int id, string? code, string? name)
+    {
+        var text = string.Join(' ', new[] { code, name }.Where(static s => !string.IsNullOrWhiteSpace(s)));
+        return text.Length > 0 ? text : id.ToString();
+    }
 
     private static ProjectPhysicalVolumeDto MapPpv(ProjectPhysicalVolume x) =>
         new(x.Id, x.ProjectId, x.ProjectAnalysisVersionId, x.GetCatalogVolumeId() ?? 0,
