@@ -1,3 +1,5 @@
+import type { ReactElement, ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectVersion } from '../../../../api/projectVersionsApi';
@@ -124,6 +126,19 @@ const detailRow: ProjectsPageDetailRow = {
   isEquipment: false,
 };
 
+function renderForecast(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  });
+  return render(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
 const versions: ProjectVersion[] = [
   {
     id: 7176,
@@ -172,7 +187,7 @@ describe('ForecastPanel detail load', () => {
   });
 
   it('fills detail grid when prefs switch plan version while Детально is open', async () => {
-    render(
+    renderForecast(
       <ForecastPanel
         projectId={1}
         projectName="Проект"
@@ -210,7 +225,7 @@ describe('ForecastPanel detail load', () => {
       },
     );
 
-    const { rerender } = render(
+    const { rerender } = renderForecast(
       <ForecastPanel
         projectId={1}
         projectName="Проект"

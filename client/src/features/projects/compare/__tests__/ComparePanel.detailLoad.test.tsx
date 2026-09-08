@@ -1,8 +1,28 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ComponentProps, ReactElement } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectVersion } from '../../../../api/projectVersionsApi';
 import type { VersionCompareDetailRow, VersionCompareResult } from '../../../../api/analyticsApi';
 import { ComparePanel } from '../ComparePanel';
+
+function createTestQueryClient(): QueryClient {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        refetchOnWindowFocus: false,
+      },
+    },
+  });
+}
+
+function renderCompare(
+  ui: ReactElement<ComponentProps<typeof ComparePanel>>,
+  client: QueryClient = createTestQueryClient(),
+) {
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 const fetchVersionCompare = vi.fn();
 const fetchVersionCompareDetail = vi.fn();
@@ -189,7 +209,7 @@ describe('ComparePanel detail load', () => {
   });
 
   it('fills detail grid when prefs switch versions while Детально is open', async () => {
-    render(
+    renderCompare(
       <ComparePanel
         projectId={1}
         workspaceVersions={versions}
@@ -221,13 +241,15 @@ describe('ComparePanel detail load', () => {
       },
     );
 
-    const { rerender } = render(
+    const client = createTestQueryClient();
+    const { rerender } = renderCompare(
       <ComparePanel
         projectId={1}
         workspaceVersions={versions}
         workspaceCompareVersionAId={2}
         workspaceCompareVersionBId={3013}
       />,
+      client,
     );
 
     await waitFor(() => {
@@ -235,12 +257,14 @@ describe('ComparePanel detail load', () => {
     });
 
     rerender(
-      <ComparePanel
-        projectId={1}
-        workspaceVersions={versions}
-        workspaceCompareVersionAId={7176}
-        workspaceCompareVersionBId={3013}
-      />,
+      <QueryClientProvider client={client}>
+        <ComparePanel
+          projectId={1}
+          workspaceVersions={versions}
+          workspaceCompareVersionAId={7176}
+          workspaceCompareVersionBId={3013}
+        />
+      </QueryClientProvider>,
     );
 
     await waitFor(() => {
@@ -261,13 +285,15 @@ describe('ComparePanel detail load', () => {
       },
     );
 
-    const { rerender } = render(
+    const client = createTestQueryClient();
+    const { rerender } = renderCompare(
       <ComparePanel
         projectId={1}
         workspaceVersions={versions}
         workspaceCompareVersionAId={7176}
         workspaceCompareVersionBId={3013}
       />,
+      client,
     );
 
     await waitFor(() => {
@@ -277,12 +303,14 @@ describe('ComparePanel detail load', () => {
     expect(firstSignal).toBeDefined();
 
     rerender(
-      <ComparePanel
-        projectId={1}
-        workspaceVersions={[...versions]}
-        workspaceCompareVersionAId={7176}
-        workspaceCompareVersionBId={3013}
-      />,
+      <QueryClientProvider client={client}>
+        <ComparePanel
+          projectId={1}
+          workspaceVersions={[...versions]}
+          workspaceCompareVersionAId={7176}
+          workspaceCompareVersionBId={3013}
+        />
+      </QueryClientProvider>,
     );
 
     await delay(30);
@@ -304,7 +332,7 @@ describe('ComparePanel detail load', () => {
       }),
     );
 
-    render(
+    renderCompare(
       <ComparePanel
         projectId={1}
         workspaceVersions={versions}

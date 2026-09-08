@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColDef, GridApi } from 'ag-grid-community';
 import {
   Alert,
@@ -7,22 +8,11 @@ import {
   Stack,
   Tab,
   Tabs,
-  Typography,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import { ACTION_LABELS } from '../../../constants/actionLabels';
 import { ExportActionButton } from '../../../components/export/ExportActionButton';
-import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import type { ImportDataType } from '../../../api/importApi';
-import { exportFactFacilityPdf, exportFactSummaryPdf } from '../../../api/visualReportsApi';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 import {
-  exportFactDetailExcel,
-  exportFactDetailExcelVisible,
-  exportFactDetailSummaryTable,
-  exportFactFacilityExcel,
-  exportFactSummaryExcel,
   fetchProjectsPageData,
   fetchProjectsPageDetails,
 } from '../../../api/projectsPageApi';
@@ -37,19 +27,19 @@ import {
 import { usePermission } from '../../../hooks/usePermission';
 import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
 import { useDictionaryStore } from '../../../store/useDictionaryStore';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import {
   LAST_PROJECT_PREF_KEY,
   factVersionPrefKey,
   parsePrefId,
 } from '../../../utils/projectWorkspacePrefs';
-import { collectGridExportData } from '../../../utils/directoryExport';
 import {
   createFactDetailColumns,
   createFactFacilityColumns,
   createFactPerformanceColumns,
 } from '../gridColumns';
-import { panelPrimaryToolbarSx, projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
+import { projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
 import { PanelNotificationsButton } from '../shared/PanelNotificationsButton';
 import { useWorkspaceChrome } from '../shared/workspaceChromeContext';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
@@ -59,7 +49,9 @@ import { IterationDeleteDialog } from '../forecast/IterationDeleteDialog';
 import { PlanningParametersDialog } from '../forecast/PlanningParametersDialog';
 import { shortCatalogName } from '../forecast/catalogShortName';
 import { FactAnalysisDialog } from './FactAnalysisDialog';
-import { useFactDetailContextMenu } from './useFactDetailContextMenu';
+import { FactToolbar } from './FactToolbar';
+import { useFactExport } from './useFactExport';
+import { useProjectDetailContextMenu } from '../shared/useProjectDetailContextMenu';
 import { buildPerformanceTreeRows, type PerformanceTreeRow } from './performanceTree';
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 
@@ -88,6 +80,7 @@ export function FactPanel({
   workspaceFactVersionId,
   workspaceFactVersionLabel,
 }: FactPanelProps) {
+  const queryClient = useQueryClient();
   const { canRead } = usePermission('Assessment');
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
   const { chromeExpanded } = useWorkspaceChrome();
@@ -96,19 +89,15 @@ export function FactPanel({
     `projects.${projectId}.factSubTab`,
     'fact-total',
   );
-  const [pageData, setPageData] = useState<ProjectsPageData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setLoading] = useState(false);
+  const [actionError, setError] = useState<string | null>(null);
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [importDialogType, setImportDialogType] = useState<ImportDialogType>(null);
   const [deleteDialogType, setDeleteDialogType] = useState<DeleteDialogType>(null);
   const [planningOpen, setPlanningOpen] = useState(false);
   const detailGridApiRef = useRef<GridApi | null>(null);
   const [detailGridReady, setDetailGridReady] = useState(false);
-  const detailRequestedKeyRef = useRef<string | null>(null);
 
   // Пользовательский выбор версии (переопределяет workspace по умолчанию)
   const [userFactVersionId, setUserFactVersionId] = useState<number | null>(null);
@@ -123,7 +112,6 @@ export function FactPanel({
 
   useEffect(() => {
     setUserFactVersionId(null);
-    setPageData(null);
     setError(null);
     restoredFactPrefForProjectRef.current = null;
   }, [projectId]);
@@ -148,62 +136,63 @@ export function FactPanel({
     };
   }, [projectId, workspaceVersions]);
 
-  const loadPageData = useCallback(async () => {
-    if (!factVersionId || !canRead) return;
-    detailRequestedKeyRef.current = null;
-    setLoading(true);
+  useEffect(() => {
     setError(null);
-    try {
-      const data = await fetchProjectsPageData(projectId, factVersionId);
-      setPageData(data);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось загрузить данные оценки факта.'));
-      setPageData(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, factVersionId, projectId]);
+  }, [factVersionId]);
 
-  useEffect(() => {
-    void loadPageData();
-  }, [loadPageData]);
+  const pageDataQuery = useQuery({
+    queryKey: queryKeys.fact.pageData(projectId, factVersionId ?? undefined),
+    queryFn: ({ signal }) => fetchProjectsPageData(projectId, factVersionId!, undefined, signal),
+    enabled: canRead && factVersionId != null,
+  });
 
-  useEffect(() => {
-    if (subTab !== 'fact-detail' || !factVersionId || !canRead || !pageData) {
-      return;
-    }
-    const key = `${projectId}:${factVersionId}`;
-    if (pageData.fact.detail.length > 0 || detailRequestedKeyRef.current === key) {
-      return;
-    }
-    detailRequestedKeyRef.current = key;
-    let cancelled = false;
-    setDetailLoading(true);
-    void fetchProjectsPageDetails(projectId, factVersionId)
-      .then((details) => {
-        if (cancelled) {
-          return;
-        }
-        setPageData((prev) =>
-          prev ? { ...prev, fact: { ...prev.fact, detail: details.factDetail } } : prev,
-        );
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          detailRequestedKeyRef.current = null;
-          setError(getApiErrorMessage(err, 'Не удалось загрузить детальные данные оценки факта.'));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setDetailLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-      setDetailLoading(false);
-    };
-  }, [subTab, factVersionId, canRead, pageData, projectId]);
+  const pageDataHasDetail = (pageDataQuery.data?.fact.detail.length ?? 0) > 0;
+
+  // Ленивая догрузка «Детально»: fetch только на вкладке fact-detail,
+  // после успешного page-data и если грид в page-data ещё пустой.
+  // subTab в ключе, чтобы кэш не смешивался с «Итого» / «по объектам».
+  const detailQuery = useQuery({
+    queryKey: queryKeys.fact.detail(projectId, factVersionId ?? undefined, subTab),
+    queryFn: ({ signal }) => fetchProjectsPageDetails(projectId, factVersionId!, undefined, signal),
+    enabled:
+      canRead
+      && factVersionId != null
+      && subTab === 'fact-detail'
+      && pageDataQuery.isSuccess
+      && !pageDataHasDetail,
+  });
+
+  const pageData = useMemo((): ProjectsPageData | null => {
+    const base = pageDataQuery.data;
+    if (!base) return null;
+    const lazyDetail = detailQuery.data?.factDetail;
+    if (lazyDetail === undefined) return base;
+    return { ...base, fact: { ...base.fact, detail: lazyDetail } };
+  }, [detailQuery.data, pageDataQuery.data]);
+
+  const loading = actionLoading || pageDataQuery.isFetching;
+  const detailLoading = detailQuery.isFetching;
+  const pageDataError =
+    pageDataQuery.isError && !isRequestCanceled(pageDataQuery.error)
+      ? getApiErrorMessage(pageDataQuery.error, 'Не удалось загрузить данные оценки факта.')
+      : null;
+  const detailError =
+    detailQuery.isError && !isRequestCanceled(detailQuery.error)
+      ? getApiErrorMessage(detailQuery.error, 'Не удалось загрузить детальные данные оценки факта.')
+      : null;
+  const error = actionError ?? pageDataError ?? detailError;
+
+  const reloadPageData = useCallback(async () => {
+    if (!factVersionId || !canRead) return;
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.fact.pageData(projectId, factVersionId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.fact.detail(projectId, factVersionId),
+      }),
+    ]);
+  }, [canRead, factVersionId, projectId, queryClient]);
 
   const handleVersionSelect = (version: ProjectVersion) => {
     setUserFactVersionId(version.id);
@@ -227,83 +216,24 @@ export function FactPanel({
   const catalogTypeMissing = selectedFactVersion != null && !selectedFactVersion.physicalVolumeTypeId;
   const importBlocked = !factVersionId || catalogTypeMissing;
 
-  const handleExportFacility = async (type: 'excel' | 'pdf') => {
-    if (!factVersionId) return;
-    setExporting(true);
-    setError(null);
-    try {
-      if (type === 'excel') await exportFactFacilityExcel(projectId, factVersionId);
-      else await exportFactFacilityPdf(projectId, factVersionId);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportDetail = async () => {
-    if (!factVersionId) return;
-    setExporting(true);
-    setError(null);
-    try {
-      await exportFactDetailExcel(projectId, factVersionId);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
-    } finally {
-      setExporting(false);
-    }
-  };
+  const {
+    exporting,
+    handleExportSummary,
+    handleExportFacility,
+    handleExportDetail,
+    handleExportDetailVisibleExcel,
+    handleExportDetailSummaryTable,
+  } = useFactExport({
+    projectId,
+    factVersionId,
+    detailGridApiRef,
+    setError,
+  });
 
   const handleDetailGridApiReady = useCallback((api: GridApi) => {
     detailGridApiRef.current = api;
     setDetailGridReady(true);
   }, []);
-
-  const handleExportDetailVisibleExcel = async () => {
-    if (!factVersionId) return;
-    const api = detailGridApiRef.current;
-    if (!api) {
-      setError('Таблица ещё не загружена.');
-      return;
-    }
-    const { headers, rows: exportRows } = collectGridExportData(api, { includeGroups: true });
-    if (headers.length === 0) {
-      setError('Нет видимых столбцов для экспорта.');
-      return;
-    }
-    if (exportRows.length === 0) {
-      setError('Нет строк для экспорта (проверьте фильтры таблицы).');
-      return;
-    }
-    setExporting(true);
-    setError(null);
-    try {
-      await exportFactDetailExcelVisible(
-        projectId,
-        factVersionId,
-        'Факт_Детально_выделенные',
-        headers,
-        exportRows,
-      );
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт выделенных данных.'));
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const handleExportDetailSummaryTable = async () => {
-    if (!factVersionId) return;
-    setExporting(true);
-    setError(null);
-    try {
-      await exportFactDetailSummaryTable(projectId, factVersionId);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось выгрузить сводную таблицу.'));
-    } finally {
-      setExporting(false);
-    }
-  };
 
   const performanceColumns = useMemo(
     () => createFactPerformanceColumns() as unknown as ColDef<PerformanceTreeRow>[],
@@ -318,6 +248,8 @@ export function FactPanel({
   );
   const facilityRows = pageData?.fact.facility ?? [];
   const detailRows = pageData?.fact.detail ?? [];
+  // Тяжёлый грид «Детально»: не блокируем переключение вкладок свежим rowData.
+  const deferredDetailRows = useDeferredValue(detailRows);
 
   const facilityPinnedBottomRow = useMemo((): ProjectsPageFacilityRow[] => {
     if (facilityRows.length === 0) return [];
@@ -361,10 +293,10 @@ export function FactPanel({
   );
 
   const { contextMenuItems: factDetailContextMenu, contextDialogs: factDetailDialogs, ConfirmDialog: ConfirmDialogFact } =
-    useFactDetailContextMenu({
+    useProjectDetailContextMenu({
       projectId,
-      factVersionId,
-      onReload: loadPageData,
+      versionId: factVersionId,
+      scope: 'fact',
       setImportDialogType,
       setLoading,
       setError,
@@ -384,119 +316,25 @@ export function FactPanel({
       <PanelBusyBar open={loading || detailLoading} />
       {chromeExpanded && (
         <>
-      <Stack direction="row" sx={panelPrimaryToolbarSx}>
-        <Button
-          variant="contained"
-          onClick={() => setVersionPickerOpen(true)}
-          sx={{
-            backgroundColor: '#2980B9',
-            color: 'white',
-            flexShrink: 0,
-            '&:hover': { backgroundColor: '#2471A3' },
-          }}
-        >
-          📋 Версия (факт)
-        </Button>
-        {factVersionLabel && (
-          <Box
-            sx={{
-              backgroundColor: '#EBF5FB',
-              border: '1px solid #AED6F1',
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 1,
-              minWidth: 0,
-              maxWidth: { xs: '100%', sm: 280 },
-            }}
-          >
-            <Typography variant="body2" sx={{ color: '#1A5276' }} noWrap>
-              {factVersionLabel}
-            </Typography>
-          </Box>
-        )}
-        {catalogShortLabel && (
-          <Box
-            data-testid="fact-catalog-label"
-            sx={{
-              backgroundColor: '#FEF9E7',
-              border: '1px solid #F9E79F',
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 1,
-            }}
-          >
-            <Typography variant="body2" sx={{ color: '#7D6608' }} noWrap>
-              {catalogShortLabel}
-            </Typography>
-          </Box>
-        )}
-        {factVersionId && (
-          <Button
-            variant="outlined"
-            onClick={() => setPlanningOpen(true)}
-            sx={{ textTransform: 'none' }}
-            data-testid="fact-planning-parameters-button"
-          >
-            Параметры
-          </Button>
-        )}
-        {canImport && (
-          <>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              title={catalogTypeMissing ? 'Укажите справочник КФО или БЕР в версии проекта' : undefined}
-              onClick={() => setImportDialogType('physical-volumes')}
-              startIcon={<UploadFileIcon />}
-            >
-              {ACTION_LABELS.importPhysicalVolumes}
-            </ToolbarActionButton>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              onClick={() => setDeleteDialogType('physical-volumes')}
-              startIcon={<DeleteIcon />}
-              color="error"
-            >
-              {ACTION_LABELS.deletePhysicalVolumes}
-            </ToolbarActionButton>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              onClick={() => setImportDialogType('equipment')}
-              startIcon={<UploadFileIcon />}
-            >
-              {ACTION_LABELS.importEquipment}
-            </ToolbarActionButton>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              onClick={() => setDeleteDialogType('equipment')}
-              startIcon={<DeleteIcon />}
-              color="error"
-            >
-              {ACTION_LABELS.deleteEquipment}
-            </ToolbarActionButton>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              onClick={() => setImportDialogType('labor-intensities')}
-              startIcon={<UploadFileIcon />}
-            >
-              {ACTION_LABELS.importLabor}
-            </ToolbarActionButton>
-            <ToolbarActionButton
-              disabled={importBlocked || loading}
-              onClick={() => setDeleteDialogType('labor-intensities')}
-              startIcon={<DeleteIcon />}
-              color="error"
-            >
-              {ACTION_LABELS.deleteLabor}
-            </ToolbarActionButton>
-          </>
-        )}
-      </Stack>
+      <FactToolbar
+        factVersionId={factVersionId}
+        factVersionLabel={factVersionLabel}
+        catalogShortLabel={catalogShortLabel}
+        catalogTypeMissing={catalogTypeMissing}
+        importBlocked={importBlocked}
+        canImport={canImport}
+        loading={loading}
+        onOpenVersionPicker={() => setVersionPickerOpen(true)}
+        onOpenPlanning={() => setPlanningOpen(true)}
+        onImport={setImportDialogType}
+        onDelete={setDeleteDialogType}
+      />
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '1 1 auto', minWidth: 0, flexWrap: 'wrap' }}>
           <Tabs
             value={subTab}
-            onChange={(_, v: FactSubTab) => setSubTab(v)}
+            onChange={(_, v: FactSubTab) => startTransition(() => setSubTab(v))}
             variant="scrollable"
             scrollButtons="auto"
             allowScrollButtonsMobile
@@ -527,35 +365,13 @@ export function FactPanel({
                 kind="excel"
                 disabled={!factVersionId}
                 loading={exporting}
-                onClick={async () => {
-                  if (!factVersionId) return;
-                  setExporting(true);
-                  setError(null);
-                  try {
-                    await exportFactSummaryExcel(projectId, factVersionId);
-                  } catch (err) {
-                    setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
+                onClick={() => void handleExportSummary('excel')}
               />
               <ExportActionButton
                 kind="pdf"
                 disabled={!factVersionId}
                 loading={exporting}
-                onClick={async () => {
-                  if (!factVersionId) return;
-                  setExporting(true);
-                  setError(null);
-                  try {
-                    await exportFactSummaryPdf(projectId, factVersionId);
-                  } catch (err) {
-                    setError(getApiErrorMessage(err, 'Не удалось выполнить экспорт.'));
-                  } finally {
-                    setExporting(false);
-                  }
-                }}
+                onClick={() => void handleExportSummary('pdf')}
               />
             </>
           )}
@@ -662,7 +478,7 @@ export function FactPanel({
 
         {subTab === 'fact-detail' && (
           <DataTable<ProjectsPageDetailRow>
-            rowData={detailRows}
+            rowData={deferredDetailRows}
             columnDefs={detailColumns}
             objectName="Assessment"
             gridId="fact-detail"
@@ -710,7 +526,7 @@ export function FactPanel({
         versionId={factVersionId}
         showFactColumn
         onClose={() => setPlanningOpen(false)}
-        onSaved={() => void loadPageData()}
+        onSaved={() => void reloadPageData()}
       />
 
       {importDialogType && factVersionId && (
@@ -720,7 +536,7 @@ export function FactPanel({
           projectId={projectId}
           versionId={factVersionId}
           onClose={() => setImportDialogType(null)}
-          onSuccess={() => void loadPageData()}
+          onSuccess={() => void reloadPageData()}
         />
       )}
 
@@ -731,7 +547,7 @@ export function FactPanel({
           projectId={projectId}
           versionId={factVersionId}
           onClose={() => setDeleteDialogType(null)}
-          onSuccess={() => void loadPageData()}
+          onSuccess={() => void reloadPageData()}
         />
       )}
     </Box>

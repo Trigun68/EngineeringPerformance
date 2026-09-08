@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   createEquipment,
   createPhysicalVolume,
@@ -12,11 +13,16 @@ import type { ContextMenuItem } from '../../../components/DataTable/DataTable';
 import { usePermission } from '../../../hooks/usePermission';
 import { useConfirmation } from '../../../hooks/useConfirmation';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import type { ProjectsPageDetailRow } from '../types';
 import { ProjectEquipmentQuickEditDialog } from '../forecast/ProjectEquipmentQuickEditDialog';
 import { ProjectPhysicalVolumeQuickEditDialog } from '../forecast/ProjectPhysicalVolumeQuickEditDialog';
 import { ForecastDetailCatalogDialog } from '../forecast/ForecastDetailCatalogDialog';
 import { ForecastDetailNormDialog } from '../forecast/ForecastDetailNormDialog';
+
+type DetailImportType = Extract<ImportDataType, 'physical-volumes' | 'equipment'>;
+
+export type ProjectDetailContextMenuScope = 'fact' | 'forecast';
 
 interface QuickEditState {
   rowId: number;
@@ -28,27 +34,28 @@ function detailNomenclature(row: ProjectsPageDetailRow): string {
   return (
     (row.isEquipment
       ? row.itemName || row.catalogName || row.pvName
-      : row.pvName || row.catalogName || row.itemName) ?? ''
+      : row.pvName || row.catalogName || row.workName || row.itemName) ?? ''
   ).trim() || '—';
 }
 
-export interface UseFactDetailContextMenuParams {
+export interface UseProjectDetailContextMenuParams {
   projectId: number;
-  factVersionId: number | null;
-  onReload: () => Promise<void>;
-  setImportDialogType: (type: ImportDataType | null) => void;
+  versionId: number | null;
+  scope: ProjectDetailContextMenuScope;
+  setImportDialogType: (type: DetailImportType) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 }
 
-export function useFactDetailContextMenu({
+export function useProjectDetailContextMenu({
   projectId,
-  factVersionId,
-  onReload,
+  versionId,
+  scope,
   setImportDialogType,
   setLoading,
   setError,
-}: UseFactDetailContextMenuParams) {
+}: UseProjectDetailContextMenuParams) {
+  const queryClient = useQueryClient();
   const { hasAccess: canImport } = usePermission('ProjectDataUpload');
   const { hasAccess: canEditPpv } = usePermission('ProjectPhysicalVolumes');
   const { hasAccess: canEditPeq } = usePermission('ProjectEquipments');
@@ -71,8 +78,22 @@ export function useFactDetailContextMenu({
     unitLabel: string;
   } | null>(null);
 
+  // pageData — точный ключ; detail — префикс без subKey, чтобы сбросить все вкладки.
+  const reloadDetailData = useCallback(async () => {
+    if (versionId == null) return;
+    const keys = queryKeys[scope];
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: keys.pageData(projectId, versionId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: keys.detail(projectId, versionId).slice(0, 4),
+      }),
+    ]);
+  }, [projectId, queryClient, scope, versionId]);
+
   const handleDeleteDetailRow = useCallback(async (row: ProjectsPageDetailRow) => {
-    if (!factVersionId || !row.rowId) return;
+    if (!versionId || !row.rowId) return;
     const label = detailNomenclature(row);
     if (!(await confirm({
       title: 'Удалить строку?',
@@ -84,38 +105,38 @@ export function useFactDetailContextMenu({
     try {
       if (row.isEquipment) {
         if (!canEditPeq) return;
-        await deleteEquipment(projectId, factVersionId, row.rowId);
+        await deleteEquipment(projectId, versionId, row.rowId);
       } else {
         if (!canEditPpv) return;
-        await deletePhysicalVolume(projectId, factVersionId, row.rowId);
+        await deletePhysicalVolume(projectId, versionId, row.rowId);
       }
-      await onReload();
+      await reloadDetailData();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось удалить строку.'));
     } finally {
       setLoading(false);
     }
-  }, [canEditPeq, canEditPpv, factVersionId, onReload, projectId, setError, setLoading]);
+  }, [canEditPeq, canEditPpv, confirm, projectId, reloadDetailData, setError, setLoading, versionId]);
 
   const handleCopyDetailRow = useCallback(async (row: ProjectsPageDetailRow) => {
-    if (!row.rowId || !factVersionId) return;
+    if (!row.rowId || !versionId) return;
     setLoading(true);
     setError(null);
     try {
       if (row.isEquipment) {
         if (!canEditPeq) return;
-        const src = await fetchEquipmentById(projectId, factVersionId, row.rowId);
+        const src = await fetchEquipmentById(projectId, versionId, row.rowId);
         if (!src) throw new Error('Строка оборудования не найдена.');
-        await createEquipment(projectId, factVersionId, {
+        await createEquipment(projectId, versionId, {
           equipmentId: src.equipmentId,
           quantity: src.quantity,
           quantityInWork: src.quantityInWork,
         });
       } else {
         if (!canEditPpv) return;
-        const src = await fetchPhysicalVolumeById(projectId, factVersionId, row.rowId);
+        const src = await fetchPhysicalVolumeById(projectId, versionId, row.rowId);
         if (!src) throw new Error('Строка физ. объёма не найдена.');
-        await createPhysicalVolume(projectId, factVersionId, {
+        await createPhysicalVolume(projectId, versionId, {
           physicalVolumeId: src.physicalVolumeId,
           quantity: src.quantity,
           facilityCode: src.facilityCode,
@@ -124,13 +145,13 @@ export function useFactDetailContextMenu({
           laborHoursPerUnit: src.laborHoursPerUnit,
         });
       }
-      await onReload();
+      await reloadDetailData();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Не удалось скопировать строку.'));
     } finally {
       setLoading(false);
     }
-  }, [canEditPeq, canEditPpv, factVersionId, onReload, projectId, setError, setLoading]);
+  }, [canEditPeq, canEditPpv, projectId, reloadDetailData, setError, setLoading, versionId]);
 
   const contextMenuItems = useMemo((): ContextMenuItem<ProjectsPageDetailRow>[] => {
     const items: ContextMenuItem<ProjectsPageDetailRow>[] = [];
@@ -239,30 +260,30 @@ export function useFactDetailContextMenu({
     setImportDialogType,
   ]);
 
-  const contextDialogs = factVersionId ? (
+  const contextDialogs = versionId ? (
     <>
       {ppvEdit && (
         <ProjectPhysicalVolumeQuickEditDialog
           open
           projectId={projectId}
-          versionId={factVersionId}
+          versionId={versionId}
           rowId={ppvEdit.rowId}
           nomenclature={ppvEdit.nomenclature}
           quantity={ppvEdit.quantity}
           onClose={() => setPpvEdit(null)}
-          onSaved={() => void onReload()}
+          onSaved={() => void reloadDetailData()}
         />
       )}
       {peqEdit && (
         <ProjectEquipmentQuickEditDialog
           open
           projectId={projectId}
-          versionId={factVersionId}
+          versionId={versionId}
           rowId={peqEdit.rowId}
           nomenclature={peqEdit.nomenclature}
           quantity={peqEdit.quantity}
           onClose={() => setPeqEdit(null)}
-          onSaved={() => void onReload()}
+          onSaved={() => void reloadDetailData()}
         />
       )}
       <ForecastDetailCatalogDialog
@@ -271,7 +292,7 @@ export function useFactDetailContextMenu({
         entryId={catalogEdit?.entryId ?? null}
         title={catalogEdit?.title ?? ''}
         onClose={() => setCatalogEdit(null)}
-        onSaved={() => void onReload()}
+        onSaved={() => void reloadDetailData()}
       />
       <ForecastDetailNormDialog
         open={normEdit != null}
@@ -280,7 +301,7 @@ export function useFactDetailContextMenu({
         groupLabel={normEdit?.groupLabel ?? ''}
         unitLabel={normEdit?.unitLabel ?? ''}
         onClose={() => setNormEdit(null)}
-        onSaved={() => void onReload()}
+        onSaved={() => void reloadDetailData()}
       />
     </>
   ) : null;
