@@ -7,48 +7,8 @@ SQL_PASSWORD="${MSSQL_SA_PASSWORD:?MSSQL_SA_PASSWORD is required}"
 DB_NAME="${DB_NAME:-EngineeringPerformance}"
 
 # -b: abort on SQL error (otherwise schema/seed failures exit 0 and CI boots empty DB).
+# -I: QUOTED_IDENTIFIER ON (filtered indexes и прочий DDL).
 SQLCMD=(/opt/mssql-tools18/bin/sqlcmd -S "${SQL_HOST}" -U "${SQL_USER}" -P "${SQL_PASSWORD}" -C -I -b)
-
-SCHEMA_FILES=(
-  schema/001_InitialSchema.sql
-  schema/002_Consolidated_20260413-14.sql
-  schema/006_Consolidated_20260415.sql
-  schema/007_PhysicalVolumeCoefficient.sql
-  schema/008_RemoveNormValue.sql
-  schema/009_DropIicWorkDirectionNormNormValue.sql
-  schema/010_AddLaborIntensity.sql
-  schema/011_AddProjectCharacteristics.sql
-  schema/012_DropProjectCharacteristicOptionAccuracy.sql
-  schema/013_AddProjectCharacteristicSelections.sql
-  schema/014_AddUserSettings.sql
-  schema/015_AddUserActionLogs.sql
-  schema/016_ExpandLaborDocumentationCodeTo450.sql
-  schema/017_SplitPhysicalVolumes.sql
-  schema/017b_BackfillProjectPhysicalVolumeCatalogLinks.sql
-  schema/099_WebApiSchemaPatch.sql
-  schema/100_ProjectVersionPlanningParameters.sql
-  schema/101_ParametricNorms.sql
-  schema/102_PlanningScenarios.sql
-  schema/103_AddPhysicalVolumeBerKfoLink.sql
-  schema/104_ZParameterLevel.sql
-  schema/105_ProjectAnalysisVersionIsPrimary.sql
-  schema/106_EquipmentProjectId.sql
-  schema/107_SqlQueryMetrics.sql
-  schema/108_CorporateAuthRolesAndTokens.sql
-  schema/109_SuperAdminRightsAndProjectParticipants.sql
-  schema/110_HotPathIndexes.sql
-  schema/111_SqlMetricsWave2Indexes.sql
-  schema/112_NormSuggestionsAndAudit.sql
-  schema/113_EquipmentLaborIntensity.sql
-  schema/114_RenameBerTypeSpelling.sql
-  schema/115_WorkDirectionWorkCosts.sql
-  schema/116_PpvCatalogSnapshot.sql
-  schema/117_DocSets.sql
-  schema/118_VersionCalculationLogs.sql
-  schema/119_ProjectAnalysisVersionRowVersion.sql
-  schema/120_ResourceMetricSamples.sql
-  schema/121_ProjectAnalysisVersionPrimaryFilteredIndex.sql
-)
 
 DATA_FILES=(
   data/002_SeedData.sql
@@ -74,6 +34,78 @@ table_exists() {
   local table_name="$1"
   "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; SELECT 1 FROM sys.tables WHERE name = N'${table_name}'" \
     | grep -q "1"
+}
+
+schema_migration_applied() {
+  local script_name="$1"
+  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; SELECT 1 FROM dbo.SchemaMigrations WHERE ScriptName = N'${script_name}'" \
+    | grep -q "1"
+}
+
+stamp_schema_migration() {
+  local script_name="$1"
+  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; IF NOT EXISTS (SELECT 1 FROM dbo.SchemaMigrations WHERE ScriptName = N'${script_name}') INSERT INTO dbo.SchemaMigrations (ScriptName) VALUES (N'${script_name}');"
+}
+
+# C-locale: 016 → 017_ → 017a → 017b (как исторический SCHEMA_FILES).
+sorted_schema_files() {
+  LC_ALL=C printf '%s\n' schema/*.sql | LC_ALL=C sort
+}
+
+# Имя сортируется строго до «017_» в C-locale (001–016). Не [[ a < b ]]:
+# префикс LC_ALL=… делает [[ обычной командой, и < становится редиректом.
+schema_name_before_017() {
+  local name="$1"
+  local first
+  # Без head: pipefail + SIGPIPE от закрытого пайпа роняет init.
+  first="$(printf '%s\n%s\n' "${name}" '017_' | LC_ALL=C sort)"
+  first="${first%%$'\n'*}"
+  [[ "${first}" == "${name}" && "${name}" != "017_" ]]
+}
+
+# Существующая БД: 001–016 уже применены (014 — голый CREATE TABLE, повтор опасен).
+# Штампуем все schema-файлы, чьи имена в C-locale меньше «017_», кроме 000.
+# 017+ не штампуем без прогона — они идемпотентны и могут отсутствовать на окружении.
+stamp_baseline_schema_if_needed() {
+  local file basename did_stamp=0
+  while IFS= read -r file; do
+    basename="${file##*/}"
+    [[ "${basename}" == "000_SchemaMigrations.sql" ]] && continue
+    schema_name_before_017 "${basename}" || break
+    if schema_migration_applied "${basename}"; then
+      continue
+    fi
+    if [[ "${did_stamp}" -eq 0 ]]; then
+      echo ">>> Stamping baseline schema (001–016) on existing database — not replaying..."
+      did_stamp=1
+    fi
+    echo "  - ${basename} (stamped)"
+    stamp_schema_migration "${basename}"
+  done < <(sorted_schema_files)
+}
+
+apply_schema_scripts() {
+  local file basename
+  echo ">>> Applying schema scripts..."
+  while IFS= read -r file; do
+    basename="${file##*/}"
+    case "${basename}" in
+      README.md)
+        continue
+        ;;
+      *017a*)
+        echo "  - ${file} (skipped: manual recovery)"
+        continue
+        ;;
+    esac
+    if schema_migration_applied "${basename}"; then
+      echo "  - ${file} (already applied)"
+      continue
+    fi
+    echo "  - ${file}"
+    "${SQLCMD[@]}" -d "${DB_NAME}" -i "${file}"
+    stamp_schema_migration "${basename}"
+  done < <(sorted_schema_files)
 }
 
 run_seed_file() {
@@ -133,35 +165,24 @@ done
 
 cd /migrations
 
-if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Users'" | grep -q "1"; then
-  echo "Database exists — applying schema drift patch and idempotent seed data."
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/017_SplitPhysicalVolumes.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/017b_BackfillProjectPhysicalVolumeCatalogLinks.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/099_WebApiSchemaPatch.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/100_ProjectVersionPlanningParameters.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/101_ParametricNorms.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/102_PlanningScenarios.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/103_AddPhysicalVolumeBerKfoLink.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/104_ZParameterLevel.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/105_ProjectAnalysisVersionIsPrimary.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/107_SqlQueryMetrics.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/108_CorporateAuthRolesAndTokens.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/109_SuperAdminRightsAndProjectParticipants.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/110_HotPathIndexes.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/111_SqlMetricsWave2Indexes.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/112_NormSuggestionsAndAudit.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/113_EquipmentLaborIntensity.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/114_RenameBerTypeSpelling.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/115_WorkDirectionWorkCosts.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/116_PpvCatalogSnapshot.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/117_DocSets.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/118_VersionCalculationLogs.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/119_ProjectAnalysisVersionRowVersion.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/120_ResourceMetricSamples.sql
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/121_ProjectAnalysisVersionPrimaryFilteredIndex.sql
-  echo ">>> Re-applying seed data scripts (idempotent)..."
-  for file in "${DATA_FILES[@]}"; do
+echo ">>> Ensuring SchemaMigrations ledger..."
+"${SQLCMD[@]}" -d "${DB_NAME}" -i schema/000_SchemaMigrations.sql
+stamp_schema_migration "000_SchemaMigrations.sql"
+
+existing_db=0
+if table_exists "Users"; then
+  existing_db=1
+  echo "Database exists — applying pending schema scripts and idempotent seed data."
+  stamp_baseline_schema_if_needed
+else
+  echo "Fresh database — applying full schema chain."
+fi
+
+apply_schema_scripts
+
+echo ">>> Applying seed data scripts..."
+for file in "${DATA_FILES[@]}"; do
+  if [[ "${existing_db}" -eq 1 ]]; then
     # Не воскрешать CI demo-проекты на существующей рабочей БД после ручного удаления.
     if [[ "${file}" == "data/016_SeedCiDemoProjects.sql" ]]; then
       echo "  - ${file} (skipped on existing DB)"
@@ -182,25 +203,14 @@ if "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SELECT 1 FROM sys.tables WHERE name = 'Use
         continue
       fi
     fi
-    run_seed_file "${file}"
-  done
-  # Повторно: backfill ProjectId после появления ProjectEquipments из сидов.
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
-  exit 0
-fi
-
-echo ">>> Applying schema scripts..."
-for file in "${SCHEMA_FILES[@]}"; do
-  echo "  - ${file}"
-  "${SQLCMD[@]}" -d "${DB_NAME}" -i "${file}"
-done
-
-echo ">>> Applying seed data scripts..."
-for file in "${DATA_FILES[@]}"; do
+  fi
   run_seed_file "${file}"
 done
 
-# Backfill ProjectId после сидов (на пустой схеме 106 в SCHEMA_FILES ещё не находит потребителей).
+# Повторно: backfill ProjectId после появления ProjectEquipments из сидов
+# (на пустой схеме первый проход 106 ещё не находит потребителей).
 "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/106_EquipmentProjectId.sql
 
-echo "Database initialized successfully."
+if [[ "${existing_db}" -eq 0 ]]; then
+  echo "Database initialized successfully."
+fi

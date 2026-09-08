@@ -313,7 +313,7 @@ Applied automatically via `FullMigration_01_Structure.sql` after `006`. For prod
 
 ## Docker additive schema (`ep-db-init`, 116–121)
 
-На живом стеке схема наращивается идемпотентными скриптами в `scripts/docker-db-init.sh` (`SCHEMA_FILES` и ветка «БД уже есть»). Не EF `MigrateAsync`.
+Источник истины схемы на Docker-стеке — таблица `dbo.SchemaMigrations` и цикл `scripts/docker-db-init.sh` по `migrations/schema/*.sql` (не EF `MigrateAsync` / `__EFMigrationsHistory`). На существующей БД скрипты до `017_` (001–016) только штампуются и не проигрываются; 017+ применяются, если ещё нет строки в журнале. Ручной recovery `017a` в авто-init не входит.
 
 | Script | Table / change |
 |--------|----------------|
@@ -325,3 +325,5 @@ Applied automatically via `FullMigration_01_Structure.sql` after `006`. For prod
 | `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql` | Filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (`ProjectId`, `Direction` при `IsPrimary=1 AND IsArchived=0`); перед созданием понижает дубликаты primary, оставляя новейший `Id`. Идемпотентно; `SET QUOTED_IDENTIFIER ON` в скрипте. Зарегистрирован в `scripts/docker-db-init.sh`. |
 
 `120` не сидирует данные: точки пишет `ResourceMetricsSampler`. См. [_doc/features/server-resource-monitoring.md](../features/server-resource-monitoring.md). `121` только индекс/данные primary, сидов нет.
+
+`122_EnsureWorkCostUniqueIndex.sql` досоздаёт уникальный индекс `UX_IicWorkDirectionWorkCosts_WorkDirection_EffectiveFrom` на `(WorkDirectionId, EffectiveFrom DESC)` с INCLUDE `(EffectiveTo, RatePerHour)`, если таблица `IicWorkDirectionWorkCosts` уже есть, а индекса нет. Это закрывает случай, когда `115_WorkDirectionWorkCosts.sql` успел создать только таблицу (индекс стоял внутри `IF NOT EXISTS` таблицы) и скрипт уже штампован в `SchemaMigrations`. Скрипт идемпотентен; `ep-db-init` подхватывает его из `schema/*.sql` в C-locale порядке, отдельно регистрировать в `docker-db-init.sh` не нужно.
