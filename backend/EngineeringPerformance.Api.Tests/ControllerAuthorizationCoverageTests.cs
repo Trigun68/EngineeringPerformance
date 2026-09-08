@@ -1,9 +1,11 @@
+using System.Net;
 using System.Reflection;
 using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Api.Controllers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 namespace EngineeringPerformance.Api.Tests;
@@ -16,8 +18,12 @@ namespace EngineeringPerformance.Api.Tests;
 /// роли проверяются через матрицу прав, а не через имена ролей в JWT.
 /// Тест чисто рефлексивный — БД не нужна.
 /// </summary>
-public sealed class ControllerAuthorizationCoverageTests
+public sealed class ControllerAuthorizationCoverageTests : IClassFixture<ApiWebApplicationFactory>
 {
+    private readonly ApiWebApplicationFactory _factory;
+
+    public ControllerAuthorizationCoverageTests(ApiWebApplicationFactory factory) => _factory = factory;
+
     /// <summary>Действия без аутентификации — только вход/выход и Negotiate.</summary>
     private static readonly HashSet<string> AnonymousAllowlist = new(StringComparer.Ordinal)
     {
@@ -125,5 +131,21 @@ public sealed class ControllerAuthorizationCoverageTests
             .ToList();
 
         Assert.True(stale.Count == 0, "Allowlist entries without a matching action:\n" + string.Join('\n', stale));
+    }
+
+    /// <summary>
+    /// FallbackPolicy в Program.cs: анонимный запрос к self-эндпоинту без [AllowAnonymous]
+    /// должен давать 401, а не 200 — иначе allowlist выше превращается в дыру.
+    /// </summary>
+    [Fact]
+    public async Task UnauthenticatedGet_ToAuthorizeOnlySettings_ReturnsUnauthorized()
+    {
+        using var anon = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        var response = await anon.GetAsync("/api/users/me/settings/layout");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 }
