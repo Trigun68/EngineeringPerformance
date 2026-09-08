@@ -218,10 +218,21 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         var wasPrimary = entity.IsPrimary;
         var direction = entity.Direction;
-        entity.IsArchived = true;
-        entity.IsPrimary = false;
-        entity.ModifiedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync(cancellationToken);
+
+        // Архивация и назначение новой основной версии — одна транзакция:
+        // иначе при сбое между ними направление остаётся без основной версии.
+        // Два SaveChanges обязательны: фильтрованный уникальный индекс
+        // UX_ProjectAnalysisVersions_OnePrimary проверяется на каждом statement.
+        await RunInTransactionAsync(async () =>
+        {
+            entity.IsArchived = true;
+            entity.IsPrimary = false;
+            entity.ModifiedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (wasPrimary)
+                await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
+        }, cancellationToken);
 
         await _actionLogger.LogAsync(
             UserActionType.VersionDelete,
@@ -229,9 +240,6 @@ public sealed class ProjectVersionService : IProjectVersionService
             entityId: entity.Id,
             description: entity.VersionName,
             cancellationToken);
-
-        if (wasPrimary)
-            await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
 
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return true;

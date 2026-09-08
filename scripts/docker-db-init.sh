@@ -63,11 +63,43 @@ schema_name_before_017() {
   [[ "${first}" == "${name}" && "${name}" != "017_" ]]
 }
 
-# Существующая БД: 001–016 уже применены (014 — голый CREATE TABLE, повтор опасен).
-# Штампуем все schema-файлы, чьи имена в C-locale меньше «017_», кроме 000.
+column_exists() {
+  local table_name="$1" column_name="$2"
+  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; SELECT 1 WHERE COL_LENGTH(N'dbo.${table_name}', N'${column_name}') IS NOT NULL" \
+    | grep -q "1"
+}
+
+column_max_length_is() {
+  local table_name="$1" column_name="$2" expected="$3"
+  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = N'${table_name}' AND COLUMN_NAME = N'${column_name}' AND CHARACTER_MAXIMUM_LENGTH = ${expected}" \
+    | grep -q "1"
+}
+
+# Свидетельство того, что baseline-скрипт (001–016) уже реально применён.
+# Возврат: 0 — применён (штампуем без прогона); 1 — нет (прогоняем и штампуем);
+# 2 — проверить нельзя, штампуем по факту наличия Users (001/002/006/007 трогают
+# таблицу PhysicalVolumes, которой после 017 нет, поэтому их повтор невозможен).
+baseline_evidence_present() {
+  case "$1" in
+    008_*|009_*) column_exists IicWorkDirectionNorms NormValue && return 1 || return 0 ;;
+    010_*) table_exists LaborIntensities && return 0 || return 1 ;;
+    011_*) table_exists ProjectCharacteristics && return 0 || return 1 ;;
+    012_*) column_exists ProjectCharacteristicOptions ComparisonAccuracy && return 1 || return 0 ;;
+    013_*) table_exists ProjectCharacteristicSelections && return 0 || return 1 ;;
+    014_*) table_exists UserSettings && return 0 || return 1 ;;
+    015_*) table_exists UserActionLogs && return 0 || return 1 ;;
+    016_*) column_max_length_is ProjectLaborIntensities DocumentationCode 450 && return 0 || return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# Существующая БД (есть Users): baseline 001–016 не переигрываем слепо.
+# Для каждого скрипта проверяем свидетельство (таблица/колонка): есть — штамп,
+# нет — прогон (init когда-то оборвался; 014 — голый CREATE TABLE, поэтому
+# без проверки его повтор ронял бы init, а слепой штамп навсегда терял UserSettings).
 # 017+ не штампуем без прогона — они идемпотентны и могут отсутствовать на окружении.
 stamp_baseline_schema_if_needed() {
-  local file basename did_stamp=0
+  local file basename did_stamp=0 evidence
   while IFS= read -r file; do
     basename="${file##*/}"
     [[ "${basename}" == "000_SchemaMigrations.sql" ]] && continue
@@ -76,10 +108,16 @@ stamp_baseline_schema_if_needed() {
       continue
     fi
     if [[ "${did_stamp}" -eq 0 ]]; then
-      echo ">>> Stamping baseline schema (001–016) on existing database — not replaying..."
+      echo ">>> Reconciling baseline schema (001–016) on existing database..."
       did_stamp=1
     fi
-    echo "  - ${basename} (stamped)"
+    baseline_evidence_present "${basename}" && evidence=0 || evidence=$?
+    if [[ "${evidence}" -eq 1 ]]; then
+      echo "  - ${basename} (evidence missing — applying)"
+      "${SQLCMD[@]}" -d "${DB_NAME}" -i "${file}"
+    else
+      echo "  - ${basename} (stamped)"
+    fi
     stamp_schema_migration "${basename}"
   done < <(sorted_schema_files)
 }

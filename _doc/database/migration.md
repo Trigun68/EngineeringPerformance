@@ -313,7 +313,7 @@ Applied automatically via `FullMigration_01_Structure.sql` after `006`. For prod
 
 ## Docker additive schema (`ep-db-init`, 116–121)
 
-Источник истины схемы на Docker-стеке — таблица `dbo.SchemaMigrations` и цикл `scripts/docker-db-init.sh` по `migrations/schema/*.sql` (не EF `MigrateAsync` / `__EFMigrationsHistory`). На существующей БД скрипты до `017_` (001–016) только штампуются и не проигрываются; 017+ применяются, если ещё нет строки в журнале. Ручной recovery `017a` в авто-init не входит.
+Источник истины схемы на Docker-стеке — таблица `dbo.SchemaMigrations` и цикл `scripts/docker-db-init.sh` по `migrations/schema/*.sql` (не EF `MigrateAsync` / `__EFMigrationsHistory`). На существующей БД скрипты до `017_` (001–016) сверяются по свидетельству применения: 008/009 — отсутствие колонки `IicWorkDirectionNorms.NormValue`, 010 — таблица `LaborIntensities`, 011 — `ProjectCharacteristics`, 012 — отсутствие `ProjectCharacteristicOptions.ComparisonAccuracy`, 013 — `ProjectCharacteristicSelections`, 014 — `UserSettings`, 015 — `UserActionLogs`, 016 — `DocumentationCode` длиной 450. Свидетельство есть — скрипт штампуется без прогона; нет — прогоняется и штампуется (страховка от оборванного раннего init). 001/002/006/007 трогают таблицу `PhysicalVolumes`, которой после 017 нет, поэтому штампуются по факту наличия `Users`. 017+ применяются, если ещё нет строки в журнале. Ручной recovery `017a` в авто-init не входит.
 
 | Script | Table / change |
 |--------|----------------|
