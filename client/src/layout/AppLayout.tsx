@@ -26,6 +26,7 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { UserMenu } from '../components/auth/UserMenu';
 import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
 import { RouteContentFallback } from '../components/WorkingOverlay/RouteContentFallback';
@@ -317,9 +318,11 @@ export function AppLayout() {
               overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
-            <Suspense fallback={<RouteContentFallback />}>
-              <Outlet />
-            </Suspense>
+            <ErrorBoundary resetKey={location.pathname}>
+              <Suspense fallback={<RouteContentFallback />}>
+                <Outlet />
+              </Suspense>
+            </ErrorBoundary>
           </Box>
         </Box>
       </Box>

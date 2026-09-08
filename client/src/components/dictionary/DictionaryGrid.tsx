@@ -30,6 +30,7 @@ import type {
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
 import {
@@ -37,6 +38,7 @@ import {
   GRID_OVERLAY_LOADING_TEMPLATE,
   GRID_OVERLAY_NO_ROWS_TEMPLATE,
 } from '../DataTable/gridDefaults';
+import { emptyRows } from '../DataTable/emptyRows';
 import {
   filterPrefKey,
   loadGridLayout,
@@ -57,7 +59,7 @@ export interface DictionaryContextMenuItem<T> {
 export interface DictionaryGridProps<T extends { id: number }> {
   rowData: T[];
   columnDefs: ColDef<T>[];
-  objectName: string;
+  objectName: PermissionObjectName;
   gridId: string;
   loading?: boolean;
   treeData?: boolean;
@@ -132,6 +134,7 @@ function DictionaryGridInternal<T extends { id: number }>({
   additionalContextMenuItems = [],
   contextMenuMode = 'full',
 }: DictionaryGridProps<T>) {
+  const resolvedRowData = rowData.length === 0 ? emptyRows<T>() : rowData;
   const gridRef = useRef<AgGridReact<T>>(null);
   const gridApiRef = useRef<GridApi<T> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -503,7 +506,7 @@ function DictionaryGridInternal<T extends { id: number }>({
         <AgGridReact<T>
           containerStyle={{ height: '100%', width: '100%' }}
           ref={gridRef}
-          rowData={rowData}
+          rowData={resolvedRowData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           localeText={agGridLocaleRu}

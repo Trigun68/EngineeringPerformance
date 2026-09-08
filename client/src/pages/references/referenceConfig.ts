@@ -1,8 +1,10 @@
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
+
 export interface ReferenceRouteConfig {
   path: string;
   resource: string;
   title: string;
-  permission: string;
+  permission: PermissionObjectName;
   isHierarchical?: boolean;
   showExcel?: boolean;
   /** formOrder порога для поля «Родитель» в модальном окне */

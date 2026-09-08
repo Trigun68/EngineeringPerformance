@@ -88,6 +88,14 @@ export function getApiErrorMessage(error: unknown, fallback = 'Произошл�
   if (response?.status === 404) {
     return 'Ресурс не найден.';
   }
+  // 410 Gone — версия/запись удалена или архивирована, клиент должен обновить список.
+  if (response?.status === 410) {
+    return 'Запись больше не доступна (удалена или архивирована). Обновите список.';
+  }
+  // 413 Payload Too Large — лимит загрузки Excel (10 МБ).
+  if (response?.status === 413) {
+    return 'Файл слишком большой. Максимальный размер — 10 МБ.';
+  }
   if (response?.status === 409) {
     return 'Версия изменена другим пользователем. Обновите данные и повторите.';
   }

@@ -33,6 +33,18 @@ describe('getApiErrorMessage', () => {
     expect(message).toBe('Недостаточно прав для выполнения операции.');
   });
 
+  it('maps 410 to gone message when body empty', () => {
+    const message = getApiErrorMessage({ response: { status: 410, data: {} } });
+    expect(message).toBe(
+      'Запись больше не доступна (удалена или архивирована). Обновите список.',
+    );
+  });
+
+  it('maps 413 to upload size message when body empty', () => {
+    const message = getApiErrorMessage({ response: { status: 413, data: {} } });
+    expect(message).toBe('Файл слишком большой. Максимальный размер — 10 МБ.');
+  });
+
   it('maps 409 to concurrency message when body empty', () => {
     const message = getApiErrorMessage({ response: { status: 409, data: {} } });
     expect(message).toBe('Версия изменена другим пользователем. Обновите данные и повторите.');

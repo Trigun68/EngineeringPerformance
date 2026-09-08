@@ -3,6 +3,8 @@ import { Box, Button, Typography } from '@mui/material';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  /** Смена ключа (например pathname) сбрасывает ошибку — вложенный boundary не залипает после ухода со сломанной панели. */
+  resetKey?: string;
 }
 
 interface ErrorBoundaryState {
@@ -19,6 +21,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(error, info.componentStack);
+  }
+
+  componentDidUpdate(prevProps: ErrorBoundaryProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
   }
 
   render() {

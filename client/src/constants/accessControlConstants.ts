@@ -1,5 +1,5 @@
 /** Отображаемые названия объектов матрицы прав (зеркало WPF AccessControlConstants). */
-const OBJECT_NAME_RU: Record<string, string> = {
+const OBJECT_NAME_RU = {
   Users: 'Пользователи',
   Projects: 'Проекты',
   PhysicalVolumes: 'Номенклатура физических объёмов',
@@ -31,8 +31,13 @@ const OBJECT_NAME_RU: Record<string, string> = {
   UserActionLog: 'Журнал действий',
   /** Только SuperAdmin (мониторинг, admin API); в AccessRights не сеется — зеркало PermissionMatrixHierarchy.cs. */
   Administration: 'Администрирование',
-};
+} as const;
+
+/** Имена объектов прав — те же строки, что backend PermissionType / WPF AccessControlConstants. */
+export type PermissionObjectName = keyof typeof OBJECT_NAME_RU;
+
+export const PERMISSION_OBJECTS = Object.keys(OBJECT_NAME_RU) as readonly PermissionObjectName[];
 
 export function toRussianObjectName(objectName: string): string {
-  return OBJECT_NAME_RU[objectName] ?? objectName;
+  return (OBJECT_NAME_RU as Record<string, string>)[objectName] ?? objectName;
 }

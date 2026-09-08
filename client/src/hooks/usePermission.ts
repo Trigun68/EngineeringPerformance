@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react';
+import type { PermissionObjectName } from '../constants/accessControlConstants';
 import { useAuthStore } from '../store/useAuthStore';
 import type { AccessLevel } from '../types/auth';
 import {
@@ -27,7 +28,7 @@ export interface PermissionResult {
  */
 const EMPTY_PERMISSIONS: Record<string, AccessLevel> = {};
 
-export function usePermission(objectName: string): PermissionResult {
+export function usePermission(objectName: PermissionObjectName): PermissionResult {
   // Стабильная ссылка: `?? {}` в селекторе даёт новый объект на каждый snapshot → риск #185.
   const permissions = useAuthStore((state) => state.user?.permissions) ?? EMPTY_PERMISSIONS;
   const roleName = useAuthStore((state) => state.user?.roleName);
@@ -63,7 +64,7 @@ export function usePermission(objectName: string): PermissionResult {
  * @example const canImport = usePermissionAccess('ProjectDataUpload');
  */
 export function usePermissionAccess(
-  requiredPermission: string,
+  requiredPermission: PermissionObjectName,
   requiredLevel: AccessLevel = 2,
 ): boolean {
   const { hasLevel } = usePermission(requiredPermission);
@@ -71,7 +72,7 @@ export function usePermissionAccess(
 }
 
 /** Хук для проверки чтения без привязки к компоненту с полным результатом. */
-export function useCanRead(objectName: string): boolean {
+export function useCanRead(objectName: PermissionObjectName): boolean {
   const permissions = useAuthStore((state) => state.user?.permissions);
   const roleName = useAuthStore((state) => state.user?.roleName);
   const roleId = useAuthStore((state) => state.user?.roleId);
@@ -82,7 +83,7 @@ export function useCanRead(objectName: string): boolean {
 }
 
 /** Хук для проверки редактирования. */
-export function useCanEdit(objectName: string): boolean {
+export function useCanEdit(objectName: PermissionObjectName): boolean {
   const permissions = useAuthStore((state) => state.user?.permissions);
   const roleName = useAuthStore((state) => state.user?.roleName);
   const roleId = useAuthStore((state) => state.user?.roleId);

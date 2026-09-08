@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import type {
   ColDef,
@@ -29,6 +29,7 @@ import ViewColumnOutlinedIcon from '@mui/icons-material/ViewColumnOutlined';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
 import { usePermission } from '../../hooks/usePermission';
 import { wpColors } from '../../theme/wpColors';
 import {
@@ -43,6 +44,7 @@ import {
   setCachedGridLayout,
 } from '../../utils/gridLayoutPersistence';
 import { dataTableAggFuncs } from './dataTableAggFuncs';
+import { emptyRows } from './emptyRows';
 import { GridViewport } from '../dictionary/GridViewport';
 
 export interface ContextMenuItem<T = unknown> {
@@ -56,7 +58,7 @@ export interface ContextMenuItem<T = unknown> {
 export interface DataTableProps<T> {
   rowData: T[];
   columnDefs: ColDef<T>[];
-  objectName: string;
+  objectName: PermissionObjectName;
   gridId?: string;
   /** Scope column layout/filters per project; falls back to global gridId keys. */
   projectId?: number;
@@ -96,7 +98,7 @@ function columnLabel(col: Column): string {
   return def.headerName ?? def.field ?? col.getColId();
 }
 
-export function DataTable<T extends object>({
+function DataTableInternal<T extends object>({
   rowData,
   columnDefs,
   objectName,
@@ -124,6 +126,8 @@ export function DataTable<T extends object>({
   pinnedBottomRowData,
   onGridApiReady,
 }: DataTableProps<T>) {
+  // Пустой inline `[]` с родителя — новая identity каждый рендер; AG Grid тогда лишний раз setGridOption.
+  const resolvedRowData = rowData.length === 0 ? emptyRows<T>() : rowData;
   const gridRef = useRef<AgGridReact<T>>(null);
   const gridApiRef = useRef<GridApi<T> | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -251,25 +255,25 @@ export function DataTable<T extends object>({
 
   useEffect(() => {
     const api = gridApiRef.current;
-    if (!api || !gridInitializedRef.current || rowData.length === 0) return;
+    if (!api || !gridInitializedRef.current || resolvedRowData.length === 0) return;
     const timer = setTimeout(() => {
       void applySavedFilters(api);
     }, 300);
     return () => clearTimeout(timer);
-  }, [applySavedFilters, rowData.length]);
+  }, [applySavedFilters, resolvedRowData.length]);
 
   // AG Grid 32 + getRowId/treeData: controlled rowData может обновить option, но не client-side model
   // (getGridOption('rowData').length уже новый, getDisplayedRowCount() — старый). Явный sync + refresh.
   useEffect(() => {
     const api = gridApiRef.current;
     if (!api || !gridInitializedRef.current) return;
-    api.setGridOption('rowData', rowData);
+    api.setGridOption('rowData', resolvedRowData);
     // Для treeData сокращение набора без remount оставляет старые displayed rows.
     if (treeData) {
-      api.setGridOption('rowData', []);
-      api.setGridOption('rowData', rowData);
+      api.setGridOption('rowData', emptyRows<T>());
+      api.setGridOption('rowData', resolvedRowData);
     }
-  }, [rowData, treeData]);
+  }, [resolvedRowData, treeData]);
 
   const onColumnRowGroupChanged = useCallback(() => {
     scheduleLayoutSave();
@@ -406,7 +410,7 @@ export function DataTable<T extends object>({
         <AgGridReact<T>
           containerStyle={{ height: '100%', width: '100%' }}
           ref={gridRef}
-          rowData={rowData}
+          rowData={resolvedRowData}
           columnDefs={columnDefs}
           defaultColDef={defaultColDef}
           localeText={agGridLocaleRu}
@@ -423,7 +427,7 @@ export function DataTable<T extends object>({
           }}
           getRowId={(params) =>
             getRowIdValue
-              ? getRowIdValue(params.data!, params.data ? rowData.indexOf(params.data) : 0)
+              ? getRowIdValue(params.data!, params.data ? resolvedRowData.indexOf(params.data) : 0)
               : String((params.data as { id?: number }).id ?? JSON.stringify(params.data))
           }
           getRowClass={getRowClass}
@@ -501,3 +505,7 @@ export function DataTable<T extends object>({
     </Box>
   );
 }
+
+export const DataTable = memo(DataTableInternal) as <T extends object>(
+  props: DataTableProps<T>
+) => JSX.Element;
