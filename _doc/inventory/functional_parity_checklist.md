@@ -49,7 +49,7 @@
   - Тест (xUnit): `PermissionsApiTests.Observer_GetUsers_Returns403`
 
 - [ ] **Матрица прав UI (только Admin):** Редактирование `AccessRights` доступно только Administrator.
-  - Backend: `AccessRightsController` → `Forbid` для non-admin
+  - Backend: `AccessRightsController` / `PermissionMatrixController` — `[HasPermission(Administration, Read)]` на GET, `Edit` на PUT
   - Frontend: `AccessRightsPage` + скрытие route для non-admin
   - Тест (Playwright): `permissions.spec.ts` → observer → `/settings/access-rights` → 403 или redirect
 
