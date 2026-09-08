@@ -44,7 +44,7 @@ public sealed partial class ProjectExcelDataImportService
                 continue;
             }
 
-            var documentTypeName = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+            var documentTypeName = ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
             if (string.IsNullOrWhiteSpace(documentTypeName))
             {
                 continue;
@@ -144,13 +144,13 @@ public sealed partial class ProjectExcelDataImportService
                     continue;
                 }
 
-                var name = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+                var name = ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
                 if (!string.IsNullOrWhiteSpace(name))
                 {
                     docTypesInFile.Add(name);
                     if (!directionByDocType.ContainsKey(name) && layout.WorkDirectionColumn > 0)
                     {
-                        var direction = GetWorksheetCellString(worksheet, rowNumber, layout.WorkDirectionColumn)?.Trim();
+                        var direction = ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.WorkDirectionColumn)?.Trim();
                         if (!string.IsNullOrWhiteSpace(direction))
                             directionByDocType[name] = direction;
                     }
@@ -210,7 +210,7 @@ public sealed partial class ProjectExcelDataImportService
                 continue;
             }
 
-            var documentTypeName = GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
+            var documentTypeName = ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.DocumentTypeColumn)?.Trim();
             if (string.IsNullOrWhiteSpace(documentTypeName))
             {
                 continue;
@@ -235,14 +235,14 @@ public sealed partial class ProjectExcelDataImportService
             }
 
             var brand = layout.BrandColumn > 0
-                ? GetWorksheetCellString(worksheet, rowNumber, layout.BrandColumn)?.Trim()
+                ? ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.BrandColumn)?.Trim()
                 : null;
-            var plannedHours = ParseDecimal(GetWorksheetCellString(worksheet, rowNumber, layout.PlannedHoursColumn));
+            var plannedHours = ImportHelpers.ParseDecimal(ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.PlannedHoursColumn));
             var actualHours = layout.ActualHoursColumn > 0
-                ? ParseDecimal(GetWorksheetCellString(worksheet, rowNumber, layout.ActualHoursColumn))
+                ? ImportHelpers.ParseDecimal(ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.ActualHoursColumn))
                 : 0m;
             var notes = layout.NotesColumn > 0
-                ? GetWorksheetCellString(worksheet, rowNumber, layout.NotesColumn)?.Trim()
+                ? ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, layout.NotesColumn)?.Trim()
                 : null;
 
             // DocumentationCode формируем из (DocumentTypeName, Brand): одинаковый тип документа
@@ -373,7 +373,7 @@ public sealed partial class ProjectExcelDataImportService
 
             for (var c = 1; c <= lastCol; c++)
             {
-                var text = GetWorksheetCellString(worksheet, r, c);
+                var text = ImportHelpers.GetWorksheetCellString(worksheet, r, c);
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     continue;
@@ -471,7 +471,7 @@ public sealed partial class ProjectExcelDataImportService
             }
         }
 
-        return exact ?? partial ?? GetFirstWorksheetWithData(workbook);
+        return exact ?? partial ?? ImportHelpers.GetFirstWorksheetWithData(workbook);
     }
 
     /// <summary>Проверяет, есть ли в строке импорта трудоёмкости хоть одно значимое поле.</summary>
@@ -494,7 +494,7 @@ public sealed partial class ProjectExcelDataImportService
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(GetWorksheetCellString(worksheet, rowNumber, c)))
+            if (!string.IsNullOrWhiteSpace(ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, c)))
             {
                 return true;
             }

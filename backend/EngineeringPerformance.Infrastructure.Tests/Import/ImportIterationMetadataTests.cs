@@ -105,7 +105,10 @@ public sealed class ImportIterationMetadataTests
             new Mock<IDictionaryService>().Object,
             new Mock<IProjectAnalyticsCache>().Object,
             recalc.Object,
-            Mock.Of<IUserActionLogger>());
+            Mock.Of<IUserActionLogger>(),
+            new PhysicalVolumeExcelImportService(
+                factory,
+                NullLogger<PhysicalVolumeExcelImportService>.Instance));
     }
 
     private static async Task<(int ProjectId, int VersionId)> SeedProjectAsync(IDbContextFactory<AppDbContext> factory)

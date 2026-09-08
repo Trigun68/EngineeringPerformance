@@ -92,7 +92,7 @@ public sealed partial class ProjectExcelDataImportService
             if (!EquipmentImportRowHasData(row, columnMap))
                 continue;
 
-            var catalogName = GetWorksheetCellString(worksheet, rowNumber, columnMap.CatalogName)?.Trim();
+            var catalogName = ImportHelpers.GetWorksheetCellString(worksheet, rowNumber, columnMap.CatalogName)?.Trim();
             if (string.IsNullOrWhiteSpace(catalogName))
                 continue;
 
@@ -222,7 +222,7 @@ public sealed partial class ProjectExcelDataImportService
             ProjectId = projectId,
             ProjectAnalysisVersionId = versionId,
             CreatedAt = importTimestamp,
-            Quantity = ParseDecimal(row.Cell(map.Quantity).GetString()),
+            Quantity = ImportHelpers.ParseDecimal(row.Cell(map.Quantity).GetString()),
             QuantityInWork = ParseNullableDecimal(row.Cell(map.QuantityInWork).GetString()),
             PositionNumber = TruncateEquipmentField(row.Cell(map.PositionNumber).GetString(), 50),
             FacilityCode = facilityCode,
@@ -288,7 +288,7 @@ public sealed partial class ProjectExcelDataImportService
         if (string.IsNullOrWhiteSpace(value))
             return null;
 
-        return ParseDecimal(value);
+        return ImportHelpers.ParseDecimal(value);
     }
 
 
@@ -310,7 +310,7 @@ public sealed partial class ProjectExcelDataImportService
             }
         }
 
-        return best ?? GetFirstWorksheetWithData(workbook);
+        return best ?? ImportHelpers.GetFirstWorksheetWithData(workbook);
     }
 
     private static long ScoreWorksheetForEquipmentImport(IXLWorksheet ws)
@@ -362,7 +362,7 @@ public sealed partial class ProjectExcelDataImportService
             var lastCol = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
             for (var col = 1; col <= lastCol; col++)
             {
-                var text = GetWorksheetCellString(worksheet, row, col);
+                var text = ImportHelpers.GetWorksheetCellString(worksheet, row, col);
                 if (text is not null
                     && text.Contains("Наименование по каталогу", StringComparison.OrdinalIgnoreCase))
                 {
@@ -383,7 +383,7 @@ public sealed partial class ProjectExcelDataImportService
 
         for (var col = 1; col <= lastCol; col++)
         {
-            var text = GetWorksheetCellString(worksheet, headerRow, col)?.Trim();
+            var text = ImportHelpers.GetWorksheetCellString(worksheet, headerRow, col)?.Trim();
             if (string.IsNullOrWhiteSpace(text))
                 continue;
 

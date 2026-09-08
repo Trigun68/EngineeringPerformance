@@ -32,7 +32,8 @@ public sealed partial class ProjectExcelDataImportService
         IDictionaryService dictionaryService,
         IProjectAnalyticsCache analyticsCache,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
-        IUserActionLogger actionLogger)
+        IUserActionLogger actionLogger,
+        IPhysicalVolumeExcelImportService physicalVolumeExcelImport)
     {
         _contextFactory = contextFactory;
         _logger = logger;
@@ -43,6 +44,7 @@ public sealed partial class ProjectExcelDataImportService
         _analyticsCache = analyticsCache;
         _recalcOrchestrator = recalcOrchestrator;
         _actionLogger = actionLogger;
+        _physicalVolumeExcelImport = physicalVolumeExcelImport;
     }
 
     public async Task<DataImportResultDto> ImportProjectDataAsync(

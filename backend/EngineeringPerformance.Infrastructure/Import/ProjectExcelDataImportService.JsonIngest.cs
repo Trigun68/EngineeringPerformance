@@ -204,7 +204,7 @@ public sealed partial class ProjectExcelDataImportService
         ImportSourceMetadata source)
     {
         if (isReplace)
-            await ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
+            await ImportHelpers.ClearPhysicalVolumeDataForVersionAsync(context, projectId, versionId);
 
         var iteration = await CreateIterationAsync(
             context, projectId, versionId, DataImportType.PhysicalVolume, description, source);
@@ -219,7 +219,7 @@ public sealed partial class ProjectExcelDataImportService
                 .Select(pv => new PvCatalogRow(pv.Id, pv.Code, pv.Name, pv.ClassifierId, pv.ParentId, pv.Coefficient, pv.IsAssessment))
                 .ToListAsync();
         var catalogName = isKfo ? "PhysicalVolumesKfo" : "PhysicalVolumesBer";
-        var physicalVolumes = BuildCodeLookup(physicalVolumeRows, catalogName);
+        var physicalVolumes = ImportHelpers.BuildCodeLookup(physicalVolumeRows, catalogName, _logger);
         var pvById = physicalVolumeRows.ToDictionary(pv => pv.Id);
 
         var existingByKey = isReplace
@@ -304,11 +304,12 @@ public sealed partial class ProjectExcelDataImportService
             imported++;
         }
 
-        await BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
+        await ImportHelpers.BackfillPhysicalVolumeClassifiersFromAncestorsAsync(
             context,
             newEntities.Select(e => e.PhysicalVolumeKfoId ?? e.PhysicalVolumeBerId).Where(id => id.HasValue).Select(id => id!.Value),
             pvById,
-            isKfo);
+            isKfo,
+            _logger);
 
         if (newEntities.Count > 0)
             context.ProjectPhysicalVolumes.AddRange(newEntities);
@@ -340,7 +341,7 @@ public sealed partial class ProjectExcelDataImportService
         if (item.PhysicalVolumeId is int id && pvById.TryGetValue(id, out catalogRow))
             return true;
 
-        if (!string.IsNullOrWhiteSpace(item.EpCode) && TryResolvePhysicalVolume(physicalVolumes, item.EpCode, out catalogRow))
+        if (!string.IsNullOrWhiteSpace(item.EpCode) && ImportHelpers.TryResolvePhysicalVolume(physicalVolumes, item.EpCode, out catalogRow))
             return true;
 
         catalogRow = default;
