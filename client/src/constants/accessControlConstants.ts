@@ -38,6 +38,11 @@ export type PermissionObjectName = keyof typeof OBJECT_NAME_RU;
 
 export const PERMISSION_OBJECTS = Object.keys(OBJECT_NAME_RU) as readonly PermissionObjectName[];
 
+/** Типизированные константы для `usePermission` / `objectName` (H1). */
+export const OBJECT_NAME = Object.fromEntries(
+  PERMISSION_OBJECTS.map((key) => [key, key]),
+) as { readonly [K in PermissionObjectName]: K };
+
 export function toRussianObjectName(objectName: string): string {
   return (OBJECT_NAME_RU as Record<string, string>)[objectName] ?? objectName;
 }
