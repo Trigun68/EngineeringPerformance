@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using ClosedXML.Excel;
+using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -370,5 +373,163 @@ internal static class ImportHelpers
         }
 
         return value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    public static async Task ClearEquipmentDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+
+        if (existing.Count > 0)
+            context.ProjectEquipments.RemoveRange(existing);
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.Equipment)
+            .ToListAsync();
+
+        if (existingIterations.Count > 0)
+            context.DataImportIterations.RemoveRange(existingIterations);
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
+            await context.SaveChangesAsync();
+    }
+
+    public static async Task<int> DeleteEquipmentRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectEquipments
+            .Where(e => e.ProjectId == projectId
+                      && e.ProjectAnalysisVersionId == versionId
+                      && e.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectEquipments.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
+    /// <summary>Удаляет все записи трудоёмкости и итерации импорта для указанной версии проекта.</summary>
+    public static async Task ClearLaborIntensityDataForVersionAsync(AppDbContext context, int projectId, int versionId)
+    {
+        var existing = await context.ProjectLaborIntensities
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .ToListAsync();
+        if (existing.Count > 0)
+            context.ProjectLaborIntensities.RemoveRange(existing);
+
+        var existingIterations = await context.DataImportIterations
+            .Where(i => i.ProjectId == projectId
+                     && i.ProjectAnalysisVersionId == versionId
+                     && i.DataType == DataImportType.LaborIntensity)
+            .ToListAsync();
+        if (existingIterations.Count > 0)
+            context.DataImportIterations.RemoveRange(existingIterations);
+
+        if (existing.Count > 0 || existingIterations.Count > 0)
+            await context.SaveChangesAsync();
+    }
+
+    public static async Task<int> DeleteLaborIntensityRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
+    {
+        var records = await context.ProjectLaborIntensities
+            .Where(li => li.ProjectId == projectId
+                      && li.ProjectAnalysisVersionId == versionId
+                      && li.CreatedAt == importedAt)
+            .ToListAsync();
+
+        if (records.Count > 0)
+        {
+            context.ProjectLaborIntensities.RemoveRange(records);
+            await context.SaveChangesAsync();
+        }
+
+        return records.Count;
+    }
+
+    public static bool TryParseIngestMode(string? mode, out bool isReplace)
+    {
+        if (string.IsNullOrWhiteSpace(mode) || mode.Equals("replace", StringComparison.OrdinalIgnoreCase))
+        {
+            isReplace = true;
+            return true;
+        }
+
+        if (mode.Equals("upsert", StringComparison.OrdinalIgnoreCase))
+        {
+            isReplace = false;
+            return true;
+        }
+
+        isReplace = true;
+        return false;
+    }
+
+    /// <summary>null — можно продолжать ingest; иначе готовый ответ с ошибкой.</summary>
+    public static DataImportResultDto? ValidateJsonIngest(
+        string? mode,
+        int itemCount,
+        bool allowEmptyReplace,
+        out bool isReplace)
+    {
+        if (!TryParseIngestMode(mode, out isReplace))
+            return new DataImportResultDto(false, 0, "Invalid mode. Use replace or upsert.", 0);
+
+        if (isReplace && itemCount == 0 && !allowEmptyReplace)
+        {
+            return new DataImportResultDto(
+                false,
+                0,
+                "Replace with empty items is not allowed. Pass allowEmptyReplace=true to clear the version.",
+                0);
+        }
+
+        return null;
+    }
+
+    public static ImportSourceMetadata CreateJsonIngestSource(int? userId, string? description, int itemCount)
+    {
+        var payload = $"{description ?? "json-ingest"}|{itemCount}|{DateTime.UtcNow:O}";
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
+        return new ImportSourceMetadata("json-ingest.json", hash, userId);
+    }
+
+    public static async Task<string> SaveTempFileAsync(Stream stream, string fileName, CancellationToken cancellationToken)
+    {
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(ext))
+            ext = ".xlsx";
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"ep-import-{Guid.NewGuid():N}{ext}");
+        await using var fs = File.Create(tempPath);
+        if (stream.CanSeek)
+            stream.Position = 0;
+        await stream.CopyToAsync(fs, cancellationToken);
+        return tempPath;
+    }
+
+    public static string ComputeFileSha256Hex(string filePath)
+    {
+        using var sha = SHA256.Create();
+        using var fs = File.OpenRead(filePath);
+        return Convert.ToHexString(sha.ComputeHash(fs));
+    }
+
+    public static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch
+        {
+            // Временный файл — не критично при сбое удаления.
+        }
     }
 }

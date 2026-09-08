@@ -14,6 +14,15 @@ public interface IPhysicalVolumeExcelImportService
         string filePath,
         string description,
         ImportSourceMetadata source);
+
+    Task<DataImportResultDto> IngestPhysicalVolumesAsync(
+        int projectId,
+        int versionId,
+        IReadOnlyList<PhysicalVolumeIngestItem> items,
+        bool isReplace,
+        string description,
+        ImportSourceMetadata source,
+        CancellationToken cancellationToken = default);
 }
 
 internal sealed partial class PhysicalVolumeExcelImportService : IPhysicalVolumeExcelImportService

@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 
 namespace EngineeringPerformance.Infrastructure.Import;
 
-public sealed partial class ProjectExcelDataImportService
+internal sealed partial class LaborIntensityImportService
 {
-    private async Task<LaborImportPreviewDto> PreviewLaborImportAsync(string filePath)
+    public async Task<LaborImportPreviewDto> PreviewLaborImportAsync(string filePath)
     {
         if (!File.Exists(filePath))
         {
@@ -60,14 +60,16 @@ public sealed partial class ProjectExcelDataImportService
         return new LaborImportPreviewDto(unmatched.ToList(), totalDataRows);
     }
 
-    private Task<DataImportResultDto> ImportLaborIntensitiesAsync(
+    public Task<DataImportResultDto> ImportLaborIntensitiesAsync(
         int projectId,
         int versionId,
         string filePath,
         string description,
         ImportSourceMetadata source,
         bool addMissingToCatalog) =>
-        ExecuteWithRetryableTransactionAsync(context =>
+        ImportTransactionRunner.ExecuteWithRetryableTransactionAsync(
+            _contextFactory,
+            context =>
             ImportLaborIntensitiesCoreAsync(context, projectId, versionId, filePath, description, source, addMissingToCatalog));
 
     private async Task<DataImportResultDto> ImportLaborIntensitiesCoreAsync(
@@ -80,9 +82,9 @@ public sealed partial class ProjectExcelDataImportService
         bool addMissingToCatalog)
     {
         // Удаляем все предыдущие данные трудоёмкости для этой версии (стратегия: очистка + вставка)
-        await ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
+        await ImportHelpers.ClearLaborIntensityDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = await CreateIterationAsync(
+        var iteration = await ImportIterationRecorder.CreateIterationAsync(
             context,
             projectId,
             versionId,
@@ -314,26 +316,6 @@ public sealed partial class ProjectExcelDataImportService
         return new DataImportResultDto(true, newEntities.Count, null, iteration.Id, detailsText);
     }
 
-    /// <summary>Удаляет все записи трудоёмкости и итерации импорта для указанной версии проекта.</summary>
-    private static async Task ClearLaborIntensityDataForVersionAsync(AppDbContext context, int projectId, int versionId)
-    {
-        var existing = await context.ProjectLaborIntensities
-            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
-        if (existing.Count > 0)
-            context.ProjectLaborIntensities.RemoveRange(existing);
-
-        var existingIterations = await context.DataImportIterations
-            .Where(i => i.ProjectId == projectId
-                     && i.ProjectAnalysisVersionId == versionId
-                     && i.DataType == DataImportType.LaborIntensity)
-            .ToListAsync();
-        if (existingIterations.Count > 0)
-            context.DataImportIterations.RemoveRange(existingIterations);
-
-        if (existing.Count > 0 || existingIterations.Count > 0)
-            await context.SaveChangesAsync();
-    }
 
     /// <summary>Описание раскладки колонок в листе трудоёмкости после авто-детекции по заголовку.</summary>
     private readonly record struct LaborIntensityImportLayout(
@@ -542,20 +524,4 @@ public sealed partial class ProjectExcelDataImportService
         return (merged, unmatched);
     }
 
-    private static async Task<int> DeleteLaborIntensityRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
-    {
-        var records = await context.ProjectLaborIntensities
-            .Where(li => li.ProjectId == projectId
-                      && li.ProjectAnalysisVersionId == versionId
-                      && li.CreatedAt == importedAt)
-            .ToListAsync();
-
-        if (records.Count > 0)
-        {
-            context.ProjectLaborIntensities.RemoveRange(records);
-            await context.SaveChangesAsync();
-        }
-
-        return records.Count;
-    }
 }

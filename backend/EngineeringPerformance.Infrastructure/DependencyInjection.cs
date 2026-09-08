@@ -133,6 +133,8 @@ public static class DependencyInjection
         services.AddScoped<ISqlProfilingPersistence, Diagnostics.SqlProfilingPersistence>();
         services.AddScoped<ISqlProfilingReportService, Diagnostics.SqlProfilingReportService>();
         services.AddScoped<IPhysicalVolumeExcelImportService, PhysicalVolumeExcelImportService>();
+        services.AddScoped<IEquipmentImportService, EquipmentImportService>();
+        services.AddScoped<ILaborIntensityImportService, LaborIntensityImportService>();
         services.AddScoped<IProjectImportService, ProjectExcelDataImportService>();
         services.AddScoped<IDirectoryFacade, DirectoryFacade>();
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();

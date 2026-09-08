@@ -8,7 +8,7 @@ namespace EngineeringPerformance.Infrastructure.Import;
 
 /// <summary>
 /// Создание, список и удаление итераций импорта (<c>DataImportIterations</c>).
-/// Удаление строк данных остаётся на стороне сервиса (типоспецифичные Delete* в других partial).
+/// Удаление строк данных — ImportHelpers.Delete*RecordsAsync (ФО/оборудование/трудоёмкость).
 /// </summary>
 internal static class ImportIterationRecorder
 {

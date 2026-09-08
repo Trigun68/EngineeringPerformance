@@ -9,15 +9,17 @@ using Microsoft.Extensions.Logging;
 
 namespace EngineeringPerformance.Infrastructure.Import;
 
-public sealed partial class ProjectExcelDataImportService
+internal sealed partial class EquipmentImportService
 {
-    private Task<DataImportResultDto> ImportEquipmentAsync(
+    public Task<DataImportResultDto> ImportEquipmentAsync(
         int projectId,
         int versionId,
         string filePath,
         string description,
         ImportSourceMetadata source) =>
-        ExecuteWithRetryableTransactionAsync(context =>
+        ImportTransactionRunner.ExecuteWithRetryableTransactionAsync(
+            _contextFactory,
+            context =>
             ImportEquipmentCoreAsync(context, projectId, versionId, filePath, description, source));
 
     private async Task<DataImportResultDto> ImportEquipmentCoreAsync(
@@ -29,9 +31,9 @@ public sealed partial class ProjectExcelDataImportService
         ImportSourceMetadata source)
     {
         // Паритет WPF: полная замена данных оборудования версии перед импортом.
-        await ClearEquipmentDataForVersionAsync(context, projectId, versionId);
+        await ImportHelpers.ClearEquipmentDataForVersionAsync(context, projectId, versionId);
 
-        var iteration = await CreateIterationAsync(
+        var iteration = await ImportIterationRecorder.CreateIterationAsync(
             context,
             projectId,
             versionId,
@@ -481,48 +483,5 @@ public sealed partial class ProjectExcelDataImportService
         public bool HasNormTypeColumn => NormType > 0;
     }
 
-    private static async Task ClearEquipmentDataForVersionAsync(AppDbContext context, int projectId, int versionId)
-    {
-        var existing = await context.ProjectEquipments
-            .Where(e => e.ProjectId == projectId && e.ProjectAnalysisVersionId == versionId)
-            .ToListAsync();
 
-        if (existing.Count > 0)
-        {
-            context.ProjectEquipments.RemoveRange(existing);
-        }
-
-        var existingIterations = await context.DataImportIterations
-            .Where(i => i.ProjectId == projectId
-                     && i.ProjectAnalysisVersionId == versionId
-                     && i.DataType == DataImportType.Equipment)
-            .ToListAsync();
-
-        if (existingIterations.Count > 0)
-        {
-            context.DataImportIterations.RemoveRange(existingIterations);
-        }
-
-        if (existing.Count > 0 || existingIterations.Count > 0)
-        {
-            await context.SaveChangesAsync();
-        }
-    }
-
-    private static async Task<int> DeleteEquipmentRecordsAsync(AppDbContext context, int projectId, int versionId, DateTime importedAt)
-    {
-        var records = await context.ProjectEquipments
-            .Where(e => e.ProjectId == projectId
-                     && e.ProjectAnalysisVersionId == versionId
-                     && e.CreatedAt == importedAt)
-            .ToListAsync();
-
-        if (records.Count > 0)
-        {
-            context.ProjectEquipments.RemoveRange(records);
-            await context.SaveChangesAsync();
-        }
-
-        return records.Count;
-    }
 }
