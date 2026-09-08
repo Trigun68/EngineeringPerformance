@@ -127,6 +127,9 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    environment:
+      # Совпадает с Spnego__TrustedProxySecret на backend; пустое → __UNSET__ в entrypoint
+      PROXY_TRUSTED_SECRET: ${PROXY_TRUSTED_SECRET:-}
     ports:
       - "${WEB_PORT:-80}:80"
     networks:
