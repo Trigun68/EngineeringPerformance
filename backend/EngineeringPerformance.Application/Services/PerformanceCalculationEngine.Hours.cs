@@ -179,6 +179,13 @@ public sealed partial class PerformanceCalculationEngine
         return Math.Round(factHours - planHours, 2, MidpointRounding.ToEven);
     }
 
+    /// <summary>
+    /// Перерасход относительно нормы IIC: факт − норматив × объём. Без округления —
+    /// как в PDF-callout (PdfInsightBuilder): положительный результат = лишние часы.
+    /// </summary>
+    public decimal ComputeHoursOverrun(decimal factHours, decimal normProductivity, decimal volume) =>
+        factHours - normProductivity * volume;
+
     public WeightedPercentileBandDto? ComputeWeightedPercentileBand(
         IEnumerable<(decimal ZScore, decimal Weight)> samples)
     {

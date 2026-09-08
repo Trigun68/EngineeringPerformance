@@ -457,6 +457,9 @@ public sealed class FactLivePlanHoursTests
             IReadOnlyList<PerformanceRowDto> factRows) =>
             inner.ComputeRawHoursDelta(planRows, factRows);
 
+        public decimal ComputeHoursOverrun(decimal factHours, decimal normProductivity, decimal volume) =>
+            inner.ComputeHoursOverrun(factHours, normProductivity, volume);
+
         public WeightedPercentileBandDto? ComputeWeightedPercentileBand(
             IEnumerable<(decimal ZScore, decimal Weight)> samples) =>
             inner.ComputeWeightedPercentileBand(samples);

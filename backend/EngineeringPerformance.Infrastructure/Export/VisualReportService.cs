@@ -192,7 +192,7 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Взвеш. Z", PdfNumberFormat.Z(summary.WeightedZScore)),
             new ReportKpiItem("Оценка", interpretationRu),
         };
-        var callouts = PdfInsightBuilder.BuildFactCallouts(data.Fact.Performance, summary);
+        var callouts = PdfInsightBuilder.BuildFactCallouts(data.Fact.Performance, summary, _engine);
 
         var hierRows = data.Fact.Performance
             .Where(r => r.WorkDirectionId >= 0)
@@ -459,7 +459,7 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Оценка", analysis.Summary.WeightedZScoreInterpretation?.ToRussian() ?? "—"),
         };
 
-        var callouts = PdfInsightBuilder.BuildFactCallouts(factData.Fact.Performance, analysis.Summary);
+        var callouts = PdfInsightBuilder.BuildFactCallouts(factData.Fact.Performance, analysis.Summary, _engine);
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {

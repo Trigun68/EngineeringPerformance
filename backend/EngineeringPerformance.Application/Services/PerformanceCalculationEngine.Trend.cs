@@ -52,34 +52,21 @@ public sealed partial class PerformanceCalculationEngine
 
     public IReadOnlyList<MonthlyTrendBucketDto> BucketTrendPointsByMonth(IEnumerable<TrendPointSample> points)
     {
-        var buckets = new Dictionary<(int Year, int Month), (decimal WeightedSum, decimal WeightSum, decimal ValueSum, int Count)>();
-        foreach (var point in points)
-        {
-            if (point.Value is null)
-                continue;
-
-            var key = (point.Date.Year, point.Date.Month);
-            var weight = point.Weight > 0m ? point.Weight : 0m;
-            if (!buckets.TryGetValue(key, out var bucket))
-                bucket = (0m, 0m, 0m, 0);
-
-            buckets[key] = (
-                bucket.WeightedSum + point.Value.Value * weight,
-                bucket.WeightSum + weight,
-                bucket.ValueSum + point.Value.Value,
-                bucket.Count + 1);
-        }
-
-        return buckets
-            .OrderBy(kv => kv.Key.Year)
-            .ThenBy(kv => kv.Key.Month)
-            .Select(kv =>
+        // Σ(v×w)/Σ(w) только через WeightedZAggregator. Без Result() — ручной код не округлял
+        // (тест WeightedAverage ждёт 0.4375, а не 0.44). Нулевой вес → арифметика, как раньше.
+        return points
+            .Where(p => p.Value is not null)
+            .GroupBy(p => (p.Date.Year, p.Date.Month))
+            .OrderBy(g => g.Key.Year)
+            .ThenBy(g => g.Key.Month)
+            .Select(g =>
             {
-                var date = new DateTime(kv.Key.Year, kv.Key.Month, 1, 0, 0, 0, DateTimeKind.Unspecified);
-                decimal? value = kv.Value.WeightSum > 0m
-                    ? kv.Value.WeightedSum / kv.Value.WeightSum
-                    : kv.Value.ValueSum / kv.Value.Count;
-                return new MonthlyTrendBucketDto(date, value);
+                var aggregator = new WeightedZAggregator();
+                foreach (var point in g)
+                    aggregator.Add(point.Value, point.Weight);
+
+                var date = new DateTime(g.Key.Year, g.Key.Month, 1, 0, 0, 0, DateTimeKind.Unspecified);
+                return new MonthlyTrendBucketDto(date, aggregator.Mean(arithmeticFallback: true));
             })
             .ToList();
     }

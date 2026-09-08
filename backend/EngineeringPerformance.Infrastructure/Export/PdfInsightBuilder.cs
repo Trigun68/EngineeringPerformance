@@ -1,5 +1,6 @@
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Export;
+using EngineeringPerformance.Application.Services;
 
 namespace EngineeringPerformance.Infrastructure.Export;
 
@@ -15,7 +16,8 @@ public static class PdfInsightBuilder
     /// <summary>Отчёт «Оценка факта» — полноценные выводы на основе Z-score и полноты данных.</summary>
     public static IReadOnlyList<PdfCallout> BuildFactCallouts(
         IReadOnlyList<PerformanceRowDto> rows,
-        ProjectVersionAnalysisSummaryDto summary)
+        ProjectVersionAnalysisSummaryDto summary,
+        IPerformanceCalculationEngine engine)
     {
         var scored = PerformanceDisplayVolume.FirstLevel(rows)
             .Where(r => r.ZScore.HasValue)
@@ -28,7 +30,7 @@ public static class PdfInsightBuilder
         if (riskRows.Count > 0)
         {
             var worst = riskRows[0];
-            var overrun = ComputeOverrun(worst);
+            var overrun = ComputeOverrun(worst, engine);
             var extra = riskRows.Count > 1 ? $" Всего направлений в зоне риска (Z > 1): {riskRows.Count}." : string.Empty;
             result.Add(new PdfCallout(
                 PdfCalloutKind.Risk,
@@ -122,11 +124,11 @@ public static class PdfInsightBuilder
             $"Факт {direction} на {Math.Abs(top.Delta.Value):N0} ч. Проверить причины расхождения перед актуализацией следующей версии прогноза.");
     }
 
-    private static decimal? ComputeOverrun(PerformanceRowDto row)
+    private static decimal? ComputeOverrun(PerformanceRowDto row, IPerformanceCalculationEngine engine)
     {
         var volume = PerformanceDisplayVolume.ResolveSubtree(row);
         return row.FactLaborHours.HasValue && row.NormProductivity.HasValue && volume.HasValue
-            ? row.FactLaborHours.Value - row.NormProductivity.Value * volume.Value
+            ? engine.ComputeHoursOverrun(row.FactLaborHours.Value, row.NormProductivity.Value, volume.Value)
             : null;
     }
 

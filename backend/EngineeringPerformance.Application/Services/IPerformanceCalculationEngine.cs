@@ -166,6 +166,13 @@ public interface IPerformanceCalculationEngine
         IReadOnlyList<PerformanceRowDto> factRows);
 
     /// <summary>
+    /// Перерасход часов относительно нормы: факт − норматив × объём.
+    /// Положительный — перерасход, отрицательный — экономия. Без округления
+    /// (объём выбирает вызывающий: для PDF — <c>PerformanceDisplayVolume.ResolveSubtree</c>).
+    /// </summary>
+    decimal ComputeHoursOverrun(decimal factHours, decimal normProductivity, decimal volume);
+
+    /// <summary>
     /// Взвешенные перцентили p10 и p90 по выборке вкладов. Пустая или из одной точки — null.
     /// </summary>
     WeightedPercentileBandDto? ComputeWeightedPercentileBand(
