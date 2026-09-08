@@ -639,6 +639,8 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 ### Импорт
 - `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs`
+- `backend/EngineeringPerformance.Infrastructure/Import/PhysicalVolumeExcelImportService.cs`
+- `backend/EngineeringPerformance.Infrastructure/Import/ImportHelpers.cs`
 
 ### Сравнение и тренды
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectCompareService.cs`

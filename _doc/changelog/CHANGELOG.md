@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-08, декомпозиция крупных экранов клиента)
+- `ProjectVersionPickerDialog`, `IicNormsPage`, `PlanningParametersDialog`, `ProductivityTrendPanel`, `FullProjectsPage` разобраны на контейнер (≤280 строк) + тулбар / грид / диалоги / хуки данных (`useVersionPickerActions`, `useIicNormMutations`, `usePlanningQueries`, `useProductivityTrendData`). DOM, `data-testid` и права (`usePermission`) без изменений; Vitest +6 render-тестов контейнеров.
+
+### Fixed (2026-09-08, консистентность кэша React Query)
+- После создания / копирования / архивации / «сделать основной» версии инвалидируются `projectVersions`, `fact`, `forecast`, `compare` данного проекта; после создания/правки проекта — `projects.all`; после правки норм IIC и норм факта — `analytics.root` и `dictionaries.all`. `ProjectTrendPanel` и `HoursTrendPanel` — `useQuery` с `signal` (без ручного `AbortController`).
+- Справочники грузятся через `useDictionaries` (`useQuery`, один запрос на приложение в `AppLayout`); `useDictionaryStore` остаётся lookup-слоем без собственного fetch.
+
+### Fixed (2026-09-08, backend)
+- Архивация основной версии и назначение новой основной — одна транзакция (`ProjectVersionService.ArchiveAsync`); направление не остаётся без primary при сбое.
+- `docker-db-init.sh`: baseline-скрипты 001–016 на существующей БД штампуются только по свидетельству (таблица / колонка / длина); при его отсутствии скрипт выполняется, а не пропускается (раньше `UserSettings` могла потеряться навсегда).
+- Перерасход часов в PDF-инсайтах и взвешенное среднее тренда по месяцам — через `IPerformanceCalculationEngine.ComputeHoursOverrun` / `WeightedZAggregator.Mean` (формулы вне движка убраны).
+- Guard-тесты: `AuditLoggingApiTests` (создание версии и ФО пишут строку журнала), `EfSchemaSmokeTests` (все таблицы и колонки модели EF есть в `INFORMATION_SCHEMA`), тест `FallbackPolicy` (аноним на endpoint без атрибутов → 401).
+
+### Changed (2026-09-08, импорт из god-class)
+- Excel-импорт физических объёмов вынесен в `PhysicalVolumeExcelImportService` (разбор / persist), оборудования — в `EquipmentImportService`, трудоёмкости — в `LaborIntensityImportService` (Excel + JSON-ingest partial-классы). Общие чтение ячеек и привязка каталога — `ImportHelpers`. Фасад `ProjectExcelDataImportService` (~100 строк) только делегирует; журнал действий по-прежнему после commit. Поведение (Replace, нормализация шифра ЕП, regex каталога) без изменений.
+
 ### Changed (2026-09-08, nginx SoT)
 - Единый конфиг nginx: `client/nginx.conf.template` (envsubst `PROXY_TRUSTED_SECRET`). Корневые `nginx.conf*` удалены. SPNEGO — `client/nginx/spnego.inc.example` и overlay `docker-compose.spnego.yml` на том же образе frontend.
 
