@@ -1,4 +1,5 @@
 import { canReadPermission } from '../../utils/permissionAccess';
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
 import type { AccessLevel } from '../../types/auth';
 
 export type ProjectTabId =
@@ -11,7 +12,7 @@ export type ProjectTabId =
 export interface ProjectTabConfig {
   id: ProjectTabId;
   label: string;
-  permission: string;
+  permission: PermissionObjectName;
 }
 
 export const PROJECT_TAB_CONFIG: ProjectTabConfig[] = [

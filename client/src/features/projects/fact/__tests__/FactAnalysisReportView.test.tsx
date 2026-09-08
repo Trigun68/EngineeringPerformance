@@ -1,6 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { FactAnalysisReportView } from '../FactAnalysisReportView';
+
+function renderView(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 vi.mock('../../../../hooks/usePermission', () => ({
   usePermission: () => ({ canRead: true }),
@@ -87,7 +96,7 @@ vi.mock('../../../../api/analyticsApi', () => ({
 
 describe('FactAnalysisReportView', () => {
   it('shows hours as optimistic, base, pessimistic and a project total row', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     await waitFor(() => {
       expect(screen.getByText('Шифр')).toBeInTheDocument();
@@ -100,7 +109,7 @@ describe('FactAnalysisReportView', () => {
   });
 
   it('keeps child cards under the parent and does not roll up hours', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     const parentCard = await screen.findByTestId('fact-analysis-card-10');
     const childCard = await screen.findByTestId('fact-analysis-card-11');
@@ -119,7 +128,7 @@ describe('FactAnalysisReportView', () => {
   });
 
   it('shows own physical volumes and labor only on the leaf card', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     const parentCard = await screen.findByTestId('fact-analysis-card-10');
     expect(within(parentCard).queryByText('Позиция')).not.toBeInTheDocument();

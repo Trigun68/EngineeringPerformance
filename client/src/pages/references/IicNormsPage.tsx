@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
 import type { ColDef, GridApi } from 'ag-grid-community';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import {
   createIicNorm,
@@ -14,9 +14,12 @@ import {
   type IicNormWriteRequest,
 } from '../../api/registersApi';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
+import { EMPTY_ROWS } from '../../components/DataTable/emptyRows';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { usePermission } from '../../hooks/usePermission';
 import { useConfirmation } from '../../hooks/useConfirmation';
+import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import type { DictionaryItem } from '../../types/dictionary';
 import { formatIisNorm } from '../../utils/formatIisNorm';
@@ -110,6 +113,7 @@ function toTreeRows(
 export function IicNormsPage() {
   const { canRead, canEdit } = usePermission(OBJECT_NAME);
   const { confirm, Dialog: ConfirmDialog } = useConfirmation();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const directions = useDictionaryStore((s) => s.getList('iicWorkDirections'));
   const getUnitName = useDictionaryStore((s) => s.getUnitName);
@@ -122,12 +126,10 @@ export function IicNormsPage() {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionInfo, setActionInfo] = useState<string | null>(null);
-  const [mutating, setMutating] = useState(false);
   const [selected, setSelected] = useState<IicNorm | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<IicNorm | null>(null);
   const [form, setForm] = useState<IicNormWriteRequest>(emptyForm);
-  const [historyRows, setHistoryRows] = useState<IicNormHistoryItem[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<IicNormHistoryItem | null>(null);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyDialogInitial, setHistoryDialogInitial] = useState<IicNormHistoryItem | null>(null);
@@ -135,16 +137,35 @@ export function IicNormsPage() {
   const gridApiRef = useRef<GridApi<IicNormTreeRow> | null>(null);
 
   const {
-    data: rows = [],
+    data: rows = EMPTY_ROWS,
     isLoading: loading,
     isError,
+    error: loadError,
     refetch,
   } = useQuery<IicNorm[]>({
-    queryKey: ['registers', 'iic-norms', asOfDate],
+    queryKey: queryKeys.registers.iicNorms(asOfDate),
     queryFn: () => fetchIicNorms(asOfDate),
     enabled: canRead,
     staleTime: 60_000,
   });
+
+  const historyDirectionId =
+    modalOpen && editing != null && form.workDirectionId > 0 ? form.workDirectionId : null;
+
+  const historyQuery = useQuery({
+    queryKey: queryKeys.registers.iicNormsHistory(historyDirectionId),
+    queryFn: () => {
+      if (historyDirectionId == null) return Promise.resolve([] as IicNorm[]);
+      return fetchIicNormHistory(historyDirectionId);
+    },
+    enabled: historyDirectionId != null,
+    staleTime: 30_000,
+  });
+
+  const historyRows = useMemo(
+    () => (historyQuery.data ?? []).map(normToHistoryItem),
+    [historyQuery.data],
+  );
 
   const treeRows = useMemo(
     () => toTreeRows(rows, directions, getUnitLabel),
@@ -164,29 +185,41 @@ export function IicNormsPage() {
       : '';
   }, [directions, form.workDirectionId, getUnitLabel]);
 
+  const invalidateIicNormQueries = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.registers.iicNormsRoot });
+  }, [queryClient]);
+
+  const createNormMutation = useMutation({
+    mutationFn: (body: IicNormWriteRequest) => createIicNorm(body),
+    onSuccess: () => invalidateIicNormQueries(),
+  });
+
+  const deleteNormMutation = useMutation({
+    mutationFn: (id: number) => deleteIicNorm(id),
+    onSuccess: () => invalidateIicNormQueries(),
+  });
+
+  const mutating = createNormMutation.isPending || deleteNormMutation.isPending;
+
   const load = useCallback(async () => {
     await refetch();
   }, [refetch]);
-  const error = actionError ?? (isError ? 'Не удалось загрузить регистр норм.' : null);
-
-  const loadHistory = useCallback(async (workDirectionId: number) => {
-    const history = await fetchIicNormHistory(workDirectionId);
-    setHistoryRows(history.map(normToHistoryItem));
-    setSelectedHistory(null);
-  }, []);
+  const error =
+    actionError
+    ?? (isError ? getApiErrorMessage(loadError, 'Не удалось загрузить регистр норм.') : null)
+    ?? (historyDirectionId != null && historyQuery.isError
+      ? getApiErrorMessage(historyQuery.error, 'Не удалось загрузить историю норм.')
+      : null);
 
   useEffect(() => {
     void fetchAll();
   }, [fetchAll]);
 
   useEffect(() => {
-    if (modalOpen && editing && form.workDirectionId > 0) {
-      void loadHistory(form.workDirectionId);
-    } else if (!editing) {
-      setHistoryRows([]);
+    if (!editing) {
       setSelectedHistory(null);
     }
-  }, [editing, form.workDirectionId, loadHistory, modalOpen]);
+  }, [editing]);
 
   const columnDefs = useMemo<ColDef<IicNormTreeRow>[]>(
     () => [
@@ -270,12 +303,13 @@ export function IicNormsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm(emptyForm());
-    setHistoryRows([]);
+    setSelectedHistory(null);
     setModalOpen(true);
   };
 
   const openEdit = (row: IicNorm) => {
     setEditing(row);
+    setSelectedHistory(null);
     setForm({
       workDirectionId: row.workDirectionId,
       performance: row.performance ?? null,
@@ -302,10 +336,13 @@ export function IicNormsPage() {
 
     void (async () => {
       if (Number.isFinite(workDirectionId) && workDirectionId > 0) {
-        const history = await fetchIicNormHistory(workDirectionId);
-        setHistoryRows(history);
+        const history = await queryClient.fetchQuery({
+          queryKey: queryKeys.registers.iicNormsHistory(workDirectionId),
+          queryFn: () => fetchIicNormHistory(workDirectionId),
+        });
+        const items = history.map(normToHistoryItem);
         if (Number.isFinite(normId) && normId > 0) {
-          const item = history.find((h) => h.id === normId) ?? null;
+          const item = items.find((h) => h.id === normId) ?? null;
           setHistoryDialogInitial(item);
           setSelectedHistory(item);
           setHistoryDialogOpen(true);
@@ -325,7 +362,7 @@ export function IicNormsPage() {
       next.delete('normId');
       setSearchParams(next, { replace: true });
     })();
-  }, [canRead, loading, rows, searchParams, setSearchParams]);
+  }, [canRead, loading, queryClient, rows, searchParams, setSearchParams]);
 
   const openAddHistory = () => {
     setHistoryDialogInitial(null);
@@ -348,11 +385,10 @@ export function IicNormsPage() {
     }))) return;
     setActionError(null);
     try {
-      await deleteIicNorm(selectedHistory.id);
-      await loadHistory(form.workDirectionId);
-      await load();
-    } catch {
-      setActionError('Не удалось удалить запись истории.');
+      await deleteNormMutation.mutateAsync(selectedHistory.id);
+      setSelectedHistory(null);
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Не удалось удалить запись истории.'));
     }
   };
 
@@ -360,26 +396,26 @@ export function IicNormsPage() {
     const recalculated = saved.recalculatedVersionCount ?? 0;
     setActionInfo(`Пересчитано версий: ${recalculated}`);
     setActionError(null);
-    await loadHistory(form.workDirectionId);
-    await load();
+    // create/update истории выполняет IicNormHistoryDialog; здесь только инвалидация кэша.
+    await invalidateIicNormQueries();
   };
 
   const handleSubmit = async () => {
     if (!form.workDirectionId) return;
     setActionError(null);
+    // В режиме редактирования запись меняют через диалог истории, не через эту форму.
+    if (editing) {
+      setModalOpen(false);
+      return;
+    }
+    const unitId = resolveIicDirectionUnitId(form.workDirectionId, directions);
+    const next = applyNormFormulaFields(
+      form.normFormula ?? defaultNormFormula(form.performance ?? 0),
+      form.deviationFormula ?? defaultDeviationFormula(),
+    );
+    const kim = isKimCurveType(next.normFormula.type);
     try {
-      if (editing) {
-        setModalOpen(false);
-        return;
-      }
-      const unitId = resolveIicDirectionUnitId(form.workDirectionId, directions);
-      setMutating(true);
-      const next = applyNormFormulaFields(
-        form.normFormula ?? defaultNormFormula(form.performance ?? 0),
-        form.deviationFormula ?? defaultDeviationFormula(),
-      );
-      const kim = isKimCurveType(next.normFormula.type);
-      await createIicNorm({
+      await createNormMutation.mutateAsync({
         ...form,
         unitId,
         normFormula: next.normFormula,
@@ -389,12 +425,9 @@ export function IicNormsPage() {
         standardDeviation: kim ? next.standardDeviation : form.standardDeviation,
       });
       setModalOpen(false);
-      await load();
-    } catch {
-      setActionError('Не удалось сохранить норму.');
-      throw new Error('save failed');
-    } finally {
-      setMutating(false);
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Не удалось сохранить норму.'));
+      throw err;
     }
   };
 
@@ -406,10 +439,9 @@ export function IicNormsPage() {
     }))) return;
     setActionError(null);
     try {
-      await deleteIicNorm(selected.id);
-      await load();
-    } catch {
-      setActionError('Не удалось удалить норму.');
+      await deleteNormMutation.mutateAsync(selected.id);
+    } catch (err) {
+      setActionError(getApiErrorMessage(err, 'Не удалось удалить норму.'));
     }
   };
 

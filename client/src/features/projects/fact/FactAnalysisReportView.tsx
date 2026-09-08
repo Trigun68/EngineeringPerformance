@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -20,12 +21,12 @@ import {
   exportAnalysisExcel,
   exportAnalysisPdf,
   fetchVersionAnalysis,
-  type ProjectVersionAnalysis,
   type ProjectVersionDirectionLaborRow,
   type ProjectVersionLaborRow,
   type ProjectVersionPhysicalVolumeItem,
 } from '../../../api/analyticsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { formatGridNumber } from '../../../utils/formatGridNumber';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { REPORT_COLUMN_HEADER_FONT_SIZE } from '../utils/projectModalTitle';
@@ -339,29 +340,25 @@ function interpretLabel(v: string | number | null | undefined): string {
 
 export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisReportViewProps) {
   const { canRead } = usePermission('Assessment');
-  const [report, setReport] = useState<ProjectVersionAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!canRead) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchVersionAnalysis(projectId, versionId);
-      setReport(data);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось загрузить отчёт анализа версии.'));
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, projectId, versionId]);
+  const {
+    data: report,
+    isPending,
+    isFetching,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.reports.versionAnalysis(projectId, versionId),
+    queryFn: () => fetchVersionAnalysis(projectId, versionId),
+    enabled: canRead,
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const loading = isPending || isFetching;
+  const error = isError
+    ? getApiErrorMessage(queryError, 'Не удалось загрузить отчёт анализа версии.')
+    : null;
 
   const cardRows = useMemo(
     () => (report ? orderDirectionsForCards(report.directions) : []),
@@ -441,7 +438,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
           <ToolbarActionButton
             startIcon={<RefreshIcon />}
             disabled={loading || exporting}
-            onClick={() => void load()}
+            onClick={() => void refetch()}
           >
             {ACTION_LABELS.refresh}
           </ToolbarActionButton>

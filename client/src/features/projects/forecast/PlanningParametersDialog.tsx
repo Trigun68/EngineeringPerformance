@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -27,6 +28,7 @@ import {
 } from '../../../api/planningParametersApi';
 import { fetchPerformance } from '../../../api/analyticsApi';
 import { fetchProjectVersions, updateProjectVersion, type ProjectVersion } from '../../../api/projectVersionsApi';
+import { queryKeys } from '../../../services/queryKeys';
 import { PlanningScenarioSelector } from '../../norms/PlanningScenarioSelector';
 import { ZParametersCaption } from './ZParametersCaption';
 import type { PlanningScenario } from '../../../types/norms';
@@ -64,6 +66,31 @@ interface PlanningTreeRow extends ProjectVersionPlanningParameter {
 }
 
 type ZField = 'zPessimistic' | 'zBase' | 'zOptimistic';
+
+const EMPTY_PLANNING_ROWS: ProjectVersionPlanningParameter[] = [];
+const EMPTY_FACT_MAP: Map<number, number | null> = new Map();
+
+interface FactZMaps {
+  zMap: Map<number, number | null>;
+  hoursMap: Map<number, number | null>;
+}
+
+interface SavePlanningVariables {
+  committed: ProjectVersionPlanningParameter[];
+  scenario: PlanningScenario;
+  zLevel: ZParameterLevel;
+}
+
+function mapsFromPerformance(performance: Awaited<ReturnType<typeof fetchPerformance>>): FactZMaps {
+  const zMap = new Map<number, number | null>();
+  const hoursMap = new Map<number, number | null>();
+  for (const row of performance) {
+    if (row.isTotal) continue;
+    zMap.set(row.workDirectionId, row.zScore);
+    hoursMap.set(row.workDirectionId, row.factLaborHours);
+  }
+  return { zMap, hoursMap };
+}
 
 function buildPlanningTreeRows(rows: ProjectVersionPlanningParameter[]): PlanningTreeRow[] {
   const parentIds = new Set(rows.map((r) => r.parentId).filter((id): id is number => id != null));
@@ -138,10 +165,14 @@ export function PlanningParametersDialog({
   onSaved,
 }: PlanningParametersDialogProps) {
   const { canEdit } = usePermission('Planning');
+  const queryClient = useQueryClient();
+  const queryEnabled = open && !!versionId;
+  const planningKey = queryKeys.forecast.planningParameters(projectId, versionId ?? undefined);
+  const versionsKey = queryKeys.projectVersions(projectId);
+
   const [rows, setRows] = useState<ProjectVersionPlanningParameter[]>([]);
   const [scenario, setScenario] = useState<PlanningScenario>(planningScenario);
   const [zLevel, setZLevel] = useState<ZParameterLevel>(Z_PARAMETER_LEVEL.EachElement);
-  const [versionMeta, setVersionMeta] = useState<ProjectVersion | null>(null);
   /** Черновики полей по iicWorkDirectionId; ключ 0 — виртуальная строка «По проекту». */
   const [zDrafts, setZDrafts] = useState<
     Record<number, { zPessimistic: string; zBase: string; zOptimistic: string }>
@@ -151,16 +182,117 @@ export function PlanningParametersDialog({
     zBase: 0,
     zOptimistic: 0,
   });
-  /** Fact Z по IIC — из performance текущей версии (трудоёмкость / ФО). */
-  const [factZByDirection, setFactZByDirection] = useState<Map<number, number | null>>(new Map());
-  const [factHoursByDirection, setFactHoursByDirection] = useState<Map<number, number | null>>(new Map());
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const hydratedSessionRef = useRef('');
+
+  const parametersQuery = useQuery({
+    queryKey: planningKey,
+    queryFn: () => fetchPlanningParameters(projectId, versionId!),
+    enabled: queryEnabled,
+    refetchOnWindowFocus: false,
+  });
+
+  const versionsQuery = useQuery({
+    queryKey: versionsKey,
+    queryFn: () => fetchProjectVersions(projectId),
+    enabled: queryEnabled,
+    refetchOnWindowFocus: false,
+  });
+
+  const performanceQuery = useQuery({
+    queryKey: [...planningKey, 'performance'] as const,
+    queryFn: async (): Promise<FactZMaps> => {
+      try {
+        const performance = await fetchPerformance(projectId, versionId!);
+        return mapsFromPerformance(performance);
+      } catch {
+        return { zMap: new Map(), hoursMap: new Map() };
+      }
+    },
+    enabled: queryEnabled && showFactColumn,
+    refetchOnWindowFocus: false,
+  });
+
+  const versionMeta = useMemo(
+    (): ProjectVersion | null =>
+      (versionsQuery.data ?? []).find((version) => version.id === versionId) ?? null,
+    [versionsQuery.data, versionId],
+  );
+
+  const factZByDirection = useMemo(
+    () => (showFactColumn ? (performanceQuery.data?.zMap ?? EMPTY_FACT_MAP) : EMPTY_FACT_MAP),
+    [showFactColumn, performanceQuery.data],
+  );
+  const factHoursByDirection = useMemo(
+    () => (showFactColumn ? (performanceQuery.data?.hoursMap ?? EMPTY_FACT_MAP) : EMPTY_FACT_MAP),
+    [showFactColumn, performanceQuery.data],
+  );
+
+  const loading =
+    parametersQuery.isLoading
+    || versionsQuery.isLoading
+    || (showFactColumn && performanceQuery.isLoading);
+  const error =
+    saveError
+    ?? (parametersQuery.isError || versionsQuery.isError
+      ? getApiErrorMessage(
+        parametersQuery.error ?? versionsQuery.error,
+        'Не удалось загрузить параметры планирования.',
+      )
+      : null);
 
   useEffect(() => {
     setScenario(planningScenario);
   }, [planningScenario, open]);
+
+  // Локальные черновики Z гидрируем один раз на открытие диалога, чтобы refetch не затирал ввод.
+  useEffect(() => {
+    const sessionKey = open && versionId ? `${projectId}:${versionId}` : '';
+    if (!sessionKey) {
+      hydratedSessionRef.current = '';
+      return;
+    }
+
+    if (parametersQuery.isError || versionsQuery.isError) {
+      setRows(EMPTY_PLANNING_ROWS);
+      setZDrafts({});
+      setProjectDraft({ zPessimistic: 0, zBase: 0, zOptimistic: 0 });
+      hydratedSessionRef.current = '';
+      return;
+    }
+
+    if (!parametersQuery.isSuccess || !versionsQuery.isSuccess) return;
+    if (hydratedSessionRef.current === sessionKey) return;
+    hydratedSessionRef.current = sessionKey;
+
+    const data = parametersQuery.data ?? EMPTY_PLANNING_ROWS;
+    setRows(data);
+    if (versionMeta?.planningScenario) {
+      setScenario(versionMeta.planningScenario as PlanningScenario);
+    }
+    setZLevel((versionMeta?.zParameterLevel ?? Z_PARAMETER_LEVEL.EachElement) as ZParameterLevel);
+    const rollup = projectRollup(data);
+    setProjectDraft(rollup);
+    setZDrafts({
+      ...draftsFromRows(data),
+      0: {
+        zPessimistic: formatZDisplay(rollup.zPessimistic),
+        zBase: formatZDisplay(rollup.zBase),
+        zOptimistic: formatZDisplay(rollup.zOptimistic),
+      },
+    });
+    setSaveError(null);
+  }, [
+    open,
+    projectId,
+    versionId,
+    parametersQuery.isSuccess,
+    parametersQuery.isError,
+    parametersQuery.data,
+    versionsQuery.isSuccess,
+    versionsQuery.isError,
+    versionMeta,
+  ]);
 
   const treeRows = useMemo(() => buildPlanningTreeRows(rows), [rows]);
   const visibleRows = useMemo(() => filterVisibleRows(treeRows, zLevel), [treeRows, zLevel]);
@@ -187,71 +319,6 @@ export function PlanningParametersDialog({
       },
     }));
   }, []);
-
-  const load = useCallback(async () => {
-    if (!versionId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const [data, versions] = await Promise.all([
-        fetchPlanningParameters(projectId, versionId),
-        fetchProjectVersions(projectId),
-      ]);
-      setRows(data);
-      const version = versions.find((v) => v.id === versionId) ?? null;
-      setVersionMeta(version);
-      if (version?.planningScenario) {
-        setScenario(version.planningScenario as PlanningScenario);
-      }
-      const level = (version?.zParameterLevel ?? Z_PARAMETER_LEVEL.EachElement) as ZParameterLevel;
-      setZLevel(level);
-      const rollup = projectRollup(data);
-      setProjectDraft(rollup);
-      setZDrafts({
-        ...draftsFromRows(data),
-        0: {
-          zPessimistic: formatZDisplay(rollup.zPessimistic),
-          zBase: formatZDisplay(rollup.zBase),
-          zOptimistic: formatZDisplay(rollup.zOptimistic),
-        },
-      });
-
-      if (showFactColumn) {
-        try {
-          const performance = await fetchPerformance(projectId, versionId);
-          const zMap = new Map<number, number | null>();
-          const hoursMap = new Map<number, number | null>();
-          for (const row of performance) {
-            if (row.isTotal) continue;
-            zMap.set(row.workDirectionId, row.zScore);
-            hoursMap.set(row.workDirectionId, row.factLaborHours);
-          }
-          setFactZByDirection(zMap);
-          setFactHoursByDirection(hoursMap);
-        } catch {
-          setFactZByDirection(new Map());
-          setFactHoursByDirection(new Map());
-        }
-      } else {
-        setFactZByDirection(new Map());
-        setFactHoursByDirection(new Map());
-      }
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось загрузить параметры планирования.'));
-      setRows([]);
-      setZDrafts({});
-      setFactZByDirection(new Map());
-      setFactHoursByDirection(new Map());
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, versionId, showFactColumn]);
-
-  useEffect(() => {
-    if (open && versionId) {
-      void load();
-    }
-  }, [open, versionId, load]);
 
   // При не-ByProject обновляем отображение rollup «по проекту» из листьев.
   useEffect(() => {
@@ -399,28 +466,11 @@ export function PlanningParametersDialog({
     return merged;
   }, [rows, zDrafts, zLevel, projectDraft]);
 
-  const handleSave = async () => {
-    if (!versionId || !canEdit) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const committed = commitDraftsToRows();
-      setRows(committed);
-      setZDrafts({
-        ...draftsFromRows(committed),
-        0: zDrafts[0]
-          ? {
-              zPessimistic: formatZDisplay(parseZInput(zDrafts[0].zPessimistic) ?? projectDraft.zPessimistic),
-              zBase: formatZDisplay(parseZInput(zDrafts[0].zBase) ?? projectDraft.zBase),
-              zOptimistic: formatZDisplay(parseZInput(zDrafts[0].zOptimistic) ?? projectDraft.zOptimistic),
-            }
-          : {
-              zPessimistic: formatZDisplay(projectDraft.zPessimistic),
-              zBase: formatZDisplay(projectDraft.zBase),
-              zOptimistic: formatZDisplay(projectDraft.zOptimistic),
-            },
-      });
-
+  const saveMutation = useMutation({
+    mutationFn: async ({ committed, scenario: nextScenario, zLevel: nextLevel }: SavePlanningVariables) => {
+      if (!versionId) {
+        throw new Error('Не указана версия анализа.');
+      }
       await savePlanningParameters(
         projectId,
         versionId,
@@ -432,11 +482,12 @@ export function PlanningParametersDialog({
         })),
       );
 
-      let meta = versionMeta;
+      let meta =
+        queryClient.getQueryData<ProjectVersion[]>(versionsKey)?.find((v) => v.id === versionId)
+        ?? versionMeta;
       if (!meta) {
         const versions = await fetchProjectVersions(projectId);
         meta = versions.find((v) => v.id === versionId) ?? null;
-        setVersionMeta(meta);
       }
       if (!meta) {
         throw new Error('Не удалось загрузить карточку версии для сохранения сценария и уровня Z.');
@@ -447,18 +498,50 @@ export function PlanningParametersDialog({
         description: meta.description ?? null,
         direction: meta.direction,
         physicalVolumeTypeId: meta.physicalVolumeTypeId ?? null,
-        planningScenario: scenario,
-        zParameterLevel: zLevel,
+        planningScenario: nextScenario,
+        zParameterLevel: nextLevel,
         rowVersion: meta.rowVersion ?? null,
       });
-
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: planningKey }),
+        queryClient.invalidateQueries({ queryKey: versionsKey }),
+      ]);
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: planningKey }),
+        queryClient.refetchQueries({ queryKey: versionsKey }),
+      ]);
       onSaved?.();
       onClose();
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось сохранить параметры планирования.'));
-    } finally {
-      setSaving(false);
-    }
+    },
+    onError: (err) => {
+      setSaveError(getApiErrorMessage(err, 'Не удалось сохранить параметры планирования.'));
+    },
+  });
+
+  const saving = saveMutation.isPending;
+
+  const handleSave = () => {
+    if (!versionId || !canEdit || saving) return;
+    setSaveError(null);
+    const committed = commitDraftsToRows();
+    setRows(committed);
+    setZDrafts({
+      ...draftsFromRows(committed),
+      0: zDrafts[0]
+        ? {
+            zPessimistic: formatZDisplay(parseZInput(zDrafts[0].zPessimistic) ?? projectDraft.zPessimistic),
+            zBase: formatZDisplay(parseZInput(zDrafts[0].zBase) ?? projectDraft.zBase),
+            zOptimistic: formatZDisplay(parseZInput(zDrafts[0].zOptimistic) ?? projectDraft.zOptimistic),
+          }
+        : {
+            zPessimistic: formatZDisplay(projectDraft.zPessimistic),
+            zBase: formatZDisplay(projectDraft.zBase),
+            zOptimistic: formatZDisplay(projectDraft.zOptimistic),
+          },
+    });
+    saveMutation.mutate({ committed, scenario, zLevel });
   };
 
   const projectEditable = canEdit && isProjectRowEditable(zLevel);

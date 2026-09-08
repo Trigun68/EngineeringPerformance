@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -30,6 +31,7 @@ import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { useConfirmation } from '../../hooks/useConfirmation';
 import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import type { Project, ProjectFormData } from '../../types/project';
 import { LAST_PROJECT_PREF_KEY } from '../../utils/projectWorkspacePrefs';
 import { putUserPreferences } from '../../api/userPreferencesApi';
@@ -53,12 +55,11 @@ const emptyForm: ProjectFormData = {
 
 export function ProjectsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { canRead, canEdit } = usePermission(OBJECT_NAME);
   const { confirm, Dialog: ConfirmDialog } = useConfirmation();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [form, setForm] = useState<ProjectFormData>(emptyForm);
@@ -67,24 +68,30 @@ export function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
 
-  const loadProjects = useCallback(async () => {
-    if (!canRead) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchProjects(showArchived);
-      setProjects(data);
-      setSelectedProject((prev) => (prev ? data.find((p) => p.id === prev.id) ?? null : null));
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось загрузить проекты.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, showArchived]);
+  // Третий элемент ключа (boolean) отделяет кэш от FullProjectsPage: queryKeys.projects.all().
+  const projectsQuery = useQuery<Project[]>({
+    queryKey: queryKeys.projects.all(showArchived),
+    queryFn: () => fetchProjects(showArchived),
+    enabled: canRead,
+  });
 
+  const projects = projectsQuery.data ?? [];
+  const loading = projectsQuery.isFetching;
+  const error =
+    actionError
+    ?? (projectsQuery.error
+      ? getApiErrorMessage(projectsQuery.error, 'Не удалось загрузить проекты.')
+      : null);
+
+  // Переносим предыдущий выбор на свежий список (тот же объект по id, иначе сброс).
   useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
+    const data = projectsQuery.data;
+    if (!data) return;
+    setSelectedProject((prev) => (prev ? data.find((p) => p.id === prev.id) ?? null : null));
+  }, [projectsQuery.data]);
+
+  const invalidateProjectLists = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.projects.all() });
 
   const workStatusOptions = useMemo(
     () => ['Черновик', 'в работе', 'завершен', 'отменен'],
@@ -162,9 +169,9 @@ export function ProjectsPage() {
         await createProject(form);
       }
       setModalOpen(false);
-      await loadProjects();
+      await invalidateProjectLists();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось сохранить изменения.'));
+      setActionError(getApiErrorMessage(err, 'Не удалось сохранить изменения.'));
       throw err;
     } finally {
       setIsSubmitting(false);
@@ -181,9 +188,9 @@ export function ProjectsPage() {
     try {
       await deleteProject(project.id);
       setSelectedProject(null);
-      await loadProjects();
+      await invalidateProjectLists();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось удалить проект.'));
+      setActionError(getApiErrorMessage(err, 'Не удалось удалить проект.'));
     }
   };
 
@@ -191,18 +198,18 @@ export function ProjectsPage() {
     try {
       await archiveProject(project.id);
       setSelectedProject(null);
-      await loadProjects();
+      await invalidateProjectLists();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось поместить проект в архив.'));
+      setActionError(getApiErrorMessage(err, 'Не удалось поместить проект в архив.'));
     }
   };
 
   const handleUnarchive = async (project: Project) => {
     try {
       await unarchiveProject(project.id);
-      await loadProjects();
+      await invalidateProjectLists();
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось извлечь проект из архива.'));
+      setActionError(getApiErrorMessage(err, 'Не удалось извлечь проект из архива.'));
     }
   };
 
@@ -310,7 +317,11 @@ export function ProjectsPage() {
       </Stack>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2, flexShrink: 0 }} onClose={() => setError(null)}>
+        <Alert
+          severity="error"
+          sx={{ mb: 2, flexShrink: 0 }}
+          onClose={actionError ? () => setActionError(null) : undefined}
+        >
           {error}
         </Alert>
       )}

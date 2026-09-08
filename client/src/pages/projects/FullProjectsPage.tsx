@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { usePermission } from '../../hooks/usePermission';
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
 import { createProject, fetchProjects, updateProject } from '../../api/projectsApi';
 import type { Project } from '../../types/project';
 import type { ProjectFormData } from '../../types/project';
@@ -41,13 +42,14 @@ import {
   writeHeaderExpanded,
 } from '../../utils/projectWorkspacePrefs';
 import { putUserPreferences } from '../../api/userPreferencesApi';
+import { queryKeys } from '../../services/queryKeys';
 
 type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'report';
 
 const WORKSPACE_TAB_CONFIG: ReadonlyArray<{
   value: WorkspaceMainTab;
   label: string;
-  permission: string;
+  permission: PermissionObjectName;
 }> = [
   { value: 'forecast', label: 'Прогнозирование', permission: 'Planning' },
   { value: 'fact', label: 'Оценка факта', permission: 'Assessment' },
@@ -105,7 +107,7 @@ export function FullProjectsPage() {
   const { canRead, canEdit } = usePermission('Projects');
 
   const projectsQuery = useQuery<Project[]>({
-    queryKey: ['projects', 'all'],
+    queryKey: queryKeys.projects.all(),
     queryFn: () => fetchProjects(),
     enabled: canRead,
   });

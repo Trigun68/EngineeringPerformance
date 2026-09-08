@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -19,7 +20,7 @@ import {
   TextField,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import type { WorkCostBatchItem, WorkCostRow } from '../../api/registersApi';
+import type { WorkCostBatchItem, WorkCostBatchRequest, WorkCostRow } from '../../api/registersApi';
 import { saveWorkCostsBatch } from '../../api/registersApi';
 import { getApiErrorMessage } from '../../services/apiError';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
@@ -105,8 +106,18 @@ export function WorkCostsSetRateDialog({
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [orgDraft, setOrgDraft] = useState('0,00');
   const [orgRate, setOrgRate] = useState(0);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { mutate: saveRates, isPending: saving } = useMutation({
+    mutationFn: (body: WorkCostBatchRequest) => saveWorkCostsBatch(body),
+    onSuccess: () => {
+      onSaved();
+      onClose();
+    },
+    onError: (err) => {
+      setError(getApiErrorMessage(err, 'Не удалось сохранить стоимость работ.'));
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -185,7 +196,7 @@ export function WorkCostsSetRateDialog({
     setOrgDraft(formatRateDisplay(parsed));
   };
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(() => {
     if (!canEdit) return;
     if (!effectiveFrom) {
       setError('Укажите дату «Действует с».');
@@ -211,18 +222,9 @@ export function WorkCostsSetRateDialog({
       return;
     }
 
-    setSaving(true);
     setError(null);
-    try {
-      await saveWorkCostsBatch({ effectiveFrom, level, items });
-      onSaved();
-      onClose();
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось сохранить стоимость работ.'));
-    } finally {
-      setSaving(false);
-    }
-  }, [canEdit, drafts, effectiveFrom, level, onClose, onSaved, orgDraft, orgRate, visibleRows]);
+    saveRates({ effectiveFrom, level, items });
+  }, [canEdit, drafts, effectiveFrom, level, orgDraft, orgRate, saveRates, visibleRows]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth data-testid="work-costs-set-rate-dialog">

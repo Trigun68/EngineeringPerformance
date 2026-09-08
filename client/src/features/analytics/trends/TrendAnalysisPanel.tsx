@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -12,16 +13,13 @@ import {
   Typography,
 } from '@mui/material';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
-import {
-  fetchZTrends,
-  type ZTrendResponse,
-  type ZTrendWeightMode,
-} from '../../../api/zTrendApi';
+import { fetchZTrends, type ZTrendWeightMode } from '../../../api/zTrendApi';
 import { exportAnalyticsTrendExcel, exportAnalyticsTrendPdf } from '../../../api/projectTrendApi';
 import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
 import { FactPlanToggle, type FactPlanMode } from '../shared/FactPlanToggle';
 import { FactorWaterfallChart } from '../shared/FactorWaterfallChart';
@@ -75,49 +73,31 @@ export function TrendAnalysisPanel({
   onToolbarExtras,
 }: Props) {
   const navigate = useNavigate();
-  const [result, setResult] = useState<ZTrendResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const load = useCallback(() => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
+  // Период и вес в queryKey — смена дат даёт новый запрос без debounce.
+  const trendsQuery = useQuery({
+    queryKey: queryKeys.analytics.zTrends(dateFrom, dateTo, weightMode),
+    queryFn: ({ signal }) =>
+      fetchZTrends(
+        {
+          periodStart: dateFrom || null,
+          periodEnd: dateTo || null,
+          weightMode,
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-    void fetchZTrends(
-      {
-        periodStart: dateFrom || null,
-        periodEnd: dateTo || null,
-        weightMode,
-      },
-      ac.signal,
-    )
-      .then((data) => {
-        if (!ac.signal.aborted) {
-          setResult(data);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        setError(getApiErrorMessage(err, 'Не удалось загрузить тренды'));
-        setLoading(false);
-      });
-  }, [dateFrom, dateTo, weightMode]);
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => load(), 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      abortRef.current?.abort();
-    };
-  }, [load]);
+  const result = trendsQuery.data ?? null;
+  const loading = trendsQuery.isFetching;
+  const queryError =
+    trendsQuery.isError && !isRequestCanceled(trendsQuery.error)
+      ? getApiErrorMessage(trendsQuery.error, 'Не удалось загрузить тренды')
+      : null;
+  const error = actionError ?? queryError;
 
   const requestBody = useMemo(
     () => ({

@@ -3,22 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, FormControl, InputLabel, MenuItem, Select, TextField } from '@mui/material';
 import type { GridApi } from 'ag-grid-community';
 import {
-  archiveDirectoryEntry,
-  createDirectoryEntry,
-  deleteDirectoryEntry,
   exportDirectoryExcel,
   fetchCharacteristicOptions,
   fetchDirectory,
   fetchDirectoryTree,
   flattenDirectoryTree,
-  unarchiveDirectoryEntry,
-  updateDirectoryEntry,
   type DirectoryEntry,
   type DirectoryTreeRow,
 } from '../../api/directoriesApi';
 import { fetchProjects } from '../../api/projectsApi';
 import type { Project } from '../../types/project';
 import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import { getUserPreferences, putUserPreferences } from '../../api/userPreferencesApi';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
@@ -41,6 +37,7 @@ import { z } from 'zod';
 import type { ReferenceRouteConfig } from './referenceConfig';
 import { isPhysicalVolumeCatalogResource } from './referenceConfig';
 import { useDirectoryColumnDefs } from './useDirectoryColumnDefs';
+import { useDirectoryMutations } from './useDirectoryMutations';
 import { formatAsIisNorm } from '../../utils/formatIisNorm';
 import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
 import { collectGridExportData } from '../../utils/directoryExport';
@@ -72,7 +69,6 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const fieldDefs = useMemo(() => getDirectoryFields(config.resource), [config.resource]);
   const formFields = useMemo(() => getFormFields(config.resource), [config.resource]);
 
-  const [mutating, setMutating] = useState(false);
   const [formError, setError] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [equipmentProjects, setEquipmentProjects] = useState<Project[]>([]);
@@ -149,7 +145,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   }, [config.resource, fetchAllDictionaries]);
 
   const directoryQuery = useQuery({
-    queryKey: ['directory-page', config.resource, showArchived, selectedProjectId],
+    queryKey: queryKeys.directory.page(config.resource, showArchived, selectedProjectId),
     enabled: canRead && (!isEquipmentCatalog || selectedProjectId !== ''),
     staleTime: 30_000,
     queryFn: async () => {
@@ -181,6 +177,18 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const load = useCallback(async () => {
     await directoryQuery.refetch();
   }, [directoryQuery]);
+
+  const {
+    submitMutation,
+    deleteMutation,
+    archiveMutation,
+    unarchiveMutation,
+    isMutating,
+  } = useDirectoryMutations({
+    resource: config.resource,
+    invalidateDictionaries,
+    onError: setError,
+  });
 
   const treeRows = directoryQuery.data?.kind === 'tree' ? directoryQuery.data.treeRows : [];
   const rows = directoryQuery.data?.kind === 'flat' ? directoryQuery.data.rows : [];
@@ -260,14 +268,6 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     setModalOpen(true);
   };
 
-  const syncArchiveState = async (entryId: number, wasArchived: boolean) => {
-    if (formIsArchived && !wasArchived) {
-      await archiveDirectoryEntry(config.resource, entryId);
-    } else if (!formIsArchived && wasArchived) {
-      await unarchiveDirectoryEntry(config.resource, entryId);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!name.trim()) return;
     const payloadProps = buildPropertiesPayload(config.resource, properties);
@@ -291,24 +291,9 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       setError(err instanceof z.ZodError ? err.issues[0]?.message ?? 'Некорректные данные формы.' : 'Некорректные данные формы.');
       return;
     }
-    setMutating(true);
-    try {
-      if (editing) {
-        await updateDirectoryEntry(config.resource, editing.id, body);
-        await syncArchiveState(editing.id, editing.isArchived);
-      } else {
-        const created = await createDirectoryEntry(config.resource, body);
-        if (formIsArchived) {
-          await archiveDirectoryEntry(config.resource, created.id);
-        }
-      }
-
-      setModalOpen(false);
-      await invalidateDictionaries();
-      await load();
-    } finally {
-      setMutating(false);
-    }
+    setError(null);
+    await submitMutation.mutateAsync({ editing, body, formIsArchived });
+    setModalOpen(false);
   };
 
   const handleDeleteForRow = async (row: DirectoryEntry) => {
@@ -316,16 +301,14 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       title: 'Удалить запись?',
       description: `Удалить «${row.name}»?`,
     }))) return;
-    await deleteDirectoryEntry(config.resource, row.id);
-    await invalidateDictionaries();
-    await load();
+    setError(null);
+    deleteMutation.mutate(row.id);
   };
 
-  const handleArchiveForRow = async (row: DirectoryEntry) => {
+  const handleArchiveForRow = (row: DirectoryEntry) => {
     if (row.isArchived) return;
-    await archiveDirectoryEntry(config.resource, row.id);
-    await invalidateDictionaries();
-    await load();
+    setError(null);
+    archiveMutation.mutate(row.id);
   };
 
   const handleDelete = async () => {
@@ -334,23 +317,20 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
       title: 'Удалить запись?',
       description: `Удалить «${selected.name}»?`,
     }))) return;
-    await deleteDirectoryEntry(config.resource, selected.id);
-    await invalidateDictionaries();
-    await load();
+    setError(null);
+    deleteMutation.mutate(selected.id);
   };
 
-  const handleArchive = async () => {
+  const handleArchive = () => {
     if (!selected || selected.isArchived) return;
-    await archiveDirectoryEntry(config.resource, selected.id);
-    await invalidateDictionaries();
-    await load();
+    setError(null);
+    archiveMutation.mutate(selected.id);
   };
 
-  const handleUnarchive = async () => {
+  const handleUnarchive = () => {
     if (!selected || !selected.isArchived) return;
-    await unarchiveDirectoryEntry(config.resource, selected.id);
-    await invalidateDictionaries();
-    await load();
+    setError(null);
+    unarchiveMutation.mutate(selected.id);
   };
 
   const handleSelectRow = (row: DirectoryEntry) => {
@@ -410,7 +390,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-      <WorkingOverlay open={loading || mutating} delayMs={mutating ? 0 : 1000} />
+      <WorkingOverlay open={loading || isMutating} delayMs={isMutating ? 0 : 1000} />
       <Box sx={{ flexShrink: 0 }}>
         {isEquipmentCatalog && (
           <FormControl size="small" sx={{ minWidth: 280, mb: 1, mr: 1 }}>
@@ -448,8 +428,8 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
           }
         }}
         onDelete={() => void handleDelete()}
-        onArchive={() => void handleArchive()}
-        onUnarchive={() => void handleUnarchive()}
+        onArchive={handleArchive}
+        onUnarchive={handleUnarchive}
         onRefresh={() => void load()}
         onExport={() => void handleExport()}
         />
@@ -480,7 +460,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             onRowClicked={handleSelectRow}
             onRowDoubleClicked={canEdit ? handleRowDoubleClick : undefined}
             onEdit={canEdit ? openEdit : undefined}
-            onArchive={(row) => void handleArchiveForRow(row)}
+            onArchive={handleArchiveForRow}
             onDelete={(row) => void handleDeleteForRow(row)}
           />
         ) : (
@@ -496,7 +476,7 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
             onRowClicked={handleSelectRow}
             onRowDoubleClicked={canEdit ? handleRowDoubleClick : undefined}
             onEdit={canEdit ? openEdit : undefined}
-            onArchive={(row) => void handleArchiveForRow(row)}
+            onArchive={handleArchiveForRow}
             onDelete={(row) => void handleDeleteForRow(row)}
           />
         )}

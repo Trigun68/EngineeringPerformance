@@ -1,4 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ReportPanel } from '../ReportPanel';
@@ -84,6 +86,17 @@ const report: PerformanceReportDto = {
   normSourcesUsed: 1,
 };
 
+function renderReportPanel(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
 describe('ReportPanel', () => {
   beforeEach(() => {
     fetchPerformanceReport.mockReset();
@@ -116,10 +129,8 @@ describe('ReportPanel', () => {
         isPrimary: true,
       },
     ];
-    render(
-      <MemoryRouter>
-        <ReportPanel projectId={1} project={project} versions={versions} />
-      </MemoryRouter>,
+    renderReportPanel(
+      <ReportPanel projectId={1} project={project} versions={versions} />,
     );
     expect(screen.getByTestId('report-trend-tab')).toHaveTextContent('Тренд');
     fireEvent.click(screen.getByTestId('report-legacy-tab'));

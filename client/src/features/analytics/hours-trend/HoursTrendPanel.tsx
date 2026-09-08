@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import Highcharts from 'highcharts';
 import HighchartsReact from 'highcharts-react-official';
 import {
@@ -15,18 +16,15 @@ import {
   Typography,
 } from '@mui/material';
 import type { ColDef } from 'ag-grid-community';
-import {
-  fetchTrendDetail,
-  fetchTrends,
-  type TrendAnalyticsResult,
-  type TrendDetailRow,
-} from '../../../api/analyticsApi';
+import { fetchTrendDetail, fetchTrends, type TrendDetailRow } from '../../../api/analyticsApi';
 import { fetchZTrendFilters } from '../../../api/zTrendApi';
 import { exportTrendsPdf } from '../../../api/visualReportsApi';
 import { DataTable } from '../../../components/DataTable/DataTable';
+import { EMPTY_ROWS } from '../../../components/DataTable/emptyRows';
 import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { LAST_PROJECT_PREF_KEY } from '../../../utils/projectWorkspacePrefs';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
 
@@ -45,14 +43,9 @@ function toMillis(iso: string): number {
 export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
   const [projects, setProjects] = useState<Array<{ id: number; code: string; name: string }>>([]);
   const [projectId, setProjectId] = useState<number | null>(null);
-  const [result, setResult] = useState<TrendAnalyticsResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [detail, setDetail] = useState<TrendDetailRow[] | null>(null);
   const [detailVersionId, setDetailVersionId] = useState<number | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,60 +66,49 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
     };
   }, []);
 
-  const load = useCallback(() => {
-    if (!projectId) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    setDetail(null);
+  // Смена проекта/периода закрывает детализацию — как раньше при перезагрузке тренда.
+  useEffect(() => {
     setDetailVersionId(null);
-    void fetchTrends({
-      projectId,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-    })
-      .then((data) => {
-        if (!ac.signal.aborted) {
-          setResult(data);
-          setLoading(false);
-        }
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        setError(getApiErrorMessage(err, 'Не удалось загрузить тренд часов.'));
-        setLoading(false);
-      });
   }, [projectId, dateFrom, dateTo]);
 
-  useEffect(() => {
-    void load();
-    return () => abortRef.current?.abort();
-  }, [load]);
+  const trendsQuery = useQuery({
+    queryKey: queryKeys.analytics.hoursTrend(projectId ?? undefined, dateFrom, dateTo),
+    // fetchTrends не принимает AbortSignal — без { signal }.
+    queryFn: () =>
+      fetchTrends({
+        projectId: projectId!,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+      }),
+    enabled: !!projectId,
+    placeholderData: keepPreviousData,
+  });
+
+  // Ленивая детализация версии: запрос только после клика по точке графика.
+  const detailQuery = useQuery({
+    queryKey: queryKeys.analytics.hoursTrendDetail(projectId ?? undefined, detailVersionId ?? undefined),
+    queryFn: () => fetchTrendDetail(projectId!, detailVersionId!),
+    enabled: projectId != null && detailVersionId != null,
+  });
+
+  const result = trendsQuery.data ?? null;
+  const loading = trendsQuery.isFetching;
+  const detail = detailQuery.data ?? null;
+  const detailLoading = detailQuery.isFetching;
+  const trendsError =
+    trendsQuery.isError && !isRequestCanceled(trendsQuery.error)
+      ? getApiErrorMessage(trendsQuery.error, 'Не удалось загрузить тренд часов.')
+      : null;
+  const detailError =
+    detailQuery.isError && !isRequestCanceled(detailQuery.error)
+      ? getApiErrorMessage(detailQuery.error, 'Не удалось загрузить детализацию версии.')
+      : null;
+  const error = actionError ?? trendsError ?? detailError;
 
   const handleProject = (id: number) => {
     setProjectId(id);
     void putUserPreferences({ [HOURS_PROJECT_PREF]: String(id) });
   };
-
-  const openDetail = useCallback(
-    (versionId: number) => {
-      if (!projectId) return;
-      setDetailVersionId(versionId);
-      setDetailLoading(true);
-      void fetchTrendDetail(projectId, versionId)
-        .then((rows) => {
-          setDetail(rows);
-          setDetailLoading(false);
-        })
-        .catch((err: unknown) => {
-          setError(getApiErrorMessage(err, 'Не удалось загрузить детализацию версии.'));
-          setDetailLoading(false);
-        });
-    },
-    [projectId],
-  );
 
   const chartOptions = useMemo<Highcharts.Options>(() => {
     const series = (result?.series ?? []).map((s) => {
@@ -170,7 +152,7 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
               click() {
                 const versionId = (this as Highcharts.Point & { custom?: { versionId?: number } }).custom
                   ?.versionId;
-                if (versionId) openDetail(versionId);
+                if (versionId) setDetailVersionId(versionId);
               },
             },
           },
@@ -178,7 +160,7 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
       },
       series,
     };
-  }, [result, openDetail]);
+  }, [result]);
 
   const columnDefs = useMemo<ColDef<TrendDetailRow>[]>(
     () => [
@@ -288,7 +270,7 @@ export function HoursTrendPanel({ dateFrom, dateTo }: Props) {
             Объекты версии
           </Typography>
           <DataTable
-            rowData={detail ?? []}
+            rowData={detail ?? EMPTY_ROWS}
             columnDefs={columnDefs}
             objectName="GroupTrend"
             gridId="analytics-hours-trend-detail"

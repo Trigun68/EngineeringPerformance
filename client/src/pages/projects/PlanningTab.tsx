@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ExportActionButton } from '../../components/export/ExportActionButton';
 import {
   Alert,
@@ -27,6 +28,7 @@ import { DataTable } from '../../components/DataTable/DataTable';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
 import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { collectNormFallbackWarnings } from '../../features/projects/forecast/normFallbackWarning';
 
@@ -77,33 +79,35 @@ function buildTreeRows(
 
 export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
   const { canRead, canEdit } = usePermission('Planning');
+  const queryClient = useQueryClient();
   const getById = useDictionaryStore((s) => s.getById);
   const getDirectionName = useDictionaryStore((s) => s.getDirectionName);
   const [report, setReport] = useState<ProjectForecastReport | null>(null);
   const [volumeEdits, setVolumeEdits] = useState<Record<number, string>>({});
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!versionId || !canRead) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchForecast(projectId, versionId);
-      setReport(data);
-      setVolumeEdits({});
-      setDirtyIds(new Set());
-    } catch {
-      setError('Не удалось загрузить прогноз.');
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, versionId, canRead]);
+  const forecastQuery = useQuery({
+    queryKey: queryKeys.forecast.report(projectId, versionId ?? undefined),
+    queryFn: () => fetchForecast(projectId, versionId!),
+    enabled: canRead && !!versionId,
+  });
 
+  // Локальный report нужен для превью сценариев; при новой выдаче GET сбрасываем правки.
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!forecastQuery.data) return;
+    setReport(forecastQuery.data);
+    setVolumeEdits({});
+    setDirtyIds(new Set());
+  }, [forecastQuery.data]);
+
+  const loading = forecastQuery.isFetching || saving;
+  const error =
+    saveError
+    ?? (forecastQuery.isError
+      ? getApiErrorMessage(forecastQuery.error, 'Не удалось загрузить прогноз.')
+      : null);
 
   const getLabel = useCallback(
     (row: ForecastIicVolumeRow) =>
@@ -162,18 +166,26 @@ export function PlanningTab({ projectId, versionId }: PlanningTabProps) {
 
   const handleSave = async () => {
     if (!versionId || dirtyIds.size === 0) return;
-    setLoading(true);
-    setError(null);
+    setSaving(true);
+    setSaveError(null);
     try {
       const items = [...dirtyIds].map((id) => ({
         workDirectionId: id,
         quantity: Number(volumeEdits[id] ?? leafRows.find((r) => r.workDirectionId === id)?.plannedVolume ?? 0),
       }));
       await saveForecastPlannedVolumes(projectId, versionId, items);
-      await load();
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.forecast.report(projectId, versionId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.forecast.pageData(projectId, versionId),
+        }),
+      ]);
     } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось сохранить плановые объёмы.'));
-      setLoading(false);
+      setSaveError(getApiErrorMessage(err, 'Не удалось сохранить плановые объёмы.'));
+    } finally {
+      setSaving(false);
     }
   };
 

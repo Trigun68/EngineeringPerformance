@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { Alert, Box, Stack, Tab, Tabs, Typography } from '@mui/material';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -11,7 +12,6 @@ import { Activity, Moon, Sun } from 'lucide-react';
 import {
   exportPerformanceReportPdf,
   fetchPerformanceReport,
-  type PerformanceReportDto,
 } from '../../../api/performanceReportApi';
 import { exportProjectTrendExcel, exportProjectTrendPdf } from '../../../api/projectTrendApi';
 import type { Project } from '../../../types/project';
@@ -20,7 +20,8 @@ import { WorkingOverlay } from '../../../components/WorkingOverlay/WorkingOverla
 import { PanelBusyBar } from '../../../components/WorkingOverlay/PanelBusyBar';
 import { usePermission } from '../../../hooks/usePermission';
 import { usePersistedTabState } from '../../../hooks/usePersistedTabState';
-import { getApiErrorMessage } from '../../../services/apiError';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { reportDarkPrefKey } from '../../../utils/projectWorkspacePrefs';
 import { WorkspaceChromeToggleRow } from '../shared/WorkspaceChromeToggleRow';
 import { projectsPageSubTabsSx } from '../shared/projectsPageTabStyles';
@@ -65,12 +66,11 @@ export interface ReportPanelProps {
 }
 
 export function ReportPanel({ projectId, project, versions }: ReportPanelProps) {
+  const queryClient = useQueryClient();
   const { canRead } = usePermission('Reports');
   const [searchParams] = useSearchParams();
-  const [report, setReport] = useState<PerformanceReportDto | null>(null);
-  const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setError] = useState<string | null>(null);
   const [darkRaw, setDarkRaw] = usePersistedTabState<'0' | '1'>(reportDarkPrefKey(projectId), '0');
   const dark = darkRaw === '1';
   const [subTab, setSubTab] = useState<ReportSubTab>('summary');
@@ -86,32 +86,28 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
     [versions],
   );
 
-  const load = useCallback(async () => {
-    if (!canRead || !projectId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchPerformanceReport(projectId);
-      setReport(data);
-    } catch (e) {
-      setReport(null);
-      setError(getApiErrorMessage(e, 'Не удалось загрузить отчёт производительности.'));
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, projectId]);
+  const reportQuery = useQuery({
+    queryKey: queryKeys.reports.performance(projectId),
+    // fetchPerformanceReport не принимает AbortSignal — signal из queryFn не передаём.
+    queryFn: () => fetchPerformanceReport(projectId),
+    enabled: canRead && Boolean(projectId),
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const report = reportQuery.data ?? null;
+  const loading = reportQuery.isFetching;
+  const loadError =
+    reportQuery.isError && !isRequestCanceled(reportQuery.error)
+      ? getApiErrorMessage(reportQuery.error, 'Не удалось загрузить отчёт производительности.')
+      : null;
+  const error = actionError ?? loadError;
 
-  // Remount ReportsTab по nonce — перезапускает react-query загрузку новых вкладок
-  // без необходимости тянуть QueryClient в панель (тесты рендерят панель без провайдера).
-  const [refreshNonce, setRefreshNonce] = useState(0);
+  // Обновление — invalidate, без remount ReportsTab по nonce.
   const handleRefresh = useCallback(() => {
-    void load();
-    setRefreshNonce((n) => n + 1);
-  }, [load]);
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.reports.performance(projectId),
+    });
+    void queryClient.invalidateQueries({ queryKey: ['reports-tab', projectId] });
+  }, [queryClient, projectId]);
 
   const handlePdf = async () => {
     setExporting(true);
@@ -220,7 +216,6 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
       {subTab === 'summary' && project && versions && versions.length > 0 ? (
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
           <ReportsTab
-            key={refreshNonce}
             projectId={projectId}
             project={project}
             versions={versions}
@@ -231,7 +226,7 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
 
       {subTab === 'trend' && project && versions && versions.length > 0 ? (
         <Box sx={{ overflow: 'auto', maxHeight: 'calc(100vh - 260px)' }}>
-          <ProjectTrendPanel projectId={projectId} refreshNonce={refreshNonce} />
+            <ProjectTrendPanel projectId={projectId} />
         </Box>
       ) : null}
 

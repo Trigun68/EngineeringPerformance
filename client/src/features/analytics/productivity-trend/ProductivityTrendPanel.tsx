@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -19,16 +20,16 @@ import type { ColDef, ValueFormatterParams } from 'ag-grid-community';
 import { DataTable } from '../../../components/DataTable/DataTable';
 import {
   fetchProductivityTrend,
-  type ProductivityTrendResponse,
   type ProductivityTrendTransition,
   type ProductivityVolumeMode,
 } from '../../../api/productivityTrendApi';
 import {
   fetchProductivityIndexTrend,
   type ProductivityIndexPoint,
-  type ProductivityIndexTrendResponse,
 } from '../../../api/productivityIndexTrendApi';
 import { FACT_ACCENT_COLOR, PLAN_ACCENT_COLOR } from '../../../constants/planFactColors';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import type { FactPlanMode } from '../shared/FactPlanToggle';
 import { TrendDetailView, type TrendDetailMetricConfig } from '../shared/TrendDetailView';
 import type {
@@ -40,7 +41,7 @@ import { AnalyticsExtraAccordion } from '../shared/AnalyticsExtraAccordion';
 import { HoursBridgeChart } from '../shared/HoursBridgeChart';
 import { HoursCoverageChips } from '../shared/HoursCoverageChips';
 import { SCurveChart } from '../shared/SCurveChart';
-import { fetchZTrends, type ZTrendResponse } from '../../../api/zTrendApi';
+import { fetchZTrends } from '../../../api/zTrendApi';
 import { FormulaTypeLegend } from './FormulaTypeLegend';
 import { ProductivityTrendChart } from './ProductivityTrendChart';
 
@@ -152,110 +153,66 @@ function formulaLabel(type: string): string {
 }
 
 export function ProductivityTrendPanel({ dateFrom, dateTo, volumeMode }: Props) {
-  const [result, setResult] = useState<ProductivityTrendResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Первичный блок (мокап TrendDetailMockup): индекс производительности по основным версиям.
-  const [indexResult, setIndexResult] = useState<ProductivityIndexTrendResponse | null>(null);
-  const [indexLoading, setIndexLoading] = useState(false);
-  const [indexError, setIndexError] = useState<string | null>(null);
   const [mode, setMode] = useState<FactPlanMode>('fact');
-  const indexAbortRef = useRef<AbortController | null>(null);
-  const [hours, setHours] = useState<ZTrendResponse | null>(null);
-  const hoursAbortRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(() => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
+  // Период и режим объёма в queryKey — смена фильтров даёт новый запрос без debounce.
+  const trendQuery = useQuery({
+    queryKey: queryKeys.analytics.productivityTrend(dateFrom, dateTo, volumeMode),
+    queryFn: ({ signal }) =>
+      fetchProductivityTrend(
+        {
+          periodStart: dateFrom || null,
+          periodEnd: dateTo || null,
+          volumeMode,
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-    void fetchProductivityTrend(
-      {
-        periodStart: dateFrom || null,
-        periodEnd: dateTo || null,
-        volumeMode,
-      },
-      ac.signal,
-    )
-      .then((data) => {
-        if (ac.signal.aborted) return;
-        setResult(data);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        const message = err instanceof Error ? err.message : 'Не удалось загрузить тренд производительности';
-        setError(message);
-        setLoading(false);
-      });
-  }, [dateFrom, dateTo, volumeMode]);
+  const indexQuery = useQuery({
+    queryKey: queryKeys.analytics.productivityIndex(dateFrom, dateTo),
+    queryFn: ({ signal }) =>
+      fetchProductivityIndexTrend(
+        {
+          periodStart: dateFrom || null,
+          periodEnd: dateTo || null,
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => load(), 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      abortRef.current?.abort();
-    };
-  }, [load]);
+  // Оверлей часов — тот же ключ zTrends, что у TrendAnalysisPanel (единственный weightMode).
+  const hoursQuery = useQuery({
+    queryKey: queryKeys.analytics.zTrends(dateFrom, dateTo, 'basisHours'),
+    queryFn: ({ signal }) =>
+      fetchZTrends(
+        {
+          periodStart: dateFrom || null,
+          periodEnd: dateTo || null,
+          weightMode: 'basisHours',
+        },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
 
-  const loadIndex = useCallback(() => {
-    indexAbortRef.current?.abort();
-    const ac = new AbortController();
-    indexAbortRef.current = ac;
-    setIndexLoading(true);
-    setIndexError(null);
+  const result = trendQuery.data ?? null;
+  const loading = trendQuery.isFetching;
+  const error =
+    trendQuery.isError && !isRequestCanceled(trendQuery.error)
+      ? getApiErrorMessage(trendQuery.error, 'Не удалось загрузить тренд производительности')
+      : null;
 
-    void fetchProductivityIndexTrend(
-      {
-        periodStart: dateFrom || null,
-        periodEnd: dateTo || null,
-      },
-      ac.signal,
-    )
-      .then((data) => {
-        if (ac.signal.aborted) return;
-        setIndexResult(data);
-        setIndexLoading(false);
-      })
-      .catch((err: unknown) => {
-        if (ac.signal.aborted) return;
-        const message =
-          err instanceof Error ? err.message : 'Не удалось загрузить индекс производительности';
-        setIndexError(message);
-        setIndexLoading(false);
-      });
-  }, [dateFrom, dateTo]);
+  const indexResult = indexQuery.data ?? null;
+  const indexLoading = indexQuery.isFetching;
+  const indexError =
+    indexQuery.isError && !isRequestCanceled(indexQuery.error)
+      ? getApiErrorMessage(indexQuery.error, 'Не удалось загрузить индекс производительности')
+      : null;
 
-  useEffect(() => {
-    const timer = setTimeout(() => loadIndex(), 400);
-    return () => {
-      clearTimeout(timer);
-      indexAbortRef.current?.abort();
-    };
-  }, [loadIndex]);
-
-  useEffect(() => {
-    hoursAbortRef.current?.abort();
-    const ac = new AbortController();
-    hoursAbortRef.current = ac;
-    void fetchZTrends(
-      { periodStart: dateFrom || null, periodEnd: dateTo || null },
-      ac.signal,
-    )
-      .then((data) => {
-        if (!ac.signal.aborted) setHours(data);
-      })
-      .catch(() => {
-        if (!ac.signal.aborted) setHours(null);
-      });
-    return () => ac.abort();
-  }, [dateFrom, dateTo]);
+  const hours = hoursQuery.data ?? null;
 
   const indexPoints = useMemo(
     () => ({

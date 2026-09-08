@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -21,7 +22,6 @@ import {
   fetchReferenceFormulas,
   runFactNormAnalysis,
   type Accuracy,
-  type FactNormAnalysisResponse,
   type NormComparison,
   type NormSuggestion,
   type ReferenceFormula,
@@ -29,6 +29,8 @@ import {
 } from '../../../api/factNormAnalyticsApi';
 import { usePermission } from '../../../hooks/usePermission';
 import { getUserPreferences, putUserPreferences } from '../../../api/userPreferencesApi';
+import { getApiErrorMessage, isRequestCanceled } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { AnalyticsKpiCards } from '../shared/AnalyticsKpiCards';
 import { AccuracyBadge } from './AccuracyBadge';
 import { CreateNormFromSuggestionDialog } from './CreateNormFromSuggestionDialog';
@@ -57,6 +59,18 @@ const VERDICT_COLOR: Record<Verdict, 'error' | 'warning' | 'success' | 'default'
 
 const FACT_NORM_PROJECTS_PREF_KEY = 'analytics.factNorm.projectIds.v1';
 
+/** Стабильный scopeKey: порядок id в UI не должен плодить отдельные записи кэша. */
+function factNormScopeKey(
+  projectIds: number[] | null,
+  workDirectionIds: number[] | null | undefined,
+): string {
+  const sortedProjects = projectIds == null ? null : [...projectIds].sort((a, b) => a - b);
+  const sortedDirections = workDirectionIds?.length
+    ? [...workDirectionIds].sort((a, b) => a - b)
+    : null;
+  return JSON.stringify({ projectIds: sortedProjects, workDirectionIds: sortedDirections });
+}
+
 type KpiFilter = 'all' | 'actual' | 'attention' | 'insufficient';
 
 interface Props {
@@ -72,19 +86,16 @@ export function FactNormAnalysisPanel({
   onToolbarExtras,
   workDirectionIds,
 }: Props) {
+  const queryClient = useQueryClient();
   const { canEdit: canEditNorms } = usePermission('IicWorkDirectionNorms');
   const [projectIds, setProjectIds] = useState<number[] | null>(null);
   const [prefsReady, setPrefsReady] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<FactNormAnalysisResponse | null>(null);
   const [selected, setSelected] = useState<NormComparison | null>(null);
   const [formulas, setFormulas] = useState<ReferenceFormula[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogSuggestion, setDialogSuggestion] = useState<NormSuggestion | null>(null);
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>('all');
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void fetchReferenceFormulas().then(setFormulas).catch(() => setFormulas([]));
@@ -125,41 +136,46 @@ export function FactNormAnalysisPanel({
     void putUserPreferences({ [FACT_NORM_PROJECTS_PREF_KEY]: JSON.stringify(ids) });
   }, []);
 
-  const runAnalysis = useCallback(async () => {
-    if (!dateFrom || !dateTo) return;
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await runFactNormAnalysis(
+  const scopeKey = useMemo(
+    () => factNormScopeKey(projectIds, workDirectionIds),
+    [projectIds, workDirectionIds],
+  );
+  const analysisQueryKey = queryKeys.analytics.factNorm(dateFrom, dateTo, scopeKey);
+
+  const {
+    data,
+    isFetching,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: analysisQueryKey,
+    queryFn: ({ signal }) =>
+      runFactNormAnalysis(
         {
           periodStart: dateFrom,
           periodEnd: dateTo,
           projectIds,
           workDirectionIds: workDirectionIds?.length ? workDirectionIds : null,
         },
-        ac.signal,
-      );
-      setResult(data);
-      setSelected(data.comparisons[0] ?? null);
-    } catch (e) {
-      if ((e as { name?: string })?.name === 'CanceledError' || (e as { code?: string })?.code === 'ERR_CANCELED') {
-        return;
-      }
-      setError(e instanceof Error ? e.message : 'Ошибка анализа');
-      setResult(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [dateFrom, dateTo, projectIds, workDirectionIds]);
+        signal,
+      ),
+    enabled: prefsReady && !!dateFrom && !!dateTo,
+    placeholderData: keepPreviousData,
+  });
 
+  const result = data ?? null;
+  const loading = isFetching;
+  const error =
+    isError && !isRequestCanceled(queryError)
+      ? getApiErrorMessage(queryError, 'Ошибка анализа')
+      : null;
+
+  // Как раньше: после успешного ответа выделяем первую строку сравнения.
   useEffect(() => {
-    if (!prefsReady) return;
-    void runAnalysis();
-    return () => abortRef.current?.abort();
-  }, [runAnalysis, prefsReady]);
+    if (!result) return;
+    setSelected(result.comparisons[0] ?? null);
+  }, [result]);
 
   const accuracy: Accuracy | null = result?.accuracy ?? null;
   const projectLabel =
@@ -192,7 +208,7 @@ export function FactNormAnalysisPanel({
         >
           {projectLabel}
         </ToolbarActionButton>
-        <ToolbarActionButton onClick={() => void runAnalysis()} disabled={loading}>
+        <ToolbarActionButton onClick={() => void refetch()} disabled={loading}>
           {ACTION_LABELS.refresh}
         </ToolbarActionButton>
         <ExportActionButton
@@ -218,7 +234,7 @@ export function FactNormAnalysisPanel({
     dateFrom,
     dateTo,
     projectIds,
-    runAnalysis,
+    refetch,
   ]);
 
   const suggestionById = useMemo(() => {
@@ -504,7 +520,9 @@ export function FactNormAnalysisPanel({
         formulas={formulas}
         chartPoints={selected?.chartPoints ?? []}
         onClose={() => setDialogOpen(false)}
-        onSaved={() => void runAnalysis()}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: analysisQueryKey });
+        }}
       />
     </Box>
   );
