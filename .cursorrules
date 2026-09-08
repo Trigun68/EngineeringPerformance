@@ -119,7 +119,7 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 ## 7. Docker / deploy
 
 - `docker compose up` — `ep-sqlserver`, `ep-api`, `ep-web`
-- Web proxies `/api/` → `api:8080`; tunnel hostname `eng-perf` → `ep-web` (not `web` DNS collision with HR Portal)
+- Web proxies `/api/` → `backend:8080`; tunnel hostname `eng-perf` → `ep-web` (not `web` DNS collision with HR Portal)
 - Production: `ASPNETCORE_ENVIRONMENT=Production`, empty `DEV_WINDOWS_USER`, SPNEGO on Nginx
 
 ---

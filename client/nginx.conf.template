@@ -37,16 +37,31 @@ http {
         image/svg+xml
         application/manifest+json;
 
-    # Cloudflare Tunnel передаёт https в X-Forwarded-Proto
+    # Cloudflare Tunnel / внешний reverse-proxy передаёт https в X-Forwarded-Proto
     map $http_x_forwarded_proto $forwarded_proto {
         ""      $scheme;
         default $http_x_forwarded_proto;
+    }
+
+    # HSTS только когда клиент пришёл по HTTPS (туннель/edge). Прямой HTTP :80 — без заголовка.
+    map $http_x_forwarded_proto $hsts_header {
+        https   "max-age=31536000; includeSubDomains";
+        default "";
+    }
+
+    # X-Remote-User в backend — только $remote_user после auth_gss.
+    # Без SPNEGO значение пустое, nginx не передаёт пустой заголовок.
+    # Клиентский X-Remote-User не пробрасываем (подделка); API всё равно требует X-Trusted-Proxy-Token.
+    map $remote_user $spnego_remote_user {
+        ""      "";
+        default $remote_user;
     }
 
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';" always;
+    add_header Strict-Transport-Security $hsts_header always;
 
     server {
         listen 80;
@@ -55,11 +70,12 @@ http {
         root /usr/share/nginx/html;
         index index.html;
 
-        # Раскомментировать для доменной среды (SPNEGO/Kerberos):
-        # auth_gss on;
-        # auth_gss_keytab /etc/krb5.keytab;
+        # SPNEGO: stock nginx:alpine без ngx_http_auth_spnego_module.
+        # include с маской не падает, если файла нет — образ без SSO стартует.
+        # Профиль: docker-compose.spnego.yml монтирует client/nginx/spnego.inc.example.
 
         location /api/ {
+            include /etc/nginx/conf.d/spnego*.inc;
             client_max_body_size 10m;
             proxy_pass http://backend:8080/api/;
             proxy_http_version 1.1;
@@ -67,7 +83,7 @@ http {
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $forwarded_proto;
-            proxy_set_header X-Remote-User $remote_user;
+            proxy_set_header X-Remote-User $spnego_remote_user;
             # Совпадает с Spnego__TrustedProxySecret; envsubst подставляет только эту переменную.
             proxy_set_header X-Trusted-Proxy-Token ${PROXY_TRUSTED_SECRET};
             proxy_read_timeout 300s;
@@ -82,6 +98,7 @@ http {
             add_header X-Content-Type-Options "nosniff" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';" always;
+            add_header Strict-Transport-Security $hsts_header always;
         }
 
         location = /index.html {
@@ -91,6 +108,7 @@ http {
             add_header X-Content-Type-Options "nosniff" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';" always;
+            add_header Strict-Transport-Security $hsts_header always;
         }
 
         location / {

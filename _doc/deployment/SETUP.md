@@ -1,7 +1,7 @@
 # Engineering Performance — Установка и первый запуск
 
 > **⚠️ УСТАРЕЛО (2026-08-26):** гайд описывает **замороженный** WPF-стек (`EngineeringPerformance.App`, `DbInitializer` — перенесён в `archive/`).
-> Актуальное развёртывание web-версии: [DEPLOY.md](./DEPLOY.md) (Docker Compose). WPF вне scope разработки — см. [_doc/architecture/wpf-reference-archive.md](../architecture/wpf-reference-archive.md).
+> Актуальное развёртывание web-версии: [DEPLOY.md](./DEPLOY.md) (Docker Compose, nginx: `client/nginx.conf.template` + `PROXY_TRUSTED_SECRET`, SPNEGO — overlay `docker-compose.spnego.yml`). WPF вне scope разработки — см. [_doc/architecture/wpf-reference-archive.md](../architecture/wpf-reference-archive.md).
 
 ## Системные требования
 

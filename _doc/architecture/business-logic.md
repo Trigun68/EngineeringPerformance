@@ -449,7 +449,7 @@ versionA, versionB (один проект)
 ### 9.1. Общий поток
 
 ```
-Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
+Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
   → ImportController [ProjectDataUpload:Edit + проект:Edit]
   → ProjectExcelDataImportService
   → транзакция + DataImportIteration

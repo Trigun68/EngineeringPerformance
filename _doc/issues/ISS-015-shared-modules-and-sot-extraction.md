@@ -7,7 +7,7 @@
 
 ## Контекст
 1. **IIC-имена:** канонический `IicWorkDirectionDisplayUnit.FormatCodeNameWithResolvedUnit` лежит в Infrastructure → Application-код не может его использовать → 5 ручных копий склейки `код — наименование (ед.)`: `PerformanceCalculationEngine.FormatClassifierName`, `DetailFactSummaryTableBuilder`, `DetailForecastSummaryTableBuilder`, `NormHealthCheckEngine` (без ед.), `AnalyticsExportService` (без ед.).
-2. **Валидаторы загрузки:** `ExcelUploadValidator` (Api, magic bytes) vs `ImportUploadValidator` (Application, без magic bytes) — дубль правил; оба 10 MB при задокументированных 50 MB.
+2. **Валидаторы загрузки:** `ExcelUploadValidator` (Api, magic bytes) vs `ImportUploadValidator` (Application, без magic bytes) — дубль правил; оба **10 MB** (как `.cursorrules`).
 3. **Форматтеры чисел:** `utils/formatGridNumber` ≡ `reportFormat.fmt`; локальные `.toFixed` в аналитике; `interpretationColor` дублирует backend-пороги.
 4. **Chrome-близнецы:** `WorkspaceChromeToggleRow`/`workspaceChromeContext` ↔ `AnalyticsChromeToggleRow`/`analyticsChromeContext` (diff — подписи/testid).
 5. **Три confirm:** `ConfirmDialog`, `useConfirmation`, `ConfirmArchiveDialog`.
@@ -15,7 +15,7 @@
 
 ## Решение (направление)
 1. Перенести IIC-форматтер в Application (или Domain) и удалить ручные копии; клиент продолжает использовать `formatIisNorm`.
-2. Единый `UploadValidator` (Application, с magic bytes), используется и контроллерами, и сервисом импорта; лимит синхронизировать с `.cursorrules` (10 или 50 MB — решить и зафиксировать).
+2. Единый `UploadValidator` (Application, с magic bytes), используется и контроллерами, и сервисом импорта; лимит **10 MB**.
 3. `utils/format.ts` — единый форматтер чисел; пороги интерпретации — из backend DTO или общего модуля.
 4. Общий `ChromeToggleRow` + параметризованный контекст; один confirm-механизм; `cn()` → `utils/cn.ts`; dictionaries — через `api/dictionariesApi.ts`.
 5. `gridColumns.tsx`: общие базовые колонки + композиция вариантов.

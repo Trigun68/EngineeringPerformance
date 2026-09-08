@@ -33,7 +33,7 @@
 
 ## Сжатие ответов
 
-Nginx (`client/nginx.conf`) сжимает JSON и статику: `gzip on`, уровень 5, от 1 КБ,
+Nginx (`client/nginx.conf.template`) сжимает JSON и статику: `gzip on`, уровень 5, от 1 КБ,
 `gzip_proxied any` (иначе ответы от backend через proxy не сжимаются). Хешированные ассеты
 Vite отдаются из готовых `.gz` (`gzip_static`) с `Cache-Control: public, max-age=31536000, immutable`;
 `index.html` — `no-cache`. На публичном хосте Brotli до браузера делает Cloudflare.

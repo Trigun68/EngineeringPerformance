@@ -1,7 +1,7 @@
 # Развёртывание web-версии (EngineeringPerformance)
 
-**Обновлено:** 2026-06-08  
-**Связано:** `docker-compose.yml`, `_doc/architecture/three-tier-docker.md`
+**Обновлено:** 2026-09-08  
+**Связано:** `docker-compose.yml`, `client/nginx.conf.template`, `_doc/architecture/three-tier-docker.md`
 
 ---
 
@@ -23,7 +23,7 @@
 2. Сборка и запуск:
 
 ```bash
-docker compose build api web
+docker compose build backend frontend
 docker compose up -d
 ```
 
@@ -91,7 +91,7 @@ docker compose up -d
 
 Ошибка «502 / пустая страница» чаще всего из‑за неверного URL: `localhost` из контейнера туннеля ≠ хост, если сети разные.
 
-**SSL/TLS:** режим **Full**. Стек приложения: `docker compose up -d` (без дополнительных профилей).
+**SSL/TLS:** режим **Full**. Контейнер frontend слушает **:80**; TLS на туннеле. HSTS nginx выставляет только при `X-Forwarded-Proto: https`. Стек: `docker compose up -d` (без overlay SPNEGO).
 
 **Логин «Неверный логин или пароль» через туннель:** API отклоняет неизвестный `Host` (HTTP 400). В `.env` задать `ALLOWED_HOSTS` с доменом туннеля, например `eng-perf.tech-lab24.ru` (по умолчанию уже в `docker-compose.yml`).
 
@@ -117,38 +117,62 @@ curl -sS https://eng-perf.tech-lab24.ru/ | head -5
 
 ---
 
+## Nginx (единый шаблон)
+
+Источник правды — `client/nginx.conf.template`, копируется в образ `frontend` (`client/Dockerfile`). При старте `client/docker-entrypoint.sh` делает `envsubst '${PROXY_TRUSTED_SECRET}'` → `/etc/nginx/nginx.conf`. Подставляется **только** `PROXY_TRUSTED_SECRET` (пустое значение в entrypoint становится `__UNSET__`, чтобы не сломать `proxy_set_header`).
+
+Одна переменная `.env` питает оба конца доверенного прокси:
+
+| Куда | Имя |
+|------|-----|
+| frontend (nginx) | `PROXY_TRUSTED_SECRET` → заголовок `X-Trusted-Proxy-Token` |
+| backend | `Spnego__TrustedProxySecret` ← тот же `${PROXY_TRUSTED_SECRET:-}` |
+
+Upstream API — сервис Compose **`backend:8080`** (не `api:8080`). `X-Remote-User` берётся из `$remote_user` после SPNEGO; без аутентификации заголовок пустой и не уходит. Клиентский `X-Remote-User` nginx не пробрасывает.
+
+Корневые `nginx.conf` / `nginx.conf.template` / `nginx.conf.spnego` удалены (устаревший upstream `api:8080`).
+
 ## Production (on-prem) — SPNEGO / Kerberos SSO
 
-Для развёртывания с Windows-аутентификацией (Kerberos/SPNEGO) используйте профиль `spnego`:
+Тот же образ `frontend`, что и в базовом compose. Overlay **не** подменяет весь `nginx.conf` и **не** монтирует `client/dist`.
 
 ```bash
 # Подготовка keytab на Windows (от имени администратора домена):
 # ktpass /princ HTTP/eng-perf.domain@DOMAIN.COM /mapuser spnego_svc@domain.com /pass * /out http.keytab
 
-# Развёртывание с SPNEGO
+# В client/nginx/spnego.inc.example задать auth_gss_realm под свой AD.
+
 docker compose -f docker-compose.yml -f docker-compose.spnego.yml up -d
 ```
+
+Почему не `include /etc/nginx/conf.d/spnego.inc` без маски: nginx падает, если файла нет. В шаблоне `include /etc/nginx/conf.d/spnego*.inc` — без файла маска ничего не подхватывает, образ без SSO стартует. Overlay монтирует `client/nginx/spnego.inc.example` → `/etc/nginx/conf.d/spnego.inc`.
+
+`nginx:alpine` в текущем Dockerfile **не содержит** `ngx_http_auth_spnego_module`. Overlay задаёт keytab, include и env; для реального Negotiate нужен кастомный образ с модулем (`load_module` в главном контексте, не в `.inc`).
 
 ### Требования для SPNEGO
 
 | Переменная | Описание | Пример |
 |------------|----------|--------|
-| `KEYTAB_PATH` | Путь к keytab файлу | `/etc/krb5.keytab` |
+| `KEYTAB_PATH` | Путь к keytab на хосте (в контейнере `/etc/nginx/http.keytab`) | `/etc/krb5.keytab` |
 | `KRB5_CONF_PATH` | Путь к krb5.conf | `/etc/krb5.conf` |
-| `KRB5_REALM` | Active Directory realm | `CORP.EXAMPLE.COM` |
-| `PROXY_TRUSTED_SECRET` | Секрет для X-Trusted-Proxy-Token | случайная строка ≥32 символов |
+| `PROXY_TRUSTED_SECRET` | Секрет `X-Trusted-Proxy-Token` (обязателен непустой в prod) | случайная строка ≥32 символов |
+
+Realm задаётся в `spnego.inc` (`auth_gss_realm`), не через envsubst.
 
 ### Конфигурация
 
-1. **NGINX**: использует `nginx.conf.spnego` с модулем `auth_spnego`
-2. **Backend**: `Spnego__Enabled=true`, валидирует `X-Trusted-Proxy-Token`
-3. **Fallback**: при ошибке Kerberos — 401 с заголовком `WWW-Authenticate: Negotiate`
+1. **NGINX**: шаблон + опциональный `spnego.inc` (`auth_gss` только на `/api/`)
+2. **Backend**: overlay ставит `Spnego__Enabled=true`, проверяет `X-Trusted-Proxy-Token`
+3. **Fallback**: при ошибке Kerberos — 401 с `WWW-Authenticate: Negotiate`
+4. **TLS**: контейнер по-прежнему :80; сертификаты — на Cloudflare / edge, не в этом overlay
+
+Процесс nginx в образе — `appuser` (uid 10001): keytab должен быть ему читаем.
 
 ### Безопасность
 
-- `PROXY_TRUSTED_SECRET` должен совпадать между nginx и api
-- Keytab должен быть доступен только root/nginx (chmod 600)
-- `DevWindowsAuth__SimulatedWindowsUser` должен быть пустым в production
+- `PROXY_TRUSTED_SECRET` должен совпадать между nginx и backend и быть непустым при `Spnego__Enabled=true`
+- Keytab — минимальные права, читаем для uid 10001
+- `DevWindowsAuth__SimulatedWindowsUser` в overlay сбрасывается в пустую строку
 
 ---
 
@@ -167,7 +191,7 @@ docker compose -f docker-compose.yml -f docker-compose.spnego.yml up -d
 |----------|----------|
 | Критический баг web | Остановить `docker compose down`; пользователи возвращаются на WPF-клиент |
 | Повреждение данных | Восстановить БД из backup; web и WPF используют одну БД — согласовать окно |
-| Неудачный релиз API | `docker compose pull` предыдущий tag / откат image api |
+| Неудачный релиз API | `docker compose pull` предыдущий tag / откат image backend |
 
 WPF-дистрибутив **не удалять** до завершения MIG4-006 (см. `_doc/architecture/wpf-reference-archive.md`).
 
@@ -175,8 +199,8 @@ WPF-дистрибутив **не удалять** до завершения MIG
 
 ## Мониторинг
 
-- Логи API: `docker logs ep-api -f`
-- Логи web/nginx: `docker logs ep-web -f`
+- Логи API: `docker logs ep-backend -f`
+- Логи web/nginx: `docker logs ep-frontend -f`
 - SQL health: `docker inspect ep-sqlserver --format '{{.State.Health.Status}}'`
 
 ---

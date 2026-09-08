@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-08, nginx SoT)
+- Единый конфиг nginx: `client/nginx.conf.template` (envsubst `PROXY_TRUSTED_SECRET`). Корневые `nginx.conf*` удалены. SPNEGO — `client/nginx/spnego.inc.example` и overlay `docker-compose.spnego.yml` на том же образе frontend.
+
 ### Changed (2026-09-07, единая авторизация и инвариант основной версии)
 - API: вместо `[Authorize(Roles=…)]` и ручных `IsAdministrator()` / `Forbid` — `[HasPermission]`. Матрица прав и access-rights (`GET` — `Administration:Read`, `PUT` — `Administration:Edit`); `PUT /api/system-settings` — `Administration:Edit` (классовый `[Authorize(Roles="SuperAdmin,Administrator")]` снят); `GET /api/system-settings` остаётся `[Authorize]` (heartbeat). Шаблоны формул норм (`GetFormulaTemplates` / `Preview`) — `IicWorkDirectionNorms:Read`.
 - Глобальная `FallbackPolicy` = `RequireAuthenticatedUser`: любой endpoint без атрибутов требует вход; аноним только с `[AllowAnonymous]`. `GET /metrics` — аутентификация **и** `Administration:Read`. Guard-тест `ControllerAuthorizationCoverageTests` (рефлексия по контроллерам).

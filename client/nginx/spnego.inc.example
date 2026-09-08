@@ -1,0 +1,17 @@
+# SPNEGO / Kerberos для location /api/ (ngx_http_auth_spnego_module).
+# Stock nginx:alpine модуля не содержит — нужен образ с auth_spnego.
+#
+# Подключение (docker-compose.spnego.yml):
+#   ./client/nginx/spnego.inc.example → /etc/nginx/conf.d/spnego.inc
+# Шаблон client/nginx.conf.template делает include /etc/nginx/conf.d/spnego*.inc
+# (маска: без файла nginx стартует). Не использовать include без маски — отсутствующий
+# файл ломает nginx -t.
+#
+# Подставить auth_gss_realm под свой AD. load_module — только в главном контексте
+# кастомного образа, не в этом include.
+
+auth_gss on;
+auth_gss_keytab /etc/nginx/http.keytab;
+auth_gss_realm EXAMPLE.COM;
+auth_gss_service_name HTTP;
+auth_gss_allow_basic_fallback off;

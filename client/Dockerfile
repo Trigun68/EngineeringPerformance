@@ -20,8 +20,9 @@ RUN apk add --no-cache shadow libcap curl gettext \
     && setcap 'cap_net_bind_service=+ep' /usr/sbin/nginx
 
 COPY --from=build /app/dist /usr/share/nginx/html
-# Runtime SoT — шаблон; client/nginx.conf остаётся справочной копией вне образа.
+# Runtime SoT — nginx.conf.template (envsubst PROXY_TRUSTED_SECRET в entrypoint).
 COPY nginx.conf.template /etc/nginx/nginx.conf.template
+COPY nginx/spnego.inc.example /etc/nginx/spnego.inc.example
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh \
     && chown -R appuser:appuser /usr/share/nginx/html \
