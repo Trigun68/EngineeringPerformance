@@ -16,16 +16,6 @@ public sealed class ProjectRepository : IProjectRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<ProjectDto>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return await _context.Projects
-            .AsNoTracking()
-            .Where(p => !p.IsArchived)
-            .OrderBy(p => p.Code)
-            .Select(MapToDto())
-            .ToListAsync(cancellationToken);
-    }
-
     public async Task<IReadOnlyList<ProjectDto>> GetAllForUserAsync(
         int userId,
         IReadOnlyList<int> accessibleProjectIds,

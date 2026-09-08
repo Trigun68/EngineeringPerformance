@@ -48,12 +48,6 @@ public sealed class CachedDictionaryService : IDictionaryService
                 });
     }
 
-    public async Task<DictionariesAllDto> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        var (data, _) = await GetAllWithETagAsync(cancellationToken);
-        return data;
-    }
-
     public Task<(DictionariesAllDto Data, string ETag)> GetAllWithETagAsync(CancellationToken cancellationToken = default) =>
         GetOrLoadWithETagAsync(cancellationToken);
 

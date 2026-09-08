@@ -34,9 +34,6 @@ public sealed class PermissionService : IPermissionService
         return rights.TryGetValue(objectName, out var level) && level >= requiredLevel;
     }
 
-    public Task<bool> CanReadAsync(int userId, PermissionType permission, CancellationToken cancellationToken = default) =>
-        HasAccessAsync(userId, permission, AccessLevel.Read, cancellationToken);
-
     public Task<bool> CanEditAsync(int userId, PermissionType permission, CancellationToken cancellationToken = default) =>
         HasAccessAsync(userId, permission, AccessLevel.Edit, cancellationToken);
 }

@@ -5,8 +5,6 @@ namespace EngineeringPerformance.Application.Projects;
 
 public interface IProjectRepository
 {
-    Task<IReadOnlyList<ProjectDto>> GetAllAsync(CancellationToken cancellationToken = default);
-
     Task<IReadOnlyList<ProjectDto>> GetAllForUserAsync(
         int userId,
         IReadOnlyList<int> accessibleProjectIds,

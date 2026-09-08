@@ -31,9 +31,6 @@ public sealed class PerformanceService : IPerformanceService
         _visibility = visibility;
     }
 
-    /// <inheritdoc />
-    public void InvalidateWorkDirectionHierarchyCache() => _workDirectionsCache = null;
-
     public Task<IReadOnlyList<PerformanceRowDto>> GetPerformanceDataAsync(
         int projectId,
         int versionId,

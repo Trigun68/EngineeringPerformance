@@ -15,10 +15,4 @@ public interface IPerformanceService
         int versionId,
         LaborHoursKind hoursKind,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Сбрасывает процессный кеш иерархии направлений ИИС, из которого строится производительность.
-    /// Должен вызываться при любом изменении справочника ИИС (в т.ч. после Invalidate/Upsert/Remove кеша направлений).
-    /// </summary>
-    void InvalidateWorkDirectionHierarchyCache();
 }
