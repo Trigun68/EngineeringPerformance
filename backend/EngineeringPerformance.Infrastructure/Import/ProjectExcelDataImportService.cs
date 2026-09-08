@@ -86,94 +86,43 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         }
     }
 
-    private Task<DataImportResultDto> ImportFromApiAsync(int projectId, int versionId, DataImportType dataType, string apiEndpoint, string description)
-    {
-        return Task.FromResult(new DataImportResultDto(false, 0, "API import not yet implemented", 0));
-    }
-
-    private async Task<IReadOnlyList<DataImportIterationInfoDto>> GetImportIterationsCoreAsync(
-        int projectId, int versionId, DataImportType dataType, CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        return await context.DataImportIterations
-            .AsNoTracking()
-            .Where(i => i.ProjectId == projectId
-                     && i.ProjectAnalysisVersionId == versionId
-                     && i.DataType == dataType)
-            .OrderByDescending(i => i.ImportedAt)
-            .Select(i => new DataImportIterationInfoDto(i.ImportedAt, i.RecordCount, i.Description, i.SourceFileName))
-            .ToListAsync(cancellationToken);
-    }
+    private Task<IReadOnlyList<DataImportIterationInfoDto>> GetImportIterationsCoreAsync(
+        int projectId, int versionId, DataImportType dataType, CancellationToken cancellationToken = default) =>
+        ImportIterationRecorder.GetImportIterationsCoreAsync(
+            _contextFactory, projectId, versionId, dataType, cancellationToken);
 
     /// <summary>
     /// Единая точка создания итерации импорта: описание, происхождение файла и автор
     /// сохраняются вместе с данными в одной транзакции.
     /// </summary>
-    private static async Task<DataImportIteration> CreateIterationAsync(
+    private static Task<DataImportIteration> CreateIterationAsync(
         AppDbContext context,
         int projectId,
         int versionId,
         DataImportType dataType,
         string description,
-        ImportSourceMetadata source)
-    {
-        var iteration = new DataImportIteration
-        {
-            ProjectId = projectId,
-            ProjectAnalysisVersionId = versionId,
-            DataType = dataType,
-            Description = description,
-            SourceFileName = source.FileName,
-            SourceFileHash = source.FileHash,
-            ImportedByUserId = source.UserId,
-            ImportedAt = DateTime.UtcNow,
-        };
-
-        context.DataImportIterations.Add(iteration);
-        await context.SaveChangesAsync();
-        return iteration;
-    }
+        ImportSourceMetadata source) =>
+        ImportIterationRecorder.CreateIterationAsync(
+            context, projectId, versionId, dataType, description, source);
 
     /// <summary>
     /// EnableRetryOnFailure требует оборачивать пользовательские транзакции в CreateExecutionStrategy.
     /// </summary>
-    private async Task<T> ExecuteWithRetryableTransactionAsync<T>(
+    private Task<T> ExecuteWithRetryableTransactionAsync<T>(
         Func<AppDbContext, Task<T>> action,
-        CancellationToken cancellationToken = default)
-    {
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        var strategy = context.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(async () =>
-        {
-            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
-            var result = await action(context);
-            await transaction.CommitAsync(cancellationToken);
-            return result;
-        });
-    }
+        CancellationToken cancellationToken = default) =>
+        ImportTransactionRunner.ExecuteWithRetryableTransactionAsync(_contextFactory, action, cancellationToken);
 
     private Task<int> DeleteIterationCoreAsync(
         int projectId, int versionId, DataImportType dataType, DateTime importedAt, CancellationToken cancellationToken = default) =>
-        ExecuteWithRetryableTransactionAsync(async context =>
-        {
-        var iteration = await context.DataImportIterations
-            .FirstOrDefaultAsync(i => i.ProjectId == projectId
-                                   && i.ProjectAnalysisVersionId == versionId
-                                   && i.DataType == dataType
-                                   && i.ImportedAt == importedAt);
-
-        if (iteration is null)
-        {
-            return 0;
-        }
-
-        var deletedRecords = await DeleteImportedRecordsAsync(context, dataType, projectId, versionId, importedAt);
-
-        context.DataImportIterations.Remove(iteration);
-        await context.SaveChangesAsync(cancellationToken);
-
-        return deletedRecords;
-        }, cancellationToken);
+        ImportIterationRecorder.DeleteIterationCoreAsync(
+            _contextFactory,
+            projectId,
+            versionId,
+            dataType,
+            importedAt,
+            DeleteImportedRecordsAsync,
+            cancellationToken);
 
     private static string? GetCellValue(IXLRangeRow row, int columnNumber)
     {
@@ -286,6 +235,10 @@ public sealed partial class ProjectExcelDataImportService : IProjectImportServic
         return "Ошибка импорта данных. Обратитесь к администратору.";
     }
 
+    /// <summary>
+    /// Диспетчер удаления строк данных по типу импорта. Остаётся здесь: Delete*RecordsAsync
+    /// живут в других partial и недоступны из <see cref="ImportIterationRecorder"/>.
+    /// </summary>
     private static async Task<int> DeleteImportedRecordsAsync(AppDbContext context, DataImportType dataType, int projectId, int versionId, DateTime importedAt)
     {
         return dataType switch
