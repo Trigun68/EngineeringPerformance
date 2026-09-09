@@ -29,15 +29,15 @@
 | P | Место | Статус |
 |---|--------|--------|
 | Critical | `BuildFactGrids` → `CalculateFactAssessment`; `FactAssessmentRowsCalculator` удалён | done |
-| High | LI recalc через `IPerformanceCalculationEngine.RecalculateLaborIntensities` | done |
-| High | Forecast hours через `ComputePpvForecastHours` / `AggregateForecastHoursByDirection` | done |
+| High | LI recalc через `IPerformanceCalculationEngine.RecalculatePlanHours` | done |
+| High | Forecast hours через `ComputeForecastHours` (фасады `ComputePpvForecastHours` / `AggregateForecastHoursByDirection` сняты 2026-09-09) | done |
 | High | Weighted Z через `ComputeWeightedZFromPerformanceRows` | done |
 | Med | `EquipmentVolumeAggregator` / forecast tree rollup | deferred (display/merge helpers) |
 | Low | `AppendPerformanceTotals` | n/a (сумма DTO) |
 
 ### API движка
 
-`CalculatePerformance` · `CalculateFactAssessment` · `ComputeForecastHours` · `ComputeForecastBaseHours` · `RecalculateLaborIntensities` · `ComputePpvForecastHours` · `AggregateForecastHoursByDirection` · `ComputeWeightedZFromPerformanceRows`
+`CalculatePerformance` · `CalculateFactAssessment` · `ComputeForecastHours` · `RecalculatePlanHours` · `ComputeWeightedZ` / `ComputeWeightedZFromPerformanceRows` · `ComputeHoursOverrun`
 
 Внутренние хелперы (`LaborIntensityCalculator`, `ForecastHoursAggregator`, `WeightedZScoreCalculator`, `ForecastCalculation`) — только для движка и unit-тестов формул; Infrastructure вызывает **только** `IPerformanceCalculationEngine`.
 

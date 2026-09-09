@@ -1,6 +1,6 @@
 # ISS-014: Удаление мёртвых UI-путей и декомпозиция god-панелей
 
-**Статус:** 🔵 Backlog (2026-08-16)
+**Статус:** 🟠 Частично (2026-09-09)
 **Категория:** Frontend / Dead code / SRP
 **Приоритет:** P1 (High)
 **Источник:** `_work/20260816_221500_code_architecture_review.md` §3 (M-05), §4 (C-05)
@@ -16,6 +16,8 @@
 
 God-панели (после удаления мёртвых): `ForecastPanel` 946 строк / 24 хука, `FactPanel` 706 / 22, `ComparePanel` 697 / 25, `ProjectVersionPickerDialog` 718, `PlanningParametersDialog` 638.
 
+**2026-09-09.** Живые панели разобраны без смены поведения: `ForecastPanel` 232, `FactPanel` 223, `ComparePanel` 240; гриды `*SummaryGrid` / `*FacilityGrid` / `*DetailGrid`, диалоги и хуки `use*PageData` / `use*PanelDialogs`. `ProjectVersionPickerDialog`, `PlanningParametersDialog`, `IicNormsPage`, `ProductivityTrendPanel`, `FullProjectsPage` — ранее. Мёртвые файлы из списка выше **ещё в дереве**.
+
 ## Решение (направление)
 1. Удалить 4 мёртвых файла + их тесты (git history сохраняет код при необходимости возврата).
 2. Декомпозиция панелей: состояние/загрузка → кастомные хуки (`useForecastData`, `useCompareData`), секции UI → подкомпоненты; цель ≤300 строк на компонент.
@@ -23,8 +25,8 @@ God-панели (после удаления мёртвых): `ForecastPanel` 9
 
 ## Acceptance Criteria
 - [ ] Мёртвые файлы удалены; `npm run build` и `npm test` зелёные; bundle уменьшился.
-- [ ] Панели разбиты на хуки/подкомпоненты; поведение не изменено (e2e `project-workspace`, `forecast-module`, `fact-compare-module` зелёные).
-- [ ] В отчёте: N passed Playwright на `http://127.0.0.1:8081`.
+- [x] Панели разбиты на хуки/подкомпоненты (контейнеры ≤250 строк). Поведение: Vitest панелей зелёный; Playwright **144 passed, 1 skipped**, `http://127.0.0.1:8081`, frontend `--build` (2026-09-09).
+- [x] В отчёте: 144 passed Playwright на `http://127.0.0.1:8081` (полный suite; `project-workspace`, `forecast-module`, `fact-compare-module` зелёные).
 
 ## Файлы
 - `client/src/pages/projects/ProjectDetailPage.tsx`, `ProjectWorkspacePage.tsx`

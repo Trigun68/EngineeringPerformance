@@ -1,6 +1,6 @@
 # Отчёт ревизии кодовой базы — Engineering Performance (Web)
 
-**Дата:** 2026-06-09 (обновлено 2026-07-14 — аудит docs↔код; 2026-09-08 — цикл коррекции архитектуры)  
+**Дата:** 2026-06-09 (обновлено 2026-07-14 — аудит docs↔код; 2026-09-08 — цикл коррекции архитектуры; 2026-09-09 — хвост: фасады движка, checksum миграций, split панелей)  
 **Роль:** Principal Architect / Lead Fullstack  
 **Стек:** ASP.NET Core 8 + React/TS + MS SQL + Docker/Nginx  
 **Scope:** **только web** — WPF не рассматривается ([web-only-development-plan.md](../_doc/plans/web-only-development-plan.md))
@@ -19,7 +19,7 @@
 | Групповой анализ | ✅ | Program/Customer + weighted Z; тренд → `/analytics/trends` |
 | PDF-отчёты | ✅ | Стиль портала, иерархия, шкала Z (аудит 2026-07-14) |
 | Тесты | ⚠️ | Api.Tests 50+; CI fail без SQL; Skip вне CI |
-| Docker/Infra | ✅ | Multi-stage OK; единый `client/nginx.conf.template` (`X-Trusted-Proxy-Token`, HSTS, `include spnego*.inc`), overlay `docker-compose.spnego.yml`; журнал `dbo.SchemaMigrations` в db-init |
+| Docker/Infra | ✅ | Multi-stage OK; единый `client/nginx.conf.template`; журнал `dbo.SchemaMigrations` + `Checksum` SHA-256 в db-init; `017a` только при `RECOVERY_RECREATE_PPV=1` (ADR-007) |
 
 ---
 

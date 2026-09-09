@@ -1,6 +1,6 @@
 # Единый SoT часов и Z-оценки
 
-**Дата:** 2026-09-07  
+**Дата:** 2026-09-09  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
 Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
@@ -11,7 +11,7 @@
 
 ## 1. Плановая трудоёмкость
 
-Единственная реализация формул: `IPerformanceCalculationEngine.RecalculateLaborIntensities` / `ComputePpvForecastHours` / `ComputeEquipmentForecastHours` (`LaborIntensityCalculator`, `ForecastHoursAggregator`).
+Единственная реализация формул: `IPerformanceCalculationEngine.RecalculatePlanHours` (совместный `V_g` ФО + оборудование) и `ComputeForecastHours` (норма × Z). Внутри движка — `LaborIntensityCalculator` / `ForecastCalculation`. Мёртвые фасады `ComputeForecastBaseHours` / `RecalculateLaborIntensities` (на движке) / `ComputePpvForecastHours` / `AggregateForecastHoursByDirection` / `ComputeEquipmentForecastHours` сняты с публичного интерфейса (2026-09-09).
 
 Web-путь: **движок → persist в БД → invalidate кэша → GET читает колонки**. Live `N(V)` на GET **запрещён**. Холодный GET сам заполняет Redis (singleflight); persist не греет кэш на том же запросе.
 
@@ -129,7 +129,7 @@ Z = (ln(hours / volume) − Estimate) / σ
 
 `FactAssessmentPipeline`: `Direction` Plan/Forecast → stored plan hours; Fact → PLI.
 
-`ComputePpvForecastHours` / `RecalculateLaborIntensities` — только persist-путь, не GET.
+`RecalculatePlanHours` / `ComputeForecastHours` — только persist-путь, не GET. Гриды GET читают `StoredPlanHours` (приватные обёртки в `ProjectsPageGridBuilder`).
 
 ---
 

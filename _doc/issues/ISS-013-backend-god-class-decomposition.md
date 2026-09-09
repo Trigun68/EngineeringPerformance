@@ -1,6 +1,6 @@
 # ISS-013: Декомпозиция god-классов backend
 
-**Статус:** 🟠 Частично (2026-09-08)
+**Статус:** 🟠 Частично (2026-09-09)
 **Категория:** Refactoring / SRP
 **Приоритет:** P1 (High)
 **Источник:** `_work/20260816_221500_code_architecture_review.md` §3
@@ -22,12 +22,14 @@
 ## Что сделано в этом цикле
 - Поведение (mixed `V_g`, плановые объёмы, DocSet) закреплено тестами **до** механической нарезки.
 - VisualReportService / FactNormAnalysisService **не** резали в том же заходе.
-- WP-B4 stage 1: Excel ФО вынесен в `PhysicalVolumeExcelImportService`; общие хелперы — `ImportHelpers`.
+- Excel ФО / оборудование / трудоёмкость вынесены в отдельные сервисы; фасад `ProjectExcelDataImportService` только делегирует.
+- 2026-09-09: с `IPerformanceCalculationEngine` сняты мёртвые фасады; тесты Application переведены на `RecalculatePlanHours` / `ComputeForecastHours` / `ComputeWeightedZ*`; неиспользуемый `engine` убран со stored-hours путей `ProjectsPageGridBuilder`. `ForecastHoursAggregator` остаётся в дереве без вызовов из движка.
 
 ## Что осталось
-1. Equipment / LaborIntensity / JsonIngest — следующие стадии нарезки импорта.
-2. GridBuilder → `ForecastGridBuilder` / `FactGridBuilder` / `CompareGridBuilder`.
-3. Export writers по доменам (не второй PDF-движок).
+1. GridBuilder → отдельные типы `ForecastGridBuilder` / `FactGridBuilder` / `CompareGridBuilder` (сейчас already partial `.Forecast` / `.Fact` / `.Compare` + stored-hours helpers).
+2. Export writers по доменам (не второй PDF-движок).
+3. Резать `VisualReportService` / крупные parse-partials до ≲600 строк.
+4. Удалить или спрятать неиспользуемый `ForecastHoursAggregator`, если не понадобится тестам формул.
 
 AC «файл ≲600» **не закрыт**. Поведение покрыто тестами Import / GridBuilder / persist.
 

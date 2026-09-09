@@ -1,7 +1,7 @@
 # Бизнес-логика Engineering Performance
 
-**Дата ревизии:** 2026-09-07  
-**Версия документа:** 1.3  
+**Дата ревизии:** 2026-09-09  
+**Версия документа:** 1.4  
 **Статус:** актуально **только для web-стека** (`backend/`, `client/`). WPF вне scope разработки.
 
 **Политика:** см. [План развития: только Web](../plans/web-only-development-plan.md).
@@ -634,7 +634,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs` + partial `.Forecast.cs` / `.Fact.cs` / `.Compare.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectForecastService.cs`
 - `backend/EngineeringPerformance.Infrastructure/LaborIntensityServices/LaborIntensityRecalculationService.cs`
-- `client/src/features/projects/forecast/ForecastPanel.tsx` (контейнер) + `ForecastToolbar.tsx`, `useForecastExport.ts`, `usePlanningQueries.ts`, гриды/диалоги панели
+- `client/src/features/projects/forecast/ForecastPanel.tsx` (контейнер) + `ForecastToolbar.tsx`, `useForecastExport.ts`, `useForecastPageData.ts`, `useForecastPanelDialogs.tsx`, `ForecastSummaryGrid` / `ForecastFacilityGrid` / `ForecastDetailGrid`, `ForecastPanelDialogs.tsx`
 
 ### Справочники
 - `backend/EngineeringPerformance.Infrastructure/Directories/DirectoryFacade.cs`
@@ -648,6 +648,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 - `backend/EngineeringPerformance.Infrastructure/Analytics/PerformanceService.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentPipeline.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentEngineMapper.cs`
+- `client/src/features/projects/fact/FactPanel.tsx` + `FactToolbar.tsx`, `useFactPageData.ts`, `useFactPanelDialogs.tsx`, `FactPerformanceGrid` / `FactFacilityGrid` / `FactDetailGrid`
 
 ### Импорт
 - `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs` (+ `.Api.cs`, `.JsonIngest.cs`) — фасад `IProjectImportService`: auth → temp file → dispatch → recalc/cache
@@ -659,6 +660,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 ### Сравнение и тренды
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectCompareService.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/TrendAnalyticsService.cs`
+- `client/src/features/projects/compare/ComparePanel.tsx` + `CompareToolbar.tsx`, `useComparePageData.ts`, `CompareSummaryGrid` / `CompareFacilityGrid` / `CompareDetailGrid`
 
 ---
 
@@ -666,6 +668,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 | Дата | Версия | Изменение |
 |------|--------|-----------|
+| 2026-09-09 | 1.4 | Хвост архитектуры: фасады движка сняты (`RecalculatePlanHours` / `ComputeForecastHours`); §15 — хуки/гриды ForecastPanel |
 | 2026-09-08 | 1.3 | Цикл коррекции архитектуры: F-3 закрыт (один weighted Z в движке), §11.3 — единый `[HasPermission]` + `FallbackPolicy` (ADR-006), §14 п.12 закрыт (nginx template, split импорта), §15 — partial-файлы движка/грида и import-сервисы |
 | 2026-07-26 | 1.2 | Обновлены пути экспорт-сервисов на `Export/`; заменён `FactAssessmentRowsCalculator` на `FactAssessmentPipeline` + `FactAssessmentEngineMapper`; добавлена секция 4.6 (DocSet-связка); уточнены статусы P-1 и P-3 |
 | 2026-07-14 | 1.1 | Web-only: WPF вне scope; разрывы пересмотрены как внутренний техдолг web; ссылка на план развития |

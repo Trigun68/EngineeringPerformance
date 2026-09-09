@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-09, хвост коррекции архитектуры)
+- Тесты Application вызывают публичные методы `IPerformanceCalculationEngine` (`RecalculatePlanHours`, `ComputeForecastHours`, `ComputeWeightedZ*`), а не `LaborIntensityCalculator` / `ForecastHoursAggregator` / `WeightedZAggregator`.
+- С публичного движка сняты мёртвые фасады `ComputeForecastBaseHours`, `RecalculateLaborIntensities`, `ComputePpvForecastHours`, `AggregateForecastHoursByDirection`, `ComputeEquipmentForecastHours`. Persist — `RecalculatePlanHours` / `ComputeForecastHours`. Контроллер `ProjectVersionsController.RecalculateLaborIntensities` без изменений.
+- `ProjectsPageGridBuilder`: неиспользуемый параметр `engine` убран с stored-hours путей (`ComputeLivePpvHours`, `AttachLivePlanHours`, `BuildForecastGrids`, …).
+- `dbo.SchemaMigrations.Checksum` (SHA-256) + проверка дрейфа в `docker-db-init.sh`; `017a_RecreatePhysicalVolumesForRecovery.sql` только при `RECOVERY_RECREATE_PPV=1` (ADR-007).
+- Клиент: ключи React Query в `queryKeys.ts`; `getApiErrorHint` / `formatApiError`; `QueryErrorResetBoundary` вокруг `ErrorBoundary`; `npm run lint` = ESLint, типы — `typecheck` (ADR-008).
+- `ForecastPanel` / `FactPanel` / `ComparePanel` разобраны на гриды, диалоги и хуки данных (контейнеры 232 / 223 / 240 строк). Пустые rowData — стабильный `emptyRows()`. DOM, `data-testid`, `objectName` без изменений.
+
 ### Changed (2026-09-09, регистр привязки трудоёмкости к ИИС)
 - Справочник трудоёмкости: периоды «группа ИИС с даты» (`LaborIntensityIicBindings`, схема `123`). Двойной щелчок открывает историю (добавить / править / удалить). Факт берёт группу as-of даты версии, не слепок импорта.
 - Агрегация факта: заявленный узел собирает себя и потомков, кроме ветвей, заявленных отдельно. Свёртка всех часов только на L1 для этого пути отключена.
