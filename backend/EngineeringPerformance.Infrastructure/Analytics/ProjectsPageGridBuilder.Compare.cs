@@ -21,8 +21,8 @@ public static partial class ProjectsPageGridBuilder
         var dictB = performanceB.Where(r => !r.IsTotal)
             .GroupBy(r => r.WorkDirectionId).ToDictionary(g => g.Key, g => g.First());
 
-        var hoursA = ResolveScenarioHoursByDirection(bundleA, performanceA, engine);
-        var hoursB = ResolveScenarioHoursByDirection(bundleB, performanceB, engine);
+        var hoursA = ResolveScenarioHoursByDirection(bundleA, performanceA);
+        var hoursB = ResolveScenarioHoursByDirection(bundleB, performanceB);
         var planZBaseA = PlanZByDirection(bundleA, engine, PlanHourKind.Base);
         var planZOptA = PlanZByDirection(bundleA, engine, PlanHourKind.Optimistic);
         var planZPesA = PlanZByDirection(bundleA, engine, PlanHourKind.Pessimistic);

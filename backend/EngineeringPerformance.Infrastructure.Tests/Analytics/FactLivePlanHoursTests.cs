@@ -184,8 +184,7 @@ public sealed class FactLivePlanHoursTests
         var bundle = Bundle([Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
         var attached = ProjectsPageGridBuilder.AttachLivePlanHours(
             [parent, leaf],
-            bundle,
-            _engine);
+            bundle);
 
         attached.Single(r => r.WorkDirectionId == DirId).BaseHours.Should().Be(50m);
         attached.Single(r => r.WorkDirectionId == 1).BaseHours.Should().BeNull();
@@ -211,8 +210,7 @@ public sealed class FactLivePlanHoursTests
         var bundle = Bundle([Ppv(1, 10m, "01", pes: 12m, bas: 50m, opt: 8m, kfo)]);
         var attached = ProjectsPageGridBuilder.AttachLivePlanHours(
             [leaf],
-            bundle,
-            _engine);
+            bundle);
         var row = attached.Should().ContainSingle().Subject;
 
         var dto = new ProjectVersionDirectionDto(
@@ -268,7 +266,7 @@ public sealed class FactLivePlanHoursTests
         StoredPlanHoursTestHelper.ApplyEngineHours(bundle, _engine);
         var performance = new List<PerformanceRowDto> { PerfRow() };
 
-        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance, _engine);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance);
         var (facility, _) = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, _engine);
 
         facility.Sum(f => f.BaseHours ?? 0m).Should().Be(forecast.GrandTotals.BaseHours);
@@ -300,33 +298,23 @@ public sealed class FactLivePlanHoursTests
         var performance = new List<PerformanceRowDto> { PerfRow() };
         var spy = new SpyEngine(_engine);
 
-        _ = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance, spy);
+        _ = ProjectsPageGridBuilder.BuildForecastGrids(bundle, performance);
         _ = ProjectsPageGridBuilder.BuildFactGrids(bundle, performance, spy);
-        _ = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle, spy);
-        _ = ProjectsPageGridBuilder.AttachLivePlanHours(performance, bundle, spy);
+        _ = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle);
+        _ = ProjectsPageGridBuilder.AttachLivePlanHours(performance, bundle);
 
         spy.RecalculateCalls.Should().Be(0);
-        spy.PpvHoursCalls.Should().Be(0);
-        spy.EquipmentHoursCalls.Should().Be(0);
-        spy.AggregateHoursCalls.Should().Be(0);
     }
 
     private sealed class SpyEngine(IPerformanceCalculationEngine inner) : IPerformanceCalculationEngine
     {
         public int RecalculateCalls { get; private set; }
-        public int PpvHoursCalls { get; private set; }
-        public int EquipmentHoursCalls { get; private set; }
-        public int AggregateHoursCalls { get; private set; }
 
         public IReadOnlyList<PerformanceRowDto> CalculatePerformance(PerformanceCalculationInput input) =>
             inner.CalculatePerformance(input);
 
         public FactAssessmentCalculationResult CalculateFactAssessment(FactAssessmentCalculationInput input) =>
             inner.CalculateFactAssessment(input);
-
-        public decimal ComputeForecastBaseHours(
-            decimal plannedVolume, decimal? performance, decimal? estimate, decimal laborHours, string method) =>
-            inner.ComputeForecastBaseHours(plannedVolume, performance, estimate, laborHours, method);
 
         public (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
             NormFormula normFormula, DeviationFormula deviationFormula, decimal volume, decimal effectiveVolume, PlanningZParameters z) =>
@@ -335,16 +323,6 @@ public sealed class FactLivePlanHoursTests
         public (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
             decimal volume, decimal? productivity, decimal? stdDev, PlanningZParameters z) =>
             inner.ComputeForecastHours(volume, productivity, stdDev, z);
-
-        public IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
-            PlanningScenario scenario,
-            IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-            IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-            IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
-        {
-            RecalculateCalls++;
-            return inner.RecalculateLaborIntensities(scenario, lines, normsByDirection, planningZByDirection);
-        }
 
         public LaborIntensityCalculator.PlanHoursResult RecalculatePlanHours(
             PlanningScenario scenario,
@@ -355,39 +333,6 @@ public sealed class FactLivePlanHoursTests
         {
             RecalculateCalls++;
             return inner.RecalculatePlanHours(scenario, ppvLines, equipmentLines, normsByDirection, planningZByDirection);
-        }
-
-        public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
-            PlanningScenario scenario,
-            IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-            IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-            IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
-        {
-            PpvHoursCalls++;
-            return inner.ComputePpvForecastHours(scenario, lines, normsByDirection, planningZByDirection);
-        }
-
-        public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
-            IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-            IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-            IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
-            IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-            IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
-        {
-            AggregateHoursCalls++;
-            return inner.AggregateForecastHoursByDirection(
-                lines, ppvHoursById, equipmentVolumes, normsByDirection, planningZByDirection);
-        }
-
-        public Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
-            PlanningScenario scenario,
-            IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
-            IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
-            IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-            IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection)
-        {
-            EquipmentHoursCalls++;
-            return inner.ComputeEquipmentForecastHours(scenario, lines, ppvLines, normsByDirection, planningZByDirection);
         }
 
         public decimal? ComputeWeightedZFromPerformanceRows(

@@ -9,12 +9,8 @@ namespace EngineeringPerformance.Infrastructure.Analytics;
 public static partial class ProjectsPageGridBuilder
 {
     public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeLivePpvHours(
-        ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine? engine = null)
-    {
-        _ = engine;
-        return StoredPlanHours.ByPpvId(bundle);
-    }
+        ProjectsPageVersionBundle bundle) =>
+        StoredPlanHours.ByPpvId(bundle);
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
         ProjectsPageVersionBundle bundle) =>
@@ -50,10 +46,8 @@ public static partial class ProjectsPageGridBuilder
     /// </summary>
     public static IReadOnlyList<PerformanceRowDto> AttachLivePlanHours(
         IReadOnlyList<PerformanceRowDto> performance,
-        ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine? engine = null)
+        ProjectsPageVersionBundle bundle)
     {
-        _ = engine;
         var byDirection = AggregateForecastHoursByDirection(bundle);
 
         return performance
@@ -102,12 +96,8 @@ public static partial class ProjectsPageGridBuilder
     }
 
     public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeLivePlanHoursByDirection(
-        ProjectsPageVersionBundle bundle,
-        IPerformanceCalculationEngine? engine = null)
-    {
-        _ = engine;
-        return AggregateForecastHoursByDirection(bundle);
-    }
+        ProjectsPageVersionBundle bundle) =>
+        AggregateForecastHoursByDirection(bundle);
 
     public static decimal? SelectPlanHours(
         (decimal? Base, decimal? Optimistic, decimal? Pessimistic) hours,
@@ -188,19 +178,17 @@ public static partial class ProjectsPageGridBuilder
     /// </summary>
     public static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ResolveLivePlanHoursByDirection(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine? engine = null)
+        IReadOnlyList<PerformanceRowDto> performance)
     {
         _ = performance;
-        return ComputeLivePlanHoursByDirection(bundle, engine);
+        return ComputeLivePlanHoursByDirection(bundle);
     }
 
     private static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ResolveScenarioHoursByDirection(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine? engine = null)
+        IReadOnlyList<PerformanceRowDto> performance)
     {
         _ = performance;
-        return ComputeLivePlanHoursByDirection(bundle, engine);
+        return ComputeLivePlanHoursByDirection(bundle);
     }
 }

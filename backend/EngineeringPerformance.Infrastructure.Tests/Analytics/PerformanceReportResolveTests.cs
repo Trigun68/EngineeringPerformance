@@ -144,7 +144,7 @@ public sealed class PerformanceReportResolveTests
         leaf.ZScore.Should().NotBe(0.2m);
         leaf.FactLaborHours.Should().BePositive();
 
-        var liveHours = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle, engine);
+        var liveHours = ProjectsPageGridBuilder.ComputeLivePlanHoursByDirection(bundle);
         var labor = new List<ProjectLaborIntensity>
         {
             new()

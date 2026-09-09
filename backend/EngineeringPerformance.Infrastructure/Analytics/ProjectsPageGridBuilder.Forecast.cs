@@ -1,5 +1,4 @@
 using EngineeringPerformance.Application.Analytics;
-using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 
 namespace EngineeringPerformance.Infrastructure.Analytics;
@@ -149,10 +148,8 @@ public static partial class ProjectsPageGridBuilder
 
     public static ProjectsPageForecastGridsDto BuildForecastGrids(
         ProjectsPageVersionBundle bundle,
-        IReadOnlyList<PerformanceRowDto> performance,
-        IPerformanceCalculationEngine? engine = null)
+        IReadOnlyList<PerformanceRowDto> performance)
     {
-        _ = engine;
         var ppvHoursById = ComputePpvForecastHours(bundle);
         var summary = BuildForecastSummary(performance, bundle);
         var facility = BuildForecastFacility(bundle, ppvHoursById);

@@ -14,14 +14,6 @@ public interface IPerformanceCalculationEngine
 
     FactAssessmentCalculationResult CalculateFactAssessment(FactAssessmentCalculationInput input);
 
-    /// <summary>Базовые часы прогноза по методу element/regression или LI.</summary>
-    decimal ComputeForecastBaseHours(
-        decimal plannedVolume,
-        decimal? performance,
-        decimal? estimate,
-        decimal laborHours,
-        string method);
-
     /// <summary>Прогнозные часы по параметрической норме и Z-параметрам планирования.</summary>
     (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
         NormFormula normFormula,
@@ -37,41 +29,11 @@ public interface IPerformanceCalculationEngine
         decimal? stdDev,
         PlanningZParameters z);
 
-    /// <summary>Пересчёт трудоёмкости PPV по сценарию планирования (без оборудования в V_g).</summary>
-    IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
-        PlanningScenario scenario,
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
     /// <summary>Совместный пересчёт часов ФО и оборудования: один V_g по сценарию.</summary>
     LaborIntensityCalculator.PlanHoursResult RecalculatePlanHours(
         PlanningScenario scenario,
         IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
         IReadOnlyList<LaborIntensityCalculator.EquipmentLine> equipmentLines,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Часы прогноза по id PPV (сценарий планирования, без оборудования в V_g).</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
-        PlanningScenario scenario,
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Агрегация прогнозных часов по направлениям ИИС (+ оборудование).</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Часы прогноза по id строки оборудования в том же V_g, что и ФО.</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
-        PlanningScenario scenario,
-        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
 

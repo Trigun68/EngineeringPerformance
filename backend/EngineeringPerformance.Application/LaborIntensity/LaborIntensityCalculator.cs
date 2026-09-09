@@ -7,7 +7,7 @@ namespace EngineeringPerformance.Application.LaborIntensity;
 
 /// <summary>
 /// Чистая логика пересчёта LI по сценариям планирования (без БД).
-/// Реализация для IPerformanceCalculationEngine.RecalculateLaborIntensities / RecalculatePlanHours;
+/// Реализация для IPerformanceCalculationEngine.RecalculatePlanHours;
 /// Infrastructure вызывает только через движок.
 /// </summary>
 public static class LaborIntensityCalculator

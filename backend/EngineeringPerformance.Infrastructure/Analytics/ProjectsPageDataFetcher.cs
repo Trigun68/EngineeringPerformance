@@ -103,7 +103,7 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
 
         var forecastTask = Task.Run(() =>
         {
-            return ProjectsPageGridBuilder.BuildForecastGrids(primaryBundle, primaryPerformance, _calculationEngine);
+            return ProjectsPageGridBuilder.BuildForecastGrids(primaryBundle, primaryPerformance);
         }, cancellationToken);
 
         var factTask = Task.Run(() =>
@@ -111,7 +111,7 @@ public sealed class ProjectsPageDataFetcher : IProjectsPageDataFetcher
             var (facility, detail) = ProjectsPageGridBuilder.BuildFactGrids(
                 primaryBundle, primaryPerformance, _calculationEngine);
             var performanceWithPlan = ProjectsPageGridBuilder.AttachLivePlanHours(
-                primaryPerformance, primaryBundle, _calculationEngine);
+                primaryPerformance, primaryBundle);
             var performanceWithTotals = ProjectsPageGridBuilder.AppendPerformanceTotals(performanceWithPlan);
             return new ProjectsPageFactGridsDto(performanceWithTotals, facility, detail);
         }, cancellationToken);

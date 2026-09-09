@@ -360,7 +360,7 @@ public sealed class CompareSummaryColumnsTests
             new(leafId, "Лист", "IIC-L", parentId, 1, "м", 10m, 8m, null, null, 10m, null, 1m, null, null),
         };
 
-        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, perf, _engine);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, perf);
         var rows = ProjectsPageGridBuilder.BuildCompareSummary(perf, perf, bundle, bundle, _engine);
         var itogo = rows.Should().ContainSingle(r => r.IsTotal && r.Name == "ИТОГО").Subject;
         var leafRow = rows.Should().ContainSingle(r => !r.IsTotal && r.WorkDirectionId == leafId).Subject;
@@ -450,7 +450,7 @@ public sealed class CompareSummaryColumnsTests
         var perfB = ProjectsPageGridBuilder.BuildPerformance(bundleB, _engine);
         var (facilityA, detailA) = ProjectsPageGridBuilder.BuildFactGrids(bundleA, perfA, _engine);
         var (facilityB, detailB) = ProjectsPageGridBuilder.BuildFactGrids(bundleB, perfB, _engine);
-        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundleA, perfA, _engine);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundleA, perfA);
 
         var grids = ProjectsPageGridBuilder.BuildCompareGrids(
             perfA,
