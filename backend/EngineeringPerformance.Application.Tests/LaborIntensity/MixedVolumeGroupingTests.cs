@@ -14,7 +14,11 @@ namespace EngineeringPerformance.Application.Tests.LaborIntensity;
 public sealed class MixedVolumeGroupingTests
 {
     private const int DirId = 7;
-    private static readonly DeviationCalculator Calculator = new(new NormCalculator());
+
+    private static readonly LaborIntensityCalculator.EquipmentLine[] NoEquipment = [];
+
+    private readonly IPerformanceCalculationEngine _engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
 
     [Fact]
     public void Wright_ByProject_EquipmentRaisesVg_AndReducesPpvHours()
@@ -33,10 +37,10 @@ public sealed class MixedVolumeGroupingTests
             new LaborIntensityCalculator.EquipmentLine(20, DirId, 5m, true, "OBJ-A"),
         };
 
-        var withoutEq = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, ppv, [], norms, z, Calculator);
-        var mixed = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z, Calculator);
+        var withoutEq = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, ppv, NoEquipment, norms, z);
+        var mixed = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z);
 
         var grouped15 = ForecastHours(15m, snap);
         mixed.Ppv.Sum(r => r.Base ?? 0m).Should().BeLessThan(withoutEq.Ppv.Sum(r => r.Base ?? 0m));
@@ -62,8 +66,8 @@ public sealed class MixedVolumeGroupingTests
             new LaborIntensityCalculator.EquipmentLine(20, DirId, 5m, true, "OBJ-A"),
         };
 
-        var mixed = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByObjectIicGroup, ppv, equipment, norms, z, Calculator);
+        var mixed = _engine.RecalculatePlanHours(
+            PlanningScenario.ByObjectIicGroup, ppv, equipment, norms, z);
 
         var hoursA = ForecastHours(7m, snap);
         var hoursB = ForecastHours(8m, snap);
@@ -89,10 +93,10 @@ public sealed class MixedVolumeGroupingTests
             new LaborIntensityCalculator.EquipmentLine(20, DirId, 5m, true, null),
         };
 
-        var ppvOnly = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByObjectIicGroup, ppv, [], norms, z, Calculator);
-        var mixed = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByObjectIicGroup, ppv, equipment, norms, z, Calculator);
+        var ppvOnly = _engine.RecalculatePlanHours(
+            PlanningScenario.ByObjectIicGroup, ppv, NoEquipment, norms, z);
+        var mixed = _engine.RecalculatePlanHours(
+            PlanningScenario.ByObjectIicGroup, ppv, equipment, norms, z);
 
         mixed.Ppv.Single(r => r.PpvId == 1).Base.Should().Be(ppvOnly.Ppv.Single(r => r.PpvId == 1).Base);
         mixed.Ppv.Single(r => r.PpvId == 2).Base.Should().Be(ppvOnly.Ppv.Single(r => r.PpvId == 2).Base);
@@ -112,8 +116,8 @@ public sealed class MixedVolumeGroupingTests
             new LaborIntensityCalculator.EquipmentLine(20, DirId, 5m, false, "OBJ-A"),
         };
 
-        var mixed = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z, Calculator);
+        var mixed = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z);
 
         mixed.Ppv.Single().Base.Should().BeApproximately(ForecastHours(10m, snap), 0.02m);
         mixed.Equipment[20].Base.Should().BeNull();
@@ -136,19 +140,19 @@ public sealed class MixedVolumeGroupingTests
             new LaborIntensityCalculator.EquipmentLine(20, DirId, 5m, true, "OBJ-A"),
         };
 
-        var each = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByEachValue, ppv, equipment, norms, z, Calculator);
-        var project = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z, Calculator);
+        var each = _engine.RecalculatePlanHours(
+            PlanningScenario.ByEachValue, ppv, equipment, norms, z);
+        var project = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, ppv, equipment, norms, z);
 
         each.Ppv.Sum(r => r.Base ?? 0m).Should().BeApproximately(project.Ppv.Sum(r => r.Base ?? 0m), 0.02m);
         each.Equipment[20].Base.Should().BeApproximately(project.Equipment[20].Base ?? 0m, 0.02m);
     }
 
-    private static decimal ForecastHours(decimal volume, NormCalculationSnapshot snap)
+    private decimal ForecastHours(decimal volume, NormCalculationSnapshot snap)
     {
-        var (b, _, _) = ForecastCalculation.ComputeForecastHours(
-            snap.NormFormula, snap.DeviationFormula, volume, volume, PlanningZParameters.Default, Calculator);
+        var (b, _, _) = _engine.ComputeForecastHours(
+            snap.NormFormula, snap.DeviationFormula, volume, volume, PlanningZParameters.Default);
         return b ?? 0m;
     }
 

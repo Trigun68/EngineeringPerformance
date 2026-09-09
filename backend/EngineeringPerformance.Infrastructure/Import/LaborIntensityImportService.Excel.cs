@@ -92,12 +92,8 @@ internal sealed partial class LaborIntensityImportService
             description,
             source);
 
-        // Справочник «Трудоёмкость» — единственный источник связи:
-        // (1) DocumentTypeName из Excel-строки проекта → LaborIntensity,
-        // (2) LaborIntensity.IicWorkDirectionId → ProjectLaborIntensity.WorkDirectionId.
-        // Никакого авто-создания направлений (TF-NNN) или каталога из файла проекта
-        // больше не происходит: это приводило к появлению мусорных записей
-        // (направлений/типов документа), не согласованных с главным справочником.
+        // Устойчивая связь — LaborIntensityId. WorkDirectionId на PLI — только ключ
+        // уникального индекса SQL, не SoT расчёта: факт читает регистр as-of CreatedAt.
         var laborCatalogRows = await context.LaborIntensities.ToListAsync();
         var laborByDocumentType = LaborCatalogLookup.BuildMap(laborCatalogRows);
         var folderIdsByName = LaborCatalogLookup.FolderIdsByName(laborCatalogRows);
@@ -218,10 +214,8 @@ internal sealed partial class LaborIntensityImportService
                 continue;
             }
 
-            // Разрешаем тип документа через справочник «Трудоёмкость». Направление берём из
-            // найденной позиции каталога (LaborIntensity.IicWorkDirectionId). Если тип не найден
-            // или в каталоге нет направления — строка принимается с NULL-привязкой, но
-            // фиксируется счётчиком для последующей диагностики в интерфейсе.
+            // Разрешаем тип документа через справочник «Трудоёмкость» (LaborIntensityId).
+            // WorkDirectionId на строке — только ключ уникального индекса, не SoT факта.
             LaborIntensity? laborItem = null;
             laborByDocumentType.TryGetValue(documentTypeName, out laborItem);
 
@@ -267,6 +261,7 @@ internal sealed partial class LaborIntensityImportService
                 ProjectId = projectId,
                 ProjectAnalysisVersionId = versionId,
                 DocumentationCode = documentationCode,
+                // Ключ уникального индекса; расчёт читает регистр as-of даты версии.
                 WorkDirectionId = laborItem?.IicWorkDirectionId,
                 LaborIntensityId = laborItem?.Id,
                 PlannedHours = plannedHours,

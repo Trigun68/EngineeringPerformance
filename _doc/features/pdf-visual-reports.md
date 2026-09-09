@@ -77,7 +77,7 @@ Modal `export/forecast.pdf` делегирует в visual `forecast-summary/pdf
 | `/api/analytics/trends/export.pdf` | Тренды | Line + column + area |
 | `/api/projects/{id}/export/combined.pdf` | Сводный | 4 key charts |
 | `/api/projects/{id}/performance-report/export.pdf` | Сводный вер 2 | KPI план/факт + история + направления; объём на L1 = поддерево |
-| `.../export/report/pdf` | Сводный вер 1 | План/факт, топ-5 и таблица групп IIC **первого уровня** (часы + объём поддерева) |
+| `.../export/report/pdf` | Сводный вер 1 | План/факт, топ-5 и таблица групп ИИС с собственными факт-часами |
 
 ## Права
 

@@ -6,6 +6,13 @@ namespace EngineeringPerformance.Application.Services;
 /// </summary>
 public static class IicClaimedBuckets
 {
+    /// <summary>
+    /// Исключающие корзины только при непустом множестве.
+    /// Пустой набор (лоадеры всегда передают HashSet) не отключает свёртку на L1.
+    /// </summary>
+    public static bool IsExclusive(IReadOnlySet<int>? claimed) =>
+        claimed is { Count: > 0 };
+
     public static int? NearestClaimed(
         int classifierId,
         IReadOnlySet<int> claimed,

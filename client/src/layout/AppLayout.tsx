@@ -26,6 +26,7 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { QueryErrorResetBoundary } from '@tanstack/react-query';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { UserMenu } from '../components/auth/UserMenu';
 import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
@@ -311,11 +312,15 @@ export function AppLayout() {
               overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
-            <ErrorBoundary resetKey={location.pathname}>
-              <Suspense fallback={<RouteContentFallback />}>
-                <Outlet />
-              </Suspense>
-            </ErrorBoundary>
+            <QueryErrorResetBoundary>
+              {({ reset }) => (
+                <ErrorBoundary resetKey={location.pathname} onReset={reset}>
+                  <Suspense fallback={<RouteContentFallback />}>
+                    <Outlet />
+                  </Suspense>
+                </ErrorBoundary>
+              )}
+            </QueryErrorResetBoundary>
           </Box>
         </Box>
       </Box>

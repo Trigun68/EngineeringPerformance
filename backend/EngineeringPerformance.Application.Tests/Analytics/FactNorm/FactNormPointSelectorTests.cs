@@ -43,6 +43,20 @@ public sealed class FactNormPointSelectorTests
     }
 
     [Fact]
+    public void Select_KeepsClaimedChild_WhenItHasOwnHours()
+    {
+        var rows = new List<PerformanceRowDto>
+        {
+            Row(L1, null, 0, hours: 100m, ownVolume: 6m, subtreeVolume: 6m, productivity: 10m),
+            Row(L2, L1, 1, hours: 40m, ownVolume: 4m, subtreeVolume: 4m, productivity: 10m),
+        };
+
+        var selected = FactNormPointSelector.Select(rows, [L2]);
+
+        selected.Should().ContainSingle(p => p.Row.WorkDirectionId == L2);
+    }
+
+    [Fact]
     public void Select_ReconstructsVolume_FromHoursAndProductivity()
     {
         var rows = new List<PerformanceRowDto>

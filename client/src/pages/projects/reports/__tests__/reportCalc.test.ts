@@ -88,8 +88,27 @@ describe('displayPhysicalVolume / insights at IIC first level', () => {
     expect(insights[0].detail).toContain('ч');
   });
 
-  it('keyDisciplines keeps roots with subtree hours', () => {
-    expect(keyDisciplines([root({}), root({ workDirectionId: 2, subtreeHours: 0 })])).toHaveLength(1);
+  it('keyDisciplines keeps rows with own fact hours', () => {
+    expect(
+      keyDisciplines([
+        root({}),
+        root({ workDirectionId: 2, factLaborHours: 0, subtreeHours: 0 }),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it('keyDisciplines keeps a claimed child with own hours', () => {
+    const child = root({
+      workDirectionId: 11,
+      parentId: 1,
+      factLaborHours: 40,
+      subtreeHours: 40,
+    });
+    const disciplines = keyDisciplines([
+      root({ factLaborHours: 0, subtreeHours: 140 }),
+      child,
+    ]);
+    expect(disciplines.map((r) => r.workDirectionId)).toEqual([11]);
   });
 });
 

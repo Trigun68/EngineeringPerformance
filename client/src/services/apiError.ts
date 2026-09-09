@@ -39,6 +39,26 @@ export function isRequestCanceled(error: unknown): boolean {
   );
 }
 
+function getResponseStatus(error: unknown): number | undefined {
+  if (typeof error !== 'object' || error === null || !('response' in error)) {
+    return undefined;
+  }
+  return (error as { response?: { status?: number } }).response?.status;
+}
+
+export function getApiErrorHint(status: number | undefined): string | null {
+  if (status === 401) {
+    return 'Сессия истекла — войдите снова.';
+  }
+  if (status === 403) {
+    return 'Недостаточно прав для этого действия.';
+  }
+  if (status === 410) {
+    return 'Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).';
+  }
+  return null;
+}
+
 /** Извлекает человекочитаемое сообщение из ProblemDetails (RFC 7807) или axios-ошибки. */
 export function getApiErrorMessage(error: unknown, fallback = 'Произошла ошибка.'): string {
   if (error instanceof ApiContractError) {
@@ -79,32 +99,40 @@ export function getApiErrorMessage(error: unknown, fallback = 'Произошл�
     return data;
   }
 
-  if (response?.status === 401) {
+  const status = getResponseStatus(error);
+  if (status === 401) {
     return 'Требуется авторизация.';
   }
-  if (response?.status === 403) {
+  if (status === 403) {
     return 'Недостаточно прав для выполнения операции.';
   }
-  if (response?.status === 404) {
+  if (status === 404) {
     return 'Ресурс не найден.';
   }
   // 410 Gone — версия/запись удалена или архивирована, клиент должен обновить список.
-  if (response?.status === 410) {
+  if (status === 410) {
     return 'Запись больше не доступна (удалена или архивирована). Обновите список.';
   }
   // 413 Payload Too Large — лимит загрузки Excel (10 МБ).
-  if (response?.status === 413) {
+  if (status === 413) {
     return 'Файл слишком большой. Максимальный размер — 10 МБ.';
   }
-  if (response?.status === 409) {
+  if (status === 409) {
     return 'Версия изменена другим пользователем. Обновите данные и повторите.';
   }
-  if (response?.status === 429) {
+  if (status === 429) {
     return 'Слишком много запросов. Повторите позже.';
   }
-  if (response?.status === 503) {
+  if (status === 503) {
     return 'База данных временно недоступна. Повторите позже.';
   }
 
   return fallback;
+}
+
+/** Сообщение API плюс HTTP-подсказка (401/403/410), если статус известен. */
+export function formatApiError(error: unknown, fallback: string): string {
+  const message = getApiErrorMessage(error, fallback) || fallback;
+  const hint = getApiErrorHint(getResponseStatus(error));
+  return hint ? `${message} ${hint}` : message;
 }

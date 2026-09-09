@@ -15,7 +15,10 @@ public sealed class PlanningScenarioLearningCurveTests
 {
     private const int DirId = 9;
 
-    private static readonly DeviationCalculator Calculator = new(new NormCalculator());
+    private static readonly LaborIntensityCalculator.EquipmentLine[] NoEquipment = [];
+
+    private readonly IPerformanceCalculationEngine _engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
 
     private static NormCalculationSnapshot WrightSnap(decimal a = 100m, decimal b = 0.2m, decimal sigma = 0m)
     {
@@ -34,11 +37,11 @@ public sealed class PlanningScenarioLearningCurveTests
         return new NormCalculationSnapshot(a, null, null, norm, dev);
     }
 
-    private static decimal ForecastHours(decimal volume, NormCalculationSnapshot snap, PlanningZParameters? z = null)
+    private decimal ForecastHours(decimal volume, NormCalculationSnapshot snap, PlanningZParameters? z = null)
     {
         var zParams = z ?? PlanningZParameters.Default;
-        var (b, _, _) = ForecastCalculation.ComputeForecastHours(
-            snap.NormFormula, snap.DeviationFormula, volume, volume, zParams, Calculator);
+        var (b, _, _) = _engine.ComputeForecastHours(
+            snap.NormFormula, snap.DeviationFormula, volume, volume, zParams);
         return b ?? 0m;
     }
 
@@ -57,8 +60,8 @@ public sealed class PlanningScenarioLearningCurveTests
         var z = new Dictionary<int, PlanningZParameters>();
 
         var expected = ForecastHours(2m, snap) + ForecastHours(8m, snap) + ForecastHours(4m, snap);
-        var results = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByEachValue, StandardLines, norms, z, Calculator);
+        var results = _engine.RecalculatePlanHours(
+            PlanningScenario.ByEachValue, StandardLines, NoEquipment, norms, z).Ppv;
 
         results.Sum(r => r.Base ?? 0).Should().BeApproximately(expected, 0.02m);
         results.Should().HaveCount(3);
@@ -71,12 +74,12 @@ public sealed class PlanningScenarioLearningCurveTests
         var norms = new Dictionary<int, NormCalculationSnapshot> { [DirId] = snap };
         var z = new Dictionary<int, PlanningZParameters>();
 
-        var eachTotal = LaborIntensityCalculator.Recalculate(
-                PlanningScenario.ByEachValue, StandardLines, norms, z, Calculator)
+        var eachTotal = _engine.RecalculatePlanHours(
+                PlanningScenario.ByEachValue, StandardLines, NoEquipment, norms, z).Ppv
             .Sum(r => r.Base ?? 0);
 
-        var groupTotal = LaborIntensityCalculator.Recalculate(
-                PlanningScenario.ByProjectIicGroup, StandardLines, norms, z, Calculator)
+        var groupTotal = _engine.RecalculatePlanHours(
+                PlanningScenario.ByProjectIicGroup, StandardLines, NoEquipment, norms, z).Ppv
             .Sum(r => r.Base ?? 0);
 
         var expectedGroup = ForecastHours(14m, snap);
@@ -93,8 +96,8 @@ public sealed class PlanningScenarioLearningCurveTests
         var norms = new Dictionary<int, NormCalculationSnapshot> { [DirId] = snap };
         var z = new Dictionary<int, PlanningZParameters>();
 
-        var results = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByObjectIicGroup, StandardLines, norms, z, Calculator);
+        var results = _engine.RecalculatePlanHours(
+            PlanningScenario.ByObjectIicGroup, StandardLines, NoEquipment, norms, z).Ppv;
 
         var objA = results.Where(r => r.PpvId is 1 or 3).Sum(r => r.Base ?? 0);
         var objB = results.Single(r => r.PpvId == 2).Base ?? 0;
@@ -102,8 +105,8 @@ public sealed class PlanningScenarioLearningCurveTests
         objA.Should().BeApproximately(ForecastHours(6m, snap), 0.02m);
         objB.Should().BeApproximately(ForecastHours(8m, snap), 0.02m);
 
-        var projectTotal = LaborIntensityCalculator.Recalculate(
-                PlanningScenario.ByProjectIicGroup, StandardLines, norms, z, Calculator)
+        var projectTotal = _engine.RecalculatePlanHours(
+                PlanningScenario.ByProjectIicGroup, StandardLines, NoEquipment, norms, z).Ppv
             .Sum(r => r.Base ?? 0);
 
         (objA + objB).Should().NotBeApproximately(projectTotal, 0.5m,
@@ -118,8 +121,8 @@ public sealed class PlanningScenarioLearningCurveTests
         var z = new Dictionary<int, PlanningZParameters>();
 
         var groupTotal = ForecastHours(14m, snap);
-        var results = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, StandardLines, norms, z, Calculator);
+        var results = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, StandardLines, NoEquipment, norms, z).Ppv;
 
         results.Single(r => r.PpvId == 1).Base.Should().BeApproximately(groupTotal * (2m / 14m), 0.02m);
         results.Single(r => r.PpvId == 2).Base.Should().BeApproximately(groupTotal * (8m / 14m), 0.02m);
@@ -135,8 +138,8 @@ public sealed class PlanningScenarioLearningCurveTests
         var z = new Dictionary<int, PlanningZParameters>();
 
         var objTotal = ForecastHours(6m, snap);
-        var results = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByObjectIicGroup, StandardLines, norms, z, Calculator);
+        var results = _engine.RecalculatePlanHours(
+            PlanningScenario.ByObjectIicGroup, StandardLines, NoEquipment, norms, z).Ppv;
 
         results.Single(r => r.PpvId == 1).Base.Should().BeApproximately(objTotal * (2m / 6m), 0.02m);
         results.Single(r => r.PpvId == 3).Base.Should().BeApproximately(objTotal * (4m / 6m), 0.02m);
@@ -155,8 +158,8 @@ public sealed class PlanningScenarioLearningCurveTests
             new(3, DirId, "OBJ-A", 4m, 1m, true),
         ];
 
-        var results = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, lines, norms, z, Calculator);
+        var results = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, lines, NoEquipment, norms, z).Ppv;
 
         results.Select(r => r.PpvId).Should().BeEquivalentTo([1, 3]);
         results.Sum(r => r.Base ?? 0).Should().BeApproximately(ForecastHours(6m, snap), 0.02m);
@@ -172,10 +175,10 @@ public sealed class PlanningScenarioLearningCurveTests
             [DirId] = new(0.5m, 0.3m, -0.5m),
         };
 
-        var groupResults = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByProjectIicGroup, StandardLines, norms, zParams, Calculator);
-        var eachResults = LaborIntensityCalculator.Recalculate(
-            PlanningScenario.ByEachValue, StandardLines, norms, zParams, Calculator);
+        var groupResults = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, StandardLines, NoEquipment, norms, zParams).Ppv;
+        var eachResults = _engine.RecalculatePlanHours(
+            PlanningScenario.ByEachValue, StandardLines, NoEquipment, norms, zParams).Ppv;
 
         var expectedGroup = ForecastHours(14m, snap, zParams[DirId]);
         groupResults.Sum(r => r.Base ?? 0).Should().BeApproximately(expectedGroup, 0.05m);

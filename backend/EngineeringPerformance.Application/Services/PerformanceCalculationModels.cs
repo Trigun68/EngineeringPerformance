@@ -15,8 +15,8 @@ public sealed record PerformanceCalculationInput(
     IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection,
     /// <summary>
     /// Факт PLI без поэлементного ключа: часы поднимаются на IIC первого уровня,
-    /// если <see cref="ClaimedWorkDirectionIds"/> не задан.
-    /// При заданном множестве заявленных узлов — исключающие корзины, без свёртки на L1.
+    /// если <see cref="ClaimedWorkDirectionIds"/> пуст или не задан.
+    /// При непустом множестве заявленных узлов — исключающие корзины, без свёртки на L1.
     /// План (сохранённые часы по classifier) — false.
     /// </summary>
     bool RollHoursToFirstLevel = false,

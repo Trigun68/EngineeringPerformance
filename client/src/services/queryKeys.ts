@@ -106,5 +106,12 @@ export const queryKeys = {
       ['reports', 'performance', projectId] as const,
     versionAnalysis: (projectId: number | undefined, versionId: number | undefined) =>
       ['reports', 'version-analysis', projectId, versionId] as const,
+    // ['reports-tab', projectId] — префикс: invalidate по проекту сбрасывает все версии.
+    tabRoot: (projectId: number | undefined) => ['reports-tab', projectId] as const,
+    tab: (projectId: number | undefined, versionId: number | undefined) =>
+      ['reports-tab', projectId, versionId] as const,
+  },
+  norms: {
+    formulaTemplates: () => ['formula-templates'] as const,
   },
 };

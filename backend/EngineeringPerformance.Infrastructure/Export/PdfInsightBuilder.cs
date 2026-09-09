@@ -19,7 +19,7 @@ public static class PdfInsightBuilder
         ProjectVersionAnalysisSummaryDto summary,
         IPerformanceCalculationEngine engine)
     {
-        var scored = PerformanceDisplayVolume.FirstLevel(rows)
+        var scored = PerformanceDisplayVolume.WithOwnFactHours(rows)
             .Where(r => r.ZScore.HasValue)
             .OrderByDescending(r => r.ZScore!.Value)
             .ToList();

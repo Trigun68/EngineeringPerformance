@@ -137,6 +137,7 @@ internal sealed partial class LaborIntensityImportService
             if (!isReplace && existingByCode.TryGetValue(documentationCode, out var existing))
             {
                 existing.LaborIntensityId = laborItem?.Id;
+                // Артефакт уникального индекса, не источник группы для расчёта.
                 existing.WorkDirectionId = laborItem?.IicWorkDirectionId;
                 existing.PlannedHours = item.PlannedHours;
                 existing.ActualHours = item.ActualHours;
@@ -153,6 +154,7 @@ internal sealed partial class LaborIntensityImportService
                 ProjectId = projectId,
                 ProjectAnalysisVersionId = versionId,
                 DocumentationCode = documentationCode,
+                // Артефакт уникального индекса, не источник группы для расчёта.
                 WorkDirectionId = laborItem?.IicWorkDirectionId,
                 LaborIntensityId = laborItem?.Id,
                 PlannedHours = item.PlannedHours,

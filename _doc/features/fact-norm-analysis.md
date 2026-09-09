@@ -27,7 +27,7 @@
 
 **Логнормальное распределение не входит в BIC-каталог** (`ReferenceFormulaCatalog.All`, 7 типов). Код `KIMCURVE` доступен через `TryGet` только чтобы посчитать R² текущей нормы. Для текущей логнормальной нормы σ факта — `std(ln(Y))`, не линейное СКО производительности. Предложение «создать норму» никогда не пишет этот тип.
 
-Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → строки IIC **первого уровня** (`ParentId == null`). X = `SubtreePhysicalVolume` (объём поддерева; fallback `hours/productivity`), Y = `FactProductivity`. Фильтр `workDirectionIds` поднимается на L1. Норма — снимок корня, иначе снимок потомка, иначе temporal на конец периода. В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
+Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → строки IIC с собственными факт-часами (корень после свёртки на L1 или заявленный узел регистра трудоёмкости). X = объём этой корзины, Y = `FactProductivity`. Фильтр `workDirectionIds` не схлопывает заявленный узел в L1; запрос листа без часов по-прежнему попадает на корень свёртки. Норма — снимок узла, иначе снимок потомка, иначе temporal на конец периода. В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
 
 ## UI
 

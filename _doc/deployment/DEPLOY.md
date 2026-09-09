@@ -34,10 +34,12 @@ docker compose up -d
 ### Номенклатура ФО / коэффициент
 
 `PUT /api/directories/physical-volumes-kfo/{id}` сохраняет `coefficient` в SQL.  
-При повторном `docker compose up` на **существующей** БД скрипты `012`/`013`/`014` **не** перезапускаются — иначе seed снова ставит `Coefficient = 1`.  
+При повторном `docker compose up` на **существующей** БД скрипты `011`/`012`/`013`/`014`/`022`/`025`/`026` **не** перезапускаются — иначе seed снова ставит `Coefficient = 1` и затирает группы IIC справочника трудоёмкости / факт.  
 Полный refresh с Excel: `FORCE_NOMENCLATURE_REFRESH=1 docker compose up db-init` (или в `.env`).
 
-Схема `123_LaborIntensityIicBindings.sql` создаёт регистр периодов ИИС для справочника трудоёмкости и заполняет открытый период из текущего `IicWorkDirectionId`.
+### Миграции schema (`db-init`)
+
+`scripts/docker-db-init.sh` применяет `migrations/schema/*.sql` и пишет журнал в `dbo.SchemaMigrations`. Колонка `Checksum` хранит SHA-256 содержимого файла на момент штампа. Если скрипт уже в журнале, а хеш файла не совпадает с сохранённым, init завершается с ошибкой: применённые скрипты неизменяемы — правки только новым номером (`116_…`), не правкой уже применённого файла. Пустой/`NULL` `Checksum` (штампы до этой колонки) при повторном init заполняется без ошибки. Скрипт `017a_RecreatePhysicalVolumesForRecovery.sql` не выполняется и не штампуется, пока у `db-init` не задано `RECOVERY_RECREATE_PPV=1`. Схема `123_LaborIntensityIicBindings.sql` создаёт регистр периодов ИИС для справочника трудоёмкости и заполняет открытый период из текущего `IicWorkDirectionId`.
 
 ---
 

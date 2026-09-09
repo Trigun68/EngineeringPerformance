@@ -6,7 +6,7 @@ namespace EngineeringPerformance.Application.Tests.Analytics;
 
 /// <summary>
 /// ISS-010: одни и те же данные дают одинаковый взвешенный Z во всех представлениях,
-/// потому что формула Σ(Z×вес)/Σ(вес) живёт только в <see cref="WeightedZAggregator"/>.
+/// потому что формула Σ(Z×вес)/Σ(вес) живёт только в <see cref="IPerformanceCalculationEngine"/>.
 /// </summary>
 public sealed class WeightedZConsistencyTests
 {
@@ -24,15 +24,29 @@ public sealed class WeightedZConsistencyTests
     [Fact]
     public void StreamingAndBatchAggregation_ProduceSameResult()
     {
-        var streaming = new WeightedZAggregator();
+        // Эталонная формула (те же правила, что у движка): без Z — пропуск; вес только > 0.
+        decimal weightedSum = 0m;
+        decimal weightSum = 0m;
         foreach (var (z, hours) in Samples)
-            streaming.Add(z, hours);
+        {
+            if (z is not { } zVal)
+                continue;
+            if (hours is not { } w || w <= 0m)
+                continue;
+
+            weightedSum += zVal * w;
+            weightSum += w;
+        }
+
+        var expected = weightSum > 0m
+            ? Math.Round(weightedSum / weightSum, 4, MidpointRounding.ToEven)
+            : (decimal?)null;
 
         var batch = _engine.ComputeWeightedZ(Samples.Select(s => (s.Z, s.Hours)), decimalPlaces: 4);
 
         // (1.0*50 + (-0.5)*30) / 80 = 0.4375
-        Assert.Equal(0.4375m, batch);
-        Assert.Equal(batch, streaming.Result(4));
+        Assert.Equal(0.4375m, expected);
+        Assert.Equal(expected, batch);
     }
 
     [Fact]

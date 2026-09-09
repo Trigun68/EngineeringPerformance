@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getApiErrorMessage } from '../apiError';
+import { formatApiError, getApiErrorHint, getApiErrorMessage } from '../apiError';
 
 describe('getApiErrorMessage', () => {
   it('prefers detail over title from ProblemDetails', () => {
@@ -48,5 +48,59 @@ describe('getApiErrorMessage', () => {
   it('maps 409 to concurrency message when body empty', () => {
     const message = getApiErrorMessage({ response: { status: 409, data: {} } });
     expect(message).toBe('Версия изменена другим пользователем. Обновите данные и повторите.');
+  });
+});
+
+describe('getApiErrorHint', () => {
+  it('returns the 401 session hint', () => {
+    expect(getApiErrorHint(401)).toBe('Сессия истекла — войдите снова.');
+  });
+
+  it('returns the 403 permission hint', () => {
+    expect(getApiErrorHint(403)).toBe('Недостаточно прав для этого действия.');
+  });
+
+  it('returns the 410 tunnel/DNS hint', () => {
+    expect(getApiErrorHint(410)).toBe(
+      'Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).',
+    );
+  });
+
+  it('returns null for other statuses', () => {
+    expect(getApiErrorHint(404)).toBeNull();
+    expect(getApiErrorHint(500)).toBeNull();
+    expect(getApiErrorHint(undefined)).toBeNull();
+  });
+});
+
+describe('formatApiError', () => {
+  it('appends the 401 hint after the API message', () => {
+    expect(formatApiError({ response: { status: 401, data: {} } }, 'Не удалось загрузить.')).toBe(
+      'Требуется авторизация. Сессия истекла — войдите снова.',
+    );
+  });
+
+  it('appends the 403 hint after the API message', () => {
+    expect(formatApiError({ response: { status: 403, data: {} } }, 'Не удалось загрузить.')).toBe(
+      'Недостаточно прав для выполнения операции. Недостаточно прав для этого действия.',
+    );
+  });
+
+  it('appends the 410 hint after the gone message', () => {
+    expect(formatApiError({ response: { status: 410, data: {} } }, 'Не удалось загрузить.')).toBe(
+      'Запись больше не доступна (удалена или архивирована). Обновите список. Запрос ушёл не в Engineering Performance (проверьте Cloudflare Tunnel / DNS web на edge).',
+    );
+  });
+
+  it('uses fallback without a hint when status is not special', () => {
+    expect(formatApiError({ response: { status: 500, data: {} } }, 'Не удалось загрузить справочник.')).toBe(
+      'Не удалось загрузить справочник.',
+    );
+  });
+
+  it('uses fallback when the error has no HTTP response', () => {
+    expect(formatApiError(new Error('network'), 'Не удалось загрузить справочник.')).toBe(
+      'Не удалось загрузить справочник.',
+    );
   });
 });

@@ -77,7 +77,7 @@ Redis подключен как дополнительная инфрастру�
 
 - `api-tests.yml`: поднимает SQL + Redis + db-init, выполняет API/infrastructure tests.
 - `e2e-tests.yml`: запускает client unit tests, client build, затем Playwright E2E в Docker.
-- Локальный единый прогон: `scripts/quality-gates.sh` (backend tests + client test/build + smoke).
+- Локальный единый прогон: `scripts/quality-gates.sh` (backend tests + client typecheck/lint (ESLint)/test/build + smoke).
 
 ## 8) Статус зрелости и отложенные компоненты
 

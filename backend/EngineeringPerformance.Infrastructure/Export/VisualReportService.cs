@@ -815,7 +815,7 @@ public sealed class VisualReportService : IVisualReportService
     }
 
     /// <summary>
-    /// Таблицы групп IIC — первый уровень (часы факта после rollup на ParentId == null).
+    /// Таблицы групп IIC — узлы с собственными факт-часами (L1 после свёртки или заявленный узел).
     /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService).
     /// </summary>
     public async Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -826,10 +826,9 @@ public sealed class VisualReportService : IVisualReportService
 
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var allRows = data.Fact.Performance.Where(r => r.WorkDirectionId >= 0).ToList();
-        // Таблицы отчёта — IIC первого уровня: часы факта после RollHoursToFirstLevel живут на корнях.
-        var firstLevel = PerformanceDisplayVolume.FirstLevel(allRows).ToList();
+        var hourRows = PerformanceDisplayVolume.WithOwnFactHours(allRows).ToList();
 
-        var scoredRoots = firstLevel.Where(r => r.ZScore.HasValue).ToList();
+        var scoredRoots = hourRows.Where(r => r.ZScore.HasValue).ToList();
         var best = scoredRoots.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
         var worst = scoredRoots.OrderByDescending(r => r.ZScore!.Value).Take(5).ToList();
 
@@ -843,7 +842,7 @@ public sealed class VisualReportService : IVisualReportService
                 r.Interpretation?.ToRussian() ?? "—",
             });
 
-        var volumeRows = firstLevel.Select(r => new HierarchicalPdfRow(
+        var volumeRows = hourRows.Select(r => new HierarchicalPdfRow(
             0,
             [
                 r.WorkDirectionName,

@@ -25,4 +25,11 @@ public static class PerformanceDisplayVolume
 
     public static IEnumerable<PerformanceRowDto> FirstLevel(IEnumerable<PerformanceRowDto> rows) =>
         rows.Where(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.ParentId is null);
+
+    /// <summary>
+    /// Узлы, на которых лежат собственные факт-часы: корни после свёртки на L1
+    /// или заявленные узлы исключающей агрегации (не только ParentId == null).
+    /// </summary>
+    public static IEnumerable<PerformanceRowDto> WithOwnFactHours(IEnumerable<PerformanceRowDto> rows) =>
+        rows.Where(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.FactLaborHours is > 0);
 }

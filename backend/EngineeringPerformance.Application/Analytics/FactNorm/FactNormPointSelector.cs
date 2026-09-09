@@ -3,7 +3,8 @@ using EngineeringPerformance.Application.Services;
 namespace EngineeringPerformance.Application.Analytics.FactNorm;
 
 /// <summary>
-/// Точки факт/норма: только IIC первого уровня, X = объём поддерева, Y = производительность.
+/// Точки факт/норма: узлы с собственными факт-часами (L1 после свёртки или заявленный узел).
+/// X = объём узла, Y = производительность.
 /// </summary>
 public static class FactNormPointSelector
 {
@@ -21,22 +22,23 @@ public static class FactNormPointSelector
             .GroupBy(r => r.WorkDirectionId)
             .ToDictionary(g => g.Key, g => g.First().ParentId);
 
-        HashSet<int>? requestedL1 = null;
+        HashSet<int>? requested = null;
         if (requestedWorkDirectionIds is { Count: > 0 })
-        {
-            requestedL1 = [];
-            foreach (var id in requestedWorkDirectionIds)
-                requestedL1.Add(IicHierarchy.ToFirstLevelId(id, parentById));
-        }
+            requested = requestedWorkDirectionIds.ToHashSet();
+
+        var hourBearingIds = performance
+            .Where(r => !r.IsTotal && r.WorkDirectionId > 0 && r.FactLaborHours is > 0)
+            .Select(r => r.WorkDirectionId)
+            .ToHashSet();
 
         var result = new List<SelectedPoint>();
         foreach (var row in performance.Where(r => !r.IsTotal && r.WorkDirectionId > 0 && r.FactLaborHours is > 0))
         {
-            if (requestedL1 is not null)
+            if (requested is not null
+                && !requested.Contains(row.WorkDirectionId)
+                && !CoversRolledRequest(row.WorkDirectionId, requested, hourBearingIds, parentById))
             {
-                var l1 = IicHierarchy.ToFirstLevelId(row.WorkDirectionId, parentById);
-                if (!requestedL1.Contains(row.WorkDirectionId) && !requestedL1.Contains(l1))
-                    continue;
+                continue;
             }
             if (row.FactProductivity is not { } productivity)
                 continue;
@@ -69,5 +71,26 @@ public static class FactNormPointSelector
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Запрос листа без собственных часов (свёртка на L1) попадает на корень, где часы уже лежат.
+    /// Заявленный узел с часами не схлопывается в предка.
+    /// </summary>
+    private static bool CoversRolledRequest(
+        int rowId,
+        IReadOnlySet<int> requested,
+        IReadOnlySet<int> hourBearingIds,
+        IReadOnlyDictionary<int, int?> parentById)
+    {
+        foreach (var id in requested)
+        {
+            if (hourBearingIds.Contains(id))
+                continue;
+            if (IicHierarchy.ToFirstLevelId(id, parentById) == rowId)
+                return true;
+        }
+
+        return false;
     }
 }

@@ -34,7 +34,7 @@ public sealed partial class PerformanceCalculationEngine
             .ToDictionary(g => g.Key, g => g.Sum(li => li.PlannedHours));
 
         var parentById = input.WorkDirections.ToDictionary(d => d.Id, d => d.ParentId);
-        var exclusive = input.ClaimedWorkDirectionIds is not null;
+        var exclusive = IicClaimedBuckets.IsExclusive(input.ClaimedWorkDirectionIds);
         if (exclusive)
         {
             volumeByDirection = IicClaimedBuckets.ApplyExclusiveVolumes(

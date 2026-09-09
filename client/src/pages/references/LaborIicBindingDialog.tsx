@@ -23,6 +23,7 @@ import {
   type LaborIicBinding,
 } from '../../api/directoriesApi';
 import { HierarchicalSelect } from '../../components/dictionary/HierarchicalSelect';
+import { ToolbarActionButton } from '../../components/export/ToolbarActionButton';
 import { useDictionaryStore } from '../../store/useDictionaryStore';
 import { getApiErrorMessage } from '../../services/apiError';
 import { formatIisNorm } from '../../utils/formatIisNorm';
@@ -129,15 +130,15 @@ export function LaborIicBindingDialog({
         <DialogContent>
           {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
           <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-            <Button size="small" variant="outlined" disabled={!canEdit} onClick={openCreate}>
+            <ToolbarActionButton disabled={!canEdit} onClick={openCreate}>
               Добавить
-            </Button>
-            <Button size="small" variant="outlined" disabled={!canEdit || selectedId == null} onClick={openEdit}>
+            </ToolbarActionButton>
+            <ToolbarActionButton disabled={!canEdit || selectedId == null} onClick={openEdit}>
               Редактировать
-            </Button>
-            <Button size="small" variant="outlined" disabled={!canEdit || selectedId == null} onClick={() => void removeSelected()}>
+            </ToolbarActionButton>
+            <ToolbarActionButton disabled={!canEdit || selectedId == null} onClick={() => void removeSelected()}>
               Удалить
-            </Button>
+            </ToolbarActionButton>
           </Stack>
           <Table size="small">
             <TableHead>

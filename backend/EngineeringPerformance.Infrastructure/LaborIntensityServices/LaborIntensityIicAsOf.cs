@@ -48,17 +48,26 @@ public static class LaborIntensityIicAsOf
         return new LaborIntensityIicAsOfSlice(byLabor, claimed.ToHashSet());
     }
 
+    /// <summary>
+    /// Карточка в срезе — группа периода (в том числе null). Без карточки — слепок колонки.
+    /// </summary>
+    public static int? ResolveDirection(
+        LaborIntensityIicAsOfSlice slice,
+        int? laborIntensityId,
+        int? storedWorkDirectionId)
+    {
+        if (laborIntensityId is not int laborId || laborId <= 0)
+            return storedWorkDirectionId;
+
+        return slice.ByLaborId.TryGetValue(laborId, out var directionId) ? directionId : null;
+    }
+
     public static void ApplyToLaborRows(
         IEnumerable<ProjectLaborIntensity> rows,
         LaborIntensityIicAsOfSlice slice)
     {
         foreach (var row in rows)
-        {
-            if (row.LaborIntensityId is int laborId && slice.ByLaborId.TryGetValue(laborId, out var directionId))
-                row.WorkDirectionId = directionId;
-            else if (row.LaborIntensityId is int)
-                row.WorkDirectionId = null;
-        }
+            row.WorkDirectionId = ResolveDirection(slice, row.LaborIntensityId, row.WorkDirectionId);
     }
 }
 

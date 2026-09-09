@@ -5,6 +5,8 @@ interface ErrorBoundaryProps {
   children: ReactNode;
   /** Смена ключа (например pathname) сбрасывает ошибку — вложенный boundary не залипает после ухода со сломанной панели. */
   resetKey?: string;
+  /** Сброс связанных Query при «Повторить» / смене resetKey (QueryErrorResetBoundary.reset). */
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -25,9 +27,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidUpdate(prevProps: ErrorBoundaryProps) {
     if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
-      this.setState({ error: null });
+      this.clearError();
     }
   }
+
+  private clearError = () => {
+    this.props.onReset?.();
+    this.setState({ error: null });
+  };
 
   render() {
     if (!this.state.error) {
@@ -42,7 +49,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <Typography color="text.secondary" sx={{ mb: 2 }}>
           {this.state.error.message}
         </Typography>
-        <Button variant="outlined" onClick={() => this.setState({ error: null })} sx={{ mr: 1 }}>
+        <Button variant="outlined" onClick={this.clearError} sx={{ mr: 1 }}>
           Повторить
         </Button>
         <Button variant="outlined" href="/">

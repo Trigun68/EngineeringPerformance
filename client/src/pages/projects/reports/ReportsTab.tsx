@@ -28,9 +28,11 @@ import { ExportActionButton } from '../../../components/export/ExportActionButto
 import type { Project } from '../../../types/project';
 import type { ProjectVersion } from '../../../api/projectVersionsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import {
   buildInsights,
   buildTree,
+  factHourRows,
   historyToTrendPoints,
   keyDisciplines,
   MUTED_COLOR,
@@ -74,7 +76,7 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   const selectedVersion = versions.find((v) => v.id === versionId) ?? null;
 
   const query = useQuery({
-    queryKey: ['reports-tab', projectId, versionId],
+    queryKey: queryKeys.reports.tab(projectId, versionId),
     queryFn: async () => {
       const [performance, analysis, forecast, characteristics, reportSummary, performanceReport] = await Promise.all([
         fetchPerformance(projectId, versionId),
@@ -100,6 +102,8 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
     [query.data?.performance],
   );
 
+  const hourRows = useMemo(() => factHourRows(roots), [roots]);
+
   const accuracyScore = useMemo(() => {
     const withValue = (query.data?.characteristics ?? []).filter(
       (c) => c.selectedValuePercent !== null && c.selectedValuePercent !== undefined,
@@ -111,10 +115,10 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
   const summary = query.data?.analysis.summary;
 
   const insights = useMemo(
-    () => (summary ? buildInsights(roots, summary, accuracyScore) : []),
-    [roots, summary, accuracyScore],
+    () => (summary ? buildInsights(hourRows, summary, accuracyScore) : []),
+    [hourRows, summary, accuracyScore],
   );
-  const keyRows = useMemo(() => keyDisciplines(roots), [roots]);
+  const keyRows = useMemo(() => keyDisciplines(hourRows), [hourRows]);
   const totalSubtreeHours = useMemo(
     () => roots.reduce((s, r) => s + (r.subtreeHours ?? 0), 0),
     [roots],
@@ -186,12 +190,12 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
           </AccordionSummary>
           <AccordionDetails sx={{ px: 0, pt: 1 }}>
             <Stack spacing={3}>
-              <TopPerformersPanel rows={roots} />
+              <TopPerformersPanel rows={hourRows} />
 
               <DirectionBars
-                rows={roots}
-                title="Оценка Z по корневым направлениям"
-                description="Агрегированная оценка по поддереву, взвешенная по трудозатратам. Группы IIC первого уровня."
+                rows={hourRows}
+                title="Оценка Z по группам с факт-часами"
+                description="Собственные факт-часы узла: корень после свёртки на первый уровень или заявленная группа ИИС."
               />
 
               <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: { xs: 2, md: 3 }, bgcolor: '#FFFFFF' }}>
@@ -230,11 +234,10 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
                         Все группы физобъёмов IIC
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Плоский список групп IIC первого уровня с сортировкой, поиском и фильтром по интерпретации.
-                        Часы факта и объём — по поддереву направления.
+                        Плоский список групп ИИС с собственными факт-часами: сортировка, поиск и фильтр по интерпретации.
                       </Typography>
                     </Stack>
-                    <PhysicalVolumeGroupsTable rows={roots} />
+                    <PhysicalVolumeGroupsTable rows={hourRows} />
                   </Stack>
                 )}
               </Box>

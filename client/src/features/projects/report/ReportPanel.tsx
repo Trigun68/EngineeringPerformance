@@ -107,7 +107,7 @@ export function ReportPanel({ projectId, project, versions }: ReportPanelProps) 
       queryKey: queryKeys.reports.performance(projectId),
     });
     void queryClient.invalidateQueries({ queryKey: queryKeys.analytics.projectTrend(projectId) });
-    void queryClient.invalidateQueries({ queryKey: ['reports-tab', projectId] });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.reports.tabRoot(projectId) });
   }, [queryClient, projectId]);
 
   const handlePdf = async () => {

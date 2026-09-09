@@ -45,4 +45,12 @@ public sealed class IicClaimedBucketsTests
         exclusive[11].Should().Be(4m);
         exclusive.Should().NotContainKey(12);
     }
+
+    [Fact]
+    public void IsExclusive_RequiresNonEmptySet()
+    {
+        IicClaimedBuckets.IsExclusive(null).Should().BeFalse();
+        IicClaimedBuckets.IsExclusive(new HashSet<int>()).Should().BeFalse();
+        IicClaimedBuckets.IsExclusive(new HashSet<int> { 1 }).Should().BeTrue();
+    }
 }

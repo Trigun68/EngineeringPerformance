@@ -48,4 +48,62 @@ public sealed class ExclusiveClaimedPerformanceTests
         child.FactLaborHours.Should().Be(40m);
         child.FactPhysicalVolume.Should().Be(4m);
     }
+
+    [Fact]
+    public void EmptyClaimedSet_StillRollsHoursToFirstLevel()
+    {
+        var directions = new[]
+        {
+            new WorkDirectionCalculationNode(1, null, "Бетон", "IIC-1", "м3"),
+            new WorkDirectionCalculationNode(12, 1, "Перекрытия", "IIC-1-2", "м3"),
+        };
+
+        var input = new PerformanceCalculationInput(
+            VersionExists: true,
+            WorkDirections: directions,
+            PhysicalVolumes:
+            [
+                new PhysicalVolumeCalculationLine(12, true, 6m, 1m),
+            ],
+            Equipment: [],
+            LaborIntensities:
+            [
+                new LaborIntensityCalculationLine(12, 100m),
+            ],
+            NormsByDirection: new Dictionary<int, NormCalculationSnapshot>(),
+            RollHoursToFirstLevel: true,
+            ClaimedWorkDirectionIds: new HashSet<int>());
+
+        var rows = Engine.CalculatePerformance(input);
+        rows.Single(r => r.WorkDirectionId == 1).FactLaborHours.Should().Be(100m);
+        rows.Single(r => r.WorkDirectionId == 12).FactLaborHours.Should().BeNull();
+    }
+
+    [Fact]
+    public void CalculateFactAssessment_ClaimedChild_DoesNotShareParentCoarseHours()
+    {
+        var classifier = new Dictionary<int, ClassifierDisplayNode>
+        {
+            [1] = new(1, "IIC-1", "Бетон", "м3", null),
+            [11] = new(11, "IIC-1-1", "Стены", "м3", 1),
+            [12] = new(12, "IIC-1-2", "Перекрытия", "м3", 1),
+        };
+
+        var result = Engine.CalculateFactAssessment(new FactAssessmentCalculationInput(
+            [
+                new FactPhysicalVolumeLine("F11", "Стены", "DS-11", "W11", "Work", "PV-11", "стены", 11, true, 4m, 1m),
+                new FactPhysicalVolumeLine("F12", "Перекрытия", "DS-12", "W12", "Work", "PV-12", "перекрытия", 12, true, 6m, 1m),
+            ],
+            [],
+            [
+                new FactLaborIntensityLine(string.Empty, 1, 100m),
+                new FactLaborIntensityLine(string.Empty, 11, 40m),
+            ],
+            new Dictionary<int, PerformanceRowDto>(),
+            classifier,
+            new HashSet<int> { 1, 11 }));
+
+        result.Detail.Single(r => r.PvCode == "PV-11").FactLaborHours.Should().Be(40m);
+        result.Detail.Single(r => r.PvCode == "PV-12").FactLaborHours.Should().Be(100m);
+    }
 }

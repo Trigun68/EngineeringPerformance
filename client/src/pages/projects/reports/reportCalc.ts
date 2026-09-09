@@ -148,7 +148,7 @@ export interface Insight {
   detail: string;
 }
 
-/** Выводы по группам IIC первого уровня (часы факта после rollup). */
+/** Выводы по узлам ИИС с собственными факт-часами (L1 после свёртки или заявленный узел). */
 export function buildInsights(
   firstLevel: PerformanceTreeRow[],
   summary: ProjectVersionAnalysisSummary,
@@ -217,10 +217,14 @@ export function buildInsights(
   return insights;
 }
 
-export function keyDisciplines(firstLevel: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
-  return firstLevel
-    .filter((r) => (r.subtreeHours ?? 0) > 0)
-    .sort((a, b) => b.subtreeHours! - a.subtreeHours!)
+export function factHourRows(roots: PerformanceTreeRow[]): PerformanceTreeRow[] {
+  return flattenTree(roots).filter((r) => (r.factLaborHours ?? 0) > 0);
+}
+
+export function keyDisciplines(rows: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
+  return rows
+    .filter((r) => (r.factLaborHours ?? r.subtreeHours ?? 0) > 0)
+    .sort((a, b) => (b.factLaborHours ?? b.subtreeHours ?? 0) - (a.factLaborHours ?? a.subtreeHours ?? 0))
     .slice(0, top);
 }
 

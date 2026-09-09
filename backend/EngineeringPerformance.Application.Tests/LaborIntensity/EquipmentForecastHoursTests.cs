@@ -9,13 +9,15 @@ namespace EngineeringPerformance.Application.Tests.LaborIntensity;
 
 public sealed class EquipmentForecastHoursTests
 {
-    private static readonly DeviationCalculator Calculator = new(new NormCalculator());
+    private static readonly LaborIntensityCalculator.PpvLine[] NoPpv = [];
+
+    private readonly IPerformanceCalculationEngine _engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
 
     [Fact]
     public void ComputeEquipmentHours_ByProjectIicGroup_UsesGroupedVolume()
     {
         var snap = WrightSnap();
-        var calculator = Calculator;
         var norms = new Dictionary<int, NormCalculationSnapshot> { [7] = snap };
         var z = new Dictionary<int, PlanningZParameters>();
 
@@ -26,10 +28,10 @@ public sealed class EquipmentForecastHoursTests
             new LaborIntensityCalculator.EquipmentLine(3, 7, 4m, false),
         };
 
-        var hours = ForecastHoursAggregator.ComputeEquipmentHours(
-            PlanningScenario.ByProjectIicGroup, lines, [], norms, z, calculator);
-        var grouped15 = ForecastCalculation.ComputeForecastHours(
-            snap.NormFormula, snap.DeviationFormula, 15m, 15m, PlanningZParameters.Default, calculator);
+        var hours = _engine.RecalculatePlanHours(
+            PlanningScenario.ByProjectIicGroup, NoPpv, lines, norms, z).Equipment;
+        var grouped15 = _engine.ComputeForecastHours(
+            snap.NormFormula, snap.DeviationFormula, 15m, 15m, PlanningZParameters.Default);
 
         hours[1].Base.Should().Be(Math.Round((grouped15.Base ?? 0m) * (10m / 15m), 2));
         hours[2].Base.Should().Be(Math.Round((grouped15.Base ?? 0m) * (5m / 15m), 2));
@@ -49,12 +51,12 @@ public sealed class EquipmentForecastHoursTests
             new LaborIntensityCalculator.EquipmentLine(2, 7, 5m, true),
         };
 
-        var hours = ForecastHoursAggregator.ComputeEquipmentHours(
-            PlanningScenario.ByEachValue, lines, [], norms, z, Calculator);
-        var expected10 = ForecastCalculation.ComputeForecastHours(
-            snap.NormFormula, snap.DeviationFormula, 10m, 10m, PlanningZParameters.Default, Calculator);
-        var expected5 = ForecastCalculation.ComputeForecastHours(
-            snap.NormFormula, snap.DeviationFormula, 5m, 5m, PlanningZParameters.Default, Calculator);
+        var hours = _engine.RecalculatePlanHours(
+            PlanningScenario.ByEachValue, NoPpv, lines, norms, z).Equipment;
+        var expected10 = _engine.ComputeForecastHours(
+            snap.NormFormula, snap.DeviationFormula, 10m, 10m, PlanningZParameters.Default);
+        var expected5 = _engine.ComputeForecastHours(
+            snap.NormFormula, snap.DeviationFormula, 5m, 5m, PlanningZParameters.Default);
 
         hours[1].Base.Should().Be(expected10.Base);
         hours[2].Base.Should().Be(expected5.Base);

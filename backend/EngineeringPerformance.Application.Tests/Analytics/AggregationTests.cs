@@ -9,6 +9,11 @@ namespace EngineeringPerformance.Application.Tests.Analytics;
 
 public sealed class AggregationTests
 {
+    private static readonly LaborIntensityCalculator.EquipmentLine[] NoEquipment = [];
+
+    private readonly IPerformanceCalculationEngine _engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
+
     [Fact]
     public void ByEachValue_SumsMatchRowTotals()
     {
@@ -23,13 +28,12 @@ public sealed class AggregationTests
             new LaborIntensityCalculator.PpvLine(2, 10, "B", 3m, 1m, true),
         };
 
-        var calculator = new DeviationCalculator(new NormCalculator());
-        var results = LaborIntensityCalculator.Recalculate(
+        var results = _engine.RecalculatePlanHours(
             PlanningScenario.ByEachValue,
             lines,
+            NoEquipment,
             new Dictionary<int, NormCalculationSnapshot> { [10] = norm },
-            new Dictionary<int, PlanningZParameters>(),
-            calculator);
+            new Dictionary<int, PlanningZParameters>()).Ppv;
 
         results.Should().HaveCount(2);
         results.Sum(r => r.Base ?? 0).Should().BeGreaterThan(0);

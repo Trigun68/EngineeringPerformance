@@ -4,6 +4,7 @@ using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Import;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -82,6 +83,26 @@ public sealed class ProjectDataService : IProjectDataService
                 x.PlannedHours, x.ActualHours,
                 x.DocumentationCode, x.Brand, x.Notes, x.WorkDirectionId))
             .ToListAsync(cancellationToken);
+
+        var createdAt = await _context.ProjectAnalysisVersions.AsNoTracking()
+            .Where(v => v.Id == versionId && v.ProjectId == projectId)
+            .Select(v => (DateTime?)v.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (createdAt is DateTime asOfDate)
+        {
+            var slice = await LaborIntensityIicAsOf.LoadAsync(
+                _context,
+                asOfDate,
+                items.Select(x => x.LaborIntensityId ?? 0),
+                cancellationToken);
+            items = items
+                .Select(x => x with
+                {
+                    WorkDirectionId = LaborIntensityIicAsOf.ResolveDirection(
+                        slice, x.LaborIntensityId, x.WorkDirectionId),
+                })
+                .ToList();
+        }
 
         return new PagedResult<ProjectLaborIntensityDto>(items, total, page, pageSize);
     }

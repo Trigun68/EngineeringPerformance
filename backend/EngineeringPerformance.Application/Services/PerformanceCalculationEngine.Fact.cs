@@ -4,7 +4,8 @@ using EngineeringPerformance.Domain.Enums;
 namespace EngineeringPerformance.Application.Services;
 
 /// <summary>
-/// Оценка факта: распределение LI по DocSet и грубым корзинам L1.
+/// Оценка факта: точный DocSet×Classifier, иначе ближайший заявленный узел
+/// или (если claimed пуст) корзина IIC первого уровня.
 /// </summary>
 public sealed partial class PerformanceCalculationEngine
 {
@@ -57,7 +58,9 @@ public sealed partial class PerformanceCalculationEngine
             exactKeysAllocated.Add(key);
         }
 
-        var claimed = input.ClaimedWorkDirectionIds;
+        var claimed = IicClaimedBuckets.IsExclusive(input.ClaimedWorkDirectionIds)
+            ? input.ClaimedWorkDirectionIds
+            : null;
         var coarseBranded = new Dictionary<(string Set, int L1), decimal>();
         var coarseOpen = new Dictionary<int, decimal>();
         foreach (var li in input.LaborIntensities.Where(x => x.WorkDirectionId.HasValue))
@@ -89,7 +92,7 @@ public sealed partial class PerformanceCalculationEngine
             coarseBranded,
             parentById,
             matchDocumentSet: true,
-            input.ClaimedWorkDirectionIds);
+            claimed);
 
         AllocateCoarseOpen(
             orderedPv,
@@ -98,7 +101,7 @@ public sealed partial class PerformanceCalculationEngine
             fromCoarse,
             coarseOpen,
             parentById,
-            input.ClaimedWorkDirectionIds);
+            claimed);
 
         var detailRows = new List<FactAssessmentDetailRowDto>();
 
@@ -107,7 +110,7 @@ public sealed partial class PerformanceCalculationEngine
             var pv = orderedPv[i];
             var vol = pv.Quantity * pv.Coefficient;
             var normKey = fromCoarse[i] && pv.ClassifierId is int cid
-                ? BucketOf(cid, input.ClaimedWorkDirectionIds, parentById)
+                ? BucketOf(cid, claimed, parentById)
                 : pv.ClassifierId ?? -1;
             input.NormByDirection.TryGetValue(normKey, out var norm);
             if (norm is null && pv.ClassifierId is int rowCid)

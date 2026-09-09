@@ -106,7 +106,7 @@ Desktop (`EngineeringPerformance.App/`) **не рассматривается** 
 | Номенклатура КФО | `PhysicalVolumeKfo` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `IicNormId`* |
 | Номенклатура БЕР | `PhysicalVolumeBer` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment` |
 | Оборудование | `Equipment` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `CatalogKeyHash` |
-| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта); группа ИИС — регистр `LaborIntensityIicBindings` as-of даты |
+| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта), `IicWorkDirectionId` (корни IIC-1…6 по Excel 025; пусто = NULL) |
 | Комплекты документации | `DocSet` | Плоский | `ProjectLaborIntensity.DocSetId`; без FK — карантин, часы не распределяются |
 | Единицы измерения | `UnitOfMeasurement` | Плоский | Используется во всех номенклатурах |
 | Характеристики проекта | `ProjectCharacteristic` | Да + опции | Паспорт объекта (PD%). Не множитель `N(V)` / Z |
@@ -369,7 +369,7 @@ zScore (строка) = (ln(factProductivity) - normEstimate) / normStdDev
 |---|----------|
 | F-1 | `ActualHours` импортируется, но не участвует в агрегации (осознанное правило ISS-006) |
 | F-2 | LI без `WorkDirectionId` (несопоставленный каталог) → строка «(пусто)» |
-| F-3 | Два способа взвешенного Z итога (pipeline vs totals calculator) — возможное расхождение |
+| F-3 | ~~Два способа взвешенного Z итога~~ — **закрыто 2026-09-07**: единственный публичный вход — `IPerformanceCalculationEngine.ComputeWeightedZ*`; `WeightedZAggregator` / `WeightedZScoreCalculator` — `internal` детали движка; `VersionCompareMerge`, `DetailFactSummaryTableBuilder`, `ZTrendEngine` и PDF-инсайты считают через движок |
 
 ---
 
@@ -471,7 +471,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 | Шаг | Правило |
 |-----|---------|
 | Сопоставление | `DocumentTypeName` **или** `Name` → `LaborIntensity` (case-insensitive, trim) |
-| WorkDirectionId | Денормализация для уникального индекса SQL. SoT для факта — регистр `LaborIntensityIicBindings` as-of `CreatedAt` версии, не слепок импорта |
+| WorkDirectionId | Денормализация для уникального индекса SQL. SoT для факта — регистр `LaborIntensityIicBindings` as-of `CreatedAt` версии, не слепок импорта. `026` не является runtime-механизмом |
 | DocumentationCode | `DocumentTypeName` или `DocumentTypeName\|Brand` |
 | Merge Excel | **Не вызывается.** Replace: строка файла = строка БД |
 | Опция | `addMissingToCatalog` (UI по умолчанию вкл.) — карточка с TF-именем, без IIC |
@@ -556,7 +556,9 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 - `GET /api/dictionaries/all` без ролевой фильтрации по справочникам
 - Вкладки проекта в UI видны без проверки permission
-- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два паттерна (остальные контроллеры закрывает `FallbackPolicy` + `ControllerAuthorizationCoverageTests`)
+- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два входа в один `PermissionService` (осознанно: slug → `PermissionType` резолвится в рантайме)
+
+Единый паттерн с 2026-09-07 ([ADR-006](../adr/ADR-006-authorization-haspermission-fallback-policy.md)): все действия — `[HasPermission]` / `[DirectoryPermission]` / `[AllowAnonymous]`; self-эндпоинты — `[Authorize]` из allowlist; `[Authorize(Roles=…)]` и ручные `IsAdministrator()` удалены; глобальная `FallbackPolicy = RequireAuthenticatedUser`; страж `ControllerAuthorizationCoverageTests` (рефлексия по контроллерам + тест 401 на endpoint без атрибутов).
 
 ---
 
@@ -611,20 +613,28 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 10. Fixture happy-path импорта (S1-05); импорт списка проектов (501).
 11. CRUD `PhysicalVolumeType` в web UI.
-12. SPNEGO prod / разбиение монолита импорта.
+12. ~~SPNEGO prod / разбиение монолита импорта~~ — закрыто 2026-09-08: единый `client/nginx.conf.template` (`X-Trusted-Proxy-Token`, HSTS, `include spnego*.inc`, overlay `docker-compose.spnego.yml`); импорт разнесён на `PhysicalVolumeExcelImportService` / `EquipmentImportService` / `LaborIntensityImportService`, фасад `ProjectExcelDataImportService` только делегирует.
 13. E2E/UAT расширение.
 
 ---
 
 ## 15. Ключевые файлы по областям
 
+### Движок расчётов (SSOT, partial-классы)
+- `backend/EngineeringPerformance.Application/Services/IPerformanceCalculationEngine.cs`
+- `backend/EngineeringPerformance.Application/Services/PerformanceCalculationEngine.cs` (ctor, `ProductivityToEstimate` / `EstimateToProductivity`)
+- `…/PerformanceCalculationEngine.Performance.cs` (иерархия Z, `CalculatePerformance`)
+- `…/PerformanceCalculationEngine.Fact.cs` (`CalculateFactAssessment`, распределение LI)
+- `…/PerformanceCalculationEngine.Hours.cs` (`RecalculatePlanHours`, сценарии, mixed `V_g`)
+- `…/PerformanceCalculationEngine.Forecast.cs` (`ComputeForecastHours`, перерасход часов)
+- `…/PerformanceCalculationEngine.Trend.cs` (`ComputeWeightedZ*`, тренды, `ComputeProductivityIndex`)
+- внутренние помощники (не вызывать из сервисов): `LaborIntensity/LaborIntensityCalculator.cs`, `Analytics/ForecastCalculation.cs`, `Analytics/ForecastHoursAggregator.cs`, `Analytics/WeightedZAggregator.cs` (`internal`)
+
 ### Планирование
-- `backend/EngineeringPerformance.Application/LaborIntensity/LaborIntensityCalculator.cs`
-- `backend/EngineeringPerformance.Application/Analytics/ForecastCalculation.cs`
-- `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs`
+- `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs` + partial `.Forecast.cs` / `.Fact.cs` / `.Compare.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectForecastService.cs`
 - `backend/EngineeringPerformance.Infrastructure/LaborIntensityServices/LaborIntensityRecalculationService.cs`
-- `client/src/features/projects/forecast/ForecastPanel.tsx`
+- `client/src/features/projects/forecast/ForecastPanel.tsx` (контейнер) + `ForecastToolbar.tsx`, `useForecastExport.ts`, `usePlanningQueries.ts`, гриды/диалоги панели
 
 ### Справочники
 - `backend/EngineeringPerformance.Infrastructure/Directories/DirectoryFacade.cs`
@@ -640,9 +650,11 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 - `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentEngineMapper.cs`
 
 ### Импорт
-- `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs`
-- `backend/EngineeringPerformance.Infrastructure/Import/PhysicalVolumeExcelImportService.cs`
-- `backend/EngineeringPerformance.Infrastructure/Import/ImportHelpers.cs`
+- `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs` (+ `.Api.cs`, `.JsonIngest.cs`) — фасад `IProjectImportService`: auth → temp file → dispatch → recalc/cache
+- `…/Import/PhysicalVolumeExcelImportService.cs` (+ `.Parse.cs`, `.Persist.cs`, `.JsonIngest.cs`, `PhysicalVolumeImportDraft.cs`)
+- `…/Import/EquipmentImportService.cs` (+ `.Excel.cs`, `.JsonIngest.cs`, `EquipmentImportCatalogMatcher.cs`, `EquipmentImportReplaceProcessor.cs`)
+- `…/Import/LaborIntensityImportService.cs` (+ `.Excel.cs`, `.JsonIngest.cs`, `LaborCatalogLookup.cs`)
+- общие: `ImportHelpers.cs`, `ImportTransactionRunner.cs`, `ImportIterationRecorder.cs`, `ImportSourceMetadata.cs`, `DocSetImportBinder.cs`
 
 ### Сравнение и тренды
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectCompareService.cs`
@@ -654,7 +666,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 | Дата | Версия | Изменение |
 |------|--------|-----------|
-| 2026-09-09 | 1.3 | Регистр `LaborIntensityIicBindings`: группа ИИС as-of даты версии; исключающая агрегация заявленных узлов; вкладка DocSets скрыта |
+| 2026-09-08 | 1.3 | Цикл коррекции архитектуры: F-3 закрыт (один weighted Z в движке), §11.3 — единый `[HasPermission]` + `FallbackPolicy` (ADR-006), §14 п.12 закрыт (nginx template, split импорта), §15 — partial-файлы движка/грида и import-сервисы |
 | 2026-07-26 | 1.2 | Обновлены пути экспорт-сервисов на `Export/`; заменён `FactAssessmentRowsCalculator` на `FactAssessmentPipeline` + `FactAssessmentEngineMapper`; добавлена секция 4.6 (DocSet-связка); уточнены статусы P-1 и P-3 |
 | 2026-07-14 | 1.1 | Web-only: WPF вне scope; разрывы пересмотрены как внутренний техдолг web; ссылка на план развития |
 | 2026-07-14 | 1.0 | Первичная полная ревизия бизнес-логики |

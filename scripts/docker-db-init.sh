@@ -17,6 +17,8 @@ DATA_FILES=(
   data/022_IicNormsEpms20260701.sql
   data/004_LaborIntensity.sql
   data/024_BackfillLaborIntensityDocumentTypeName.sql
+  data/025_RefreshLaborIntensityIicFromExcel.sql
+  data/026_SyncProjectLaborWorkDirectionFromCatalog.sql
   data/005_PhysicalVolumes.sql
   data/005_PhysicalVolumesKfo.sql
   data/012_RefreshPhysicalVolumesKfoFromNomenclature.sql
@@ -42,9 +44,42 @@ schema_migration_applied() {
     | grep -q "1"
 }
 
+# SHA-256 файла (64 hex). Без пайпа в head — pipefail + SIGPIPE роняет init.
+file_sha256() {
+  sha256sum "$1" | cut -d' ' -f1
+}
+
 stamp_schema_migration() {
-  local script_name="$1"
-  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; IF NOT EXISTS (SELECT 1 FROM dbo.SchemaMigrations WHERE ScriptName = N'${script_name}') INSERT INTO dbo.SchemaMigrations (ScriptName) VALUES (N'${script_name}');"
+  local script_name="$1" file_path="$2" checksum
+  checksum="$(file_sha256 "${file_path}")"
+  # INSERT с хешем; уже есть строка с пустым Checksum — backfill, непустой не трогаем.
+  "${SQLCMD[@]}" -d "${DB_NAME}" -Q "SET NOCOUNT ON; IF NOT EXISTS (SELECT 1 FROM dbo.SchemaMigrations WHERE ScriptName = N'${script_name}') INSERT INTO dbo.SchemaMigrations (ScriptName, Checksum) VALUES (N'${script_name}', '${checksum}'); ELSE UPDATE dbo.SchemaMigrations SET Checksum = '${checksum}' WHERE ScriptName = N'${script_name}' AND (Checksum IS NULL OR RTRIM(Checksum) = '');"
+}
+
+# Сверка журнала с файлом. Непустой и другой хеш — fail (скрипт неизменяем).
+# Пустой Checksum — тихий backfill.
+verify_schema_migration_checksum() {
+  local script_name="$1" file_path="$2" current stored raw line
+  current="$(file_sha256 "${file_path}")"
+  raw="$("${SQLCMD[@]}" -d "${DB_NAME}" -h -1 -W -Q "SET NOCOUNT ON; SELECT ISNULL(RTRIM(CAST(Checksum AS varchar(64))), '') FROM dbo.SchemaMigrations WHERE ScriptName = N'${script_name}';")"
+  raw="${raw//$'\r'/}"
+  stored=""
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    # Только 64 hex — sqlcmd может дописать пустые строки.
+    [[ "${line}" =~ ^[0-9a-fA-F]{64}$ ]] || continue
+    stored="${line}"
+    break
+  done <<< "${raw}"
+  if [[ -z "${stored}" ]]; then
+    stamp_schema_migration "${script_name}" "${file_path}"
+    return 0
+  fi
+  if [[ "${stored}" != "${current}" ]]; then
+    echo "!!! Checksum mismatch for ${script_name}: applied ${stored} vs file ${current}. Applied migrations are immutable — add a new numbered script instead."
+    exit 1
+  fi
 }
 
 # C-locale: 016 → 017_ → 017a → 017b (как исторический SCHEMA_FILES).
@@ -105,6 +140,7 @@ stamp_baseline_schema_if_needed() {
     [[ "${basename}" == "000_SchemaMigrations.sql" ]] && continue
     schema_name_before_017 "${basename}" || break
     if schema_migration_applied "${basename}"; then
+      verify_schema_migration_checksum "${basename}" "${file}"
       continue
     fi
     if [[ "${did_stamp}" -eq 0 ]]; then
@@ -118,7 +154,7 @@ stamp_baseline_schema_if_needed() {
     else
       echo "  - ${basename} (stamped)"
     fi
-    stamp_schema_migration "${basename}"
+    stamp_schema_migration "${basename}" "${file}"
   done < <(sorted_schema_files)
 }
 
@@ -132,17 +168,20 @@ apply_schema_scripts() {
         continue
         ;;
       *017a*)
-        echo "  - ${file} (skipped: manual recovery)"
-        continue
+        if [[ "${RECOVERY_RECREATE_PPV:-0}" != "1" ]]; then
+          echo "  - ${file} (skipped: set RECOVERY_RECREATE_PPV=1 to run)"
+          continue
+        fi
         ;;
     esac
     if schema_migration_applied "${basename}"; then
+      verify_schema_migration_checksum "${basename}" "${file}"
       echo "  - ${file} (already applied)"
       continue
     fi
     echo "  - ${file}"
     "${SQLCMD[@]}" -d "${DB_NAME}" -i "${file}"
-    stamp_schema_migration "${basename}"
+    stamp_schema_migration "${basename}" "${file}"
   done < <(sorted_schema_files)
 }
 
@@ -205,7 +244,7 @@ cd /migrations
 
 echo ">>> Ensuring SchemaMigrations ledger..."
 "${SQLCMD[@]}" -d "${DB_NAME}" -i schema/000_SchemaMigrations.sql
-stamp_schema_migration "000_SchemaMigrations.sql"
+stamp_schema_migration "000_SchemaMigrations.sql" "schema/000_SchemaMigrations.sql"
 
 existing_db=0
 if table_exists "Users"; then
@@ -226,14 +265,16 @@ for file in "${DATA_FILES[@]}"; do
       echo "  - ${file} (skipped on existing DB)"
       continue
     fi
-    # Bulk-refresh номенклатур/норм затирают UI-правки (Coefficient, нормы ИИС) и часто
-    # не идемпотентны при unique-индексах (sqlcmd -b → abort всего init).
-    # Принудительно: FORCE_NOMENCLATURE_REFRESH=1.
+    # Bulk-refresh номенклатур/норм затирают UI-правки (Coefficient, нормы ИИС,
+    # группы IIC трудоёмкости) и часто не идемпотентны при unique-индексах
+    # (sqlcmd -b → abort всего init). Принудительно: FORCE_NOMENCLATURE_REFRESH=1.
     if [[ "${file}" == "data/011_RefreshIicFromTexasV2.sql" \
        || "${file}" == "data/022_IicNormsEpms20260701.sql" \
        || "${file}" == "data/012_RefreshPhysicalVolumesKfoFromNomenclature.sql" \
        || "${file}" == "data/013_RefreshPhysicalVolumesBerFromNomenclature.sql" \
-       || "${file}" == "data/014_RefreshEquipmentFromNomenclature.sql" ]]; then
+       || "${file}" == "data/014_RefreshEquipmentFromNomenclature.sql" \
+       || "${file}" == "data/025_RefreshLaborIntensityIicFromExcel.sql" \
+       || "${file}" == "data/026_SyncProjectLaborWorkDirectionFromCatalog.sql" ]]; then
       if [[ "${FORCE_NOMENCLATURE_REFRESH:-0}" == "1" ]]; then
         echo "  - ${file} (FORCE_NOMENCLATURE_REFRESH=1)"
       else
