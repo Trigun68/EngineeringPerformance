@@ -18,6 +18,7 @@ using EngineeringPerformance.Infrastructure.Registers;
 using EngineeringPerformance.Infrastructure.Users;
 using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Import;
+using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects.Commands;
@@ -140,6 +141,7 @@ public static class DependencyInjection
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
         services.AddScoped<IWorkCostService, IicWorkDirectionWorkCostService>();
         services.AddScoped<ILaborIntensityRecalculationService, LaborIntensityRecalculationService>();
+        services.AddScoped<ILaborIntensityIicBindingService, LaborIntensityIicBindingService>();
         services.AddScoped<IAnalysisVersionRecalculationOrchestrator, AnalysisVersionRecalculationOrchestrator>();
         services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();
         services.AddSingleton<INormCalculator, NormCalculator>();

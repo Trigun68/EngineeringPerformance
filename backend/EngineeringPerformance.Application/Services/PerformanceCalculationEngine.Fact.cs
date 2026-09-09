@@ -57,6 +57,7 @@ public sealed partial class PerformanceCalculationEngine
             exactKeysAllocated.Add(key);
         }
 
+        var claimed = input.ClaimedWorkDirectionIds;
         var coarseBranded = new Dictionary<(string Set, int L1), decimal>();
         var coarseOpen = new Dictionary<int, decimal>();
         foreach (var li in input.LaborIntensities.Where(x => x.WorkDirectionId.HasValue))
@@ -66,15 +67,17 @@ public sealed partial class PerformanceCalculationEngine
                 && exactKeysAllocated.Contains((NormalizeDocSetKey(li.DocSet), dir)))
                 continue;
 
-            var l1 = IicHierarchy.ToFirstLevelId(dir, parentById);
+            var bucket = claimed is not null
+                ? IicClaimedBuckets.NearestClaimed(dir, claimed, parentById) ?? dir
+                : IicHierarchy.ToFirstLevelId(dir, parentById);
             if (!string.IsNullOrEmpty(li.DocSet))
             {
-                var key = (li.DocSet, l1);
+                var key = (li.DocSet, bucket);
                 coarseBranded[key] = coarseBranded.GetValueOrDefault(key) + li.Hours;
             }
             else
             {
-                coarseOpen[l1] = coarseOpen.GetValueOrDefault(l1) + li.Hours;
+                coarseOpen[bucket] = coarseOpen.GetValueOrDefault(bucket) + li.Hours;
             }
         }
 
@@ -85,7 +88,8 @@ public sealed partial class PerformanceCalculationEngine
             fromCoarse,
             coarseBranded,
             parentById,
-            matchDocumentSet: true);
+            matchDocumentSet: true,
+            input.ClaimedWorkDirectionIds);
 
         AllocateCoarseOpen(
             orderedPv,
@@ -93,7 +97,8 @@ public sealed partial class PerformanceCalculationEngine
             fromExact,
             fromCoarse,
             coarseOpen,
-            parentById);
+            parentById,
+            input.ClaimedWorkDirectionIds);
 
         var detailRows = new List<FactAssessmentDetailRowDto>();
 
@@ -102,7 +107,7 @@ public sealed partial class PerformanceCalculationEngine
             var pv = orderedPv[i];
             var vol = pv.Quantity * pv.Coefficient;
             var normKey = fromCoarse[i] && pv.ClassifierId is int cid
-                ? IicHierarchy.ToFirstLevelId(cid, parentById)
+                ? BucketOf(cid, input.ClaimedWorkDirectionIds, parentById)
                 : pv.ClassifierId ?? -1;
             input.NormByDirection.TryGetValue(normKey, out var norm);
             if (norm is null && pv.ClassifierId is int rowCid)
@@ -255,7 +260,8 @@ public sealed partial class PerformanceCalculationEngine
         bool[] fromCoarse,
         Dictionary<(string Set, int L1), decimal> buckets,
         IReadOnlyDictionary<int, int?> parentById,
-        bool matchDocumentSet)
+        bool matchDocumentSet,
+        IReadOnlySet<int>? claimed = null)
     {
         foreach (var ((set, l1), setHours) in buckets)
         {
@@ -271,7 +277,7 @@ public sealed partial class PerformanceCalculationEngine
                 var pv = orderedPv[i];
                 if (!pv.IsAssessment || pv.ClassifierId is not int cid)
                     continue;
-                if (IicHierarchy.ToFirstLevelId(cid, parentById) != l1)
+                if (BucketOf(cid, claimed, parentById) != l1)
                     continue;
                 if (matchDocumentSet
                     && !string.Equals(pv.DocumentSet, set, StringComparison.OrdinalIgnoreCase))
@@ -305,7 +311,8 @@ public sealed partial class PerformanceCalculationEngine
         bool[] fromExact,
         bool[] fromCoarse,
         Dictionary<int, decimal> hoursByL1,
-        IReadOnlyDictionary<int, int?> parentById)
+        IReadOnlyDictionary<int, int?> parentById,
+        IReadOnlySet<int>? claimed = null)
     {
         var buckets = hoursByL1.ToDictionary(kv => (Set: string.Empty, L1: kv.Key), kv => kv.Value);
         AllocateCoarseBuckets(
@@ -315,8 +322,17 @@ public sealed partial class PerformanceCalculationEngine
             fromCoarse,
             buckets,
             parentById,
-            matchDocumentSet: false);
+            matchDocumentSet: false,
+            claimed);
     }
+
+    private static int BucketOf(
+        int classifierId,
+        IReadOnlySet<int>? claimed,
+        IReadOnlyDictionary<int, int?> parentById) =>
+        claimed is not null
+            ? IicClaimedBuckets.NearestClaimed(classifierId, claimed, parentById) ?? classifierId
+            : IicHierarchy.ToFirstLevelId(classifierId, parentById);
 
     private static string NormalizeDocSetKey(string? value) =>
         string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();

@@ -106,7 +106,7 @@ Desktop (`EngineeringPerformance.App/`) **не рассматривается** 
 | Номенклатура КФО | `PhysicalVolumeKfo` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `IicNormId`* |
 | Номенклатура БЕР | `PhysicalVolumeBer` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment` |
 | Оборудование | `Equipment` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `CatalogKeyHash` |
-| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта), `IicWorkDirectionId` |
+| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта); группа ИИС — регистр `LaborIntensityIicBindings` as-of даты |
 | Комплекты документации | `DocSet` | Плоский | `ProjectLaborIntensity.DocSetId`; без FK — карантин, часы не распределяются |
 | Единицы измерения | `UnitOfMeasurement` | Плоский | Используется во всех номенклатурах |
 | Характеристики проекта | `ProjectCharacteristic` | Да + опции | Паспорт объекта (PD%). Не множитель `N(V)` / Z |
@@ -471,10 +471,12 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 | Шаг | Правило |
 |-----|---------|
 | Сопоставление | `DocumentTypeName` **или** `Name` → `LaborIntensity` (case-insensitive, trim) |
-| WorkDirectionId | Из `LaborIntensity.IicWorkDirectionId` (может остаться NULL) |
+| WorkDirectionId | Денормализация для уникального индекса SQL. SoT для факта — регистр `LaborIntensityIicBindings` as-of `CreatedAt` версии, не слепок импорта |
 | DocumentationCode | `DocumentTypeName` или `DocumentTypeName\|Brand` |
 | Merge Excel | **Не вызывается.** Replace: строка файла = строка БД |
 | Опция | `addMissingToCatalog` (UI по умолчанию вкл.) — карточка с TF-именем, без IIC |
+
+Группа ИИС карточки задаётся регистром периодов (`EffectiveFrom` / `EffectiveTo`). Двойной щелчок в справочнике трудоёмкости открывает историю. Заявленный узел ИИС аккумулирует объём себя и потомков, кроме поддеревьев, которые сами заявлены в регистре. Вкладка «Комплекты документации» скрыта в UI (сущность `DocSet` остаётся системной).
 
 **Примечание:** поле `Techas` в каталоге `LaborIntensity` — legacy. Web-импорт сопоставляет TF по `DocumentTypeName` или `Name`.
 
@@ -652,6 +654,7 @@ Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
 
 | Дата | Версия | Изменение |
 |------|--------|-----------|
+| 2026-09-09 | 1.3 | Регистр `LaborIntensityIicBindings`: группа ИИС as-of даты версии; исключающая агрегация заявленных узлов; вкладка DocSets скрыта |
 | 2026-07-26 | 1.2 | Обновлены пути экспорт-сервисов на `Export/`; заменён `FactAssessmentRowsCalculator` на `FactAssessmentPipeline` + `FactAssessmentEngineMapper`; добавлена секция 4.6 (DocSet-связка); уточнены статусы P-1 и P-3 |
 | 2026-07-14 | 1.1 | Web-only: WPF вне scope; разрывы пересмотрены как внутренний техдолг web; ссылка на план развития |
 | 2026-07-14 | 1.0 | Первичная полная ревизия бизнес-логики |

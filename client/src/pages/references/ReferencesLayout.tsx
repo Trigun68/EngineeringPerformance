@@ -30,7 +30,8 @@ export function ReferencesLayout() {
 
   const visibleRoutes = useMemo(
     () => REFERENCE_ROUTES.filter((route) =>
-      canReadPermission(user?.permissions, route.permission, user?.roleName),
+      !route.hidden
+      && canReadPermission(user?.permissions, route.permission, user?.roleName),
     ),
     [user?.permissions, user?.roleName],
   );

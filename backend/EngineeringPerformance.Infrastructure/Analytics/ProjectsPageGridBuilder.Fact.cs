@@ -172,7 +172,8 @@ public static partial class ProjectsPageGridBuilder
             bundle.Equipment,
             laborIntensities,
             normByDirection,
-            bundle.ClassifierMap);
+            bundle.ClassifierMap,
+            bundle.ClaimedWorkDirectionIds);
         var calculated = engine.CalculateFactAssessment(input);
         var (detailInternal, facilityInternal) = FactAssessmentEngineMapper.FromResult(calculated);
 

@@ -114,6 +114,8 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
       hierarchical: true,
       formatAsIisNorm: true,
       showInGrid: true,
+      showInForm: false,
+      readOnly: true,
       gridWidth: 280,
       formOrder: 40,
     },

@@ -33,6 +33,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<AccessRight> AccessRights => Set<AccessRight>();
     public DbSet<DataImportIteration> DataImportIterations => Set<DataImportIteration>();
     public DbSet<LaborIntensity> LaborIntensities => Set<LaborIntensity>();
+    public DbSet<LaborIntensityIicBinding> LaborIntensityIicBindings => Set<LaborIntensityIicBinding>();
     public DbSet<ProjectCharacteristic> ProjectCharacteristics => Set<ProjectCharacteristic>();
     public DbSet<ProjectCharacteristicOption> ProjectCharacteristicOptions => Set<ProjectCharacteristicOption>();
     public DbSet<ProjectCharacteristicSelection> ProjectCharacteristicSelections => Set<ProjectCharacteristicSelection>();
@@ -65,6 +66,7 @@ public sealed class AppDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ResourceMetricSampleConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionNormConfiguration());
         modelBuilder.ApplyConfiguration(new IicWorkDirectionWorkCostConfiguration());
+        modelBuilder.ApplyConfiguration(new LaborIntensityIicBindingConfiguration());
         modelBuilder.ApplyConfiguration(new DataImportIterationConfiguration());
         modelBuilder.ApplyConfiguration(new NormSuggestionConfiguration());
         modelBuilder.ApplyConfiguration(new NormChangeAuditConfiguration());

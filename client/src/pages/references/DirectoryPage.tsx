@@ -42,6 +42,7 @@ import { formatAsIisNorm } from '../../utils/formatIisNorm';
 import { resolveIicDirectionUnitName } from '../../utils/resolveIicDirectionUnit';
 import { collectGridExportData } from '../../utils/directoryExport';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
+import { LaborIicBindingDialog } from './LaborIicBindingDialog';
 
 interface DirectoryPageProps {
   config: ReferenceRouteConfig;
@@ -128,6 +129,8 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const [properties, setProperties] = useState<Record<string, unknown>>({});
   const [formIsArchived, setFormIsArchived] = useState(false);
   const [characteristicModalOpen, setCharacteristicModalOpen] = useState(false);
+  const [bindingModalOpen, setBindingModalOpen] = useState(false);
+  const [bindingRow, setBindingRow] = useState<DirectoryEntry | null>(null);
   const [characteristicEditing, setCharacteristicEditing] = useState<DirectoryEntry | null>(null);
 
   const gridApiRef = useRef<GridApi | null>(null);
@@ -226,7 +229,9 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
   const handleExport = useCallback(async () => {
     const api = gridApiRef.current;
     if (!api) return;
-    const { headers, rows: exportRows } = collectGridExportData(api);
+    const { headers, rows: exportRows } = collectGridExportData(api, {
+      includeTreeNodes: config.resource === 'labor-intensities',
+    });
     await exportDirectoryExcel(config.resource, config.title, headers, exportRows);
   }, [config.resource, config.title]);
 
@@ -334,6 +339,11 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
     if (config.resource === 'project-characteristics') {
       setCharacteristicEditing(row);
       setCharacteristicModalOpen(true);
+      return;
+    }
+    if (config.resource === 'labor-intensities') {
+      setBindingRow(row);
+      setBindingModalOpen(true);
       return;
     }
     openEdit(row);
@@ -473,6 +483,18 @@ export function DirectoryPage({ config }: DirectoryPageProps) {
           />
         )}
       </Box>
+
+      <LaborIicBindingDialog
+        open={bindingModalOpen}
+        laborIntensityId={bindingRow?.id ?? null}
+        title={bindingRow?.name ?? ''}
+        canEdit={canEdit}
+        onClose={() => {
+          setBindingModalOpen(false);
+          setBindingRow(null);
+        }}
+        onChanged={() => void load()}
+      />
 
       <CharacteristicEditDialog
         open={characteristicModalOpen}

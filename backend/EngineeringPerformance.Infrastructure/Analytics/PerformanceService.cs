@@ -5,6 +5,7 @@ using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,9 +52,12 @@ public sealed class PerformanceService : IPerformanceService
             throw new UnauthorizedAccessException($"User {userId} cannot read project {projectId}.");
 
         // GAP: один scoped DbContext на запрос (раньше — до 5 параллельных factory-контекстов).
-        var versionExists = await _context.ProjectAnalysisVersions
+        var version = await _context.ProjectAnalysisVersions
             .AsNoTracking()
-            .AnyAsync(v => v.Id == versionId && v.ProjectId == projectId, cancellationToken);
+            .Where(v => v.Id == versionId && v.ProjectId == projectId)
+            .Select(v => new { v.CreatedAt })
+            .FirstOrDefaultAsync(cancellationToken);
+        var versionExists = version is not null;
 
         var workDirections = await GetWorkDirectionsAsync(cancellationToken);
 
@@ -74,6 +78,13 @@ public sealed class PerformanceService : IPerformanceService
             .AsNoTracking()
             .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
             .ToListAsync(cancellationToken);
+
+        var asOf = await LaborIntensityIicAsOf.LoadAsync(
+            _context,
+            version?.CreatedAt ?? DateTime.UtcNow,
+            laborIntensities.Select(li => li.LaborIntensityId ?? 0),
+            cancellationToken);
+        LaborIntensityIicAsOf.ApplyToLaborRows(laborIntensities, asOf);
 
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection;
         if (versionExists)
@@ -133,7 +144,8 @@ public sealed class PerformanceService : IPerformanceService
                     hoursKind == LaborHoursKind.Actual ? li.ActualHours : li.PlannedHours))
                 .ToList(),
             NormsByDirection: normsByDirection,
-            RollHoursToFirstLevel: true);
+            RollHoursToFirstLevel: true,
+            ClaimedWorkDirectionIds: asOf.ClaimedWorkDirectionIds);
 
         // GAP: математика только в PerformanceCalculationEngine, не в LINQ/циклах сервиса.
         var rows = _calculationEngine.CalculatePerformance(input);

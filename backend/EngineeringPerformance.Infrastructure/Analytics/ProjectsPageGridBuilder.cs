@@ -153,7 +153,8 @@ public static partial class ProjectsPageGridBuilder
                 .ToList(),
             LaborIntensities: labor,
             NormsByDirection: bundle.NormsByDirection,
-            RollHoursToFirstLevel: rollHoursToFirstLevel);
+            RollHoursToFirstLevel: rollHoursToFirstLevel,
+            ClaimedWorkDirectionIds: rollHoursToFirstLevel ? bundle.ClaimedWorkDirectionIds : null);
 
         var rows = engine.CalculatePerformance(input);
         return ApplyFormattedWorkDirectionNames(rows, bundle.ClassifierMap);

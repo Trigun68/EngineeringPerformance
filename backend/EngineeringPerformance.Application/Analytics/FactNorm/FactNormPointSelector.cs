@@ -30,13 +30,19 @@ public static class FactNormPointSelector
         }
 
         var result = new List<SelectedPoint>();
-        foreach (var row in PerformanceDisplayVolume.FirstLevel(performance))
+        foreach (var row in performance.Where(r => !r.IsTotal && r.WorkDirectionId > 0 && r.FactLaborHours is > 0))
         {
-            if (requestedL1 is not null && !requestedL1.Contains(row.WorkDirectionId))
-                continue;
+            if (requestedL1 is not null)
+            {
+                var l1 = IicHierarchy.ToFirstLevelId(row.WorkDirectionId, parentById);
+                if (!requestedL1.Contains(row.WorkDirectionId) && !requestedL1.Contains(l1))
+                    continue;
+            }
             if (row.FactProductivity is not { } productivity)
                 continue;
-            var volume = PerformanceDisplayVolume.ResolveSubtree(row);
+            var volume = row.FactPhysicalVolume is > 0
+                ? row.FactPhysicalVolume.Value
+                : PerformanceDisplayVolume.ResolveSubtree(row);
             if (volume is not > 0)
                 continue;
             result.Add(new SelectedPoint(row, volume.Value, productivity));

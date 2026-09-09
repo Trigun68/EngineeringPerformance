@@ -61,7 +61,8 @@ internal static class FactAssessmentEngineMapper
         IReadOnlyList<ProjectEquipment> equipment,
         IReadOnlyList<FactLaborIntensityRow> laborIntensities,
         IReadOnlyDictionary<int, PerformanceRowDto> normByDirection,
-        IReadOnlyDictionary<int, IicWorkDirection> classifierMap)
+        IReadOnlyDictionary<int, IicWorkDirection> classifierMap,
+        IReadOnlySet<int>? claimedWorkDirectionIds = null)
     {
         var classifierDtoMap = classifierMap.ToDictionary(
             kv => kv.Key,
@@ -111,7 +112,8 @@ internal static class FactAssessmentEngineMapper
                 .Select(li => new FactLaborIntensityLine(li.DocSet, li.WorkDirectionId, li.Hours))
                 .ToList(),
             normByDirection,
-            classifierDtoMap);
+            classifierDtoMap,
+            claimedWorkDirectionIds);
     }
 
     public static (List<FactDetailRowInternal> Detail, List<FactFacilityRowInternal> Facility) FromResult(

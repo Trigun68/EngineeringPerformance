@@ -37,6 +37,8 @@ docker compose up -d
 При повторном `docker compose up` на **существующей** БД скрипты `012`/`013`/`014` **не** перезапускаются — иначе seed снова ставит `Coefficient = 1`.  
 Полный refresh с Excel: `FORCE_NOMENCLATURE_REFRESH=1 docker compose up db-init` (или в `.env`).
 
+Схема `123_LaborIntensityIicBindings.sql` создаёт регистр периодов ИИС для справочника трудоёмкости и заполняет открытый период из текущего `IicWorkDirectionId`.
+
 ---
 
 ## Переменные окружения (api)

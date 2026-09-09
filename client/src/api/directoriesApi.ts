@@ -218,3 +218,65 @@ export async function exportDirectoryExcelLegacy(resource: string): Promise<void
   const { blob, filename } = await downloadBlob(`/directories/${resource}/export.xlsx`);
   triggerBrowserDownload(blob, filename);
 }
+
+export interface LaborIicBinding {
+  id: number;
+  laborIntensityId: number;
+  iicWorkDirectionId: number | null;
+  iicGroupName: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+export interface LaborIicBindingWrite {
+  iicWorkDirectionId: number | null;
+  effectiveFrom: string;
+}
+
+function normalizeBinding(raw: Record<string, unknown>): LaborIicBinding {
+  const id = Number(raw.id ?? raw.Id);
+  const laborIntensityId = Number(raw.laborIntensityId ?? raw.LaborIntensityId);
+  const direction = raw.iicWorkDirectionId ?? raw.IicWorkDirectionId;
+  return {
+    id,
+    laborIntensityId,
+    iicWorkDirectionId: direction == null || direction === '' ? null : Number(direction),
+    iicGroupName: (raw.iicGroupName ?? raw.IicGroupName ?? null) as string | null,
+    effectiveFrom: String(raw.effectiveFrom ?? raw.EffectiveFrom ?? ''),
+    effectiveTo: (raw.effectiveTo ?? raw.EffectiveTo ?? null) as string | null,
+  };
+}
+
+export async function fetchLaborIicBindings(laborIntensityId: number): Promise<LaborIicBinding[]> {
+  const { data } = await apiClient.get<unknown[]>(
+    `/labor-intensities/${laborIntensityId}/iic-bindings`,
+  );
+  return (data ?? []).map((row) => normalizeBinding(row as Record<string, unknown>));
+}
+
+export async function createLaborIicBinding(
+  laborIntensityId: number,
+  body: LaborIicBindingWrite,
+): Promise<LaborIicBinding> {
+  const { data } = await apiClient.post<Record<string, unknown>>(
+    `/labor-intensities/${laborIntensityId}/iic-bindings`,
+    body,
+  );
+  return normalizeBinding(data);
+}
+
+export async function updateLaborIicBinding(
+  laborIntensityId: number,
+  id: number,
+  body: LaborIicBindingWrite,
+): Promise<LaborIicBinding> {
+  const { data } = await apiClient.put<Record<string, unknown>>(
+    `/labor-intensities/${laborIntensityId}/iic-bindings/${id}`,
+    body,
+  );
+  return normalizeBinding(data);
+}
+
+export async function deleteLaborIicBinding(laborIntensityId: number, id: number): Promise<void> {
+  await apiClient.delete(`/labor-intensities/${laborIntensityId}/iic-bindings/${id}`);
+}

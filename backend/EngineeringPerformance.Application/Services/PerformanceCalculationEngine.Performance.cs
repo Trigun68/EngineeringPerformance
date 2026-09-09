@@ -33,8 +33,19 @@ public sealed partial class PerformanceCalculationEngine
             .GroupBy(li => li.WorkDirectionId!.Value)
             .ToDictionary(g => g.Key, g => g.Sum(li => li.PlannedHours));
 
-        if (input.RollHoursToFirstLevel)
+        var parentById = input.WorkDirections.ToDictionary(d => d.Id, d => d.ParentId);
+        var exclusive = input.ClaimedWorkDirectionIds is not null;
+        if (exclusive)
+        {
+            volumeByDirection = IicClaimedBuckets.ApplyExclusiveVolumes(
+                volumeByDirection,
+                input.ClaimedWorkDirectionIds!,
+                parentById);
+        }
+        else if (input.RollHoursToFirstLevel)
+        {
             hoursByDirection = RollHoursToFirstLevel(hoursByDirection, input.WorkDirections);
+        }
 
         var rootDirections = input.WorkDirections.Where(d => !d.ParentId.HasValue).ToList();
         var result = new List<PerformanceRowDto>();
@@ -50,13 +61,28 @@ public sealed partial class PerformanceCalculationEngine
                 hoursByDirection,
                 input.NormsByDirection,
                 result,
-                visited);
+                visited,
+                exclusive);
         }
 
         var unallocatedPhysicalVolume = input.PhysicalVolumes
             .Where(pv => !pv.ClassifierId.HasValue && pv.IsAssessment)
             .Sum(pv => pv.Quantity * pv.Coefficient)
             + SumUnallocatedEquipmentVolume(input.Equipment);
+
+        if (exclusive)
+        {
+            var originalVolume = input.PhysicalVolumes
+                .Where(pv => pv.ClassifierId.HasValue && pv.IsAssessment)
+                .Sum(pv => pv.Quantity * pv.Coefficient)
+                + input.Equipment
+                    .Where(e => e.ClassifierId.HasValue && e.IsAssessment)
+                    .Sum(e => e.Quantity * e.Coefficient);
+            var placed = volumeByDirection.Values.Sum();
+            var leftover = originalVolume - placed;
+            if (leftover > 0)
+                unallocatedPhysicalVolume += leftover;
+        }
 
         result.Add(CreateUnallocatedPlaceholderRow(unallocatedPhysicalVolume));
         return result;
@@ -127,7 +153,8 @@ public sealed partial class PerformanceCalculationEngine
         IReadOnlyDictionary<int, decimal> hoursByDirection,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normByDirection,
         List<PerformanceRowDto> result,
-        HashSet<int> visited)
+        HashSet<int> visited,
+        bool exclusiveVolumes)
     {
         if (!visited.Add(direction.Id))
             return (0m, 0m, 0m);
@@ -152,13 +179,19 @@ public sealed partial class PerformanceCalculationEngine
                 hoursByDirection,
                 normByDirection,
                 result,
-                visited);
-            subtreeEstimateHours += childEstimateHours;
-            subtreeWeightedEstimate += childWeighted;
-            subtreeVolume += childVolume;
+                visited,
+                exclusiveVolumes);
+            if (!exclusiveVolumes)
+            {
+                subtreeEstimateHours += childEstimateHours;
+                subtreeWeightedEstimate += childWeighted;
+                subtreeVolume += childVolume;
+            }
         }
 
-        var volumeForProductivity = factHours > 0 ? subtreeVolume : ownVolume;
+        var volumeForProductivity = exclusiveVolumes
+            ? ownVolume
+            : (factHours > 0 ? subtreeVolume : ownVolume);
         decimal? factProductivity = volumeForProductivity > 0 && factHours > 0
             ? Math.Round(factHours / volumeForProductivity, 4)
             : null;
@@ -207,7 +240,9 @@ public sealed partial class PerformanceCalculationEngine
             ZScore: zScore,
             Interpretation: interpretation,
             SubtreeHours: subtreeEstimateHours > 0 ? subtreeEstimateHours : null,
-            SubtreePhysicalVolume: subtreeVolume > 0 ? subtreeVolume : null);
+            SubtreePhysicalVolume: exclusiveVolumes
+                ? (ownVolume > 0 ? ownVolume : null)
+                : (subtreeVolume > 0 ? subtreeVolume : null));
 
         return (subtreeEstimateHours, subtreeWeightedEstimate, subtreeVolume);
     }

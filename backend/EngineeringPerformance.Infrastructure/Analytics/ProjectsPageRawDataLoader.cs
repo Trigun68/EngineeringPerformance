@@ -6,6 +6,7 @@ using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,7 @@ public sealed class ProjectsPageVersionBundle
     public required IReadOnlyDictionary<int, int> NormIdByDirection { get; init; }
     public PlanningScenario PlanningScenario { get; init; } = PlanningScenario.ByEachValue;
     public AnalysisDirection Direction { get; init; } = AnalysisDirection.Fact;
+    public IReadOnlySet<int> ClaimedWorkDirectionIds { get; init; } = new HashSet<int>();
 }
 
 /// <summary>
@@ -107,7 +109,7 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
             var versionRows = await context.ProjectAnalysisVersions
                 .AsNoTracking()
                 .Where(v => versionIds.Contains(v.Id))
-                .Select(v => new { v.Id, v.ProjectId, v.PlanningScenario, v.Direction })
+                .Select(v => new { v.Id, v.ProjectId, v.PlanningScenario, v.Direction, v.CreatedAt })
                 .ToListAsync(cancellationToken);
             var versionById = versionRows.ToDictionary(v => v.Id);
 
@@ -167,13 +169,21 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
                         g => g.Key,
                         g => NormSnapshotFactory.FromEntity(g.First().Norm!));
 
+                var labor = (liByVersion.GetValueOrDefault(key.VersionId) ?? []).ToList();
+                var asOf = await LaborIntensityIicAsOf.LoadAsync(
+                    context,
+                    version.CreatedAt,
+                    labor.Select(li => li.LaborIntensityId ?? 0),
+                    cancellationToken);
+                LaborIntensityIicAsOf.ApplyToLaborRows(labor, asOf);
+
                 result[key.VersionId] = new ProjectsPageVersionBundle
                 {
                     VersionExists = true,
                     WorkDirections = workDirections,
                     PhysicalVolumes = pvByVersion.GetValueOrDefault(key.VersionId) ?? [],
                     Equipment = eqByVersion.GetValueOrDefault(key.VersionId) ?? [],
-                    LaborIntensities = liByVersion.GetValueOrDefault(key.VersionId) ?? [],
+                    LaborIntensities = labor,
                     NormsByDirection = normsByDirection,
                     ClassifierMap = classifierMap,
                     PlanningZByDirection = planningByVersion.GetValueOrDefault(key.VersionId)?
@@ -186,6 +196,7 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
                         .ToDictionary(g => g.Key, g => g.First().NormId),
                     PlanningScenario = version.PlanningScenario,
                     Direction = version.Direction,
+                    ClaimedWorkDirectionIds = asOf.ClaimedWorkDirectionIds,
                 };
             }
 
@@ -207,7 +218,7 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
         var version = await context.ProjectAnalysisVersions
             .AsNoTracking()
             .Where(v => v.Id == versionId && v.ProjectId == projectId)
-            .Select(v => new { v.Id, v.PlanningScenario, v.Direction })
+            .Select(v => new { v.Id, v.PlanningScenario, v.Direction, v.CreatedAt })
             .FirstOrDefaultAsync(cancellationToken);
         var versionExists = version is not null;
 
@@ -271,19 +282,29 @@ public sealed class ProjectsPageRawDataLoader : IProjectsPageRawDataLoader
             p => p.IicWorkDirectionId,
             p => new PlanningZParameters(p.ZPessimistic, p.ZBase, p.ZOptimistic));
 
+        var laborList = laborIntensities.ToList();
+        var asOfDate = version?.CreatedAt ?? DateTime.UtcNow;
+        var asOf = await LaborIntensityIicAsOf.LoadAsync(
+            context,
+            asOfDate,
+            laborList.Select(li => li.LaborIntensityId ?? 0),
+            cancellationToken);
+        LaborIntensityIicAsOf.ApplyToLaborRows(laborList, asOf);
+
         return new ProjectsPageVersionBundle
         {
             VersionExists = versionExists,
             WorkDirections = workDirections,
             PhysicalVolumes = physicalVolumes,
             Equipment = equipment,
-            LaborIntensities = laborIntensities,
+            LaborIntensities = laborList,
             NormsByDirection = normsByDirection,
             ClassifierMap = workDirections.ToDictionary(d => d.Id),
             PlanningZByDirection = planningZByDirection,
             NormIdByDirection = normIdByDirection,
             PlanningScenario = version?.PlanningScenario ?? PlanningScenario.ByEachValue,
             Direction = version?.Direction ?? AnalysisDirection.Fact,
+            ClaimedWorkDirectionIds = asOf.ClaimedWorkDirectionIds,
         };
     }
 

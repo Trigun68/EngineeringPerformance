@@ -7,6 +7,8 @@ export interface ReferenceRouteConfig {
   permission: PermissionObjectName;
   isHierarchical?: boolean;
   showExcel?: boolean;
+  /** Не показывать вкладку в навигации справочников. */
+  hidden?: boolean;
   /** formOrder порога для поля «Родитель» в модальном окне */
   parentFormOrder?: number;
 }
@@ -50,6 +52,7 @@ export const REFERENCE_ROUTES: ReferenceRouteConfig[] = [
     resource: 'doc-sets',
     title: 'Комплекты документации',
     permission: 'DocSets',
+    hidden: true,
   },
   {
     path: 'iic-work-directions',
