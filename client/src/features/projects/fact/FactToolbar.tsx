@@ -1,10 +1,15 @@
+import type { ReactNode } from 'react';
 import { Box, Button, Stack, Typography } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import type { ImportDataType } from '../../../api/importApi';
+import { ExportActionButton } from '../../../components/export/ExportActionButton';
 import { ToolbarActionButton } from '../../../components/export/ToolbarActionButton';
 import { ACTION_LABELS } from '../../../constants/actionLabels';
 import { panelPrimaryToolbarSx } from '../shared/projectsPageTabStyles';
+import type { FactPageSubTab } from './useFactPageData';
+
+export type FactToolbarSubTab = FactPageSubTab;
 
 export interface FactToolbarProps {
   factVersionId: number | null;
@@ -14,13 +19,23 @@ export interface FactToolbarProps {
   importBlocked: boolean;
   canImport: boolean;
   loading: boolean;
+  exporting: boolean;
+  detailGridReady: boolean;
+  subTab: FactToolbarSubTab;
   onOpenVersionPicker: () => void;
   onOpenPlanning: () => void;
+  onOpenAnalysis: () => void;
   onImport: (type: ImportDataType) => void;
   onDelete: (type: ImportDataType) => void;
+  onExportSummary: (type: 'excel' | 'pdf') => void;
+  onExportFacility: (type: 'excel' | 'pdf') => void;
+  onExportDetail: () => void;
+  onExportDetailVisibleExcel: () => void;
+  onExportDetailSummaryTable: () => void;
+  children?: ReactNode;
 }
 
-/** Первый ряд тулбара факта: версия, каталог, параметры, импорт/удаление. Без запросов. */
+/** Тулбар факта: версия, импорт/удаление, вкладки (children) и выгрузка. Без запросов. */
 export function FactToolbar({
   factVersionId,
   factVersionLabel,
@@ -29,12 +44,23 @@ export function FactToolbar({
   importBlocked,
   canImport,
   loading,
+  exporting,
+  detailGridReady,
+  subTab,
   onOpenVersionPicker,
   onOpenPlanning,
+  onOpenAnalysis,
   onImport,
   onDelete,
+  onExportSummary,
+  onExportFacility,
+  onExportDetail,
+  onExportDetailVisibleExcel,
+  onExportDetailSummaryTable,
+  children,
 }: FactToolbarProps) {
   return (
+    <>
     <Stack direction="row" sx={panelPrimaryToolbarSx}>
       <Button
         variant="contained"
@@ -142,5 +168,74 @@ export function FactToolbar({
         </>
       )}
     </Stack>
+
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
+        {children}
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+          {subTab === 'fact-total' && (
+            <>
+              <Button
+                variant="contained"
+                disabled={!factVersionId}
+                onClick={onOpenAnalysis}
+                sx={{ backgroundColor: '#3498DB', color: 'white', height: 36, textTransform: 'none' }}
+              >
+                📊 Анализ версии
+              </Button>
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportSummary('excel')}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportSummary('pdf')}
+              />
+            </>
+          )}
+          {subTab === 'fact-facility' && (
+            <>
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportFacility('excel')}
+              />
+              <ExportActionButton
+                kind="pdf"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportFacility('pdf')}
+              />
+            </>
+          )}
+          {subTab === 'fact-detail' && (
+            <>
+              <ExportActionButton
+                kind="excel"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportDetail()}
+              />
+              <ExportActionButton
+                kind="excelSelected"
+                disabled={!factVersionId || !detailGridReady}
+                loading={exporting}
+                onClick={() => void onExportDetailVisibleExcel()}
+              />
+              <ExportActionButton
+                kind="excelSummary"
+                disabled={!factVersionId}
+                loading={exporting}
+                onClick={() => void onExportDetailSummaryTable()}
+              />
+            </>
+          )}
+        </Stack>
+      </Box>
+    </>
   );
 }
