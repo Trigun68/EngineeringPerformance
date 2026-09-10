@@ -23,9 +23,12 @@ dotnet test backend/EngineeringPerformance.Api.Tests/EngineeringPerformance.Api.
 echo "===> Running backend infrastructure tests"
 dotnet test backend/EngineeringPerformance.Infrastructure.Tests/EngineeringPerformance.Infrastructure.Tests.csproj --verbosity minimal
 
-echo "===> Running client unit tests"
+echo "===> Typecheck and lint client"
 cd client
 npm ci
+npm run typecheck && npm run lint
+
+echo "===> Running client unit tests"
 npm run test
 
 echo "===> Building client"

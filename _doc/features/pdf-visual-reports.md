@@ -1,6 +1,6 @@
 # PDF-отчёты с графиками
 
-**Дата обновления:** 2026-08-30  
+**Дата обновления:** 2026-09-07  
 **Код:** `VisualReportService.cs`, `QuestPdfReportComposer.cs`, `ScottPlotChartRenderer.cs`, `ReportVisualTheme.cs`, `PdfNumberFormat.cs`, `PdfScenarioLabels.cs`, `PdfTableColumn.cs`, `PdfInsightBuilder.cs`, `client/src/api/visualReportsApi.ts`  
 **Правило для агентов:** [`.cursor/rules/pdf-visual-design.mdc`](../../.cursor/rules/pdf-visual-design.mdc)
 
@@ -76,8 +76,8 @@ Modal `export/forecast.pdf` делегирует в visual `forecast-summary/pdf
 | `.../compare/export.pdf` | Сравнение (Итого / По объектам) | Waterfall Δ Z; полные имена сценариев × A/B |
 | `/api/analytics/trends/export.pdf` | Тренды | Line + column + area |
 | `/api/projects/{id}/export/combined.pdf` | Сводный | 4 key charts |
-| `/api/projects/{id}/performance-report/export.pdf` | Сводный вер 2 | KPI план/факт + история + направления |
-| `.../export/report/pdf` | Сводный вер 1 | План/факт, топ-5 IIC, группы физобъёмов |
+| `/api/projects/{id}/performance-report/export.pdf` | Сводный вер 2 | KPI план/факт + история + направления; объём на L1 = поддерево |
+| `.../export/report/pdf` | Сводный вер 1 | План/факт, топ-5 и таблица групп ИИС с собственными факт-часами |
 
 ## Права
 

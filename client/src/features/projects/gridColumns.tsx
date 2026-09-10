@@ -83,11 +83,14 @@ export function createForecastSummaryColumns(): ColDef<ProjectsPageForecastSumma
       width: 90,
     },
     {
-      colId: 'factPhysicalVolume',
-      headerName: 'Факт ФО',
+      colId: 'physicalVolume',
+      headerName: 'Физобъём',
       width: 160,
       ...rightAlign,
-      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueGetter: physicalVolumeValueGetter(
+        'physicalVolumeDisplay',
+        'physicalVolume',
+      ),
       valueFormatter: (p) =>
         typeof p.value === 'string' ? p.value : num0(p.value),
     },
@@ -155,7 +158,7 @@ export function createFacilityColumns(): ColDef<ProjectsPageFacilityRow>[] {
     { field: 'facilityCode', headerName: 'Код объекта', minWidth: 120 },
     { field: 'facilityName', headerName: 'Объект', minWidth: 180 },
     { field: 'laborHours', headerName: 'Часы' },
-    { field: 'zScore', headerName: 'Z' },
+    { field: 'zScore', headerName: 'Оценка Z' },
     { field: 'interpretation', headerName: 'Интерпретация', minWidth: 140 },
   ];
 }
@@ -303,7 +306,7 @@ export function createDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
       ...rightAlign,
       valueFormatter: (p) => num0(p.value),
     },
-    { field: 'zScore', headerName: 'Z', width: 80 },
+    { field: 'zScore', headerName: 'Оценка Z', width: 80 },
   ];
 }
 
@@ -321,7 +324,7 @@ export function createPerformanceColumns(
     { field: 'factPhysicalVolume', headerName: 'ФО' },
     { field: 'factLaborHours', headerName: 'Часы' },
     { field: 'factProductivity', headerName: 'Произв.' },
-    { field: 'zScore', headerName: 'Z' },
+    { field: 'zScore', headerName: 'Оценка Z' },
     { field: 'interpretation', headerName: 'Интерпретация' },
   ];
 }
@@ -333,11 +336,26 @@ export function createFactPerformanceColumns(): ColDef<PerformanceRow>[] {
     { field: 'workDirectionCode', headerName: 'Код', width: 100 },
     { field: 'normUnitName', headerName: 'Ед. изм.', width: 90 },
     {
-      colId: 'factPhysicalVolume',
-      headerName: 'ФО',
-      width: 160,
+      colId: 'physicalVolume',
+      headerName: 'Физобъём',
+      width: 150,
       ...rightAlign,
-      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueGetter: physicalVolumeValueGetter(
+        'physicalVolumeDisplay',
+        'physicalVolume',
+      ),
+      valueFormatter: (p) =>
+        typeof p.value === 'string' ? p.value : num0(p.value),
+    },
+    {
+      colId: 'assessmentPhysicalVolume',
+      headerName: 'Сгруппированный физобъём',
+      width: 170,
+      ...rightAlign,
+      valueGetter: physicalVolumeValueGetter(
+        'assessmentPhysicalVolumeDisplay',
+        'assessmentPhysicalVolume',
+      ),
       valueFormatter: (p) =>
         typeof p.value === 'string' ? p.value : num0(p.value),
     },
@@ -391,7 +409,7 @@ export function createFactFacilityColumns(): ColDef<ProjectsPageFacilityRow>[] {
     ...factPlanHourColumns<ProjectsPageFacilityRow>(),
     {
       field: 'zScore',
-      headerName: 'Z-score',
+      headerName: 'Оценка Z',
       width: 100,
       ...rightAlign,
       valueFormatter: (p) => num4(p.value),
@@ -492,7 +510,7 @@ export function createFactDetailColumns(): ColDef<ProjectsPageDetailRow>[] {
     },
     {
       field: 'zScore',
-      headerName: 'Z-score',
+      headerName: 'Оценка Z',
       width: 100,
       ...rightGroupable,
       valueFormatter: (p) => num4(p.value),

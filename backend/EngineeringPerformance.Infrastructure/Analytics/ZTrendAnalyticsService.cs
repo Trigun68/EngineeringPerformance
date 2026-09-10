@@ -53,8 +53,14 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             .Select(p => new ZTrendFilterProjectDto(p.Id, p.Code, p.Name))
             .ToListAsync(cancellationToken);
 
+        var claimedIds = await _db.LaborIntensityIicBindings.AsNoTracking()
+            .Where(b => b.IicWorkDirectionId != null)
+            .Select(b => b.IicWorkDirectionId!.Value)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
         var groups = await _db.IicWorkDirections.AsNoTracking()
-            .Where(d => !d.IsArchived && d.ParentId == null)
+            .Where(d => !d.IsArchived && (d.ParentId == null || claimedIds.Contains(d.Id)))
             .OrderBy(d => d.SortOrder).ThenBy(d => d.Name)
             .Select(d => new ZTrendFilterGroupDto(d.Id, d.Code ?? string.Empty, d.Name))
             .ToListAsync(cancellationToken);
@@ -77,7 +83,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
 
         // Портфельное поколение в ключе: мутация любого проекта сбрасывает выборку без TTL.
         var cacheKey =
-            $"ztrends:v5:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
+            $"ztrends:v6:{userId}:{request.PeriodStart:O}:{request.PeriodEnd:O}:{weightMode}:" +
             $"{string.Join(',', projectIds.OrderBy(x => x))}:" +
             $"{string.Join(',', (request.WorkDirectionIds ?? []).OrderBy(x => x))}";
 
@@ -259,9 +265,7 @@ public sealed class ZTrendAnalyticsService : IZTrendAnalyticsService
             }
 
             // Detect sigma_zero from root rows
-            var rootRows = assessment.Performance
-                .Where(r => !r.IsTotal && r.ParentId == null && r.WorkDirectionId >= 0)
-                .ToList();
+            var rootRows = PerformanceDisplayVolume.WithOwnFactHours(assessment.Performance).ToList();
 
             var overallPoint = new ZTrendRawPoint(
                 version.CreatedAt,

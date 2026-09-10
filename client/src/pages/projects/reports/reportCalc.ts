@@ -84,9 +84,51 @@ export function fmtSigned(value: number | null | undefined, digits = 2): string 
   return (value > 0 ? '+' : '') + fmt(value, digits);
 }
 
+/** Пустой физобъём в отчёте — тире, не «0» и не «Н/Д». */
+export function formatReportVolume(
+  value: number | null | undefined,
+  unitName?: string | null,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value) || value === 0) return '—';
+  const n = fmt(value, 1);
+  const unit = unitName?.trim();
+  return unit ? `${n} ${unit}` : n;
+}
+
 /** Дерево направлений, собранное из плоского PerformanceRow[] (агрегаты уже рассчитаны backend'ом). */
 export interface PerformanceTreeRow extends PerformanceRow {
   children: PerformanceTreeRow[];
+}
+
+/** Объём поддерева (L1 после rollup часов) либо реконструкция hours/productivity. */
+export function resolveSubtreePhysicalVolume(
+  row: Pick<
+    PerformanceRow,
+    'subtreePhysicalVolume' | 'factPhysicalVolume' | 'factLaborHours' | 'factProductivity'
+  >,
+): number | null {
+  if (row.subtreePhysicalVolume != null && row.subtreePhysicalVolume > 0) {
+    return row.subtreePhysicalVolume;
+  }
+  const hours = row.factLaborHours;
+  const productivity = row.factProductivity;
+  if (hours != null && hours > 0 && productivity != null && productivity > 0) {
+    return hours / productivity;
+  }
+  return row.factPhysicalVolume ?? null;
+}
+
+/** На корне IIC — объём поддерева; на потомках — собственный объём. */
+export function displayPhysicalVolume(
+  row: Pick<
+    PerformanceRow,
+    'parentId' | 'subtreePhysicalVolume' | 'factPhysicalVolume' | 'factLaborHours' | 'factProductivity'
+  >,
+): number | null {
+  if (row.parentId != null) {
+    return row.factPhysicalVolume ?? null;
+  }
+  return resolveSubtreePhysicalVolume(row);
 }
 
 export function buildTree(rows: PerformanceRow[]): PerformanceTreeRow[] {
@@ -117,19 +159,20 @@ export interface Insight {
   detail: string;
 }
 
-/** Порт lib/performance/insights.ts из прототипа (без поля «ответственный» — в реальных данных его нет). */
+/** Выводы по узлам ИИС с собственными факт-часами (L1 после свёртки или заявленный узел). */
 export function buildInsights(
-  leaves: PerformanceTreeRow[],
+  firstLevel: PerformanceTreeRow[],
   summary: ProjectVersionAnalysisSummary,
   accuracyScore: number | null,
 ): Insight[] {
   const insights: Insight[] = [];
-  const scored = leaves.filter((r) => r.zScore !== null).sort((a, b) => b.zScore! - a.zScore!);
+  const scored = firstLevel.filter((r) => r.zScore !== null).sort((a, b) => b.zScore! - a.zScore!);
 
   for (const row of scored.filter((r) => r.zScore! > 1)) {
+    const volume = resolveSubtreePhysicalVolume(row);
     const overrun =
-      row.factLaborHours && row.normProductivity && row.factPhysicalVolume
-        ? row.factLaborHours - row.normProductivity * row.factPhysicalVolume
+      row.factLaborHours && row.normProductivity && volume
+        ? row.factLaborHours - row.normProductivity * volume
         : null;
     insights.push({
       kind: 'risk',
@@ -185,10 +228,14 @@ export function buildInsights(
   return insights;
 }
 
-export function keyDisciplines(leaves: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
-  return leaves
-    .filter((r) => (r.subtreeHours ?? 0) > 0)
-    .sort((a, b) => b.subtreeHours! - a.subtreeHours!)
+export function factHourRows(roots: PerformanceTreeRow[]): PerformanceTreeRow[] {
+  return flattenTree(roots).filter((r) => (r.factLaborHours ?? 0) > 0);
+}
+
+export function keyDisciplines(rows: PerformanceTreeRow[], top = 3): PerformanceTreeRow[] {
+  return rows
+    .filter((r) => (r.factLaborHours ?? r.subtreeHours ?? 0) > 0)
+    .sort((a, b) => (b.factLaborHours ?? b.subtreeHours ?? 0) - (a.factLaborHours ?? a.subtreeHours ?? 0))
     .slice(0, top);
 }
 

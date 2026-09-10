@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Stack, TextField, Typography } from '@mui/material';
 import type { ColDef, GridApi } from 'ag-grid-community';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   deleteWorkCostPeriod,
   exportWorkCostsExcelFromGrid,
@@ -11,6 +11,7 @@ import {
   type WorkCostRow,
 } from '../../api/registersApi';
 import { DictionaryGrid } from '../../components/dictionary/DictionaryGrid';
+import { EMPTY_ROWS } from '../../components/DataTable/emptyRows';
 import { ExportActionButton } from '../../components/export/ExportActionButton';
 import { ToolbarActionButton } from '../../components/export/ToolbarActionButton';
 import { ACTION_LABELS } from '../../constants/actionLabels';
@@ -18,6 +19,7 @@ import { useConfirmation } from '../../hooks/useConfirmation';
 import { usePermission } from '../../hooks/usePermission';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 import { collectGridExportData } from '../../utils/directoryExport';
 import { formatDate } from '../../utils/formatDateTime';
 import { WorkCostsPeriodsPanel, periodDateKey } from './WorkCostsPeriodsPanel';
@@ -67,11 +69,12 @@ export function WorkCostsPage() {
   const gridApiRef = useRef<GridApi<WorkCostTreeRow> | null>(null);
 
   const {
-    data: asOfRows = [],
+    data: asOfRows = EMPTY_ROWS,
     isLoading: asOfLoading,
     isError: asOfError,
+    error: asOfLoadError,
   } = useQuery<WorkCostRow[]>({
-    queryKey: ['registers', 'work-costs', 'as-of', asOfDate],
+    queryKey: queryKeys.registers.workCosts.asOf(asOfDate),
     queryFn: () => fetchWorkCosts(asOfDate),
     enabled: canRead,
     staleTime: 60_000,
@@ -81,34 +84,50 @@ export function WorkCostsPage() {
     data: periods = [],
     isLoading: periodsLoading,
     isError: periodsError,
+    error: periodsLoadError,
   } = useQuery({
-    queryKey: ['registers', 'work-costs', 'periods'],
+    queryKey: queryKeys.registers.workCosts.periods,
     queryFn: fetchWorkCostPeriods,
     enabled: canRead,
     staleTime: 30_000,
   });
 
   const {
-    data: periodRows = [],
+    data: periodRows = EMPTY_ROWS,
     isLoading: periodLoading,
     isError: periodError,
+    error: periodLoadError,
   } = useQuery<WorkCostRow[]>({
-    queryKey: ['registers', 'work-costs', 'period', selectedFrom],
+    queryKey: queryKeys.registers.workCosts.period(selectedFrom ?? undefined),
     queryFn: () => fetchWorkCostPeriod(selectedFrom!),
     enabled: canRead && selectedFrom != null,
     staleTime: 30_000,
   });
 
+  const invalidate = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.registers.workCosts.root });
+  }, [queryClient]);
+
+  const { mutate: deletePeriod, isPending: isDeleting } = useMutation({
+    mutationFn: (effectiveFrom: string) => deleteWorkCostPeriod(effectiveFrom),
+    onSuccess: () => {
+      setSelectedFrom(null);
+      setActionError(null);
+      void invalidate();
+    },
+    onError: (err) => {
+      setActionError(getApiErrorMessage(err, 'Не удалось удалить период.'));
+    },
+  });
+
   const rows = selectedFrom ? periodRows : asOfRows;
-  const loading = periodsLoading || (selectedFrom ? periodLoading : asOfLoading);
+  const loading = periodsLoading || (selectedFrom ? periodLoading : asOfLoading) || isDeleting;
   const treeRows = useMemo(() => toTreeRows(rows), [rows]);
   const error =
     actionError
-    ?? (asOfError || periodsError || periodError ? 'Не удалось загрузить стоимость работ.' : null);
-
-  const invalidate = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['registers', 'work-costs'] });
-  }, [queryClient]);
+    ?? (asOfError ? getApiErrorMessage(asOfLoadError, 'Не удалось загрузить стоимость работ.') : null)
+    ?? (periodsError ? getApiErrorMessage(periodsLoadError, 'Не удалось загрузить стоимость работ.') : null)
+    ?? (periodError ? getApiErrorMessage(periodLoadError, 'Не удалось загрузить стоимость работ.') : null);
 
   const openCreate = useCallback(() => {
     setModalMode('create');
@@ -135,7 +154,7 @@ export function WorkCostsPage() {
   }, []);
 
   const handleDelete = useCallback(async () => {
-    if (!canEdit || !selectedFrom) return;
+    if (!canEdit || !selectedFrom || isDeleting) return;
     const period = periods.find((p) => periodDateKey(p.effectiveFrom) === selectedFrom);
     const count = period?.directionCount ?? rows.filter((r) => r.ratePerHour != null).length;
     const ok = await confirm({
@@ -145,15 +164,9 @@ export function WorkCostsPage() {
       cancelText: 'Отмена',
     });
     if (!ok) return;
-    try {
-      setActionError(null);
-      await deleteWorkCostPeriod(selectedFrom);
-      setSelectedFrom(null);
-      await invalidate();
-    } catch (err) {
-      setActionError(getApiErrorMessage(err, 'Не удалось удалить период.'));
-    }
-  }, [canEdit, confirm, invalidate, periods, rows, selectedFrom]);
+    setActionError(null);
+    deletePeriod(selectedFrom);
+  }, [canEdit, confirm, deletePeriod, isDeleting, periods, rows, selectedFrom]);
 
   const columnDefs = useMemo<ColDef<WorkCostTreeRow>[]>(
     () => [
@@ -229,7 +242,7 @@ export function WorkCostsPage() {
           </ToolbarActionButton>
         )}
         {canEdit && (
-          <ToolbarActionButton onClick={() => void handleDelete()} disabled={!selectedFrom}>
+          <ToolbarActionButton onClick={() => void handleDelete()} disabled={!selectedFrom || isDeleting}>
             Удалить
           </ToolbarActionButton>
         )}

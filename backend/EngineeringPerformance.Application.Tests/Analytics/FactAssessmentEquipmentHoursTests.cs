@@ -107,4 +107,32 @@ public sealed class FactAssessmentEquipmentHoursTests
         facilityHours.Should().Be(liHours);
         facilityHours.Should().BeLessThanOrEqualTo(liHours);
     }
+
+    [Fact]
+    public void CalculateFactAssessment_EmptyDocSet_AllocatesCoarseWhenClassifierInTree()
+    {
+        var normByDirection = new Dictionary<int, PerformanceRowDto>
+        {
+            [11] = NormRow(11, 10m),
+        };
+
+        var factPv = new List<FactPhysicalVolumeLine>
+        {
+            new("F1", "Facility 1", "DS1", "W1", "Work", "PV-A", "pv-a", 11, true, 40m, 1m),
+        };
+
+        var result = _engine.CalculateFactAssessment(new FactAssessmentCalculationInput(
+            factPv,
+            [],
+            [new FactLaborIntensityLine(string.Empty, 11, 200m)],
+            normByDirection,
+            new Dictionary<int, ClassifierDisplayNode>
+            {
+                [11] = new(11, "A", "leaf-A", "ед."),
+            }));
+
+        result.Detail.Single(r => r.PvCode == "PV-A").FactLaborHours.Should().Be(200m);
+        result.Facility.Single(f => f.Code == "F1").FactLaborHours.Should().Be(200m);
+        result.Facility.Should().NotContain(f => f.Name == "(пусто)");
+    }
 }

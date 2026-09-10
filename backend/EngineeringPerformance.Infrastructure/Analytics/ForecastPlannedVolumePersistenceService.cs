@@ -1,4 +1,5 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
@@ -11,13 +12,16 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
 {
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ForecastPlannedVolumePersistenceService(
         IDbContextFactory<AppDbContext> contextFactory,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _contextFactory = contextFactory;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     public async Task SavePlannedVolumeAsync(
@@ -61,18 +65,19 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
 
         if (rows.Count > 0)
         {
-            var first = rows[0];
-            var k = first.GetCoefficient();
-            first.Quantity = ProjectPhysicalVolumeIicUnits.ProjectQuantityFromIicGroupUnits(quantity, k);
-            first.ModifiedAt = DateTime.UtcNow;
+            var newQuantities = PlannedVolumeDistributor.Distribute(
+                version.PlanningScenario,
+                quantity,
+                rows.Select(r => (r.GetCoefficient(), r.Quantity)).ToList());
 
-            for (var i = 1; i < rows.Count; i++)
+            for (var i = 0; i < rows.Count; i++)
             {
-                rows[i].Quantity = 0m;
+                rows[i].Quantity = newQuantities[i];
                 rows[i].ModifiedAt = DateTime.UtcNow;
             }
 
             await context.SaveChangesAsync(cancellationToken);
+            await LogPlannedVolumeEditAsync(projectAnalysisVersionId, workDirectionId, cancellationToken);
             await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
             return;
         }
@@ -102,6 +107,8 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
                 CreatedAt = DateTime.UtcNow,
             };
             PhysicalVolumeCatalogBinding.AssignCatalogId(entity, catalogKfo.Id, isKfo: true);
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                entity, catalogKfo.Coefficient, catalogKfo.IsAssessment, catalogKfo.ClassifierId);
             context.ProjectPhysicalVolumes.Add(entity);
         }
         else
@@ -127,10 +134,24 @@ public sealed class ForecastPlannedVolumePersistenceService : IForecastPlannedVo
                 CreatedAt = DateTime.UtcNow,
             };
             PhysicalVolumeCatalogBinding.AssignCatalogId(entity, catalogBer.Id, isKfo: false);
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(
+                entity, catalogBer.Coefficient, catalogBer.IsAssessment, catalogBer.ClassifierId);
             context.ProjectPhysicalVolumes.Add(entity);
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        await LogPlannedVolumeEditAsync(projectAnalysisVersionId, workDirectionId, cancellationToken);
         await _recalcOrchestrator.RecalculateVersionAsync(projectId, projectAnalysisVersionId, cancellationToken);
     }
+
+    private Task LogPlannedVolumeEditAsync(
+        int versionId,
+        int workDirectionId,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            UserActionType.PlannedVolumeEdit,
+            entityType: "ProjectPhysicalVolume",
+            entityId: versionId,
+            description: $"Planned volume for work direction {workDirectionId}",
+            cancellationToken: cancellationToken);
 }

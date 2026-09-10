@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using EngineeringPerformance.Api.Configuration;
-using EngineeringPerformance.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
+using EngineeringPerformance.Application.Auth;
 using Microsoft.Extensions.Options;
 
 namespace EngineeringPerformance.Api.Middleware;
@@ -23,31 +22,28 @@ public sealed class SpnegoUserMiddleware
         _options = options.Value;
     }
 
-    public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ITrustedProxyValidator trustedProxy,
+        ISpnegoIdentityResolver identityResolver)
     {
         if (_options.Enabled
             && context.User.Identity?.IsAuthenticated != true
-            && IsTrustedProxyRequest(context)
+            && IsTrustedProxyRequest(context, trustedProxy)
             && context.Request.Headers.TryGetValue(RemoteUserHeader, out var remoteUserValues))
         {
             var remoteUser = remoteUserValues.FirstOrDefault()?.Trim();
             if (!string.IsNullOrWhiteSpace(remoteUser))
             {
-                var user = await dbContext.Users
-                    .AsNoTracking()
-                    .Include(u => u.Role)
-                    .FirstOrDefaultAsync(u =>
-                        u.IsActive &&
-                        (u.WindowsUsername == remoteUser || u.Username == remoteUser));
-
+                var user = await identityResolver.ResolveAsync(remoteUser, context.RequestAborted);
                 if (user is not null)
                 {
                     var claims = new List<Claim>
                     {
-                        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                        new(ClaimTypes.NameIdentifier, user.UserId.ToString()),
                         new(ClaimTypes.Name, user.Username),
                         new(ClaimTypes.GivenName, user.DisplayName),
-                        new(ClaimTypes.Role, user.Role.Name),
+                        new(ClaimTypes.Role, user.RoleName),
                         new("role_id", user.RoleId.ToString()),
                         new("auth_method", "spnego")
                     };
@@ -60,16 +56,9 @@ public sealed class SpnegoUserMiddleware
         await _next(context);
     }
 
-    private bool IsTrustedProxyRequest(HttpContext context)
+    private static bool IsTrustedProxyRequest(HttpContext context, ITrustedProxyValidator trustedProxy)
     {
-        if (string.IsNullOrWhiteSpace(_options.TrustedProxySecret))
-            return false;
-
-        if (!context.Request.Headers.TryGetValue(SpnegoOptions.TrustedProxyTokenHeader, out var tokenValues))
-            return false;
-
-        var provided = tokenValues.FirstOrDefault();
-        return !string.IsNullOrEmpty(provided)
-            && string.Equals(provided, _options.TrustedProxySecret, StringComparison.Ordinal);
+        context.Request.Headers.TryGetValue(SpnegoOptions.TrustedProxyTokenHeader, out var tokenValues);
+        return trustedProxy.IsTrustedProxyToken(tokenValues.FirstOrDefault());
     }
 }

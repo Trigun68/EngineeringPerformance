@@ -1,6 +1,6 @@
 using System.Text.Json;
 using EngineeringPerformance.Application.Common.Exceptions;
-using EngineeringPerformance.Infrastructure.Persistence;
+using EngineeringPerformance.Application.Diagnostics;
 using FluentValidation;
 
 namespace EngineeringPerformance.Api.Middleware;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using EngineeringPerformance.Application.Services;
 
 namespace EngineeringPerformance.Application.Analytics;
 
@@ -8,6 +9,13 @@ namespace EngineeringPerformance.Application.Analytics;
 /// </summary>
 public sealed class ZTrendEngine : IZTrendEngine
 {
+    private readonly IPerformanceCalculationEngine _calculationEngine;
+
+    public ZTrendEngine(IPerformanceCalculationEngine calculationEngine)
+    {
+        _calculationEngine = calculationEngine;
+    }
+
     public static readonly string[] PlotPalette =
     [
         "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
@@ -66,16 +74,16 @@ public sealed class ZTrendEngine : IZTrendEngine
                     };
                 }
 
-                var aggregator = new WeightedZAggregator();
-                foreach (var point in linePoints)
-                    aggregator.Add(point.ZScore, point.Weight);
+                // Σ(Z×вес)/Σ(вес) — только через движок (SSOT); вес учитывается лишь положительный.
+                var samples = linePoints.Select(p => ((decimal?)p.ZScore, (decimal?)p.Weight)).ToList();
+                var weightSum = linePoints.Where(p => p.ZScore.HasValue && p.Weight > 0).Sum(p => p.Weight);
 
                 var sample = linePoints[0];
                 return sample with
                 {
                     Date = g.Key.Item1,
-                    ZScore = aggregator.Result(2),
-                    Weight = aggregator.WeightSum,
+                    ZScore = _calculationEngine.ComputeWeightedZ(samples, decimalPlaces: 2),
+                    Weight = weightSum,
                     ProjectCount = projectCount,
                     Contributions = ToContributions(list),
                 };

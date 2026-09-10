@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Claims;
 using EngineeringPerformance.Application.Monitoring;
 
 namespace EngineeringPerformance.Api.Middleware;
@@ -10,18 +11,26 @@ public sealed class RequestMetricsMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly IRequestMetricsStore _metricsStore;
+    private readonly IActiveUserTracker _activeUsers;
 
-    public RequestMetricsMiddleware(RequestDelegate next, IRequestMetricsStore metricsStore)
+    public RequestMetricsMiddleware(
+        RequestDelegate next,
+        IRequestMetricsStore metricsStore,
+        IActiveUserTracker activeUsers)
     {
         _next = next;
         _metricsStore = metricsStore;
+        _activeUsers = activeUsers;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (ShouldSkip(context.Request.Path))
+        var path = context.Request.Path.Value;
+        var skipRed = MonitoringSelfTraffic.ExcludeFromRed(path);
+        if (skipRed)
         {
             await _next(context);
+            RecordPresence(context, path);
             return;
         }
 
@@ -47,12 +56,21 @@ public sealed class RequestMetricsMiddleware
                 stopwatch.Elapsed.TotalMilliseconds,
                 context.Response.StatusCode,
                 exceptionType);
+
+            RecordPresence(context, path);
         }
     }
 
-    private static bool ShouldSkip(PathString path)
+    private void RecordPresence(HttpContext context, string? path)
     {
-        var value = path.Value ?? string.Empty;
-        return value.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase);
+        if (MonitoringSelfTraffic.ExcludeFromPresence(path))
+            return;
+
+        if (context.User.Identity?.IsAuthenticated != true)
+            return;
+
+        var idValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (int.TryParse(idValue, out var userId))
+            _activeUsers.Record(userId, DateTime.UtcNow);
     }
 }

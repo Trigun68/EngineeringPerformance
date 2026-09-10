@@ -10,6 +10,7 @@ public static class SqlConnectionStringLane
 {
     public const string InteractiveAppName = "EP-Interactive";
     public const string AnalyticsAppName = "EP-Analytics";
+    public const string ResourceMonitorAppName = "EP-ResourceMonitor";
 
     public static string ForInteractive(string baseConnectionString)
     {
@@ -31,6 +32,18 @@ public static class SqlConnectionStringLane
             MinPoolSize = 0,
             MaxPoolSize = 8,
             ConnectTimeout = 15,
+        };
+        return builder.ConnectionString;
+    }
+
+    public static string ForResourceMonitor(string baseConnectionString)
+    {
+        var builder = new SqlConnectionStringBuilder(baseConnectionString)
+        {
+            ApplicationName = ResourceMonitorAppName,
+            MinPoolSize = 0,
+            MaxPoolSize = 2,
+            ConnectTimeout = 2,
         };
         return builder.ConnectionString;
     }

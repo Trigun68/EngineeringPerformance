@@ -5,6 +5,12 @@ public sealed class AnalyticsSqlGate
 {
     private readonly SemaphoreSlim _limit = new(2, 2);
 
+    public int Limit => 2;
+
+    public int AvailableCount => _limit.CurrentCount;
+
+    public int BusyCount => Math.Max(0, Limit - AvailableCount);
+
     public Task WaitAsync(CancellationToken cancellationToken) => _limit.WaitAsync(cancellationToken);
 
     public void Release() => _limit.Release();

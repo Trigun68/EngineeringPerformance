@@ -1,6 +1,6 @@
 # Анализ факта и норм
 
-**Дата:** 2026-08-31  
+**Дата:** 2026-09-07  
 **Код:** `FactNormAnalysisEngine`, `FactNormAnalysisService`, вкладка `/analytics` → «Сравнение факта и норм»
 
 ## Назначение
@@ -25,9 +25,9 @@
 
 Чистый движок `IFactNormAnalysisEngine` (Application): CONSTANT, LINEAR, POWER, LOGARITHMIC, EXPONENTIAL, POLYNOMIAL2, HYPERBOLIC; выбор по BIC при adj R² ≥ порога; вердикты ChangeFormulaType / AdjustParameters / NormIsActual.
 
-**Кривая Кима не входит в BIC-каталог** (`ReferenceFormulaCatalog.All`, 7 типов). Код `KIMCURVE` доступен через `TryGet` только чтобы посчитать R² текущей нормы. Для текущей Kim-нормы σ факта — `std(ln(Y))`, не линейное СКО производительности. Предложение «создать норму» никогда не пишет Kim.
+**Логнормальное распределение не входит в BIC-каталог** (`ReferenceFormulaCatalog.All`, 7 типов). Код `KIMCURVE` доступен через `TryGet` только чтобы посчитать R² текущей нормы. Для текущей логнормальной нормы σ факта — `std(ln(Y))`, не линейное СКО производительности. Предложение «создать норму» никогда не пишет этот тип.
 
-Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → `PerformanceRowDto` (x=объём, y=производительность). В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
+Точки факта: **только IsPrimary Fact**-версии за период (по одной на проект), `IFactAssessmentPipeline` → строки IIC с собственными факт-часами (корень после свёртки на L1 или заявленный узел регистра трудоёмкости). X = объём этой корзины, Y = `FactProductivity`. Фильтр `workDirectionIds` не схлопывает заявленный узел в L1; запрос листа без часов по-прежнему попадает на корень свёртки. Норма — снимок узла, иначе снимок потомка, иначе temporal на конец периода. В ответе: `NormMeanPerformance`, `FactMeanPerformance`, метаданные проекта/версии на точках. Z-расчёт по-прежнему только в `PerformanceCalculationEngine`.
 
 ## UI
 

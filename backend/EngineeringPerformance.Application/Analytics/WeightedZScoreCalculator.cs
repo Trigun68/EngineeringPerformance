@@ -4,10 +4,10 @@ namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Единый расчёт средневзвешенного Z по корневым направлениям.
-/// Реализация для IPerformanceCalculationEngine.ComputeWeightedZFromPerformanceRows;
-/// Infrastructure вызывает только через движок.
+/// Internal-реализация <c>IPerformanceCalculationEngine.ComputeWeightedZFromPerformanceRows</c>;
+/// Infrastructure и тесты обращаются только через движок.
 /// </summary>
-public static class WeightedZScoreCalculator
+internal static class WeightedZScoreCalculator
 {
     public static decimal? FromRootPerformanceRows(IReadOnlyList<PerformanceRowDto> performanceRows, int decimalPlaces = 2)
     {

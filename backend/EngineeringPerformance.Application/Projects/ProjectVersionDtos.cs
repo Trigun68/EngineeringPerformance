@@ -17,7 +17,8 @@ public sealed record ProjectVersionDto(
     PlanningScenario PlanningScenario = PlanningScenario.ByEachValue,
     ZParameterLevel ZParameterLevel = ZParameterLevel.EachElement,
     bool IsPrimary = false,
-    int RecalculatedVersionCount = 0);
+    int RecalculatedVersionCount = 0,
+    byte[]? RowVersion = null);
 
 public sealed record ProjectVersionWriteRequest(
     string VersionName,
@@ -33,4 +34,5 @@ public sealed record ProjectVersionWriteRequest(
     /// </summary>
     DateTime? AsOfDate = null,
     /// <summary>Только Create: сделать версию основной (сбросит предыдущую того же Direction).</summary>
-    bool? IsPrimary = null);
+    bool? IsPrimary = null,
+    byte[]? RowVersion = null);

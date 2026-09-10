@@ -27,7 +27,11 @@ public sealed record ForecastIicVolumeRowDto(
     decimal PessimisticHours,
     string Range,
     /// <summary>Полный путь «родитель / … / узел» для плоских таблиц сценариев.</summary>
-    string HierarchyPath);
+    string HierarchyPath,
+    /// <summary>Собственный плановый физобъём узла (Qty×Coeff на ClassifierId), без суммы детей.</summary>
+    decimal? OwnPlannedVolume = null,
+    /// <summary>Тот же объём, свёрнутый на уровень привязки трудоёмкости as-of (IicClaimedBuckets).</summary>
+    decimal? GroupedPhysicalVolume = null);
 
 public sealed record ForecastScenarioDto(
     string ScenarioName,

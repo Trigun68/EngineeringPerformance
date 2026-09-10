@@ -49,7 +49,7 @@
   - Тест (xUnit): `PermissionsApiTests.Observer_GetUsers_Returns403`
 
 - [ ] **Матрица прав UI (только Admin):** Редактирование `AccessRights` доступно только Administrator.
-  - Backend: `AccessRightsController` → `Forbid` для non-admin
+  - Backend: `AccessRightsController` / `PermissionMatrixController` — `[HasPermission(Administration, Read)]` на GET, `Edit` на PUT
   - Frontend: `AccessRightsPage` + скрытие route для non-admin
   - Тест (Playwright): `permissions.spec.ts` → observer → `/settings/access-rights` → 403 или redirect
 
@@ -257,7 +257,7 @@
 
 ### 2. Валидация файла
 
-- [ ] **`ExcelUploadValidator`:** extension, MIME, PK zip magic, max 50 MB.
+- [ ] **`ExcelUploadValidator`:** extension, MIME, PK zip magic, max 10 MB.
   - Тест (xUnit): `ImportApiTests.InvalidMime_Returns400`
 
 ### 3. Три типа импорта
@@ -394,7 +394,7 @@
 |-----------|---------------|-----------------------------------|-----------------|
 | Роли/ACL | 2 уровня (`AccessRights` + `ProjectPermissions`); GAP: WPF без Level, список всех проектов, импорт без Edit | 2 уровня + `RequireProjectAccess(Level)` + nav/tab guards + Admin-only matrix | `[ ]` → цель: xUnit + Playwright S0 |
 | Расчёты | Размазаны по `PerformanceService` + `ProjectsPageViewModel` (~2500 строк VM) | Единый `PerformanceCalculationEngine`; UI только отображает DTO | `[ ]` → порт `PerformanceServiceTests` + новые edge cases |
-| Импорт | Replace OK; UI без ACL; `MergeLabor` только в тестах | Права на UI+API; Replace сохранён; skip ≠ rollback; validator 50MB | `[ ]` → `ImportApiTests` + e2e |
+| Импорт | Replace OK; UI без ACL; `MergeLabor` только в тестах | Права на UI+API; Replace сохранён; skip ≠ rollback; validator 10 MB | `[ ]` → `ImportApiTests` + e2e |
 | Копирование | PPV+LI+iterations; **без Equipment**; web — только шапка | **Full Deep Copy** включая Equipment; транзакция; права Edit | `[ ]` → `CopyVersionTests` |
 | Производительность БД | 5 `DbContext` на `GetPerformanceDataAsync`; дубль PPV queries | 1 Scoped `DbContext`; batch read; `.AsNoTracking()` | `[ ]` → perf integration + code review |
 | 9 гридов UI | DevExpress GridControl×9, контекстные меню, layout save | AG Grid×9, hooks, `DataTable`, user settings | `[~]` частично (Compare filter ✅) |

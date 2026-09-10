@@ -1,32 +1,37 @@
 # ISS-013: Декомпозиция god-классов backend
 
-**Статус:** 🔵 Backlog (2026-08-16)
+**Статус:** 🟠 Частично (2026-09-09)
 **Категория:** Refactoring / SRP
 **Приоритет:** P1 (High)
 **Источник:** `_work/20260816_221500_code_architecture_review.md` §3
 
 ## Контекст
-Классы со смешанными ответственностями (цель CLAUDE.md — функции ≤30 строк, один класс = одна причина изменения):
-- `ProjectExcelDataImportService.*` — 5 partial-файлов, ~2879 строк (PPV 1344 / LI 569 / Equipment 526 / API / транзакции / метаданные).
-- `ProjectsPageGridBuilder` — 1282 строки, 25 статических методов: forecast summary + forecast grids + fact grids + compare + performance totals + именование IIC. Методы `BuildFactGrids` ~170 строк, `BuildForecastDetail` ~105.
-- `ProjectExportService` — 1272 строки, 13 публичных экспортов (Excel+PDF × forecast/fact/compare); `BuildFactDetailSummaryTableWorkbook` ~150 строк, `AddDetailSummarySheet` ~125.
-- Также: `VisualReportService` 830, `FactNormAnalysisService` 684, `ProjectForecastService` 636, `NormRegistryService` 611, `DirectoryFacade` 546.
+После цикла mixed `V_g` / DocSet / persist цифры:
 
-## Решение (направление)
-1. Import: разделить на `PhysicalVolumeImportProcessor` / `LaborIntensityImportProcessor` / `EquipmentImportProcessor` (уже частично есть) + тонкий оркестратор + отдельный `ImportIterationMetadataWriter` (см. ISS-009).
-2. GridBuilder: `ForecastGridBuilder` / `FactGridBuilder` / `CompareGridBuilder` + общий `HourRollup`-модуль; именование IIC — через SoT-хелпер (ISS-015).
-3. Export: `ExcelExportWriter`/`PdfExportWriter` по доменам (forecast/fact/compare), общие хелперы стилей/чисел.
-4. Методы >80 строк с несколькими ответственностями — Extract Method.
+| Файл | Строк (2026-09-08) |
+|------|---------------------|
+| `PhysicalVolumeExcelImportService.Parse.cs` | ~668 |
+| `ProjectsPageGridBuilder.cs` | 1288 |
+| `VisualReportService.cs` | 1143 |
+| `ProjectExportService.cs` | 1028 |
+| `ProjectExcelDataImportService.JsonIngest.cs` | 635 |
+| Остальные partials импорта | ≤571 |
 
-## Acceptance Criteria
-- [ ] Ни один файл не превышает ~600 строк; методы ≤80 строк (кроме декларативных маппингов).
-- [ ] Поведение не меняется: существующие тесты зелёные, e2e экспорта зелёные.
-- [ ] Нет новых нарушений SSOT движка (ISS-010 учтён).
+Импорт уже 6 partials; публичный `IProjectImportService` сохранён.
 
-## Файлы
-- `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.*.cs`
-- `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs`
-- `backend/EngineeringPerformance.Infrastructure/Export/ProjectExportService.cs`, `VisualReportService.cs`
+## Что сделано в этом цикле
+- Поведение (mixed `V_g`, плановые объёмы, DocSet) закреплено тестами **до** механической нарезки.
+- VisualReportService / FactNormAnalysisService **не** резали в том же заходе.
+- Excel ФО / оборудование / трудоёмкость вынесены в отдельные сервисы; фасад `ProjectExcelDataImportService` только делегирует.
+- 2026-09-09: с `IPerformanceCalculationEngine` сняты мёртвые фасады; тесты Application переведены на `RecalculatePlanHours` / `ComputeForecastHours` / `ComputeWeightedZ*`; неиспользуемый `engine` убран со stored-hours путей `ProjectsPageGridBuilder`. `ForecastHoursAggregator` остаётся в дереве без вызовов из движка.
+
+## Что осталось
+1. GridBuilder → отдельные типы `ForecastGridBuilder` / `FactGridBuilder` / `CompareGridBuilder` (сейчас already partial `.Forecast` / `.Fact` / `.Compare` + stored-hours helpers).
+2. Export writers по доменам (не второй PDF-движок).
+3. Резать `VisualReportService` / крупные parse-partials до ≲600 строк.
+4. Удалить или спрятать неиспользуемый `ForecastHoursAggregator`, если не понадобится тестам формул.
+
+AC «файл ≲600» **не закрыт**. Поведение покрыто тестами Import / GridBuilder / persist.
 
 ## Связанные
 - ISS-009, ISS-010, ISS-015; `performance-calculation-engine-ssot.mdc`

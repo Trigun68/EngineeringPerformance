@@ -85,18 +85,19 @@ export function DirectionsTable({ projectId, rows }: Props) {
 
   return (
     <div className="overflow-x-auto" data-testid="report-directions-table">
-      <table className="w-full min-w-[1100px] border-collapse text-sm">
+      <table className="w-full min-w-[1240px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border bg-slate-800 text-left text-xs text-slate-100 dark:bg-slate-900">
             <th className="px-2 py-2.5 font-semibold">Направление</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Объём</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Физобъём</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Сгруппированный физобъём</th>
             <th className="px-2 py-2.5 text-right font-semibold">Труд. план</th>
             <th className="px-2 py-2.5 text-right font-semibold">Труд. факт</th>
             <th className="px-2 py-2.5 text-right font-semibold">Произв. план</th>
             <th className="px-2 py-2.5 text-right font-semibold">Произв. факт</th>
             <th className="px-2 py-2.5 text-right font-semibold">Норма</th>
             <th className="px-2 py-2.5 text-right font-semibold">σ</th>
-            <th className="px-2 py-2.5 text-right font-semibold">Z план</th>
+            <th className="px-2 py-2.5 text-right font-semibold">Заложенный Z</th>
             <th className="px-2 py-2.5 text-right font-semibold">Z факт</th>
           </tr>
         </thead>
@@ -137,6 +138,9 @@ export function DirectionsTable({ projectId, rows }: Props) {
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
                   {fmt(row.physicalVolume, 1)}
+                </td>
+                <td className="px-2 py-2 text-right font-mono text-xs">
+                  {fmt(row.assessmentPhysicalVolume, 1)}
                 </td>
                 <td className="px-2 py-2 text-right font-mono text-xs">
                   {fmt(row.planLaborHours, 1)}

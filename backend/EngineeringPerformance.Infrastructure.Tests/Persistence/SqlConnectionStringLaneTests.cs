@@ -33,6 +33,19 @@ public sealed class SqlConnectionStringLaneTests
         parsed.ConnectTimeout.Should().Be(15);
         parsed.ApplicationName.Should().NotBe(SqlConnectionStringLane.InteractiveAppName);
     }
+
+    [Fact]
+    public void ForResourceMonitor_UsesTinyPoolAndDistinctAppName()
+    {
+        const string baseCs =
+            "Server=localhost;Database=EngineeringPerformance;User Id=sa;Password=x;TrustServerCertificate=True";
+
+        var parsed = new SqlConnectionStringBuilder(SqlConnectionStringLane.ForResourceMonitor(baseCs));
+
+        parsed.ApplicationName.Should().Be(SqlConnectionStringLane.ResourceMonitorAppName);
+        parsed.MaxPoolSize.Should().Be(2);
+        parsed.ConnectTimeout.Should().Be(2);
+    }
 }
 
 public sealed class SqlConnectionTimeoutClassifierTests

@@ -4,6 +4,8 @@ using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
+using EngineeringPerformance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -23,6 +25,7 @@ public sealed class VisualReportService : IVisualReportService
     private readonly IProjectReportSummaryService _reportSummary;
     private readonly IWorkCostService _workCosts;
     private readonly IPerformanceCalculationEngine _engine;
+    private readonly AppDbContext _context;
 
     public VisualReportService(
         IProjectsPageDataFetcher pageData,
@@ -34,7 +37,8 @@ public sealed class VisualReportService : IVisualReportService
         IPerformanceReportService performanceReport,
         IProjectReportSummaryService reportSummary,
         IWorkCostService workCosts,
-        IPerformanceCalculationEngine engine)
+        IPerformanceCalculationEngine engine,
+        AppDbContext context)
     {
         _pageData = pageData;
         _compare = compare;
@@ -46,6 +50,7 @@ public sealed class VisualReportService : IVisualReportService
         _reportSummary = reportSummary;
         _workCosts = workCosts;
         _engine = engine;
+        _context = context;
     }
 
     public async Task<byte[]> ExportForecastSummaryPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
@@ -83,7 +88,7 @@ public sealed class VisualReportService : IVisualReportService
                 r.Level,
                 [
                     r.DisplayName,
-                    PdfNumberFormat.Volume(r.FactPhysicalVolume),
+                    PdfNumberFormat.Volume(r.PhysicalVolume),
                     PdfNumberFormat.Hours(r.OptimisticHours),
                     PdfNumberFormat.Hours(r.BaseHours),
                     PdfNumberFormat.Hours(r.PessimisticHours),
@@ -187,7 +192,7 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Взвеш. Z", PdfNumberFormat.Z(summary.WeightedZScore)),
             new ReportKpiItem("Оценка", interpretationRu),
         };
-        var callouts = PdfInsightBuilder.BuildFactCallouts(data.Fact.Performance, summary);
+        var callouts = PdfInsightBuilder.BuildFactCallouts(data.Fact.Performance, summary, _engine);
 
         var hierRows = data.Fact.Performance
             .Where(r => r.WorkDirectionId >= 0)
@@ -198,7 +203,8 @@ public sealed class VisualReportService : IVisualReportService
                     r.Level,
                     [
                         r.WorkDirectionName,
-                        PdfNumberFormat.Volume(r.FactPhysicalVolume),
+                        PdfNumberFormat.Volume(r.PhysicalVolume),
+                        PdfNumberFormat.Volume(r.AssessmentPhysicalVolume),
                         PdfNumberFormat.Hours(r.FactLaborHours),
                         ..FactPlanHourCells(r.OptimisticHours, r.BaseHours, r.PessimisticHours),
                         PdfNumberFormat.Z(r.ZScore),
@@ -226,7 +232,7 @@ public sealed class VisualReportService : IVisualReportService
                 c, "Производительность по IIC",
                 FactSummaryColumns,
                 hierRows,
-                interpretationColumnIndex: 8));
+                interpretationColumnIndex: 9));
         },
         PdfReportKind.Fact,
         "Оценка факта — Итого",
@@ -391,6 +397,11 @@ public sealed class VisualReportService : IVisualReportService
         bool includeAppendix = false,
         CancellationToken cancellationToken = default)
     {
+        await EnsureVersionsBelongToProjectAsync(
+            projectId,
+            [planVersionId, factVersionId, compareVersionAId, compareVersionBId],
+            cancellationToken);
+
         var planData = await _pageData.GetProjectsPageDataAsync(projectId, planVersionId, null, cancellationToken);
         var factData = await _pageData.GetProjectsPageDataAsync(projectId, factVersionId, null, cancellationToken);
         var analysis = await _analysis.GenerateReportAsync(projectId, factVersionId, cancellationToken);
@@ -449,7 +460,7 @@ public sealed class VisualReportService : IVisualReportService
             new ReportKpiItem("Оценка", analysis.Summary.WeightedZScoreInterpretation?.ToRussian() ?? "—"),
         };
 
-        var callouts = PdfInsightBuilder.BuildFactCallouts(factData.Fact.Performance, analysis.Summary);
+        var callouts = PdfInsightBuilder.BuildFactCallouts(factData.Fact.Performance, analysis.Summary, _engine);
 
         return QuestPdfReportComposer.BuildLandscapeReport(col =>
         {
@@ -529,7 +540,9 @@ public sealed class VisualReportService : IVisualReportService
             chart.VersionBName);
 
         var tableRows = summary
-            .Where(r => r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
+            .Where(r => r.PhysicalVolumeA.HasValue || r.PhysicalVolumeB.HasValue
+                || r.AssessmentPhysicalVolumeA.HasValue || r.AssessmentPhysicalVolumeB.HasValue
+                || r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
                 || r.PlannedLaborHoursA.HasValue || r.PlannedLaborHoursB.HasValue
                 || r.PlannedLaborHoursOptimisticA.HasValue || r.PlannedLaborHoursOptimisticB.HasValue
                 || r.PlannedLaborHoursPessimisticA.HasValue || r.PlannedLaborHoursPessimisticB.HasValue
@@ -539,8 +552,10 @@ public sealed class VisualReportService : IVisualReportService
             .Select(r => (string[])
             [
                 r.Name,
-                PdfNumberFormat.Volume(r.FactPhysicalVolumeA),
-                PdfNumberFormat.Volume(r.FactPhysicalVolumeB),
+                PdfNumberFormat.Volume(r.PhysicalVolumeA),
+                PdfNumberFormat.Volume(r.PhysicalVolumeB),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolumeA),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolumeB),
                 ..ComparePlanHourCells(r.PlannedLaborHoursOptimisticA, r.PlannedLaborHoursA, r.PlannedLaborHoursPessimisticA,
                     r.PlannedLaborHoursOptimisticB, r.PlannedLaborHoursB, r.PlannedLaborHoursPessimisticB),
                 PdfNumberFormat.Hours(r.FactLaborHoursA),
@@ -720,7 +735,7 @@ public sealed class VisualReportService : IVisualReportService
 
         var kpis = new List<ReportKpiItem>
         {
-            new("Z-оценка план", FmtZ(report.Plan?.WeightedZScore)),
+            new("Заложенный Z", FmtZ(report.Plan?.WeightedZScore)),
             new("Z-оценка факт", FmtZ(report.Fact?.WeightedZScore)),
             new("Трудоёмкость план", FmtHours(report.Plan?.TotalLaborHours)),
             new("Трудоёмкость факт", FmtHours(report.Fact?.TotalLaborHours)),
@@ -739,7 +754,8 @@ public sealed class VisualReportService : IVisualReportService
             .Select(d => (string[])
             [
                 d.Name,
-                d.PhysicalVolume is null ? "—" : $"{PdfNumberFormat.Volume(d.PhysicalVolume)} {d.UnitName ?? ""}".Trim(),
+                PdfNumberFormat.Volume(d.PhysicalVolume),
+                PdfNumberFormat.Volume(d.AssessmentPhysicalVolume),
                 PdfNumberFormat.Hours(d.PlanLaborHours),
                 PdfNumberFormat.Hours(d.FactLaborHours),
                 PdfNumberFormat.Productivity(d.PlanProductivity),
@@ -801,9 +817,8 @@ public sealed class VisualReportService : IVisualReportService
     }
 
     /// <summary>
-    /// Сводный отчёт «план/факт» по основным версиям (вкладка «Отчёт»).
-    /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService);
-    /// таблицы листьев — из факт-грида текущей версии, паритет client ReportsTab.
+    /// Таблицы групп IIC — узлы с собственными факт-часами (L1 после свёртки или заявленный узел).
+    /// Сводка — из <see cref="IProjectReportSummaryService"/> (семантика PerformanceReportService).
     /// </summary>
     public async Task<byte[]> ExportProjectReportPdfAsync(int projectId, int versionId, CancellationToken cancellationToken = default)
     {
@@ -813,14 +828,11 @@ public sealed class VisualReportService : IVisualReportService
 
         var data = await _pageData.GetProjectsPageDataAsync(projectId, versionId, null, cancellationToken);
         var allRows = data.Fact.Performance.Where(r => r.WorkDirectionId >= 0).ToList();
-        var parentIds = allRows.Where(r => r.ParentId.HasValue).Select(r => r.ParentId!.Value).ToHashSet();
-        // Лист дерева = узел, который никто не указывает своим родителем — паритет
-        // client reportCalc.ts::flattenTree + ReportsTab.tsx (leaves = flat.filter(children.length === 0)).
-        var leaves = allRows.Where(r => !parentIds.Contains(r.WorkDirectionId)).ToList();
+        var hourRows = PerformanceDisplayVolume.WithOwnFactHours(allRows).ToList();
 
-        var scoredLeaves = leaves.Where(r => r.ZScore.HasValue).ToList();
-        var best = scoredLeaves.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
-        var worst = scoredLeaves.OrderByDescending(r => r.ZScore!.Value).Take(5).ToList();
+        var scoredRoots = hourRows.Where(r => r.ZScore.HasValue).ToList();
+        var best = scoredRoots.OrderBy(r => r.ZScore!.Value).Take(5).ToList();
+        var worst = scoredRoots.OrderByDescending(r => r.ZScore!.Value).Take(5).ToList();
 
         static IEnumerable<string[]> RankRows(IReadOnlyList<PerformanceRowDto> rows) =>
             rows.Select((r, i) => new[]
@@ -832,12 +844,12 @@ public sealed class VisualReportService : IVisualReportService
                 r.Interpretation?.ToRussian() ?? "—",
             });
 
-        var volumeRows = leaves.Select(r => new HierarchicalPdfRow(
+        var volumeRows = hourRows.Select(r => new HierarchicalPdfRow(
             0,
             [
                 r.WorkDirectionName,
-                PdfNumberFormat.Volume(r.FactPhysicalVolume),
-                PdfNumberFormat.Hours(r.FactLaborHours),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolume),
+                PdfNumberFormat.Hours(r.FactLaborHours ?? r.SubtreeHours),
                 PdfNumberFormat.Productivity(r.FactProductivity),
                 PdfNumberFormat.Productivity(r.NormProductivity),
                 PdfNumberFormat.Z(r.ZScore),
@@ -940,7 +952,8 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] ForecastSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.4f),
-        PdfTableColumn.Number("План. объём"),
+        // Own физобъём; exclusive remap FactPhysicalVolume не показываем.
+        PdfTableColumn.Number("Физобъём"),
         PdfTableColumn.Optimistic(),
         PdfTableColumn.BaseHours(),
         PdfTableColumn.Pessimistic(),
@@ -955,10 +968,12 @@ public sealed class VisualReportService : IVisualReportService
         PdfTableColumn.Pessimistic(),
     ];
 
+    /// <summary>Итого факта: own физобъём и сгруппированный (AssessmentPhysicalVolume), без exclusive remap в первой колонке.</summary>
     private static readonly PdfTableColumn[] FactSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.4f),
-        PdfTableColumn.Number("ФО"),
+        PdfTableColumn.Number("Физобъём"),
+        PdfTableColumn.Number("Сгруппированный физобъём", width: 1.6f),
         PdfTableColumn.Number("Часы"),
         PdfTableColumn.Optimistic(),
         PdfTableColumn.BaseHours(),
@@ -999,7 +1014,7 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] VolumeGroupColumns =
     [
         PdfTableColumn.Text("Направление IIC", 2.6f),
-        PdfTableColumn.Number("Факт. объём"),
+        PdfTableColumn.Number("Сгруппированный физобъём"),
         PdfTableColumn.Number("Часы"),
         PdfTableColumn.Number("Произв. (факт)"),
         PdfTableColumn.Number("Норма IIC"),
@@ -1007,17 +1022,19 @@ public sealed class VisualReportService : IVisualReportService
         PdfTableColumn.Text("Оценка"),
     ];
 
+    /// <summary>Сводный v2: own физобъём и сгруппированный (AssessmentPhysicalVolume), без subtree на корнях.</summary>
     private static readonly PdfTableColumn[] PerformanceDirectionsColumns =
     [
         PdfTableColumn.Text("Направление", 2.2f),
-        PdfTableColumn.Number("Объём"),
+        PdfTableColumn.Number("Физобъём"),
+        PdfTableColumn.Number("Сгруппированный физобъём", width: 1.6f),
         PdfTableColumn.Number("Труд. план"),
         PdfTableColumn.Number("Труд. факт"),
         PdfTableColumn.Number("Произв. план"),
         PdfTableColumn.Number("Произв. факт"),
         PdfTableColumn.Number("Норма"),
         PdfTableColumn.Number("σ"),
-        PdfTableColumn.Number("Z план"),
+        PdfTableColumn.Number("Заложенный Z"),
         PdfTableColumn.Number("Z факт"),
     ];
 
@@ -1034,8 +1051,10 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] CompareSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.2f),
-        PdfTableColumn.Number("ФО A"),
-        PdfTableColumn.Number("ФО B"),
+        PdfTableColumn.Number("Физобъём A"),
+        PdfTableColumn.Number("Физобъём B"),
+        PdfTableColumn.Number("Сгруппированный физобъём A", width: 1.6f),
+        PdfTableColumn.Number("Сгруппированный физобъём B", width: 1.6f),
         ..ComparePlanHourColumns,
         PdfTableColumn.Number("Факт. труд A"),
         PdfTableColumn.Number("Факт. труд B"),
@@ -1109,4 +1128,25 @@ public sealed class VisualReportService : IVisualReportService
 
     private static string SumNullableDisplay(IEnumerable<decimal?> values, int decimals) =>
         PdfNumberFormat.Format(SumNullable(values), decimals);
+
+    private async Task EnsureVersionsBelongToProjectAsync(
+        int projectId,
+        IReadOnlyList<int> versionIds,
+        CancellationToken cancellationToken)
+    {
+        var versions = await _context.ProjectAnalysisVersions
+            .AsNoTracking()
+            .Where(v => versionIds.Contains(v.Id))
+            .Select(v => new { v.Id, v.ProjectId })
+            .ToListAsync(cancellationToken);
+
+        foreach (var vid in versionIds)
+        {
+            var found = versions.FirstOrDefault(v => v.Id == vid);
+            if (found is null)
+                throw new InvalidOperationException($"Версия с идентификатором {vid} не найдена.");
+            if (found.ProjectId != projectId)
+                throw new InvalidOperationException($"Версия {vid} принадлежит другому проекту.");
+        }
+    }
 }

@@ -1,5 +1,7 @@
 import { createTheme, ThemeProvider } from '@mui/material';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { NormAnalysisPanel } from '../NormAnalysisPanel';
 
@@ -32,13 +34,20 @@ vi.mock('../../../../api/factNormAnalyticsApi', () => ({
 
 const theme = createTheme();
 
+function renderPanel(ui: ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <ThemeProvider theme={theme}>{ui}</ThemeProvider>
+    </QueryClientProvider>,
+  );
+}
+
 describe('NormAnalysisPanel help button', () => {
   it('opens the help dialog from the info icon', async () => {
-    render(
-      <ThemeProvider theme={theme}>
-        <NormAnalysisPanel dateFrom="2026-01-01" dateTo="2026-08-01" />
-      </ThemeProvider>,
-    );
+    renderPanel(<NormAnalysisPanel dateFrom="2026-01-01" dateTo="2026-08-01" />);
     await waitFor(() => {
       expect(screen.getByTestId('norm-analysis-help')).toBeInTheDocument();
     });

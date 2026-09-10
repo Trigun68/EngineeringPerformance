@@ -1,5 +1,7 @@
-using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
+using EngineeringPerformance.Application.Common.Exceptions;
+using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
@@ -15,19 +17,22 @@ public sealed class ProjectVersionService : IProjectVersionService
     private readonly IProjectVersionPlanningParameterService _planningParameters;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly IProjectAnalyticsCache _analyticsCache;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectVersionService(
         AppDbContext context,
         IProjectVersionDeepCopyService deepCopy,
         IProjectVersionPlanningParameterService planningParameters,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
-        IProjectAnalyticsCache analyticsCache)
+        IProjectAnalyticsCache analyticsCache,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _deepCopy = deepCopy;
         _planningParameters = planningParameters;
         _recalcOrchestrator = recalcOrchestrator;
         _analyticsCache = analyticsCache;
+        _actionLogger = actionLogger;
     }
 
     public async Task<IReadOnlyList<ProjectVersionDto>> ListAsync(int projectId, CancellationToken cancellationToken = default)
@@ -76,15 +81,30 @@ public sealed class ProjectVersionService : IProjectVersionService
             CreatedAt = asOf,
         };
 
-        if (makePrimary && hasPeers)
-            await ClearPrimaryAsync(projectId, request.Direction, excludeVersionId: null, cancellationToken);
+        await RunInTransactionAsync(async () =>
+        {
+            // Filtered unique index UX_ProjectAnalysisVersions_OnePrimary проверяется per-statement:
+            // сначала снимаем primary с соседей и сохраняем, затем вставляем новую основную.
+            if (makePrimary && hasPeers)
+            {
+                await ClearPrimaryAsync(projectId, request.Direction, excludeVersionId: null, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
 
-        _context.ProjectAnalysisVersions.Add(entity);
-        await _context.SaveChangesAsync(cancellationToken);
+            _context.ProjectAnalysisVersions.Add(entity);
+            await _context.SaveChangesAsync(cancellationToken);
 
-        await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
-            _context, entity.Id, entity.CreatedAt, cancellationToken);
-        await _context.SaveChangesAsync(cancellationToken);
+            await AnalysisVersionSnapshotService.PopulateSnapshotAsync(
+                _context, entity.Id, entity.CreatedAt, cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }, cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionCreate,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
 
         await _planningParameters.SeedForVersionAsync(entity.Id, cancellationToken);
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
@@ -98,6 +118,9 @@ public sealed class ProjectVersionService : IProjectVersionService
             .FirstOrDefaultAsync(v => v.ProjectId == projectId && v.Id == versionId, cancellationToken);
         if (entity is null)
             return null;
+
+        if (request.RowVersion is { Length: > 0 })
+            _context.Entry(entity).Property(v => v.RowVersion).OriginalValue = request.RowVersion;
 
         await ValidatePhysicalVolumeTypeAsync(request.PhysicalVolumeTypeId, cancellationToken);
 
@@ -127,22 +150,22 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.ModifiedAt = DateTime.UtcNow;
         // IsPrimary не меняется через Update — только Create / SetPrimary / Archive.
 
-        if (previousDirection != request.Direction && entity.IsPrimary)
-        {
-            // Смена направления: снять primary здесь и при необходимости восстановить у старого направления.
-            entity.IsPrimary = false;
-            await PromotePrimaryIfMissingAsync(projectId, previousDirection, cancellationToken);
+        var scenarioChanged = request.PlanningScenario.HasValue
+            && request.PlanningScenario.Value != previousScenario;
 
-            var targetHasPrimary = await _context.ProjectAnalysisVersions
-                .AnyAsync(
-                    v => v.ProjectId == projectId
-                         && v.Direction == request.Direction
-                         && !v.IsArchived
-                         && v.IsPrimary
-                         && v.Id != versionId,
-                    cancellationToken);
-            if (!targetHasPrimary)
+        var directionChangedFromPrimary = previousDirection != request.Direction && entity.IsPrimary;
+
+        await RunInTransactionAsync(async () =>
+        {
+            if (directionChangedFromPrimary)
             {
+                // Смена направления: сначала снять primary и сохранить (сущность в БД ещё числится
+                // primary старого направления), затем восстановить основную у старого направления.
+                // Порядок важен из-за filtered unique index UX_ProjectAnalysisVersions_OnePrimary.
+                entity.IsPrimary = false;
+                await SaveWithConcurrencyCheckAsync(cancellationToken);
+                await PromotePrimaryIfMissingAsync(projectId, previousDirection, cancellationToken);
+
                 var hasPeers = await _context.ProjectAnalysisVersions
                     .AnyAsync(
                         v => v.ProjectId == projectId
@@ -150,28 +173,33 @@ public sealed class ProjectVersionService : IProjectVersionService
                              && !v.IsArchived
                              && v.Id != versionId,
                         cancellationToken);
+                // Единственная версия нового направления — становится его основной.
                 if (!hasPeers)
                     entity.IsPrimary = true;
             }
-        }
 
-        var scenarioChanged = request.PlanningScenario.HasValue
-            && request.PlanningScenario.Value != previousScenario;
+            // Снимок норм зависит от CreatedAt; смена справочника БЕР/КФО тоже требует
+            // явного пересоздания (единая политика версии).
+            if (catalogChanged || createdAtChanged)
+            {
+                await AnalysisVersionSnapshotService.RepopulateSnapshotAsync(
+                    _context, entity.Id, entity.CreatedAt, cancellationToken);
+            }
 
-        // Снимок норм зависит от CreatedAt; смена справочника БЕР/КФО тоже требует
-        // явного пересоздания (единая политика версии).
-        if (catalogChanged || createdAtChanged)
-        {
-            await AnalysisVersionSnapshotService.RepopulateSnapshotAsync(
-                _context, entity.Id, entity.CreatedAt, cancellationToken);
-        }
+            await SaveWithConcurrencyCheckAsync(cancellationToken);
+        }, cancellationToken);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.VersionEdit,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
 
         var recalcCount = 0;
         if (catalogChanged || createdAtChanged || scenarioChanged)
         {
-            await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+            await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, "scenario", cancellationToken);
             recalcCount = 1;
         }
 
@@ -190,13 +218,28 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         var wasPrimary = entity.IsPrimary;
         var direction = entity.Direction;
-        entity.IsArchived = true;
-        entity.IsPrimary = false;
-        entity.ModifiedAt = DateTime.UtcNow;
-        await _context.SaveChangesAsync(cancellationToken);
 
-        if (wasPrimary)
-            await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
+        // Архивация и назначение новой основной версии — одна транзакция:
+        // иначе при сбое между ними направление остаётся без основной версии.
+        // Два SaveChanges обязательны: фильтрованный уникальный индекс
+        // UX_ProjectAnalysisVersions_OnePrimary проверяется на каждом statement.
+        await RunInTransactionAsync(async () =>
+        {
+            entity.IsArchived = true;
+            entity.IsPrimary = false;
+            entity.ModifiedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (wasPrimary)
+                await PromotePrimaryIfMissingAsync(projectId, direction, cancellationToken);
+        }, cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionDelete,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
 
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return true;
@@ -212,6 +255,14 @@ public sealed class ProjectVersionService : IProjectVersionService
         entity.IsArchived = false;
         entity.ModifiedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionRestore,
+            entityType: "ProjectAnalysisVersion",
+            entityId: entity.Id,
+            description: entity.VersionName,
+            cancellationToken);
+
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
 
         return await GetByIdAsync(projectId, versionId, cancellationToken);
@@ -228,10 +279,24 @@ public sealed class ProjectVersionService : IProjectVersionService
 
         if (!entity.IsPrimary)
         {
-            await ClearPrimaryAsync(projectId, entity.Direction, excludeVersionId: versionId, cancellationToken);
-            entity.IsPrimary = true;
-            entity.ModifiedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync(cancellationToken);
+            await RunInTransactionAsync(async () =>
+            {
+                // Два SaveChanges: unique-индекс по primary проверяется на каждом UPDATE отдельно.
+                await ClearPrimaryAsync(projectId, entity.Direction, excludeVersionId: versionId, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                entity.IsPrimary = true;
+                entity.ModifiedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+            }, cancellationToken);
+
+            await _actionLogger.LogAsync(
+                UserActionType.VersionSetPrimary,
+                entityType: "ProjectAnalysisVersion",
+                entityId: entity.Id,
+                description: entity.VersionName,
+                cancellationToken);
+
             await InvalidateAnalyticsAsync(projectId, cancellationToken);
         }
 
@@ -253,6 +318,14 @@ public sealed class ProjectVersionService : IProjectVersionService
             newDescription,
             targetDirection,
             cancellationToken);
+
+        await _actionLogger.LogAsync(
+            UserActionType.VersionCopy,
+            entityType: "ProjectAnalysisVersion",
+            entityId: copy.Id,
+            description: copy.VersionName,
+            cancellationToken);
+
         await InvalidateAnalyticsAsync(projectId, cancellationToken);
         return copy;
     }
@@ -279,6 +352,27 @@ public sealed class ProjectVersionService : IProjectVersionService
             + "физические объёмы. Удалите данные ФО версии или создайте новую версию с нужным справочником.");
     }
 
+    /// <summary>
+    /// Пользовательская транзакция внутри execution strategy (EnableRetryOnFailure).
+    /// Если транзакция уже открыта вызывающим кодом — просто выполняем действие.
+    /// </summary>
+    private async Task RunInTransactionAsync(Func<Task> action, CancellationToken cancellationToken)
+    {
+        if (_context.Database.CurrentTransaction is not null || !_context.Database.IsRelational())
+        {
+            await action();
+            return;
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            await action();
+            await transaction.CommitAsync(cancellationToken);
+        });
+    }
+
     private async Task ClearPrimaryAsync(
         int projectId,
         AnalysisDirection direction,
@@ -298,6 +392,18 @@ public sealed class ProjectVersionService : IProjectVersionService
         {
             other.IsPrimary = false;
             other.ModifiedAt = DateTime.UtcNow;
+        }
+    }
+
+    private async Task SaveWithConcurrencyCheckAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("Версия изменена другим пользователем. Обновите данные и повторите.");
         }
     }
 
@@ -378,5 +484,6 @@ public sealed class ProjectVersionService : IProjectVersionService
             v.PlanningScenario,
             v.ZParameterLevel,
             v.IsPrimary,
-            0);
+            0,
+            v.RowVersion);
 }

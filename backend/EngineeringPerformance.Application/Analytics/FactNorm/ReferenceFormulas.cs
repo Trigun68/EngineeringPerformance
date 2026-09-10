@@ -100,7 +100,7 @@ public sealed class ConstantReferenceFormula : ReferenceFormulaBase
 public sealed class KimCurveReferenceFormula : ReferenceFormulaBase
 {
     public override string Code => ReferenceFormulaCodes.KimCurve;
-    public override string DisplayName => "Кривая Кима";
+    public override string DisplayName => "Логнормальное распределение";
     public override string Formula => "P(z) = e^(μ + z·σ)";
     public override string Description => "Логнормаль: μ = ln(P), производительность не зависит от объёма";
     public override IReadOnlyList<string> ParamNames => ["a"];

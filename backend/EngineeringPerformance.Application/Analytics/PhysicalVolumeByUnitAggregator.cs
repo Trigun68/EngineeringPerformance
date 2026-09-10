@@ -35,7 +35,12 @@ public static class PhysicalVolumeByUnitAggregator
 
     public static IReadOnlyList<(string Unit, decimal Total)> AggregateFromPerformance(
         IEnumerable<PerformanceRowDto> rows) =>
-        Aggregate(rows.Select(r => (r.NormUnitName, r.FactPhysicalVolume)));
+        AggregateFromPerformance(rows, r => r.FactPhysicalVolume);
+
+    public static IReadOnlyList<(string Unit, decimal Total)> AggregateFromPerformance(
+        IEnumerable<PerformanceRowDto> rows,
+        Func<PerformanceRowDto, decimal?> volumeSelector) =>
+        Aggregate(rows.Select(r => (r.NormUnitName, volumeSelector(r))));
 
     public static string Format(IReadOnlyList<(string Unit, decimal Total)> totals)
     {
@@ -65,7 +70,18 @@ public static class PhysicalVolumeByUnitAggregator
     }
 
     public static string? FormatFromPerformance(IEnumerable<PerformanceRowDto> rows) =>
-        FormatOrNull(rows.Select(r => (r.NormUnitName, r.FactPhysicalVolume)));
+        FormatFromPerformance(rows, r => r.FactPhysicalVolume);
+
+    public static string? FormatFromPerformance(
+        IEnumerable<PerformanceRowDto> rows,
+        Func<PerformanceRowDto, decimal?> volumeSelector) =>
+        FormatOrNull(rows.Select(r => (r.NormUnitName, volumeSelector(r))));
+
+    public static string? FormatPhysicalVolume(IEnumerable<PerformanceRowDto> rows) =>
+        FormatFromPerformance(rows, r => r.PhysicalVolume);
+
+    public static string? FormatAssessmentPhysicalVolume(IEnumerable<PerformanceRowDto> rows) =>
+        FormatFromPerformance(rows, r => r.AssessmentPhysicalVolume);
 
     private static string FormatNumber(decimal value) =>
         value.ToString("N0", DisplayCulture);

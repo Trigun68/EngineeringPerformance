@@ -116,3 +116,12 @@ Content-Type: application/json
 {
     "documentTypeNames": ["РД-технология"]
 }
+
+### Resource metrics (1 hour)
+GET {{baseUrl}}/api/monitoring/resource-metrics?windowMinutes=60
+Authorization: Bearer {{login.response.body.accessToken}}
+
+### Resource metrics (24 hours)
+GET {{baseUrl}}/api/monitoring/resource-metrics?windowMinutes=1440
+Authorization: Bearer {{login.response.body.accessToken}}
+

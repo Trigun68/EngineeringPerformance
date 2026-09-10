@@ -94,7 +94,7 @@ public sealed class ProjectReportSummaryService(
     private ProjectReportSummaryBlock BuildPlanBlock(ProjectsPageVersionBundle bundle)
     {
         var planPerformance = ProjectsPageGridBuilder.BuildPlanPerformance(bundle, calculationEngine);
-        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance, calculationEngine);
+        var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, planPerformance);
         var scenarios = PlanningScenarioReportMetrics.Compute(bundle, calculationEngine, forecast.GrandTotals);
 
         return ToBlock(scenarios.HoursBase, scenarios.ZBase);

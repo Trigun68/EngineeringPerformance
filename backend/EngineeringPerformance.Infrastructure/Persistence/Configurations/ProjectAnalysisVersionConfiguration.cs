@@ -4,26 +4,37 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace EngineeringPerformance.Infrastructure.Persistence.Configurations;
 
-public class ProjectAnalysisVersionConfiguration : IEntityTypeConfiguration<ProjectAnalysisVersion>
+/// <summary>
+/// Версия анализа проекта. Конфигурация зеркалит SQL (001, 099, 105, 119, 121):
+/// длины строк и индексы совпадают со схемой, чтобы EF-модель не расходилась с БД.
+/// RowVersion настраивается в <c>AppDbContext.OnModelCreating</c> (ветка InMemory/SQL).
+/// </summary>
+public sealed class ProjectAnalysisVersionConfiguration : IEntityTypeConfiguration<ProjectAnalysisVersion>
 {
+    public const string PrimaryVersionIndexName = "UX_ProjectAnalysisVersions_OnePrimary";
+
     public void Configure(EntityTypeBuilder<ProjectAnalysisVersion> builder)
     {
         builder.ToTable("ProjectAnalysisVersions");
 
         builder.HasKey(v => v.Id);
 
-        builder.Property(v => v.Name).IsRequired().HasMaxLength(200);
-        builder.Property(v => v.VersionName).IsRequired().HasMaxLength(100);
+        // 001_InitialSchema: VersionName nvarchar(200); Name — nvarchar(max) (без ограничения).
+        builder.Property(v => v.VersionName).IsRequired().HasMaxLength(200);
+        // 099_WebApiSchemaPatch: Description nvarchar(2000).
         builder.Property(v => v.Description).HasMaxLength(2000);
 
-        // Primary version is scoped per direction.
-        builder.HasIndex(v => new { v.ProjectId, v.Direction, v.IsPrimary })
-            .HasDatabaseName("IX_ProjectAnalysisVersions_Primary")
-            .IsUnique();
+        builder.HasIndex(v => v.ProjectId)
+            .HasDatabaseName("IX_ProjectAnalysisVersions_ProjectId");
 
-        // Quick lookup by direction.
-        builder.HasIndex(v => new { v.ProjectId, v.Direction }).IsUnique(false);
+        builder.HasIndex(v => v.PhysicalVolumeTypeId)
+            .HasDatabaseName("IX_ProjectAnalysisVersions_PhysicalVolumeTypeId");
 
-        builder.HasIndex(v => v.SortOrder);
+        // Одна основная (IsPrimary) неархивная версия на проект и направление (Plan/Fact).
+        // Filtered unique: не-primary и архивные версии не ограничиваются (121_...).
+        builder.HasIndex(v => new { v.ProjectId, v.Direction })
+            .HasDatabaseName(PrimaryVersionIndexName)
+            .IsUnique()
+            .HasFilter("[IsPrimary] = 1 AND [IsArchived] = 0");
     }
 }

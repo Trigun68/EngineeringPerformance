@@ -7,6 +7,7 @@ import {
   DialogTitle,
   Stack,
 } from '@mui/material';
+import { getApiErrorMessage } from '../../services/apiError';
 
 export interface EditModalProps {
   open: boolean;
@@ -44,8 +45,8 @@ export function EditModal({
     setError(null);
     try {
       await onSubmit();
-    } catch {
-      setError('Не удалось сохранить изменения.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Не удалось сохранить изменения.'));
     }
   };
 

@@ -53,6 +53,15 @@ public sealed class ProjectPhysicalVolume : DataTableRecord
 
     public string? Status { get; set; }
 
+    /// <summary>Снимок коэффициента каталога на момент импорта/привязки. Архив не читает live-каталог.</summary>
+    public decimal? CatalogCoefficient { get; set; }
+
+    /// <summary>Снимок «оценка» каталога. null — снимок ещё не заполнен.</summary>
+    public bool? CatalogIsAssessment { get; set; }
+
+    /// <summary>Снимок классификатора IIC. Имеет смысл, если <see cref="CatalogCoefficient"/> задан.</summary>
+    public int? CatalogClassifierId { get; set; }
+
     public Project Project { get; set; } = null!;
 
     public ProjectAnalysisVersion ProjectAnalysisVersion { get; set; } = null!;

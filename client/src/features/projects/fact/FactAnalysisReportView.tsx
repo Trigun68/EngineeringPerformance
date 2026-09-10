@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Alert,
   Box,
@@ -20,12 +21,12 @@ import {
   exportAnalysisExcel,
   exportAnalysisPdf,
   fetchVersionAnalysis,
-  type ProjectVersionAnalysis,
   type ProjectVersionDirectionLaborRow,
   type ProjectVersionLaborRow,
   type ProjectVersionPhysicalVolumeItem,
 } from '../../../api/analyticsApi';
 import { getApiErrorMessage } from '../../../services/apiError';
+import { queryKeys } from '../../../services/queryKeys';
 import { formatGridNumber } from '../../../utils/formatGridNumber';
 import { formatIisNorm } from '../../../utils/formatIisNorm';
 import { REPORT_COLUMN_HEADER_FONT_SIZE } from '../utils/projectModalTitle';
@@ -58,8 +59,8 @@ const PLAN_HOUR_BG = {
 const OPT_COLOR = '#27AE60';
 const PES_COLOR = '#E74C3C';
 
-const GRID_COLUMNS = '90px minmax(220px, 1.4fr) 110px 100px 130px 120px 130px 110px 110px 80px minmax(140px, 1fr)';
-const GRID_MIN_WIDTH = 1280;
+const GRID_COLUMNS = '90px minmax(220px, 1.4fr) 110px 150px 100px 130px 120px 130px 110px 110px 80px minmax(140px, 1fr)';
+const GRID_MIN_WIDTH = 1420;
 
 function VolumeTable({ title, rows }: { title: string; rows: ProjectVersionPhysicalVolumeItem[] }) {
   if (rows.length === 0) return null;
@@ -213,7 +214,8 @@ function ReportHeaderRow() {
     >
       <ReportHeaderCell>Шифр</ReportHeaderCell>
       <ReportHeaderCell>Направление</ReportHeaderCell>
-      <ReportHeaderCell align="right">Факт ФО</ReportHeaderCell>
+      <ReportHeaderCell align="right">Физобъём</ReportHeaderCell>
+      <ReportHeaderCell align="right">Сгруппированный физобъём</ReportHeaderCell>
       <ReportHeaderCell align="right">Факт ч</ReportHeaderCell>
       <ReportHeaderCell align="right" sx={{ color: OPT_COLOR }}>
         План.Труд.Оптим.
@@ -234,6 +236,7 @@ function ReportDataRow({
   code,
   name,
   factFo,
+  assessmentFo,
   factHours,
   optH,
   baseH,
@@ -247,6 +250,7 @@ function ReportDataRow({
   code: string;
   name: string;
   factFo: unknown;
+  assessmentFo: unknown;
   factHours: unknown;
   optH: unknown;
   baseH: unknown;
@@ -282,6 +286,13 @@ function ReportDataRow({
       <Box sx={{ fontWeight: dark ? 600 : 500 }}>{name}</Box>
       <Box sx={{ textAlign: 'right' }}>
         {typeof factFo === 'string' ? factFo : dark ? (factFo != null && factFo !== '' ? String(factFo) : '—') : num2(factFo)}
+      </Box>
+      <Box sx={{ textAlign: 'right' }}>
+        {typeof assessmentFo === 'string'
+          ? assessmentFo
+          : dark
+            ? (assessmentFo != null && assessmentFo !== '' ? String(assessmentFo) : '—')
+            : num2(assessmentFo)}
       </Box>
       <Box sx={{ textAlign: 'right' }}>{num1(factHours)}</Box>
       <Box
@@ -339,29 +350,25 @@ function interpretLabel(v: string | number | null | undefined): string {
 
 export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisReportViewProps) {
   const { canRead } = usePermission('Assessment');
-  const [report, setReport] = useState<ProjectVersionAnalysis | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  const load = useCallback(async () => {
-    if (!canRead) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchVersionAnalysis(projectId, versionId);
-      setReport(data);
-    } catch (err) {
-      setError(getApiErrorMessage(err, 'Не удалось загрузить отчёт анализа версии.'));
-      setReport(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [canRead, projectId, versionId]);
+  const {
+    data: report,
+    isPending,
+    isFetching,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery({
+    queryKey: queryKeys.reports.versionAnalysis(projectId, versionId),
+    queryFn: () => fetchVersionAnalysis(projectId, versionId),
+    enabled: canRead,
+  });
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const loading = isPending || isFetching;
+  const error = isError
+    ? getApiErrorMessage(queryError, 'Не удалось загрузить отчёт анализа версии.')
+    : null;
 
   const cardRows = useMemo(
     () => (report ? orderDirectionsForCards(report.directions) : []),
@@ -441,7 +448,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
           <ToolbarActionButton
             startIcon={<RefreshIcon />}
             disabled={loading || exporting}
-            onClick={() => void load()}
+            onClick={() => void refetch()}
           >
             {ACTION_LABELS.refresh}
           </ToolbarActionButton>
@@ -471,6 +478,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
             code=""
             name="По проекту"
             factFo={projectTotal.fo}
+            assessmentFo={null}
             factHours={projectTotal.hours}
             optH={projectTotal.opt}
             baseH={projectTotal.base}
@@ -505,6 +513,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
                 code={d.code || '—'}
                 name={directionTitle(d)}
                 factFo={factFo}
+                assessmentFo={d.assessmentPhysicalVolume}
                 factHours={d.factLaborHours}
                 optH={d.optimisticHours}
                 baseH={d.baseHours}

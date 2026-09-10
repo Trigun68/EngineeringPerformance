@@ -2,11 +2,11 @@ namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
 /// Единственная реализация формулы взвешенного Z: Σ(Z×вес)/Σ(вес).
-/// Примитив движка расчётов (<c>IPerformanceCalculationEngine</c>): разовые выборки
-/// считаются через <c>ComputeWeightedZ</c>, потоковые сайты накапливают через <see cref="Add"/>.
-/// Собственные реализации этой формулы в сервисах и билдерах запрещены (ISS-010).
+/// Internal-примитив движка расчётов: наружу (Infrastructure, билдеры, сервисы) доступен
+/// только <c>IPerformanceCalculationEngine.ComputeWeightedZ</c> / <c>ComputeWeightedZFromPerformanceRows</c>.
+/// Собственные реализации этой формулы вне движка запрещены (ISS-010).
 /// </summary>
-public struct WeightedZAggregator
+internal struct WeightedZAggregator
 {
     private decimal _weightedSum;
     private decimal _weightSum;
@@ -35,6 +35,21 @@ public struct WeightedZAggregator
         _weightSum += w;
     }
 
+    /// <summary>
+    /// Σ(Z×вес)/Σ(вес) без округления. При нулевом весе — арифметика, если fallback.
+    /// Бакеты тренда берут это значение как есть; <see cref="Result"/> округляет.
+    /// </summary>
+    public readonly decimal? Mean(bool arithmeticFallback = false)
+    {
+        if (_weightSum > 0)
+            return _weightedSum / _weightSum;
+
+        if (arithmeticFallback && _zCount > 0)
+            return _zSum / _zCount;
+
+        return null;
+    }
+
     /// <param name="arithmeticFallback">
     /// При нулевом суммарном весе вернуть среднее арифметическое Z вместо null.
     /// Нужен rollup Z параметров планирования (диалог и сводный отчёт).
@@ -44,12 +59,7 @@ public struct WeightedZAggregator
         MidpointRounding rounding = MidpointRounding.ToEven,
         bool arithmeticFallback = false)
     {
-        if (_weightSum > 0)
-            return Math.Round(_weightedSum / _weightSum, decimalPlaces, rounding);
-
-        if (arithmeticFallback && _zCount > 0)
-            return Math.Round(_zSum / _zCount, decimalPlaces, rounding);
-
-        return null;
+        var mean = Mean(arithmeticFallback);
+        return mean is { } v ? Math.Round(v, decimalPlaces, rounding) : null;
     }
 }

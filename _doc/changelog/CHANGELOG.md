@@ -2,13 +2,96 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-10, два физобъёма на «Итого» и в отчётах)
+- На дереве «Итого» (грид, модалки, Excel/PDF) разведены два объёма: **Физобъём** (own по `ClassifierId`, без суммы детей и без exclusive remap) и **Сгруппированный физобъём** (тот же объём на уровне привязки ИИС as-of даты версии; ниже уровня — «—»).
+- Прогноз «Итого» и модалка «Прогноз» — одна колонка **Физобъём**. Факт «Итого», модалка «Анализ версии», сравнение «Итого» — обе колонки. Плановая производительность сравнения делится на own-объём.
+- Сводный вер 1: дерево направлений — Физобъём + сгруппированный, одни факт-часы, интерпретация «—»; таблица прогноза — дерево IIC без подписи ±0.5σ; «Все группы» — сгруппированный объём.
+- Сводный вер 2: «Объём» → **Физобъём** (own, не subtree на корнях) + **Сгруппированный физобъём**. Точность, тренд, FactNorm и `PlannedVolume` планирования не менялись.
+
+### Changed (2026-09-09, хвост коррекции архитектуры)
+- Тесты Application вызывают публичные методы `IPerformanceCalculationEngine` (`RecalculatePlanHours`, `ComputeForecastHours`, `ComputeWeightedZ*`), а не `LaborIntensityCalculator` / `ForecastHoursAggregator` / `WeightedZAggregator`.
+- С публичного движка сняты мёртвые фасады `ComputeForecastBaseHours`, `RecalculateLaborIntensities`, `ComputePpvForecastHours`, `AggregateForecastHoursByDirection`, `ComputeEquipmentForecastHours`. Persist — `RecalculatePlanHours` / `ComputeForecastHours`. Контроллер `ProjectVersionsController.RecalculateLaborIntensities` без изменений.
+- `ProjectsPageGridBuilder`: неиспользуемый параметр `engine` убран с stored-hours путей (`ComputeLivePpvHours`, `AttachLivePlanHours`, `BuildForecastGrids`, …).
+- `dbo.SchemaMigrations.Checksum` (SHA-256) + проверка дрейфа в `docker-db-init.sh`; `017a_RecreatePhysicalVolumesForRecovery.sql` только при `RECOVERY_RECREATE_PPV=1` (ADR-007).
+- Клиент: ключи React Query в `queryKeys.ts`; `getApiErrorHint` / `formatApiError`; `QueryErrorResetBoundary` вокруг `ErrorBoundary`; `npm run lint` = ESLint, типы — `typecheck` (ADR-008).
+- `ForecastPanel` / `FactPanel` / `ComparePanel` разобраны на гриды, диалоги и хуки данных (контейнеры 232 / 223 / 240 строк). Пустые rowData — стабильный `emptyRows()`. DOM, `data-testid`, `objectName` без изменений.
+
+### Changed (2026-09-09, регистр привязки трудоёмкости к ИИС)
+- Справочник трудоёмкости: периоды «группа ИИС с даты» (`LaborIntensityIicBindings`, схема `123`). Двойной щелчок открывает историю (добавить / править / удалить). Факт берёт группу as-of даты версии, не слепок импорта.
+- Агрегация факта: заявленный узел собирает себя и потомков, кроме ветвей, заявленных отдельно. Свёртка всех часов только на L1 для этого пути отключена.
+- Отчёт, PDF, тренды и точки факт/норма показывают узлы с собственными факт-часами, не только первый уровень. Пустой регистр не отключает свёртку на L1.
+- Выгрузка Excel справочника трудоёмкости включает все уровни дерева.
+- Вкладка «Комплекты документации» скрыта в навигации справочников.
+
+### Changed (2026-09-08, справочник трудоёмкости — группы IIC)
+- Группы IIC у типов документов приведены к выгрузке `справочник_трудоемкость.xlsx`: листья на корнях `IIC-1` / `IIC-2` / `IIC-3` / `IIC-4` / `IIC-6` либо без направления (пусто в Excel). L2-папки выровнены по детям. Скрипт `migrations/data/025_RefreshLaborIntensityIicFromExcel.sql`.
+- Строки факта: `ProjectLaborIntensities.WorkDirectionId` (и пустой `LaborIntensityId`) выровнены с каталогом — `026_SyncProjectLaborWorkDirectionFromCatalog.sql`. Оценка факта после этого читает новые группы IIC (кэш аналитики сбрасывается). На живой БД повторный db-init не гоняет 025/026, пока `FORCE_NOMENCLATURE_REFRESH=1`.
+
+### Changed (2026-09-08, декомпозиция крупных экранов клиента)
+- `ProjectVersionPickerDialog`, `IicNormsPage`, `PlanningParametersDialog`, `ProductivityTrendPanel`, `FullProjectsPage` разобраны на контейнер (≤280 строк) + тулбар / грид / диалоги / хуки данных (`useVersionPickerActions`, `useIicNormMutations`, `usePlanningQueries`, `useProductivityTrendData`). DOM, `data-testid` и права (`usePermission`) без изменений; Vitest +6 render-тестов контейнеров.
+
+### Fixed (2026-09-08, консистентность кэша React Query)
+- После создания / копирования / архивации / «сделать основной» версии инвалидируются `projectVersions`, `fact`, `forecast`, `compare` данного проекта; после создания/правки проекта — `projects.all`; после правки норм IIC и норм факта — `analytics.root` и `dictionaries.all`. `ProjectTrendPanel` и `HoursTrendPanel` — `useQuery` с `signal` (без ручного `AbortController`).
+- Справочники грузятся через `useDictionaries` (`useQuery`, один запрос на приложение в `AppLayout`); `useDictionaryStore` остаётся lookup-слоем без собственного fetch.
+
+### Fixed (2026-09-08, backend)
+- Архивация основной версии и назначение новой основной — одна транзакция (`ProjectVersionService.ArchiveAsync`); направление не остаётся без primary при сбое.
+- `docker-db-init.sh`: baseline-скрипты 001–016 на существующей БД штампуются только по свидетельству (таблица / колонка / длина); при его отсутствии скрипт выполняется, а не пропускается (раньше `UserSettings` могла потеряться навсегда).
+- Перерасход часов в PDF-инсайтах и взвешенное среднее тренда по месяцам — через `IPerformanceCalculationEngine.ComputeHoursOverrun` / `WeightedZAggregator.Mean` (формулы вне движка убраны).
+- Guard-тесты: `AuditLoggingApiTests` (создание версии и ФО пишут строку журнала), `EfSchemaSmokeTests` (все таблицы и колонки модели EF есть в `INFORMATION_SCHEMA`), тест `FallbackPolicy` (аноним на endpoint без атрибутов → 401).
+
+### Changed (2026-09-08, импорт из god-class)
+- Excel-импорт физических объёмов вынесен в `PhysicalVolumeExcelImportService` (разбор / persist), оборудования — в `EquipmentImportService`, трудоёмкости — в `LaborIntensityImportService` (Excel + JSON-ingest partial-классы). Общие чтение ячеек и привязка каталога — `ImportHelpers`. Фасад `ProjectExcelDataImportService` (~100 строк) только делегирует; журнал действий по-прежнему после commit. Поведение (Replace, нормализация шифра ЕП, regex каталога) без изменений.
+
+### Changed (2026-09-08, nginx SoT)
+- Единый конфиг nginx: `client/nginx.conf.template` (envsubst `PROXY_TRUSTED_SECRET`). Корневые `nginx.conf*` удалены. SPNEGO — `client/nginx/spnego.inc.example` и overlay `docker-compose.spnego.yml` на том же образе frontend.
+
+### Changed (2026-09-07, единая авторизация и инвариант основной версии)
+- API: вместо `[Authorize(Roles=…)]` и ручных `IsAdministrator()` / `Forbid` — `[HasPermission]`. Матрица прав и access-rights (`GET` — `Administration:Read`, `PUT` — `Administration:Edit`); `PUT /api/system-settings` — `Administration:Edit` (классовый `[Authorize(Roles="SuperAdmin,Administrator")]` снят); `GET /api/system-settings` остаётся `[Authorize]` (heartbeat). Шаблоны формул норм (`GetFormulaTemplates` / `Preview`) — `IicWorkDirectionNorms:Read`.
+- Глобальная `FallbackPolicy` = `RequireAuthenticatedUser`: любой endpoint без атрибутов требует вход; аноним только с `[AllowAnonymous]`. `GET /metrics` — аутентификация **и** `Administration:Read`. Guard-тест `ControllerAuthorizationCoverageTests` (рефлексия по контроллерам).
+- Объект **Администрирование** (`Administration`) в матрице клиента (`accessControlConstants`, `permissionObjectHierarchy`).
+- Одна основная неархивная версия на проект и направление: миграция `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql` (filtered unique index `UX_ProjectAnalysisVersions_OnePrimary`; дубликаты понижаются, остаётся новейший `Id`). EF-конфиги `ProjectAnalysisVersionConfiguration` и `ProjectEquipmentConfiguration` подключены в `OnModelCreating` (раньше были мёртвым кодом); `VersionName` ≤ 200, `Description` ≤ 2000.
+- Смена основной версии (создание, «Сделать основной», смена направления) — два `SaveChanges` в транзакции (индекс проверяется на каждый statement). Исправлено: смена направления у primary больше не оставляет старое направление без основной.
+
+### Fixed (2026-09-07, факт трудоёмкости в отчёте и анализе норм)
+- Таблицы вкладки **Отчет** (топ-5, «Все группы физобъёмов IIC», дерево на корнях, PDF сводных, «Сводный вер 2») показывают группы IIC **первого уровня**: часы факта после `RollHoursToFirstLevel` и объём **поддерева** (`SubtreePhysicalVolume`). Листья больше не отфильтровывают часы в «—».
+- **Анализ факта и норм** и симулятор «Анализа норм» берут точки с корней IIC (X = объём поддерева, Y = производительность). Фильтр по потомку поднимается на L1; норма снимка — с корня или с потомка. Кэш FactNorm: ключ `fact-norm:v2`.
+- Excel/PDF **Факт → Итого** по-прежнему печатает own `FactLaborHours` на всех уровнях дерева (отдельный follow-up).
+
+### Changed (2026-09-06, импорт трудоёмкости и Z факта)
+- Тип документа TF сопоставляется со справочником по `DocumentTypeName` **или** `Name`. Отсутствующие типы UI добавляет в справочник по умолчанию.
+- Факт без поэлементного ФО: часы на группах IIC **первого уровня**, P/Z от объёма поддерева; по объектам — марка = комплект документов и связанная группа ФО. Excel/PDF и «Аналитика» читают тот же движок.
+
+### Fixed (2026-09-05, табличный Excel прогноза / факта / сравнения)
+- Плановые часы в Excel: пастель грида `#e3f2fd` / `#e8f5e9` / `#ffebee` и тёмный текст, не насыщенные `#27AE60` / `#E74C3C`.
+- Ширины колонок Excel: перенос шапки, `RelativeWidth` + `AdjustToContents` (больше не стандартные 8,43).
+- «Детально → Выгрузить Excel»: колонки как в гриде, все строки, строка **ИТОГО** (факт без второй «Норм производит.»).
+- Сравнение: полная выгрузка с сервера на Итого / По объектам / Детально (`CompareTableDocumentBuilder`); «Выгрузить Excel (сводная)» остаётся компактной.
+
+### Added (2026-09-01, история «Ресурсы»)
+- На вкладке **Ресурсы** выбор периода **Отчёт за** (1 ч по умолчанию … 90 дн). Сэмплы пишутся в SQL (`ResourceMetricSamples`, 90 суток), графики читаются с даунсэмплом. Карточки и вердикт остаются оперативными («сейчас»).
+
+### Added (2026-09-01, вкладка «Ресурсы»)
+- В администрировании вкладка **Ресурсы** (`/admin/resources`): CPU и RAM бэкенда, Redis и SQL Server на общих графиках (доли ядра и МиБ), коннекты и активные пользователи за 5 минут, стоимость на пользователя, пулы SQL Interactive/Analytics, занятость AnalyticsSqlGate, GC alloc/Gen2 и авто-вердикт. API `GET /api/monitoring/resource-metrics`. Nginx не учитывается.
+
+### Changed (2026-09-01, название «Логнормальное распределение»)
+- Тип формулы норм IIC `KimCurve` в справочнике, редакторе, анализе норм и сообщениях валидации называется **«Логнормальное распределение»** (раньше «Кривая Кима»). Код API `KIMCURVE` и `FormulaType.KimCurve = 12` без изменений.
+
+### Changed (2026-08-31, корпоративный цикл расчётов и справочников)
+- Оборудование входит в тот же `V_g`, что ФО: при группировке по проекту/объекту норма `N` считается от суммы assessed-объёмов. После выкладки нажмите **Пересчитать** (или `scripts/recalculate-all-labor.sh` для всех неархивных версий) — существующие часы сами не обновятся.
+- Плановые объёмы по листу ИИС: sibling больше не обнуляются. В сценарии «каждая позиция» несколько строк ФО по направлению — ошибка 400. В групповых сценариях V* распределяется пропорционально физобъёму.
+- Подписи Z: гриды и факт — **«Оценка Z»**; план в отчёте — **«Заложенный Z»** (параметр планирования, не live-оценка грида).
+- Справочник **«Комплекты документации»**: импорт трудоёмкости выделяет код после `|`, unmatched — карантин (часы не в распределении).
+- Лимит Excel **10 МБ** (nginx и API). Конкурирующее сохранение версии анализа — **409**.
+- Журнал пересчёта версии: `GET /api/projects/{id}/versions/{vid}/calculation-log`.
+
 ### Fixed (2026-08-31, двойной щелчок в редакторах справочников)
 - В модалке «Редактирование нормы» двойной щелчок по строке периода открывает карточку записи, как кнопка «Редактировать».
 - Диалог выбора проекта: двойной щелчок подтверждает выбор. Справочник «Стоимость работ»: двойной щелчок по строке периода или группы открывает правку блока.
 
 ### Added (2026-08-31, формула «Кривая Кима»)
 - В нормах ИИС тип **«Кривая Кима»**: `P(z) = e^(μ + z·σ)`, `μ = ln(P)`, σ в лог-пространстве. Часы плана `LI(z) = P(z)·V`; при z = 0 совпадает с постоянной нормой. Z без новой ветки: в регистр пишутся `Estimate = μ` и `StandardDeviation = σ`. Существующие нормы и снимки версий не пересчитываются.
-- Редактор, грид, карточка анализа норм и выгрузка реестра показывают **производительность, μ и σ** отдельными подписями. FactNorm не предлагает Ким в BIC-каталоге; для текущей Kim-нормы σ факта считается как `std(ln(Y))`.
+- Редактор, грид, карточка анализа норм и выгрузка реестра показывают **производительность, μ и σ** отдельными подписями. FactNorm не предлагает этот тип в BIC-каталоге; для текущей логнормальной нормы σ факта считается как `std(ln(Y))`.
 
 ### Changed (2026-08-30, шкала Z слева направо)
 - На визуальных шкалах Z (сводный вер 1 и вер 2, PDF-отчёт, превью `/dev/pdf-mockups`) слева хуже (`+3` / Критично), справа лучше (`−3` / Отлично). Числа в таблицах и оси графиков не менялись.

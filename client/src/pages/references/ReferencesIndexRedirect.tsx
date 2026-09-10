@@ -14,7 +14,7 @@ function resolveVisibleRoutes(
   roleName: string | undefined,
 ) {
   return REFERENCE_ROUTES.filter((route) =>
-    canReadPermission(permissions, route.permission, roleName),
+    !route.hidden && canReadPermission(permissions, route.permission, roleName),
   );
 }
 

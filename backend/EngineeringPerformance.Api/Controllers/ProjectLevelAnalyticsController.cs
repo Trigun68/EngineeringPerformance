@@ -194,9 +194,54 @@ public sealed class ProjectLevelAnalyticsController : ControllerBase
         return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
 
+    [HttpGet("compare/export/summary/excel")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportCompareSummaryExcel(
+        int projectId,
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _projectExport.ExportCompareSummaryExcelAsync(
+            projectId, versionA, versionB, cancellationToken);
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "xlsx",
+            ExportFileNameBuilder.Views.Summary,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
+    [HttpGet("compare/export/facility/excel")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
+    public async Task<IActionResult> ExportCompareFacilityExcel(
+        int projectId,
+        [FromQuery] int versionA,
+        [FromQuery] int versionB,
+        CancellationToken cancellationToken)
+    {
+        var bytes = await _projectExport.ExportCompareFacilityExcelAsync(
+            projectId, versionA, versionB, cancellationToken);
+        var fileName = await _fileNames.ForVersionsAsync(
+            projectId,
+            [versionA, versionB],
+            ExportFileNameBuilder.Modules.Compare,
+            "xlsx",
+            ExportFileNameBuilder.Views.Facility,
+            cancellationToken: cancellationToken);
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
     [HttpGet("compare/export/detail/excel")]
     [RequireProjectAccess]
     [HasPermission(PermissionType.VersionComparison, AccessLevel.Read)]
+    [EnableRateLimiting("export")]
     public async Task<IActionResult> ExportCompareDetailExcel(
         int projectId,
         [FromQuery] int versionA,

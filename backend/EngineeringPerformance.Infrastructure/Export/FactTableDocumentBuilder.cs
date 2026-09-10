@@ -34,10 +34,11 @@ internal static class FactTableDocumentBuilder
             new("Код", 1.1f),
             new("Направление", 2.4f),
             new("Ед. изм.", 0.9f),
-            new("ФО", 1.4f, Numeric: true),
+            new("Физобъём", 1.4f, Numeric: true),
+            new("Сгруппированный физобъём", 1.5f, Numeric: true),
             new("Факт трудоёмк.", 1.3f, Numeric: true),
             new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-            new("План.Труд.Баз.", 1.2f, Numeric: true),
+            new("План.Труд.Баз.", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
             new("План.Труд.Песс.", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
             new("Факт производит.", 1.3f, Numeric: true),
             new("Норм производит.", 1.3f, Numeric: true),
@@ -96,12 +97,12 @@ internal static class FactTableDocumentBuilder
             new("Производит.", 1.1f, Numeric: true),
             new("СО", 0.8f, Numeric: true),
             new("Кол-во", 0.9f, Numeric: true),
-            new("Факт ч", 1.1f, Numeric: true),
+            new("Факт.трудоёмк., ч", 1.1f, Numeric: true),
             new("План.Труд.Оптим.", 1.2f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-            new("План.Труд.Баз.", 1.1f, Numeric: true),
+            new("План.Труд.Баз.", 1.1f, Numeric: true, Tone: ForecastHourTone.Base),
             new("План.Труд.Песс.", 1.2f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
-            new("Факт произв.", 1.1f, Numeric: true),
-            new("Z", 0.9f, Numeric: true),
+            new("Факт производит.", 1.1f, Numeric: true),
+            new("Оценка Z", 0.9f, Numeric: true),
             new("Интерпретация", 1.6f),
         };
 
@@ -109,17 +110,18 @@ internal static class FactTableDocumentBuilder
             title,
             "Детально",
             Landscape: true,
-            [new ForecastTableSection(null, columns, rows.Select(MapDetailRow).ToList())]);
+            [new ForecastTableSection(null, columns, rows.Select(MapDetailRow).Append(DetailTotalRow(rows)).ToList())]);
     }
 
     private static ForecastTableColumn[] AnalysisColumns() =>
     [
         new("Шифр", 1.0f),
         new("Направление", 2.6f),
-        new("Факт ФО", 1.2f, Numeric: true),
+        new("Физобъём", 1.2f, Numeric: true),
+        new("Сгруппированный физобъём", 1.4f, Numeric: true),
         new("Факт ч", 1.1f, Numeric: true),
         new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-        new("План.Труд.Баз.", 1.2f, Numeric: true),
+        new("План.Труд.Баз.", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
         new("План.Труд.Песс.", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
         new("Факт произв.", 1.2f, Numeric: true),
         new("Норм. произв.", 1.2f, Numeric: true),
@@ -133,9 +135,9 @@ internal static class FactTableDocumentBuilder
         new("Наименование объекта", 3.4f),
         new("Факт.трудоёмк., ч", 1.3f, Numeric: true),
         new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-        new("План.Труд.Баз.", 1.2f, Numeric: true),
+        new("План.Труд.Баз.", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
         new("План.Труд.Песс.", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
-        new("Z-оценка", 1.1f, Numeric: true),
+        new("Оценка Z", 1.1f, Numeric: true),
         new("Интерпретация", 1.8f),
     ];
 
@@ -146,10 +148,11 @@ internal static class FactTableDocumentBuilder
         [
             Text(d.Code),
             new ForecastTableCell(indent + d.Name),
-            Number(d.FactPhysicalVolume, 2),
+            Number(d.PhysicalVolume, 2),
+            Number(d.AssessmentPhysicalVolume, 2),
             Hour(d.FactLaborHours, ForecastHourTone.None, 1),
             Hour(d.OptimisticHours, ForecastHourTone.Optimistic, 1),
-            Hour(d.BaseHours, ForecastHourTone.None, 1),
+            Hour(d.BaseHours, ForecastHourTone.Base, 1),
             Hour(d.PessimisticHours, ForecastHourTone.Pessimistic, 1),
             Number(d.FactProductivity, 4),
             Number(d.NormProductivity, 4),
@@ -173,9 +176,10 @@ internal static class FactTableDocumentBuilder
             new ForecastTableCell("По проекту", Bold: true),
             new ForecastTableCell(string.Empty, Bold: true),
             new ForecastTableCell(fo, Bold: true),
+            new ForecastTableCell("—", Bold: true),
             Hour(report.Summary.TotalFactLaborHours, ForecastHourTone.None, 1),
             Hour(all.Sum(d => d.OptimisticHours ?? 0m), ForecastHourTone.Optimistic, 1),
-            Hour(all.Sum(d => d.BaseHours ?? 0m), ForecastHourTone.None, 1),
+            Hour(all.Sum(d => d.BaseHours ?? 0m), ForecastHourTone.Base, 1),
             Hour(all.Sum(d => d.PessimisticHours ?? 0m), ForecastHourTone.Pessimistic, 1),
             new ForecastTableCell("—", Bold: true),
             new ForecastTableCell("—", Bold: true),
@@ -187,18 +191,22 @@ internal static class FactTableDocumentBuilder
     private static ForecastTableRow MapSummaryRow(PerformanceRowDto row)
     {
         var indent = row.Level > 0 ? new string(' ', row.Level * 2) : string.Empty;
-        var fo = !string.IsNullOrWhiteSpace(row.FactPhysicalVolumeDisplay)
-            ? row.FactPhysicalVolumeDisplay
-            : FormatNumber(row.FactPhysicalVolume, 2);
+        var physical = !string.IsNullOrWhiteSpace(row.PhysicalVolumeDisplay)
+            ? row.PhysicalVolumeDisplay
+            : FormatNumber(row.PhysicalVolume, 2);
+        var assessment = !string.IsNullOrWhiteSpace(row.AssessmentPhysicalVolumeDisplay)
+            ? row.AssessmentPhysicalVolumeDisplay
+            : FormatNumber(row.AssessmentPhysicalVolume, 2);
         return new ForecastTableRow(
         [
             Text(row.WorkDirectionCode),
             new ForecastTableCell(indent + row.WorkDirectionName, Bold: row.IsTotal),
             new ForecastTableCell(row.NormUnitName ?? string.Empty, Bold: row.IsTotal),
-            new ForecastTableCell(fo ?? "—", row.FactPhysicalVolume, Bold: row.IsTotal),
+            new ForecastTableCell(physical ?? "—", row.PhysicalVolume, Bold: row.IsTotal),
+            new ForecastTableCell(assessment ?? "—", row.AssessmentPhysicalVolume, Bold: row.IsTotal),
             Hour(row.FactLaborHours, ForecastHourTone.None, 1),
             Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 1),
-            Hour(row.BaseHours, ForecastHourTone.None, 1),
+            Hour(row.BaseHours, ForecastHourTone.Base, 1),
             Hour(row.PessimisticHours, ForecastHourTone.Pessimistic, 1),
             Number(row.FactProductivity, 4),
             Number(row.NormProductivity, 4),
@@ -214,7 +222,7 @@ internal static class FactTableDocumentBuilder
             Text(row.FacilityName),
             Hour(row.LaborHours, ForecastHourTone.None, 1),
             Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 1),
-            Hour(row.BaseHours, ForecastHourTone.None, 1),
+            Hour(row.BaseHours, ForecastHourTone.Base, 1),
             Hour(row.PessimisticHours, ForecastHourTone.Pessimistic, 1),
             Number(row.ZScore, 4),
             Text(row.Interpretation),
@@ -237,7 +245,7 @@ internal static class FactTableDocumentBuilder
             new ForecastTableCell(string.Empty, Bold: true),
             Hour(fact, ForecastHourTone.None, 1),
             Hour(opt, ForecastHourTone.Optimistic, 1),
-            Hour(bas, ForecastHourTone.None, 1),
+            Hour(bas, ForecastHourTone.Base, 1),
             Hour(pes, ForecastHourTone.Pessimistic, 1),
             new ForecastTableCell(string.Empty, Bold: true),
             new ForecastTableCell(string.Empty, Bold: true),
@@ -268,12 +276,34 @@ internal static class FactTableDocumentBuilder
             DecimalCell(row.Quantity),
             DecimalCell(row.FactLaborHours),
             DecimalCell(row.OptimisticHours, ForecastHourTone.Optimistic),
-            DecimalCell(row.BaseHours),
+            DecimalCell(row.BaseHours, ForecastHourTone.Base),
             DecimalCell(row.PessimisticHours, ForecastHourTone.Pessimistic),
             DecimalCell(row.FactProductivity),
             DecimalCell(row.ZScore),
             Text(row.Interpretation),
         ]);
+
+    private static ForecastTableRow DetailTotalRow(IReadOnlyList<ProjectsPageDetailRowDto> rows)
+    {
+        decimal fact = 0m, opt = 0m, bas = 0m, pes = 0m;
+        foreach (var row in rows)
+        {
+            fact += row.FactLaborHours ?? 0m;
+            opt += row.OptimisticHours ?? 0m;
+            bas += row.BaseHours ?? 0m;
+            pes += row.PessimisticHours ?? 0m;
+        }
+
+        var cells = new ForecastTableCell[26];
+        for (var i = 0; i < cells.Length; i++)
+            cells[i] = new ForecastTableCell(string.Empty, Bold: true);
+        cells[0] = new ForecastTableCell("ИТОГО", Bold: true);
+        cells[19] = DecimalCell(fact);
+        cells[20] = DecimalCell(opt, ForecastHourTone.Optimistic);
+        cells[21] = DecimalCell(bas, ForecastHourTone.Base);
+        cells[22] = DecimalCell(pes, ForecastHourTone.Pessimistic);
+        return new ForecastTableRow(cells, IsTotal: true);
+    }
 
     private static ForecastTableCell Text(string? value) =>
         new(value ?? string.Empty);

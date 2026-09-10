@@ -1,10 +1,12 @@
-using EngineeringPerformance.Application.Dictionaries;
-using EngineeringPerformance.Application.Registers;
 using EngineeringPerformance.Application.Analytics;
 using EngineeringPerformance.Application.Analytics.FactNorm;
 using EngineeringPerformance.Application.Analytics.NormRegistry;
-using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Application.Audit;
+using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Application.Registers;
+using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -18,19 +20,22 @@ public sealed class IicWorkDirectionNormService : IIicNormService
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
     private readonly INormRegistryService _normRegistry;
     private readonly IFactNormCacheGeneration _factNormCache;
+    private readonly IUserActionLogger _actionLogger;
 
     public IicWorkDirectionNormService(
         AppDbContext context,
         ICacheInvalidator cacheInvalidator,
         IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
         INormRegistryService normRegistry,
-        IFactNormCacheGeneration factNormCache)
+        IFactNormCacheGeneration factNormCache,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _cacheInvalidator = cacheInvalidator;
         _recalcOrchestrator = recalcOrchestrator;
         _normRegistry = normRegistry;
         _factNormCache = factNormCache;
+        _actionLogger = actionLogger;
     }
 
     /// <summary>
@@ -126,6 +131,13 @@ public sealed class IicWorkDirectionNormService : IIicNormService
 
         _context.IicWorkDirectionNorms.Add(entity);
         await _context.SaveChangesAsync(cancellationToken);
+        // IicNormCreate в enum нет — создание фиксируем как IicNormEdit.
+        await _actionLogger.LogAsync(
+            UserActionType.IicNormEdit,
+            entityType: "IicWorkDirectionNorm",
+            entityId: entity.Id,
+            description: $"Created WorkDirectionId={entity.WorkDirectionId}",
+            cancellationToken: cancellationToken);
         await InvalidateNormCachesAsync(cancellationToken);
 
         var recalcCount = await _recalcOrchestrator.AfterNormChangedAsync(
@@ -168,6 +180,12 @@ public sealed class IicWorkDirectionNormService : IIicNormService
         NormDtoMapper.ApplyToEntity(entity, request);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.IicNormEdit,
+            entityType: "IicWorkDirectionNorm",
+            entityId: entity.Id,
+            description: $"Updated WorkDirectionId={entity.WorkDirectionId}",
+            cancellationToken: cancellationToken);
         await InvalidateNormCachesAsync(cancellationToken);
 
         var recalcCount = await _recalcOrchestrator.AfterNormChangedAsync(
@@ -192,6 +210,12 @@ public sealed class IicWorkDirectionNormService : IIicNormService
 
         _context.IicWorkDirectionNorms.Remove(entity);
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.IicNormEdit,
+            entityType: "IicWorkDirectionNorm",
+            entityId: id,
+            description: $"Deleted WorkDirectionId={workDirectionId}",
+            cancellationToken: cancellationToken);
         await InvalidateNormCachesAsync(cancellationToken);
         await _recalcOrchestrator.AfterNormChangedAsync(
             workDirectionId,

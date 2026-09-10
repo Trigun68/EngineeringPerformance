@@ -1,3 +1,5 @@
+using EngineeringPerformance.Application.Services;
+
 namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
@@ -14,7 +16,8 @@ public static class DetailFactSummaryTableBuilder
         IReadOnlyList<DetailFactSummaryInputRow> rows,
         IReadOnlyList<IicDirectionNodeDto> directions,
         string projectCode,
-        string versionName)
+        string versionName,
+        IPerformanceCalculationEngine engine)
     {
         var byId = directions.ToDictionary(d => d.Id);
         var blockRoots = DetailForecastSummaryTableBuilder.ResolveBlockRoots(directions);
@@ -68,7 +71,7 @@ public static class DetailFactSummaryTableBuilder
             return "—";
         }
 
-        var aggregates = new Dictionary<(FacilityKey Fac, ColumnKey Col), (decimal Vol, decimal Pes, decimal Base, decimal Opt, decimal Fact, WeightedZAggregator Z)>();
+        var aggregates = new Dictionary<(FacilityKey Fac, ColumnKey Col), (decimal Vol, decimal Pes, decimal Base, decimal Opt, decimal Fact, List<(decimal? ZScore, decimal? Weight)> Z)>();
 
         foreach (var row in rows)
         {
@@ -92,9 +95,9 @@ public static class DetailFactSummaryTableBuilder
 
             var existing = aggregates.TryGetValue(key, out var found)
                 ? found
-                : (Vol: 0m, Pes: 0m, Base: 0m, Opt: 0m, Fact: 0m, Z: new WeightedZAggregator());
+                : (Vol: 0m, Pes: 0m, Base: 0m, Opt: 0m, Fact: 0m, Z: new List<(decimal? ZScore, decimal? Weight)>());
 
-            existing.Z.Add(row.ZScore, fact);
+            existing.Z.Add((row.ZScore, fact));
             aggregates[key] = (
                 existing.Vol + volume,
                 existing.Pes + pes,
@@ -152,7 +155,7 @@ public static class DetailFactSummaryTableBuilder
             {
                 if (aggregates.TryGetValue((fac, colKey), out var agg))
                 {
-                    var z = agg.Z.Result(4, MidpointRounding.AwayFromZero);
+                    var z = engine.ComputeWeightedZ(agg.Z, 4, MidpointRounding.AwayFromZero);
                     var factHours = Math.Round(agg.Fact, 0, MidpointRounding.AwayFromZero);
                     var optHours = Math.Round(agg.Opt, 0, MidpointRounding.AwayFromZero);
                     var baseHoursRounded = Math.Round(agg.Base, 0, MidpointRounding.AwayFromZero);

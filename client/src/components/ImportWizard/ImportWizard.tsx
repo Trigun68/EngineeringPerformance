@@ -52,7 +52,7 @@ export function ImportWizard({ projectId, versionId, onImported }: ImportWizardP
   const [iterations, setIterations] = useState<ImportIteration[]>([]);
   const [preview, setPreview] = useState<string | null>(null);
   const [laborPreview, setLaborPreview] = useState<string[]>([]);
-  const [addMissingLabor, setAddMissingLabor] = useState(false);
+  const [addMissingLabor, setAddMissingLabor] = useState(true);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [result, setResult] = useState<string | null>(null);
   const [rowErrors, setRowErrors] = useState<ImportRowError[]>([]);
@@ -182,7 +182,7 @@ export function ImportWizard({ projectId, versionId, onImported }: ImportWizardP
         disabled={uploadDisabled}
       />
 
-      {dataType === 'labor-intensities' && laborPreview.length > 0 && (
+      {dataType === 'labor-intensities' && pendingFile && (
         <Box>
           <FormControlLabel
             control={

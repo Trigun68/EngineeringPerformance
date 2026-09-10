@@ -22,6 +22,10 @@ export type CollectGridExportOptions = {
    * Без активной группировки колонок поведение как у leaf-only.
    */
   includeGroups?: boolean;
+  /**
+   * Дерево treeData: родители и листья в порядке грида, имя с отступом по уровню.
+   */
+  includeTreeNodes?: boolean;
 };
 
 function getExportColumns(api: GridApi): Column[] {
@@ -94,9 +98,21 @@ export function collectGridExportData(
 
   const hasRowGroups = (api.getRowGroupColumns()?.length ?? 0) > 0;
   const includeGroups = Boolean(options?.includeGroups) && hasRowGroups;
+  const includeTreeNodes = Boolean(options?.includeTreeNodes);
 
   const rows: string[][] = [];
   api.forEachNodeAfterFilterAndSort((node) => {
+    if (includeTreeNodes) {
+      if (!node.data) return;
+      const cells = buildRowCells(api, columns, node);
+      const level = node.level ?? 0;
+      if (level > 0 && cells.length > 0) {
+        cells[0] = `${'  '.repeat(level)}${cells[0]}`;
+      }
+      rows.push(cells);
+      return;
+    }
+
     if (includeGroups) {
       if (node.group) {
         rows.push(buildRowCells(api, columns, node));

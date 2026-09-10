@@ -18,6 +18,7 @@ public sealed class MonitoringController : ControllerBase
     private readonly IAuditConfigService _auditConfig;
     private readonly IPermissionDriftService _permissionDrift;
     private readonly ISqlProfilingReportService _sqlProfiling;
+    private readonly IResourceMetricsService _resourceMetrics;
 
     public MonitoringController(
         ISystemMetricsService systemMetrics,
@@ -25,7 +26,8 @@ public sealed class MonitoringController : ControllerBase
         IHealthCheckService healthCheck,
         IAuditConfigService auditConfig,
         IPermissionDriftService permissionDrift,
-        ISqlProfilingReportService sqlProfiling)
+        ISqlProfilingReportService sqlProfiling,
+        IResourceMetricsService resourceMetrics)
     {
         _systemMetrics = systemMetrics;
         _logViewer = logViewer;
@@ -33,6 +35,7 @@ public sealed class MonitoringController : ControllerBase
         _auditConfig = auditConfig;
         _permissionDrift = permissionDrift;
         _sqlProfiling = sqlProfiling;
+        _resourceMetrics = resourceMetrics;
     }
 
     [HttpGet("system-metrics")]
@@ -63,6 +66,16 @@ public sealed class MonitoringController : ControllerBase
     {
         var health = await _healthCheck.GetHealthAsync(cancellationToken);
         return Ok(health);
+    }
+
+    [HttpGet("resource-metrics")]
+    [HasPermission(PermissionType.Administration, AccessLevel.Read)]
+    public async Task<ActionResult<ResourceMetricsDto>> GetResourceMetrics(
+        [FromQuery][RangeAttribute(1, 129600)] int windowMinutes = 60,
+        CancellationToken cancellationToken = default)
+    {
+        var metrics = await _resourceMetrics.GetResourceMetricsAsync(windowMinutes, cancellationToken);
+        return Ok(metrics);
     }
 
     [HttpGet("audit-config")]

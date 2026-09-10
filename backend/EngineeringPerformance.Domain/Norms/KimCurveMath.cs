@@ -1,7 +1,7 @@
 namespace EngineeringPerformance.Domain.Norms;
 
 /// <summary>
-/// Логнормаль Кима: μ = ln(P), P(z) = e^(μ + z·σ).
+/// Логнормальное распределение: μ = ln(P), P(z) = e^(μ + z·σ).
 /// </summary>
 public static class KimCurveMath
 {

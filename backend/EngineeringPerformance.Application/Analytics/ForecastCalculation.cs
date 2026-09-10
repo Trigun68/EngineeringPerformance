@@ -7,7 +7,7 @@ namespace EngineeringPerformance.Application.Analytics;
 /// <summary>
 /// Единая формула прогнозных часов через <see cref="IDeviationCalculator"/>.
 /// Мультипликативная: LI = N(V) · (1 + σ·z) · V_eff.
-/// Логнормаль (Кривая Кима): LI = e^(μ + z·σ) · V_eff.
+/// Логнормальное распределение: LI = e^(μ + z·σ) · V_eff.
 /// Internal-деталь <see cref="Services.PerformanceCalculationEngine"/> — прямые вызовы
 /// из Infrastructure запрещены, наружу торчит только IPerformanceCalculationEngine.
 /// </summary>
@@ -50,14 +50,14 @@ internal static class ForecastCalculation
         decimal volume,
         decimal? productivity,
         decimal? stdDev,
-        PlanningZParameters z)
+        PlanningZParameters z,
+        IDeviationCalculator calculator)
     {
         if (volume <= 0 || !productivity.HasValue)
             return (null, null, null);
 
         var norm = NormFormulaMapper.FromLegacyPerformance(productivity);
         var dev = NormFormulaMapper.FromLegacyStdDev(productivity, stdDev);
-        var calculator = new DeviationCalculator(new NormCalculator());
         var hours = ComputeForecastHours(norm, dev, volume, volume, z, calculator);
         return ClampNonNegativeHours(hours);
     }

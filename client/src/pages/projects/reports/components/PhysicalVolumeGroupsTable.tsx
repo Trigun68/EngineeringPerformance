@@ -24,7 +24,7 @@ interface PhysicalVolumeGroupsRow {
 }
 
 interface PhysicalVolumeGroupsTableProps {
-  leaves: PerformanceTreeRow[];
+  rows: PerformanceTreeRow[];
 }
 
 const INTERPRETATION_FILTERS: Interpretation[] = ['Excellent', 'Good', 'Satisfactory', 'NeedsAttention', 'Critical'];
@@ -37,45 +37,50 @@ function numberFormatter(digits: number) {
   };
 }
 
+/** Плоская строка групп ИИС: сгруппированный физобъём — AssessmentPhysicalVolume, не сумма детей. */
+export function mapPhysicalVolumeGroupsRow(row: PerformanceTreeRow): PhysicalVolumeGroupsRow {
+  const grouped = row.assessmentPhysicalVolume;
+  return {
+    id: row.workDirectionId,
+    name: row.workDirectionName,
+    physicalVolume: grouped != null && grouped > 0 ? grouped : null,
+    laborHours: row.factLaborHours ?? row.subtreeHours,
+    productivity: row.factProductivity,
+    normProductivity: row.normProductivity,
+    zScore: row.zScore,
+    interpretation: getInterpretation(row.zScore),
+  };
+}
+
 /**
- * Плоская таблица всех групп физобъёмов IIC (листовые направления работ) — дополняет
+ * Плоская таблица групп ИИС с собственными факт-часами — дополняет
  * иерархическое дерево PerformanceTree, но допускает сортировку и фильтрацию по любому
  * столбцу и быстрый поиск по коду/наименованию, что в дереве неудобно на крупных проектах.
  */
-export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableProps) {
+export function PhysicalVolumeGroupsTable({ rows }: PhysicalVolumeGroupsTableProps) {
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<Interpretation | null>(null);
 
-  const rows = useMemo<PhysicalVolumeGroupsRow[]>(
-    () =>
-      leaves.map((row) => ({
-        id: row.workDirectionId,
-        name: row.workDirectionName,
-        physicalVolume: row.factPhysicalVolume,
-        laborHours: row.factLaborHours,
-        productivity: row.factProductivity,
-        normProductivity: row.normProductivity,
-        zScore: row.zScore,
-        interpretation: getInterpretation(row.zScore),
-      })),
-    [leaves],
+  const tableRows = useMemo<PhysicalVolumeGroupsRow[]>(
+    () => rows.map(mapPhysicalVolumeGroupsRow),
+    [rows],
   );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((row) => {
+    return tableRows.filter((row) => {
       if (activeFilter && row.interpretation !== activeFilter) return false;
       if (!term) return true;
       return row.name.toLowerCase().includes(term);
     });
-  }, [rows, search, activeFilter]);
+  }, [tableRows, search, activeFilter]);
 
   const columnDefs = useMemo<ColDef<PhysicalVolumeGroupsRow>[]>(
     () => [
       { field: 'name', headerName: 'Направление IIC', flex: 1, minWidth: 280 },
       {
         field: 'physicalVolume',
-        headerName: 'Факт. объём',
+        headerName: 'Сгруппированный физобъём',
         width: 130,
         valueFormatter: numberFormatter(1),
         type: 'rightAligned',
@@ -103,7 +108,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
       },
       {
         field: 'zScore',
-        headerName: 'Z',
+        headerName: 'Оценка Z',
         width: 90,
         type: 'rightAligned',
         valueFormatter: numberFormatter(2),
@@ -128,7 +133,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
   );
 
   return (
-    <Stack spacing={1.5} sx={{ height: 520 }}>
+    <Stack spacing={1.5} sx={{ height: 520 }} data-testid="report-physical-volume-groups">
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
         <TextField
           size="small"
@@ -161,7 +166,7 @@ export function PhysicalVolumeGroupsTable({ leaves }: PhysicalVolumeGroupsTableP
           ))}
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ ml: { sm: 'auto' } }}>
-          Показано {filtered.length} из {rows.length} групп
+          Показано {filtered.length} из {tableRows.length} групп
         </Typography>
       </Stack>
 

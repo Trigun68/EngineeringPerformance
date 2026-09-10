@@ -173,6 +173,59 @@ test.describe('Fact and Compare modules - WPF parity', () => {
     await expect(page.getByRole('tab', { name: 'Детально' })).toBeVisible();
   });
 
+  test('compare summary excel uses Russian filename template', async ({ page }) => {
+    test.setTimeout(120_000);
+    const projectId = await openPreferredProject(page);
+    test.skip(!projectId, 'No projects in seed data');
+
+    const pair = await page.evaluate(async (id) => {
+      const res = await fetch(`/api/projects/${id}/versions`, { credentials: 'include' });
+      if (!res.ok) return null;
+      const versions = (await res.json()) as Array<{
+        id: number;
+        direction: number;
+        isArchived: boolean;
+        isPrimary?: boolean;
+      }>;
+      const plan = versions.filter((v) => v.direction === 1 && !v.isArchived);
+      const fact = versions.filter((v) => v.direction === 2 && !v.isArchived);
+      const primaryPlan = plan.find((v) => v.isPrimary) ?? plan[0];
+      const primaryFact = fact.find((v) => v.isPrimary) ?? fact[0] ?? plan.find((v) => v.id !== primaryPlan?.id);
+      if (!primaryPlan || !primaryFact) return null;
+      return { versionA: primaryPlan.id, versionB: primaryFact.id };
+    }, projectId);
+    test.skip(pair == null, 'Need two versions for compare excel');
+
+    await page.evaluate(
+      async ({ id, versionA, versionB }) => {
+        await fetch('/api/users/me/preferences', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            preferences: {
+              [`projects.${id}.compareSubTab`]: 'compare-total',
+              [`projects.${id}.compareVersionAId`]: String(versionA),
+              [`projects.${id}.compareVersionBId`]: String(versionB),
+            },
+          }),
+        });
+      },
+      { id: projectId, versionA: pair!.versionA, versionB: pair!.versionB },
+    );
+
+    await page.goto(`/projects/${projectId}`);
+    await page.getByRole('tab', { name: 'Сравнение версий' }).click();
+    await waitForWorkingOverlayHidden(page, 90_000);
+    await page.getByRole('tab', { name: 'Итого', exact: true }).click();
+    const excelButton = actionButton(page, 'exportExcel');
+    await expect(excelButton).toBeEnabled({ timeout: 60_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 90_000 });
+    await excelButton.click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^сравнение_итого_-_.+\(.+\)\.xlsx$/);
+  });
+
   test('compare grids show six plan labor hour columns after physical volume', async ({ page }) => {
     test.setTimeout(180_000);
     const projectId = await openPreferredProject(page);

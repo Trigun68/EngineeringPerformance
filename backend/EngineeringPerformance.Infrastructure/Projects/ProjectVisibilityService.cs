@@ -1,3 +1,4 @@
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
@@ -10,10 +11,12 @@ namespace EngineeringPerformance.Infrastructure.Projects;
 public sealed class ProjectVisibilityService : IProjectVisibilityService
 {
     private readonly AppDbContext _context;
+    private readonly IUserActionLogger _actionLogger;
 
-    public ProjectVisibilityService(AppDbContext context)
+    public ProjectVisibilityService(AppDbContext context, IUserActionLogger actionLogger)
     {
         _context = context;
+        _actionLogger = actionLogger;
     }
 
     public async Task<bool> IsAdministratorAsync(int userId, CancellationToken cancellationToken = default)
@@ -105,6 +108,12 @@ public sealed class ProjectVisibilityService : IProjectVisibilityService
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.ProjectPermissionUpdate,
+            entityType: "ProjectPermission",
+            entityId: projectId,
+            description: $"Updated project permissions ({participants.Count} participants)",
+            cancellationToken: cancellationToken);
     }
 
     public async Task<bool> RemoveProjectPermissionAsync(int projectId, int userId, CancellationToken cancellationToken = default)
@@ -116,6 +125,12 @@ public sealed class ProjectVisibilityService : IProjectVisibilityService
 
         _context.ProjectPermissions.Remove(row);
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.ProjectPermissionUpdate,
+            entityType: "ProjectPermission",
+            entityId: projectId,
+            description: $"Removed project permission for user {userId}",
+            cancellationToken: cancellationToken);
         return true;
     }
 }

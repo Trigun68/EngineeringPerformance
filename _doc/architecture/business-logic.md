@@ -1,7 +1,7 @@
 # Бизнес-логика Engineering Performance
 
-**Дата ревизии:** 2026-08-23  
-**Версия документа:** 1.2  
+**Дата ревизии:** 2026-09-09  
+**Версия документа:** 1.4  
 **Статус:** актуально **только для web-стека** (`backend/`, `client/`). WPF вне scope разработки.
 
 **Политика:** см. [План развития: только Web](../plans/web-only-development-plan.md).
@@ -70,11 +70,11 @@ Project
       └── DataImportIteration[] (аудит импортов)
 ```
 
-### 3.2. Принцип заморозки норм
+**Основная версия (`IsPrimary`).** На пару `(ProjectId, Direction)` допускается не более одной неархивной основной версии. Инвариант держит БД: filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (`IsPrimary=1 AND IsArchived=0`), миграция `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql`. Смена primary (создание, «Сделать основной», смена направления) в `ProjectVersionService` идёт **двумя `SaveChanges` в одной транзакции** (execution strategy): сначала снять флаг со старой, затем назначить новой — индекс проверяется на каждый statement. Смена направления у primary больше не оставляет старое направление без основной: `PromotePrimaryIfMissingAsync` раньше видел ещё несохранённую сущность как primary.
 
-Все расчёты версии (прогноз, факт, сравнение) используют **снимок норм** (`AnalysisVersionSnapshot`), созданный при создании или копировании версии по нормам, действовавшим на `CreatedAt`. Изменения в справочнике норм **не влияют** на уже созданные версии.
+### 3.2. Снимок норм и live-recalc
 
-При копировании версии создаётся **новый** снимок по актуальным нормам на дату копии — историческая непрерывность норм не сохраняется.
+При создании или копировании версии пишется `AnalysisVersionSnapshot` по нормам на `CreatedAt`. **Заморозки нет:** смена нормы ИИС пересчитывает версии, чья дата попадает в период (`AfterNormChangedAsync` + `RepopulateSnapshot`). Смена сценария, импорт, CRUD ФО/оборудования и кнопка «Пересчитать» тоже пишут `LaborIntensity*` заново. GET читает сохранённые колонки, без live `N(V)`.
 
 ### 3.3. Активный стек (web-only)
 
@@ -106,9 +106,10 @@ Desktop (`EngineeringPerformance.App/`) **не рассматривается** 
 | Номенклатура КФО | `PhysicalVolumeKfo` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `IicNormId`* |
 | Номенклатура БЕР | `PhysicalVolumeBer` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment` |
 | Оборудование | `Equipment` | Да | `ClassifierId`, `Coefficient`, `UnitId`, `IsAssessment`, `CatalogKeyHash` |
-| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта), `IicWorkDirectionId` |
+| Трудоёмкость (каталог) | `LaborIntensity` | Да | `DocumentTypeName` (ключ импорта), `IicWorkDirectionId` (корни IIC-1…6 по Excel 025; пусто = NULL) |
+| Комплекты документации | `DocSet` | Плоский | `ProjectLaborIntensity.DocSetId`; без FK — карантин, часы не распределяются |
 | Единицы измерения | `UnitOfMeasurement` | Плоский | Используется во всех номенклатурах |
-| Характеристики проекта | `ProjectCharacteristic` | Да + опции | Влияют на прогноз (характеристики версии) |
+| Характеристики проекта | `ProjectCharacteristic` | Да + опции | Паспорт объекта (PD%). Не множитель `N(V)` / Z |
 
 \* `IicNormId` на КФО **не используется** в расчётах — нормы берутся только через снимок по `ClassifierId` → `WorkDirectionId`.
 
@@ -212,7 +213,7 @@ LI(z) = N · (1 + σ × z) × V_eff
 ```
 
 где `z ∈ {ZBase, ZOptimistic, ZPessimistic}`, `V_eff = Quantity × Coefficient`.  
-Только строки PPV с оценкой «Да». Оборудование — per-item `N(V_eq)×z`, без сценария группировки.
+Только строки с оценкой «Да». Оборудование входит в тот же `V_g`, что ФО: `ByProjectIicGroup` / `ByObjectIicGroup` группируют assessed ФО + assessed-оборудование; `ByEachValue` — `N(V_i)` на каждой линии. GET не пересчитывает `N(V)`.
 
 Значения Z по умолчанию: pessimistic = 0.5, base = 0, optimistic = −0.5. Это **входы в часы**, не колонка Z-оценки.
 
@@ -259,7 +260,15 @@ Persist (не GET): импорт/CRUD ФО и оборудования, смен
 
 ### 5.6. Редактирование плановых объёмов
 
-`ForecastPlannedVolumePersistenceService` сохраняет пользовательские плановые объёмы по листьям дерева ИИС. При нескольких PPV с одним `ClassifierId` обнуляет все кроме первой — **упрощение**, теряющее детализацию по объектам.
+`ForecastPlannedVolumePersistenceService` пишет целевой объём V* по листу ИИС **по сценарию версии**. Sibling **не** обнуляются.
+
+| Сценарий | Поведение |
+|----------|-----------|
+| `ByEachValue` | Одна assessed-строка ФО по направлению — записать V*. Несколько — 400, править в детализации ФО |
+| `ByProjectIicGroup` | V* = целевой `V_g`; доли пропорционально текущему физобъёму (`Quantity × Coefficient`); ΣV=0 — поровну |
+| `ByObjectIicGroup` | Масштаб всех assessed-строк направления так, чтобы сумма = V*; доли объектов сохраняются |
+
+Оборудование PlanningTab не переписывает; оно входит в `V_g` на recalc. После save вызывается persist часов.
 
 ### 5.7. UI планирования (web)
 
@@ -360,7 +369,7 @@ zScore (строка) = (ln(factProductivity) - normEstimate) / normStdDev
 |---|----------|
 | F-1 | `ActualHours` импортируется, но не участвует в агрегации (осознанное правило ISS-006) |
 | F-2 | LI без `WorkDirectionId` (несопоставленный каталог) → строка «(пусто)» |
-| F-3 | Два способа взвешенного Z итога (pipeline vs totals calculator) — возможное расхождение |
+| F-3 | ~~Два способа взвешенного Z итога~~ — **закрыто 2026-09-07**: единственный публичный вход — `IPerformanceCalculationEngine.ComputeWeightedZ*`; `WeightedZAggregator` / `WeightedZScoreCalculator` — `internal` детали движка; `VersionCompareMerge`, `DetailFactSummaryTableBuilder`, `ZTrendEngine` и PDF-инсайты считают через движок |
 
 ---
 
@@ -440,7 +449,7 @@ versionA, versionB (один проект)
 ### 9.1. Общий поток
 
 ```
-Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
+Excel (.xlsx, ≤10 MB) → ExcelUploadValidator
   → ImportController [ProjectDataUpload:Edit + проект:Edit]
   → ProjectExcelDataImportService
   → транзакция + DataImportIteration
@@ -461,13 +470,15 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Шаг | Правило |
 |-----|---------|
-| Сопоставление | `DocumentTypeName` → `LaborIntensity` (case-insensitive, trim) |
-| WorkDirectionId | Из `LaborIntensity.IicWorkDirectionId` (может остаться NULL) |
+| Сопоставление | `DocumentTypeName` **или** `Name` → `LaborIntensity` (case-insensitive, trim) |
+| WorkDirectionId | Денормализация для уникального индекса SQL. SoT для факта — регистр `LaborIntensityIicBindings` as-of `CreatedAt` версии, не слепок импорта. `026` не является runtime-механизмом |
 | DocumentationCode | `DocumentTypeName` или `DocumentTypeName\|Brand` |
-| Merge | По (DocumentationCode, WorkDirectionId) с **суммированием** часов (ISS-006) |
-| Опция | `addMissingToCatalog` — создаёт корневые LI **без** IIC-направления |
+| Merge Excel | **Не вызывается.** Replace: строка файла = строка БД |
+| Опция | `addMissingToCatalog` (UI по умолчанию вкл.) — карточка с TF-именем, без IIC |
 
-**Примечание:** поле `Techas` в каталоге `LaborIntensity` — legacy; web-импорт использует только `DocumentTypeName`.
+Группа ИИС карточки задаётся регистром периодов (`EffectiveFrom` / `EffectiveTo`). Двойной щелчок в справочнике трудоёмкости открывает историю. Заявленный узел ИИС аккумулирует объём себя и потомков, кроме поддеревьев, которые сами заявлены в регистре. Вкладка «Комплекты документации» скрыта в UI (сущность `DocSet` остаётся системной).
+
+**Примечание:** поле `Techas` в каталоге `LaborIntensity` — legacy. Web-импорт сопоставляет TF по `DocumentTypeName` или `Name`.
 
 ### 9.4. Импорт оборудования
 
@@ -537,13 +548,17 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 | Тренды | `GroupTrend` |
 | Импорт Excel | `ProjectDataUpload` (Edit) |
 | Справочники (UI) | `References` + объектные права |
-| Матрица прав | Administrator only |
+| Матрица прав / access-rights / permission-matrix | `Administration` (Read/Edit) |
+| Системные настройки PUT | `Administration` (Edit); GET — любой аутентифицированный (heartbeat) |
+| `GET /metrics` | `Administration` (Read) |
 
 ### 11.3. Известные пробелы ACL
 
 - `GET /api/dictionaries/all` без ролевой фильтрации по справочникам
 - Вкладки проекта в UI видны без проверки permission
-- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два паттерна
+- `DirectoriesController` использует `EnsureAccessAsync`, не `[HasPermission]` — два входа в один `PermissionService` (осознанно: slug → `PermissionType` резолвится в рантайме)
+
+Единый паттерн с 2026-09-07 ([ADR-006](../adr/ADR-006-authorization-haspermission-fallback-policy.md)): все действия — `[HasPermission]` / `[DirectoryPermission]` / `[AllowAnonymous]`; self-эндпоинты — `[Authorize]` из allowlist; `[Authorize(Roles=…)]` и ручные `IsAdministrator()` удалены; глобальная `FallbackPolicy = RequireAuthenticatedUser`; страж `ControllerAuthorizationCoverageTests` (рефлексия по контроллерам + тест 401 на endpoint без атрибутов).
 
 ---
 
@@ -598,20 +613,28 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 10. Fixture happy-path импорта (S1-05); импорт списка проектов (501).
 11. CRUD `PhysicalVolumeType` в web UI.
-12. SPNEGO prod / разбиение монолита импорта.
+12. ~~SPNEGO prod / разбиение монолита импорта~~ — закрыто 2026-09-08: единый `client/nginx.conf.template` (`X-Trusted-Proxy-Token`, HSTS, `include spnego*.inc`, overlay `docker-compose.spnego.yml`); импорт разнесён на `PhysicalVolumeExcelImportService` / `EquipmentImportService` / `LaborIntensityImportService`, фасад `ProjectExcelDataImportService` только делегирует.
 13. E2E/UAT расширение.
 
 ---
 
 ## 15. Ключевые файлы по областям
 
+### Движок расчётов (SSOT, partial-классы)
+- `backend/EngineeringPerformance.Application/Services/IPerformanceCalculationEngine.cs`
+- `backend/EngineeringPerformance.Application/Services/PerformanceCalculationEngine.cs` (ctor, `ProductivityToEstimate` / `EstimateToProductivity`)
+- `…/PerformanceCalculationEngine.Performance.cs` (иерархия Z, `CalculatePerformance`)
+- `…/PerformanceCalculationEngine.Fact.cs` (`CalculateFactAssessment`, распределение LI)
+- `…/PerformanceCalculationEngine.Hours.cs` (`RecalculatePlanHours`, сценарии, mixed `V_g`)
+- `…/PerformanceCalculationEngine.Forecast.cs` (`ComputeForecastHours`, перерасход часов)
+- `…/PerformanceCalculationEngine.Trend.cs` (`ComputeWeightedZ*`, тренды, `ComputeProductivityIndex`)
+- внутренние помощники (не вызывать из сервисов): `LaborIntensity/LaborIntensityCalculator.cs`, `Analytics/ForecastCalculation.cs`, `Analytics/ForecastHoursAggregator.cs`, `Analytics/WeightedZAggregator.cs` (`internal`)
+
 ### Планирование
-- `backend/EngineeringPerformance.Application/LaborIntensity/LaborIntensityCalculator.cs`
-- `backend/EngineeringPerformance.Application/Analytics/ForecastCalculation.cs`
-- `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs`
+- `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectsPageGridBuilder.cs` + partial `.Forecast.cs` / `.Fact.cs` / `.Compare.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectForecastService.cs`
 - `backend/EngineeringPerformance.Infrastructure/LaborIntensityServices/LaborIntensityRecalculationService.cs`
-- `client/src/features/projects/forecast/ForecastPanel.tsx`
+- `client/src/features/projects/forecast/ForecastPanel.tsx` (контейнер) + `ForecastToolbar.tsx`, `useForecastExport.ts`, `useForecastPageData.ts`, `useForecastPanelDialogs.tsx`, `ForecastSummaryGrid` / `ForecastFacilityGrid` / `ForecastDetailGrid`, `ForecastPanelDialogs.tsx`
 
 ### Справочники
 - `backend/EngineeringPerformance.Infrastructure/Directories/DirectoryFacade.cs`
@@ -625,13 +648,19 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 - `backend/EngineeringPerformance.Infrastructure/Analytics/PerformanceService.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentPipeline.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/FactAssessmentEngineMapper.cs`
+- `client/src/features/projects/fact/FactPanel.tsx` + `FactToolbar.tsx`, `useFactPageData.ts`, `useFactPanelDialogs.tsx`, `FactPerformanceGrid` / `FactFacilityGrid` / `FactDetailGrid`
 
 ### Импорт
-- `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs`
+- `backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.cs` (+ `.Api.cs`, `.JsonIngest.cs`) — фасад `IProjectImportService`: auth → temp file → dispatch → recalc/cache
+- `…/Import/PhysicalVolumeExcelImportService.cs` (+ `.Parse.cs`, `.Persist.cs`, `.JsonIngest.cs`, `PhysicalVolumeImportDraft.cs`)
+- `…/Import/EquipmentImportService.cs` (+ `.Excel.cs`, `.JsonIngest.cs`, `EquipmentImportCatalogMatcher.cs`, `EquipmentImportReplaceProcessor.cs`)
+- `…/Import/LaborIntensityImportService.cs` (+ `.Excel.cs`, `.JsonIngest.cs`, `LaborCatalogLookup.cs`)
+- общие: `ImportHelpers.cs`, `ImportTransactionRunner.cs`, `ImportIterationRecorder.cs`, `ImportSourceMetadata.cs`, `DocSetImportBinder.cs`
 
 ### Сравнение и тренды
 - `backend/EngineeringPerformance.Infrastructure/Analytics/ProjectCompareService.cs`
 - `backend/EngineeringPerformance.Infrastructure/Analytics/TrendAnalyticsService.cs`
+- `client/src/features/projects/compare/ComparePanel.tsx` + `CompareToolbar.tsx`, `useComparePageData.ts`, `CompareSummaryGrid` / `CompareFacilityGrid` / `CompareDetailGrid`
 
 ---
 
@@ -639,6 +668,8 @@ Excel (.xlsx, ≤50 MB) → ExcelUploadValidator
 
 | Дата | Версия | Изменение |
 |------|--------|-----------|
+| 2026-09-09 | 1.4 | Хвост архитектуры: фасады движка сняты (`RecalculatePlanHours` / `ComputeForecastHours`); §15 — хуки/гриды ForecastPanel |
+| 2026-09-08 | 1.3 | Цикл коррекции архитектуры: F-3 закрыт (один weighted Z в движке), §11.3 — единый `[HasPermission]` + `FallbackPolicy` (ADR-006), §14 п.12 закрыт (nginx template, split импорта), §15 — partial-файлы движка/грида и import-сервисы |
 | 2026-07-26 | 1.2 | Обновлены пути экспорт-сервисов на `Export/`; заменён `FactAssessmentRowsCalculator` на `FactAssessmentPipeline` + `FactAssessmentEngineMapper`; добавлена секция 4.6 (DocSet-связка); уточнены статусы P-1 и P-3 |
 | 2026-07-14 | 1.1 | Web-only: WPF вне scope; разрывы пересмотрены как внутренний техдолг web; ссылка на план развития |
 | 2026-07-14 | 1.0 | Первичная полная ревизия бизнес-логики |

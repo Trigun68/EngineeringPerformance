@@ -1,10 +1,14 @@
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
+
 export interface ReferenceRouteConfig {
   path: string;
   resource: string;
   title: string;
-  permission: string;
+  permission: PermissionObjectName;
   isHierarchical?: boolean;
   showExcel?: boolean;
+  /** Не показывать вкладку в навигации справочников. */
+  hidden?: boolean;
   /** formOrder порога для поля «Родитель» в модальном окне */
   parentFormOrder?: number;
 }
@@ -42,6 +46,13 @@ export const REFERENCE_ROUTES: ReferenceRouteConfig[] = [
     permission: 'LaborIntensities',
     isHierarchical: true,
     parentFormOrder: 35,
+  },
+  {
+    path: 'doc-sets',
+    resource: 'doc-sets',
+    title: 'Комплекты документации',
+    permission: 'DocSets',
+    hidden: true,
   },
   {
     path: 'iic-work-directions',

@@ -17,7 +17,7 @@
 | PUT | `…/versions/{vid}` | Изменить (в т.ч. `asOfDate` → переснимок) |
 | DELETE | `…/versions/{vid}` | Архив |
 | POST | `…/versions/{vid}/restore` | Разархив |
-| POST | `…/versions/{vid}/set-primary` | Основная для Direction |
+| POST | `…/versions/{vid}/set-primary` | Основная для Direction. Не более одной неархивной основной на `(ProjectId, Direction)`: filtered unique index `UX_ProjectAnalysisVersions_OnePrimary` (миграция `121_ProjectAnalysisVersionPrimaryFilteredIndex.sql`). |
 | POST | `…/versions/{vid}/copy` | Глубокая копия |
 | GET\|PUT | `…/planning-parameters` | Z по направлениям ИИС |
 | POST | `…/recalculate` | Пересчёт плановых часов |

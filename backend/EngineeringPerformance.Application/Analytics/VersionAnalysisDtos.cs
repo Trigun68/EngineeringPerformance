@@ -53,7 +53,9 @@ public sealed record ProjectVersionDirectionDto(
     IReadOnlyList<ProjectVersionDirectionLaborDto> DirectionLaborIntensities,
     decimal? PessimisticHours = null,
     decimal? BaseHours = null,
-    decimal? OptimisticHours = null);
+    decimal? OptimisticHours = null,
+    decimal? PhysicalVolume = null,
+    decimal? AssessmentPhysicalVolume = null);
 
 /// <summary>Запись трудоёмкости проекта, привязанная к конкретному направлению IIC.</summary>
 public sealed record ProjectVersionDirectionLaborDto(

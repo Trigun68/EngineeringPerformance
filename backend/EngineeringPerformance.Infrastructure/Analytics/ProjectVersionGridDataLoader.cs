@@ -2,6 +2,7 @@ using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
 using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,8 +15,9 @@ public sealed class ProjectVersionGridLoadOptions
 
 public sealed class ProjectLaborIntensityLoadRow
 {
+    public int? LaborIntensityId { get; init; }
     public string? DocumentationCode { get; init; }
-    public int? WorkDirectionId { get; init; }
+    public int? WorkDirectionId { get; set; }
     public decimal PlannedHours { get; init; }
 }
 
@@ -84,16 +86,35 @@ public sealed class ProjectVersionGridDataLoader
         IReadOnlyList<ProjectLaborIntensityLoadRow> laborIntensities = [];
         if (options.IncludeLaborIntensities)
         {
-            laborIntensities = await _context.ProjectLaborIntensities
+            var createdAt = await _context.ProjectAnalysisVersions.AsNoTracking()
+                .Where(v => v.Id == versionId && v.ProjectId == projectId)
+                .Select(v => v.CreatedAt)
+                .FirstAsync(cancellationToken);
+
+            var rows = await _context.ProjectLaborIntensities
                 .AsNoTracking()
                 .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
                 .Select(li => new ProjectLaborIntensityLoadRow
                 {
+                    LaborIntensityId = li.LaborIntensityId,
                     DocumentationCode = li.DocumentationCode,
                     WorkDirectionId = li.WorkDirectionId,
                     PlannedHours = li.PlannedHours,
                 })
                 .ToListAsync(cancellationToken);
+
+            var slice = await LaborIntensityIicAsOf.LoadAsync(
+                _context,
+                createdAt,
+                rows.Select(r => r.LaborIntensityId ?? 0),
+                cancellationToken);
+            foreach (var row in rows)
+            {
+                row.WorkDirectionId = LaborIntensityIicAsOf.ResolveDirection(
+                    slice, row.LaborIntensityId, row.WorkDirectionId);
+            }
+
+            laborIntensities = rows;
         }
 
         return new ProjectVersionGridLoadResult

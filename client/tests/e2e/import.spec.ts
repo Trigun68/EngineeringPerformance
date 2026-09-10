@@ -31,6 +31,7 @@ const mockDictionaries = {
   iicWorkDirections: [{ id: 1, name: 'Направление А', code: 'DA' }],
   iicWorkDirectionNorms: [],
   unitsOfMeasurement: [{ id: 1, name: 'шт' }],
+  docSets: [],
   projectCharacteristics: [],
 };
 

@@ -163,25 +163,32 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
   scenario: CompareScenario,
   { getPhysicalVolume, getZScore, getZDelta, zDeltaColumnId }: CompareMetricColumnOptions<T>,
   planLaborExtras?: Partial<ColDef<T>>,
+  includeFo = true,
 ): ColDef<T>[] {
   const num2 = (value: unknown) => formatGridNumber(value, 2);
   const num4 = (value: unknown) => formatGridNumber(value, 4);
 
+  const foColumns: ColDef<T>[] = includeFo
+    ? [
+        {
+          headerName: 'ФО (v. А)',
+          width: 120,
+          ...rightAlign,
+          valueGetter: (params) => params.data ? getPhysicalVolume(params.data, 'A') : null,
+          valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+        },
+        {
+          headerName: 'ФО (v. Б)',
+          width: 120,
+          ...rightAlign,
+          valueGetter: (params) => params.data ? getPhysicalVolume(params.data, 'B') : null,
+          valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+        },
+      ]
+    : [];
+
   return [
-    {
-      headerName: 'ФО (v. А)',
-      width: 120,
-      ...rightAlign,
-      valueGetter: (params) => params.data ? getPhysicalVolume(params.data, 'A') : null,
-      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
-    },
-    {
-      headerName: 'ФО (v. Б)',
-      width: 120,
-      ...rightAlign,
-      valueGetter: (params) => params.data ? getPhysicalVolume(params.data, 'B') : null,
-      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
-    },
+    ...foColumns,
     ...comparePlanLaborHourColumns<T>(planLaborExtras),
     {
       headerName: 'Ф.труд. (v. А)',
@@ -226,14 +233,14 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Z-оценка (v. А)',
+      headerName: 'Оценка Z (v. А)',
       width: 130,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZScore(params.data, 'A') : null,
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Z-оценка (v. Б)',
+      headerName: 'Оценка Z (v. Б)',
       width: 130,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZScore(params.data, 'B') : null,
@@ -241,7 +248,7 @@ export function createCompareSharedMetricColumns<T extends CompareScenarioMetric
     },
     {
       colId: zDeltaColumnId,
-      headerName: 'Δ Z-score',
+      headerName: 'Δ оценка Z',
       width: 110,
       ...rightAlign,
       valueGetter: (params) => params.data ? getZDelta(params.data) : null,
@@ -265,25 +272,71 @@ export function getComparePlanZScore(
 }
 
 export function createCompareSummaryColumns(scenario: CompareScenario = 'base'): ColDef<VersionCompareRow>[] {
+  const num2 = (value: unknown) => formatGridNumber(value, 2);
   const num4 = (value: unknown) => formatGridNumber(value, 4);
+  const volumeCell = (
+    row: VersionCompareRow,
+    side: VersionSide,
+    kind: 'physical' | 'assessment',
+  ): string | number | null => {
+    if (kind === 'physical') {
+      return side === 'A'
+        ? row.physicalVolumeDisplayA ?? row.physicalVolumeA ?? null
+        : row.physicalVolumeDisplayB ?? row.physicalVolumeB ?? null;
+    }
+    return side === 'A'
+      ? row.assessmentPhysicalVolumeDisplayA ?? row.assessmentPhysicalVolumeA ?? null
+      : row.assessmentPhysicalVolumeDisplayB ?? row.assessmentPhysicalVolumeB ?? null;
+  };
+
   return [
+    {
+      colId: 'physicalVolumeA',
+      headerName: 'Физобъём (v. А)',
+      width: 140,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? volumeCell(params.data, 'A', 'physical') : null,
+      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+    },
+    {
+      colId: 'physicalVolumeB',
+      headerName: 'Физобъём (v. Б)',
+      width: 140,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? volumeCell(params.data, 'B', 'physical') : null,
+      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+    },
+    {
+      colId: 'assessmentPhysicalVolumeA',
+      headerName: 'Сгруппированный физобъём (v. А)',
+      width: 170,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? volumeCell(params.data, 'A', 'assessment') : null,
+      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+    },
+    {
+      colId: 'assessmentPhysicalVolumeB',
+      headerName: 'Сгруппированный физобъём (v. Б)',
+      width: 170,
+      ...rightAlign,
+      valueGetter: (params) => params.data ? volumeCell(params.data, 'B', 'assessment') : null,
+      valueFormatter: (params) => typeof params.value === 'string' ? params.value : num2(params.value),
+    },
     ...createCompareSharedMetricColumns<VersionCompareRow>(scenario, {
-      getPhysicalVolume: (row, side) => side === 'A'
-        ? row.factPhysicalVolumeDisplayA ?? row.factPhysicalVolumeA
-        : row.factPhysicalVolumeDisplayB ?? row.factPhysicalVolumeB,
+      getPhysicalVolume: () => null,
       getZScore: (row, side) => side === 'A' ? row.factZScoreA : row.factZScoreB,
       getZDelta: (row) => row.factZDelta,
       zDeltaColumnId: 'factZDelta',
-    }),
+    }, undefined, false),
     {
-      headerName: 'Пл.Z (v. А)',
+      headerName: 'Оценка Z плана (v. А)',
       width: 120,
       ...rightAlign,
       valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'A') : null,
       valueFormatter: (params) => num4(params.value),
     },
     {
-      headerName: 'Пл.Z (v. Б)',
+      headerName: 'Оценка Z плана (v. Б)',
       width: 120,
       ...rightAlign,
       valueGetter: (params) => params.data ? getComparePlanZScore(params.data, scenario, 'B') : null,
@@ -291,7 +344,7 @@ export function createCompareSummaryColumns(scenario: CompareScenario = 'base'):
     },
     {
       colId: 'planZDelta',
-      headerName: 'Δ Пл.Z',
+      headerName: 'Δ оценка Z плана',
       width: 110,
       ...rightAlign,
       valueGetter: (params) => {

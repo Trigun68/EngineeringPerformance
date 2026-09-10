@@ -6,9 +6,27 @@ import {
 import { fetchProjectVersions, type ProjectVersion } from '@/api/projectVersionsApi';
 import { fetchProjectPermissions, type ProjectPermission } from '@/api/projectPermissionsApi';
 import { fetchProjectCharacteristics, type ProjectCharacteristicSelection } from '@/api/projectCharacteristicsApi';
-import { canReadPermission } from '@/utils/permissionAccess';
+import { usePermission } from '@/hooks/usePermission';
+import { queryKeys } from '@/services/queryKeys';
 import { useAuthStore } from '@/store/useAuthStore';
+import type { PermissionObjectName } from '@/constants/accessControlConstants';
+import { canReadPermission } from '@/utils/permissionAccess';
 import type { Project } from '@/types/project';
+
+type WorkspaceMainTab = 'forecast' | 'fact' | 'compare' | 'report';
+
+interface WorkspaceTabConfig {
+  value: WorkspaceMainTab;
+  label: string;
+  permission: PermissionObjectName;
+}
+
+const WORKSPACE_TAB_CONFIG: readonly WorkspaceTabConfig[] = [
+  { value: 'forecast', label: 'Прогнозирование', permission: 'Planning' },
+  { value: 'fact', label: 'Оценка факта', permission: 'Assessment' },
+  { value: 'compare', label: 'Сравнение версий', permission: 'VersionComparison' },
+  { value: 'report', label: 'Отчет', permission: 'Reports' },
+];
 
 export interface ProjectWorkspaceData {
   project: Project | null;
@@ -65,38 +83,33 @@ export function useProjectWorkspace(projectId: number | null, canRead: boolean) 
   const user = useAuthStore((s) => s.user);
   const permissions = user?.permissions;
   const roleName = user?.roleName;
+  const { canEdit: canEditProject } = usePermission('Projects');
 
   const visibleWorkspaceTabs = useMemo(
-    () =>
-      [
-        { value: 'forecast' as const, label: 'Прогнозирование', permission: 'Planning' },
-        { value: 'fact' as const, label: 'Оценка факта', permission: 'Assessment' },
-        { value: 'compare' as const, label: 'Сравнение версий', permission: 'VersionComparison' },
-        { value: 'report' as const, label: 'Отчет', permission: 'Reports' },
-      ].filter((tab) => canReadPermission(permissions, tab.permission, roleName)),
+    () => WORKSPACE_TAB_CONFIG.filter((tab) => canReadPermission(permissions, tab.permission, roleName)),
     [permissions, roleName],
   );
 
   const projectQuery = useQuery({
-    queryKey: ['project', projectId],
+    queryKey: queryKeys.project(projectId ?? undefined),
     queryFn: () => fetchProjectById(projectId!),
     enabled: !!projectId && canRead,
   });
 
   const versionsQuery = useQuery({
-    queryKey: ['projectVersions', projectId],
+    queryKey: queryKeys.projectVersions(projectId ?? undefined),
     queryFn: () => fetchProjectVersions(projectId!),
     enabled: !!projectId && canRead,
   });
 
   const characteristicsQuery = useQuery({
-    queryKey: ['projectCharacteristics', projectId],
+    queryKey: queryKeys.projectCharacteristics(projectId ?? undefined),
     queryFn: () => fetchProjectCharacteristics(projectId!).catch(() => []),
     enabled: !!projectId && canRead,
   });
 
   const permissionsQuery = useQuery({
-    queryKey: ['projectPermissions', projectId],
+    queryKey: queryKeys.projectPermissions(projectId ?? undefined),
     queryFn: () => fetchProjectPermissions(projectId!).catch(() => [] as ProjectPermission[]),
     enabled: !!projectId && canRead,
   });
@@ -120,7 +133,7 @@ export function useProjectWorkspace(projectId: number | null, canRead: boolean) 
     error,
     visibleWorkspaceTabs,
     canRead,
-    canEdit: canRead,
+    canEdit: canRead && canEditProject,
   };
 }
 
@@ -128,7 +141,7 @@ export interface ProjectWorkspaceContextValue {
   data: ProjectWorkspaceData | null;
   loading: boolean;
   error: unknown;
-  visibleWorkspaceTabs: ReadonlyArray<{ value: string; label: string; permission: string }>;
+  visibleWorkspaceTabs: ReadonlyArray<{ value: string; label: string; permission: PermissionObjectName }>;
   canRead: boolean;
   canEdit: boolean;
 }

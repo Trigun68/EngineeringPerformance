@@ -1,6 +1,8 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Analytics;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -10,11 +12,13 @@ namespace EngineeringPerformance.Infrastructure.Projects;
 public sealed class ProjectVersionPlanningParameterService(
     AppDbContext context,
     IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
-    ProjectsPageRawDataLoader rawLoader) : IProjectVersionPlanningParameterService
+    ProjectsPageRawDataLoader rawLoader,
+    IUserActionLogger actionLogger) : IProjectVersionPlanningParameterService
 {
     private readonly AppDbContext _context = context;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator = recalcOrchestrator;
     private readonly ProjectsPageRawDataLoader _rawLoader = rawLoader;
+    private readonly IUserActionLogger _actionLogger = actionLogger;
 
     public async Task<IReadOnlyList<ProjectVersionPlanningParameterDto>> ListAsync(
         int projectId,
@@ -89,6 +93,12 @@ public sealed class ProjectVersionPlanningParameterService(
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        await _actionLogger.LogAsync(
+            UserActionType.PlanningParameterEdit,
+            entityType: "ProjectVersionPlanningParameter",
+            entityId: versionId,
+            description: $"Updated planning parameters for version {versionId} ({request.Items.Count} items)",
+            cancellationToken: cancellationToken);
         await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
     }
 

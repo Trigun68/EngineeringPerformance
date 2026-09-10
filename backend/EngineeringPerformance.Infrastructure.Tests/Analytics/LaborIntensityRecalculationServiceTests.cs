@@ -42,15 +42,21 @@ public sealed class LaborIntensityRecalculationServiceTests
             .Include(e => e.Equipment)
             .ToListAsync();
 
-        var assessed = ppv.Where(p => p.Id != 3).ToList();
-        var expectedPpv = _engine.RecalculateLaborIntensities(
+        var expected = _engine.RecalculatePlanHours(
             scenario,
-            assessed.Select(p => new LaborIntensityCalculator.PpvLine(
-                p.Id, 7, p.FacilityCode, p.Quantity, 1m, true)).ToList(),
+            [
+                new LaborIntensityCalculator.PpvLine(1, 7, "OBJ-A", 2m, 1m, true),
+                new LaborIntensityCalculator.PpvLine(2, 7, "OBJ-B", 8m, 1m, true),
+                new LaborIntensityCalculator.PpvLine(3, 7, "OBJ-A", 4m, 1m, false),
+            ],
+            [
+                new LaborIntensityCalculator.EquipmentLine(20, 7, 5m, true, "OBJ-A"),
+                new LaborIntensityCalculator.EquipmentLine(21, 7, 4m, false),
+            ],
             WrightNorms(),
             new Dictionary<int, PlanningZParameters>());
 
-        foreach (var row in expectedPpv)
+        foreach (var row in expected.Ppv)
         {
             var stored = ppv.Single(p => p.Id == row.PpvId);
             stored.LaborIntensityBase.Should().Be(row.Base);
@@ -60,13 +66,7 @@ public sealed class LaborIntensityRecalculationServiceTests
 
         ppv.Single(p => p.Id == 3).LaborIntensityBase.Should().BeNull("оценка «Нет» не получает LI");
 
-        var expectedEq = _engine.ComputeEquipmentForecastHours(
-            [new LaborIntensityCalculator.EquipmentLine(20, 7, 5m, true),
-             new LaborIntensityCalculator.EquipmentLine(21, 7, 4m, false)],
-            WrightNorms(),
-            new Dictionary<int, PlanningZParameters>());
-
-        equipment.Single(e => e.Id == 20).LaborIntensityBase.Should().Be(expectedEq[20].Base);
+        equipment.Single(e => e.Id == 20).LaborIntensityBase.Should().Be(expected.Equipment[20].Base);
         equipment.Single(e => e.Id == 21).LaborIntensityBase.Should().BeNull();
 
         var dir = await context.IicWorkDirections.AsNoTracking().SingleAsync();
@@ -96,20 +96,22 @@ public sealed class LaborIntensityRecalculationServiceTests
         };
         var forecast = ProjectsPageGridBuilder.BuildForecastGrids(bundle, []);
         var expectedTotal =
-            expectedPpv.Sum(r => r.Base ?? 0m) + (expectedEq[20].Base ?? 0m);
+            expected.Ppv.Sum(r => r.Base ?? 0m) + (expected.Equipment[20].Base ?? 0m);
         forecast.GrandTotals.BaseHours.Should().Be(expectedTotal);
     }
 
     [Fact]
-    public async Task RecalculateAsync_EquipmentHours_DoNotFollowPpvScenario()
+    public async Task RecalculateAsync_EquipmentHours_FollowPpvScenario_WhenNormDependsOnVolume()
     {
         var each = await RecalculateEquipmentBaseAsync(PlanningScenario.ByEachValue);
         var project = await RecalculateEquipmentBaseAsync(PlanningScenario.ByProjectIicGroup);
         var obj = await RecalculateEquipmentBaseAsync(PlanningScenario.ByObjectIicGroup);
 
-        each.Should().Be(project);
-        project.Should().Be(obj);
         each.Should().BePositive();
+        project.Should().BePositive();
+        obj.Should().BePositive();
+        each.Should().NotBe(project);
+        obj.Should().NotBe(each);
     }
 
     private async Task<decimal?> RecalculateEquipmentBaseAsync(PlanningScenario scenario)
@@ -250,6 +252,7 @@ public sealed class LaborIntensityRecalculationServiceTests
                 ProjectAnalysisVersionId = 10,
                 EquipmentId = 8,
                 Quantity = 5m,
+                FacilityCode = "OBJ-A",
                 Equipment = eqYes,
             },
             new ProjectEquipment

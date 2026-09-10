@@ -1,6 +1,15 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { FactAnalysisReportView } from '../FactAnalysisReportView';
+
+function renderView(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
 
 vi.mock('../../../../hooks/usePermission', () => ({
   usePermission: () => ({ canRead: true }),
@@ -20,6 +29,8 @@ vi.mock('../../../../api/analyticsApi', () => ({
         name: 'Родитель',
         unitName: 'м³',
         factPhysicalVolume: null,
+        physicalVolume: null,
+        assessmentPhysicalVolume: null,
         factLaborHours: null,
         pessimisticHours: 0,
         baseHours: 0,
@@ -43,6 +54,8 @@ vi.mock('../../../../api/analyticsApi', () => ({
         name: 'Лист',
         unitName: 'м³',
         factPhysicalVolume: 8,
+        physicalVolume: 8,
+        assessmentPhysicalVolume: 15,
         factLaborHours: 12,
         pessimisticHours: 60,
         baseHours: 50,
@@ -87,20 +100,20 @@ vi.mock('../../../../api/analyticsApi', () => ({
 
 describe('FactAnalysisReportView', () => {
   it('shows hours as optimistic, base, pessimistic and a project total row', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     await waitFor(() => {
       expect(screen.getByText('Шифр')).toBeInTheDocument();
     });
     const header = screen.getByText('Шифр').parentElement;
     expect(header?.textContent).toMatch(
-      /ШифрНаправлениеФакт ФОФакт чПлан\.Труд\.Оптим\.План\.Труд\.Баз\.План\.Труд\.Песс\./,
+      /ШифрНаправлениеФизобъёмСгруппированный физобъёмФакт чПлан\.Труд\.Оптим\.План\.Труд\.Баз\.План\.Труд\.Песс\./,
     );
     expect(screen.getByText('По проекту')).toBeInTheDocument();
   });
 
   it('keeps child cards under the parent and does not roll up hours', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     const parentCard = await screen.findByTestId('fact-analysis-card-10');
     const childCard = await screen.findByTestId('fact-analysis-card-11');
@@ -119,7 +132,7 @@ describe('FactAnalysisReportView', () => {
   });
 
   it('shows own physical volumes and labor only on the leaf card', async () => {
-    render(<FactAnalysisReportView projectId={1} versionId={2} />);
+    renderView(<FactAnalysisReportView projectId={1} versionId={2} />);
 
     const parentCard = await screen.findByTestId('fact-analysis-card-10');
     expect(within(parentCard).queryByText('Позиция')).not.toBeInTheDocument();
@@ -133,5 +146,7 @@ describe('FactAnalysisReportView', () => {
     expect(within(childCard).getByText('Факт, ч')).toBeInTheDocument();
     expect(within(childCard).getByText('План, ч')).toBeInTheDocument();
     expect(within(childCard).getAllByText('8,00').length).toBeGreaterThanOrEqual(2);
+    expect(within(childCard).getByText('15,00')).toBeInTheDocument();
+    expect(within(parentCard).queryByText('15,00')).not.toBeInTheDocument();
   });
 });

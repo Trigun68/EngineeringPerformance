@@ -75,7 +75,7 @@
   `ForecastPlannedVolumePersistenceService.cs`
 - `backend/EngineeringPerformance.Infrastructure/Projects/ProjectDataService.cs`,
   `ProjectVersionService.cs`
-- `scripts/perf-smoke.sh`, `client/nginx.conf`
+- `scripts/perf-smoke.sh`, `client/nginx.conf.template`
 
 ## Связанные
 - ISS-011 (поколение кэша FactNorm — тот же приём инвалидации)

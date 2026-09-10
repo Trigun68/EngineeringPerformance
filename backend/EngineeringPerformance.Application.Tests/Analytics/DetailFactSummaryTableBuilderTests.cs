@@ -1,10 +1,15 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Application.Services;
 using FluentAssertions;
 
 namespace EngineeringPerformance.Application.Tests.Analytics;
 
 public sealed class DetailFactSummaryTableBuilderTests
 {
+    private static readonly IPerformanceCalculationEngine Engine =
+        new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator()));
+
     [Fact]
     public void Build_AggregatesFoPlanFactAndWeightedZ()
     {
@@ -22,7 +27,7 @@ public sealed class DetailFactSummaryTableBuilderTests
             new("02", "Объект 2", 100, 3m, 1m, 18m, 15m, 12m, null, null),
         };
 
-        var table = DetailFactSummaryTableBuilder.Build(rows, directions, "P-01", "Факт v1");
+        var table = DetailFactSummaryTableBuilder.Build(rows, directions, "P-01", "Факт v1", Engine);
 
         table.Columns.Should().ContainSingle();
         table.Rows.Should().HaveCount(2);

@@ -1,5 +1,6 @@
 using ClosedXML.Excel;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Permissions;
@@ -101,9 +102,19 @@ public sealed class ImportIterationMetadataTests
             currentUser.Object,
             permissions.Object,
             visibility.Object,
-            new Mock<IDictionaryService>().Object,
             new Mock<IProjectAnalyticsCache>().Object,
-            recalc.Object);
+            recalc.Object,
+            Mock.Of<IUserActionLogger>(),
+            new PhysicalVolumeExcelImportService(
+                factory,
+                NullLogger<PhysicalVolumeExcelImportService>.Instance),
+            new EquipmentImportService(
+                factory,
+                NullLogger<EquipmentImportService>.Instance,
+                new Mock<IDictionaryService>().Object),
+            new LaborIntensityImportService(
+                factory,
+                NullLogger<LaborIntensityImportService>.Instance));
     }
 
     private static async Task<(int ProjectId, int VersionId)> SeedProjectAsync(IDbContextFactory<AppDbContext> factory)

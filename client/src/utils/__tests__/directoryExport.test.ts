@@ -157,6 +157,46 @@ describe('collectGridExportData', () => {
     expect(rows).toEqual([['A', '10']]);
   });
 
+  it('includeTreeNodes keeps parents and indents children', () => {
+    const parent = {
+      group: true,
+      data: { facilityName: 'Бетон', baseHours: '' },
+      level: 0,
+    } as unknown as IRowNode;
+    const child = {
+      group: false,
+      data: { facilityName: 'Стены', baseHours: 3 },
+      level: 1,
+    } as unknown as IRowNode;
+    const api = createMockApi({
+      columns: [nameCol, hoursCol],
+      nodes: [parent, child],
+      getValue: (col, node) => node.data?.[col.getColId()],
+    });
+
+    const { rows } = collectGridExportData(api, { includeTreeNodes: true });
+    expect(rows).toEqual([
+      ['Бетон', ''],
+      ['  Стены', '3'],
+    ]);
+  });
+
+  it('includeTreeNodes exports only nodes the grid still shows after filter', () => {
+    const visible = {
+      group: false,
+      data: { facilityName: 'Видимый', baseHours: 1 },
+      level: 0,
+    } as unknown as IRowNode;
+    const api = createMockApi({
+      columns: [nameCol, hoursCol],
+      nodes: [visible],
+      getValue: (col, node) => node.data?.[col.getColId()],
+    });
+
+    const { rows } = collectGridExportData(api, { includeTreeNodes: true });
+    expect(rows).toEqual([['Видимый', '1']]);
+  });
+
   it('without row groups includeGroups still exports leaves only', () => {
     const leaf = mockLeaf({ facilityName: 'A', baseHours: 5 });
     const api = createMockApi({

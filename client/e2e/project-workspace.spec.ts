@@ -179,7 +179,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByTestId('report-v1-page')).toBeVisible({ timeout: 40_000 });
     await expect(page.getByText('Сводка по проекту')).toBeVisible();
     await expect(page.getByText('Трудоёмкость').first()).toBeVisible();
-    await expect(page.getByText('Z-оценка').first()).toBeVisible();
+    await expect(page.getByText('Заложенный Z').first()).toBeVisible();
+    await expect(page.getByText('Оценка Z').first()).toBeVisible();
     await expect(page.getByTestId('report-v1-z-scale')).toBeVisible();
     await expect(page.getByTestId('report-z-zone-Critical')).toBeVisible();
     await expect(page.getByTestId('report-z-zone-Excellent')).toBeVisible();
@@ -188,6 +189,8 @@ test.describe('Project Workspace - WPF Style', () => {
     await expect(page.getByText('Динамика Z-оценки по версиям')).toBeVisible();
     await expect(page.getByTestId('report-export-pdf')).toBeVisible();
     await expect(page.getByTestId('report-v1-more-toggle')).toBeVisible();
+    await page.getByRole('tab', { name: 'Физические объёмы' }).click();
+    await expect(page.getByTestId('report-physical-volume-groups')).toBeVisible();
     await expect(page.getByText('Анализ версии проекта')).toHaveCount(0);
 
     // «Тренд» — история версий проекта, мост часов, Z от 0, S-curve.

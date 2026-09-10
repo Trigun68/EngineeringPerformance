@@ -18,6 +18,7 @@ export const DICTIONARY_KEYS = [
   'iicWorkDirections',
   'iicWorkDirectionNorms',
   'unitsOfMeasurement',
+  'docSets',
   'projectCharacteristics',
 ] as const;
 
@@ -33,5 +34,6 @@ export interface DictionariesAllResponse {
   iicWorkDirections: DictionaryItem[];
   iicWorkDirectionNorms: DictionaryItem[];
   unitsOfMeasurement: DictionaryItem[];
+  docSets: DictionaryItem[];
   projectCharacteristics: DictionaryItem[];
 }

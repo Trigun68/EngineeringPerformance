@@ -27,6 +27,9 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
   'units-of-measurement': [
     { key: 'description', label: 'Описание', type: 'text', showInGrid: true, gridWidth: 240, formOrder: 20 },
   ],
+  'doc-sets': [
+    { key: 'code', label: 'Код', type: 'text', required: true, showInGrid: true, gridWidth: 140, formOrder: 10 },
+  ],
   'physical-volumes-kfo': [
     { key: 'code', label: 'Код', type: 'text', required: true, showInGrid: false, gridWidth: 120, formOrder: 10 },
     { key: 'description', label: 'Описание', type: 'text', showInGrid: true, gridWidth: 200, formOrder: 30 },
@@ -111,6 +114,8 @@ export const DIRECTORY_FIELD_CONFIG: Record<string, DirectoryFieldDef[]> = {
       hierarchical: true,
       formatAsIisNorm: true,
       showInGrid: true,
+      showInForm: false,
+      readOnly: true,
       gridWidth: 280,
       formOrder: 40,
     },

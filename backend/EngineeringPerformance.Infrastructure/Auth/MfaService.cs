@@ -1,7 +1,10 @@
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OtpNet;
 using System.Security.Cryptography;
@@ -11,7 +14,8 @@ namespace EngineeringPerformance.Infrastructure.Auth;
 public sealed class MfaService(
     AppDbContext context,
     IDataProtectionProvider dataProtectionProvider,
-    IOptions<MfaOptions> options) : IMfaService
+    IOptions<MfaOptions> options,
+    IUserActionLogger actionLogger) : IMfaService
 {
     private readonly MfaOptions _options = options.Value;
     private readonly IDataProtector _protector =
@@ -69,6 +73,10 @@ public sealed class MfaService(
         user.MfaSecret = _protector.Protect(secret);
         user.MfaEnabled = true;
         await context.SaveChangesAsync(cancellationToken);
+        await actionLogger.LogForUserAsync(
+            user.Id,
+            UserActionType.MfaEnable,
+            cancellationToken: cancellationToken);
     }
 
     public async Task DisableMfaAsync(User user, CancellationToken cancellationToken = default)
@@ -76,6 +84,10 @@ public sealed class MfaService(
         user.MfaSecret = null;
         user.MfaEnabled = false;
         await context.SaveChangesAsync(cancellationToken);
+        await actionLogger.LogForUserAsync(
+            user.Id,
+            UserActionType.MfaDisable,
+            cancellationToken: cancellationToken);
     }
 
     public bool IsMfaRequired(User user) =>
@@ -87,6 +99,11 @@ public sealed class MfaService(
 
     public async Task ResetMfaAsync(User user, CancellationToken cancellationToken = default) =>
         await DisableMfaAsync(user, cancellationToken);
+
+    public async Task<User?> GetActiveUserByIdAsync(int userId, CancellationToken cancellationToken = default) =>
+        await context.Users
+            .Include(u => u.Role)
+            .FirstOrDefaultAsync(u => u.Id == userId && u.IsActive, cancellationToken);
 
     private static bool IsValidCode(string code) =>
         code.Length == 6 && code.All(char.IsAsciiDigit);

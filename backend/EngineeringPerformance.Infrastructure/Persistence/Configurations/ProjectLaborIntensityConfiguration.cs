@@ -30,6 +30,11 @@ public sealed class ProjectLaborIntensityConfiguration : IEntityTypeConfiguratio
             .HasForeignKey(li => li.ProjectPhysicalVolumeId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne(li => li.DocSet)
+            .WithMany(d => d.LaborIntensities)
+            .HasForeignKey(li => li.DocSetId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasOne(li => li.PhysicalVolumeKfo)
             .WithMany(pv => pv.LaborIntensities)
             .HasForeignKey(li => li.PhysicalVolumeKfoId)

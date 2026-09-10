@@ -101,7 +101,9 @@ public sealed class ProjectVersionAnalysisService : IProjectVersionAnalysisServi
                 Interpretation: r.Interpretation,
                 PhysicalVolumes: BuildPhysicalVolumes(pvByDirection, r.WorkDirectionId, unitNameById),
                 EquipmentVolumes: BuildEquipmentVolumes(eqByDirection, r.WorkDirectionId, unitNameById),
-                DirectionLaborIntensities: BuildDirectionLabor(laborByDirection, r.WorkDirectionId)))
+                DirectionLaborIntensities: BuildDirectionLabor(laborByDirection, r.WorkDirectionId),
+                PhysicalVolume: r.PhysicalVolume,
+                AssessmentPhysicalVolume: r.AssessmentPhysicalVolume))
             .ToList();
 
         // Имена групп IIC уже в формате «код — наименование (ед.)» из PerformanceService.

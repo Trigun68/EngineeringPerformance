@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loginAsAdmin, actionButton, ACTION_LABELS } from './helpers';
+import { loginAsAdmin, actionButton, ACTION_LABELS, waitForWorkingOverlayHidden } from './helpers';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = process.env.E2E_SAMPLES_DIR ?? path.resolve(__dirname, '../../.src');
@@ -126,6 +126,8 @@ test.describe('Project data import (.src samples)', () => {
     await previewResponse;
 
     await expect(dialog.getByText(/Строк в файле:\s*[1-9]/)).toBeVisible();
+    await expect(dialog.getByText(/Не найдено в справочнике:\s*\d+/)).toBeVisible();
+    await expect(dialog.getByText(/Не найдено в справочнике:\s*1008/)).toHaveCount(0);
 
     const importResponse = page.waitForResponse(
       (response) =>
@@ -139,5 +141,30 @@ test.describe('Project data import (.src samples)', () => {
     await importResponse;
 
     await expect(dialog.getByText(/Импортировано записей:\s*[1-9]/)).toBeVisible();
+    await dialog.locator('.MuiDialogActions-root').getByRole('button', { name: 'Закрыть' }).click();
+    await expect(dialog).not.toBeVisible();
+    await waitForWorkingOverlayHidden(page, 90_000);
+    await page.getByRole('tab', { name: 'Итого', exact: true }).click();
+    await waitForWorkingOverlayHidden(page, 90_000);
+    await page.waitForSelector('.ag-center-cols-container .ag-row', { timeout: 30_000 });
+
+    const hoursTotal = await page.evaluate(() => {
+      const w = window as Window & {
+        __epGridApis?: Record<string, { forEachNode: (cb: (node: { data?: { factLaborHours?: number | null } }) => void) => void }>;
+      };
+      const api = w.__epGridApis?.['fact-performance'];
+      if (!api) {
+        return 0;
+      }
+      let sum = 0;
+      api.forEachNode((node) => {
+        const hours = node.data?.factLaborHours;
+        if (typeof hours === 'number' && hours > 0) {
+          sum += hours;
+        }
+      });
+      return sum;
+    });
+    expect(hoursTotal).toBeGreaterThan(0);
   });
 });

@@ -2,12 +2,13 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { getUserPreferences } from './api/userPreferencesApi';
-import { AppLayout } from './layout/AppLayout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { AdminRouteGuard } from './components/auth/AdminRouteGuard';
 import { MfaSetupDialog } from './components/auth/MfaSetupDialog';
 import { PermissionGuard, SettingsGuard } from './components/auth/PermissionGuard';
 import { AdminLayout } from './features/admin/AdminLayout';
 import { useFirstAccessiblePath } from './hooks/useAccessibleNavigation';
+import { AppLayout } from './layout/AppLayout';
 import { ProjectsPage as ProjectsListPage } from './pages/projects/ProjectsPage';
 import { FullProjectsPage } from './pages/projects/FullProjectsPage';
 import { ReferencesLayout } from './pages/references/ReferencesLayout';
@@ -35,6 +36,9 @@ const HealthDashboard = lazy(() =>
 const ConfigAudit = lazy(() => import('./features/admin/ConfigAudit').then((m) => ({ default: m.ConfigAudit })));
 const MonitoringDashboard = lazy(() =>
   import('./features/monitoring/MonitoringDashboard').then((m) => ({ default: m.MonitoringDashboard })),
+);
+const ResourceDashboard = lazy(() =>
+  import('./features/admin/ResourceDashboard').then((m) => ({ default: m.ResourceDashboard })),
 );
 const UserActionLogPage = lazy(() =>
   import('./pages/audit/UserActionLogPage').then((m) => ({ default: m.UserActionLogPage })),
@@ -122,6 +126,7 @@ export default function App() {
   }
 
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <>
         <Routes>
@@ -264,6 +269,7 @@ export default function App() {
               <Route path="logs" element={<LogViewer />} />
               <Route path="health" element={<HealthDashboard />} />
               <Route path="monitoring" element={<MonitoringDashboard />} />
+              <Route path="resources" element={<ResourceDashboard />} />
               <Route path="audit" element={<ConfigAudit />} />
               <Route path="user-actions" element={<UserActionLogPage />} />
             </Route>
@@ -308,5 +314,6 @@ export default function App() {
         />
       </>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

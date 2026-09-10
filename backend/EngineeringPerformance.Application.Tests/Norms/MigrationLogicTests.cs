@@ -43,11 +43,11 @@ public sealed class MigrationLogicTests
         const decimal stdDev = 8m;
         const decimal volume = 10m;
         var z = PlanningZParameters.Default;
+        var calculator = new DeviationCalculator(new NormCalculator());
 
-        var legacy = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, z);
+        var legacy = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, z, calculator);
         var norm = NormFormulaMapper.FromLegacyPerformance(performance);
         var dev = NormFormulaMapper.FromLegacyStdDev(performance, stdDev);
-        var calculator = new DeviationCalculator(new NormCalculator());
         var modern = ForecastCalculation.ComputeForecastHours(norm, dev, volume, volume, z, calculator);
 
         modern.Base.Should().Be(legacy.Base);
@@ -87,9 +87,10 @@ public sealed class MigrationLogicTests
         const decimal volume = 10m;
         var zZero = new PlanningZParameters(0.5m, 0m, -0.5m);
         var zBase = new PlanningZParameters(0.5m, 0.4m, -0.5m);
+        var calculator = new DeviationCalculator(new NormCalculator());
 
-        var (baseZero, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zZero);
-        var (baseAdj, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zBase);
+        var (baseZero, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zZero, calculator);
+        var (baseAdj, _, _) = ForecastCalculation.ComputeForecastHours(volume, performance, stdDev, zBase, calculator);
 
         baseZero.Should().Be(1000m);
         baseAdj.Should().Be(1040m);

@@ -1,6 +1,6 @@
 # Единый SoT часов и Z-оценки
 
-**Дата:** 2026-08-31  
+**Дата:** 2026-09-09  
 **Код:** `IPerformanceCalculationEngine`, `LaborIntensityCalculator`, `LaborIntensityRecalculationService`, `ProjectsPageGridBuilder`, `FactAssessmentPipeline`, `PerformanceReportService`
 
 Связанные: [business-logic.md](./business-logic.md), [forecast-algorithm.md](../features/forecast-algorithm.md), [performance-report.md](../features/performance-report.md), [version-comparison.md](../features/version-comparison.md).
@@ -11,7 +11,7 @@
 
 ## 1. Плановая трудоёмкость
 
-Единственная реализация формул: `IPerformanceCalculationEngine.RecalculateLaborIntensities` / `ComputePpvForecastHours` / `ComputeEquipmentForecastHours` (`LaborIntensityCalculator`, `ForecastHoursAggregator`).
+Единственная реализация формул: `IPerformanceCalculationEngine.RecalculatePlanHours` (совместный `V_g` ФО + оборудование) и `ComputeForecastHours` (норма × Z). Внутри движка — `LaborIntensityCalculator` / `ForecastCalculation`. Мёртвые фасады `ComputeForecastBaseHours` / `RecalculateLaborIntensities` (на движке) / `ComputePpvForecastHours` / `AggregateForecastHoursByDirection` / `ComputeEquipmentForecastHours` сняты с публичного интерфейса (2026-09-09).
 
 Web-путь: **движок → persist в БД → invalidate кэша → GET читает колонки**. Live `N(V)` на GET **запрещён**. Холодный GET сам заполняет Redis (singleflight); persist не греет кэш на том же запросе.
 
@@ -35,9 +35,9 @@ Web-путь: **движок → persist в БД → invalidate кэша → GET
 | Модель | LI(z) |
 |--------|--------|
 | Multiplicative (по умолчанию) | `N · (1 + σ_rel · z) · V` |
-| Lognormal («Кривая Кима») | `e^(μ + z · σ) · V`, `μ = ln(P)`, `N = P` независимо от V |
+| Lognormal («Логнормальное распределение») | `e^(μ + z · σ) · V`, `μ = ln(P)`, `N = P` независимо от V |
 
-При z = 0 Ким совпадает с Constant: `P · V`. Z-оценка не ветвится: `Estimate = μ`, `StandardDeviation = σ` (лог).
+При z = 0 логнормаль совпадает с Constant: `P · V`. Z-оценка не ветвится: `Estimate = μ`, `StandardDeviation = σ` (лог).
 
 | Сценарий | Как берётся N |
 |----------|----------------|
@@ -47,7 +47,7 @@ Web-путь: **движок → persist в БД → invalidate кэша → GET
 
 Эквивалент: групповые часы `N_g·(1+σz)·V_g`, доля строки `V_i/V_g`.
 
-Оборудование **не** группируется по сценарию: `N(V_eq)×z` на позицию. Колонки: `ProjectEquipment.LaborIntensityBase/Pessimistic/Optimistic`.
+Оборудование в том же `V_g`, что ФО: `ByProjectIicGroup` / `ByObjectIicGroup` — `V_g = Σ V_ФО + Σ V_об` (assessed, с ClassifierId). `ByEachValue` — `N(V_i)` на каждой линии. Пустой `FacilityCode` у оборудования в `ByObjectIicGroup` — своя корзина `""`. Колонки: `ProjectEquipment.LaborIntensityBase/Pessimistic/Optimistic`. GET не пересчитывает `N(V)` — только `StoredPlanHours`.
 
 Строка с оценкой «Нет» не входит в `V_g` и не получает LI (колонки `null`).
 
@@ -82,6 +82,8 @@ Backfill после миграции колонок оборудования: `s
 
 Неотнесённые строки (`WorkDirectionId` пуст) не входят в выделенные часы факта; KPI неотнесённых — отдельно (`UnallocatedPlannedHours`).
 
+Импорт TF без строки номенклатуры ФО (типичный Excel): если на дату версии нет заявленных узлов регистра трудоёмкости, часы **поднимаются на IIC первого уровня** (`RollHoursToFirstLevel`). Если claimed-set непуст, часы остаются на заявленном узле, объём — у ближайшего заявленного предка, без свёртки на L1. Группа строки факта берётся из регистра `LaborIntensityIicBindings` as-of `CreatedAt` версии, не из слепка импорта. Производительность узла с часами — `hours / объём этой корзины`. Таблицы отчёта, тренды и точки FactNorm показывают узлы с собственными факт-часами. На «По объектам / Детально» `CalculateFactAssessment` сначала режет точное `(DocSet, ClassifierId)`, иначе бакет ближайшего заявленного узла (или L1, если claimed пуст). «(пусто)» только у LI без направления.
+
 ---
 
 ## 3. Z-оценка (план и факт — одна формула)
@@ -105,7 +107,16 @@ Z = (ln(hours / volume) − Estimate) / σ
 
 Одинаковые часы, объём и норма → одинаковый Z на прогнозе, факте и сравнении.
 
-**Исключение — вкладка «Отчёт»:** KPI и колонка «Z план» показывают заложенный `zBase` параметров планирования (`IPerformanceCalculationEngine.ResolvePlanningZ` / `PlanningScenarioReportMetrics`), а не live Z грида. Грид прогноза по-прежнему считает Z от сохранённых часов.
+На гридах **«Итого»**, в модалках и в Excel/PDF те же отображаемые объёмы (математика Z не меняется):
+
+| Колонка | Поле | Смысл |
+|---------|------|--------|
+| **Физобъём** | `PhysicalVolume` | Own `Σ(Quantity × Coefficient)` assessed ФО + оборудование, отнесённые **напрямую** к `ClassifierId`. Родитель не суммирует детей. Итог по ЕИ — только в строках `Итого:` / «По проекту» |
+| **Сгруппированный физобъём** | `AssessmentPhysicalVolume` | Тот же own-объём, свёрнутый на уровень группы ИИС из справочника трудоёмкости as-of даты версии (`LaborIntensityIicBindings` / `ClaimedWorkDirectionIds` / `IicClaimedBuckets.ApplyExclusiveVolumes`). В ячейке — **объём**, не часы. Ниже уровня привязки — прочерк. Пусто, если на узле нет факт-часов |
+
+Прогноз «Итого» и модалка «Прогноз» показывают только **Физобъём**. Факт, сравнение «Итого» и модалка «Анализ версии» — оба столбца. «Детально» / «По объектам» — поэлементное «Кол-во», второй колонки объёма нет. Планирование (`PlannedVolume`) по-прежнему сумма parent+children для редактирования. Точность / тренд / FactNorm (`PerformanceDisplayVolume.ForReportRow`) не менялись.
+
+**Исключение — вкладка «Отчёт»:** KPI плана — **«Заложенный Z»** (`zBase` параметров планирования). Грид прогноза и факт — **«Оценка Z»** от сохранённых часов / PlannedHours.
 
 ---
 
@@ -127,13 +138,14 @@ Z = (ln(hours / volume) − Estimate) / σ
 
 `FactAssessmentPipeline`: `Direction` Plan/Forecast → stored plan hours; Fact → PLI.
 
-`ComputePpvForecastHours` / `RecalculateLaborIntensities` — только persist-путь, не GET.
+`RecalculatePlanHours` / `ComputeForecastHours` — только persist-путь, не GET. Гриды GET читают `StoredPlanHours` (приватные обёртки в `ProjectsPageGridBuilder`).
 
 ---
 
 ## 5. Что не входит
 
 - Удаление колонки `ActualHours`.
-- Группировка оборудования по сценарию.
+- Заморозка норм / снимок ставок ₽ на версии.
 - WPF / `EngineeringPerformance.Core`.
 - Стилизация Excel факта/сравнения.
+- Excel/PDF **Факт → Итого** (`FactTableDocumentBuilder`): колонка часов по-прежнему own `FactLaborHours` на всех уровнях дерева (не вкладка «Отчет»). Follow-up: те же L1-часы и объём поддерева, что в таблицах отчёта.

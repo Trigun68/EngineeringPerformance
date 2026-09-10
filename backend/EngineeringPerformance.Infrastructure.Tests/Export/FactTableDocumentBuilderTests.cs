@@ -16,7 +16,8 @@ public sealed class FactTableDocumentBuilderTests
             10m, 20m, 0.5m, null, 0.4m, null, 0.1m, 1.2m,
             PerformanceInterpretation.Good,
             [], [], [],
-            PessimisticHours: 30m, BaseHours: 25m, OptimisticHours: 20m);
+            PessimisticHours: 30m, BaseHours: 25m, OptimisticHours: 20m,
+            PhysicalVolume: 10m, AssessmentPhysicalVolume: 14m);
 
         var report = new ProjectVersionAnalysisDto(
             "Проект", "P-01", "Факт v1",
@@ -31,22 +32,25 @@ public sealed class FactTableDocumentBuilderTests
         var document = FactTableDocumentBuilder.BuildAnalysis(report);
         var section = document.Sections.Should().ContainSingle().Subject;
         section.Columns.Select(c => c.Header).Should().Equal(
-            "Шифр", "Направление", "Факт ФО", "Факт ч",
+            "Шифр", "Направление", "Физобъём", "Сгруппированный физобъём", "Факт ч",
             "План.Труд.Оптим.", "План.Труд.Баз.", "План.Труд.Песс.",
             "Факт произв.", "Норм. произв.", "Z", "Интерпретация");
 
         section.Rows[0].IsTotal.Should().BeTrue();
         section.Rows[0].Cells[0].Text.Should().Be("По проекту");
-        section.Rows[0].Cells[4].Number.Should().Be(20m);
-        section.Rows[0].Cells[4].Tone.Should().Be(ForecastHourTone.Optimistic);
-        section.Rows[0].Cells[5].Number.Should().Be(25m);
-        section.Rows[0].Cells[6].Number.Should().Be(30m);
-        section.Rows[0].Cells[6].Tone.Should().Be(ForecastHourTone.Pessimistic);
+        section.Rows[0].Cells[5].Number.Should().Be(20m);
+        section.Rows[0].Cells[5].Tone.Should().Be(ForecastHourTone.Optimistic);
+        section.Rows[0].Cells[6].Number.Should().Be(25m);
+        section.Rows[0].Cells[6].Tone.Should().Be(ForecastHourTone.Base);
+        section.Rows[0].Cells[7].Number.Should().Be(30m);
+        section.Rows[0].Cells[7].Tone.Should().Be(ForecastHourTone.Pessimistic);
 
         section.Rows[1].Cells[0].Text.Should().Be("A1");
-        section.Rows[1].Cells[4].Number.Should().Be(20m);
-        section.Rows[1].Cells[5].Number.Should().Be(25m);
-        section.Rows[1].Cells[6].Number.Should().Be(30m);
+        section.Rows[1].Cells[2].Number.Should().Be(10m);
+        section.Rows[1].Cells[3].Number.Should().Be(14m);
+        section.Rows[1].Cells[5].Number.Should().Be(20m);
+        section.Rows[1].Cells[6].Number.Should().Be(25m);
+        section.Rows[1].Cells[7].Number.Should().Be(30m);
     }
 
     [Fact]
@@ -76,9 +80,9 @@ public sealed class FactTableDocumentBuilderTests
 
         var document = FactTableDocumentBuilder.BuildAnalysis(report);
         var total = document.Sections[0].Rows[0];
-        total.Cells[4].Number.Should().Be(40m);
-        total.Cells[5].Number.Should().Be(50m);
-        total.Cells[6].Number.Should().Be(60m);
+        total.Cells[5].Number.Should().Be(40m);
+        total.Cells[6].Number.Should().Be(50m);
+        total.Cells[7].Number.Should().Be(60m);
         document.Sections[0].Rows[1].Cells[0].Text.Should().Be("P");
         document.Sections[0].Rows[2].Cells[0].Text.Should().Be("L");
     }
@@ -90,16 +94,52 @@ public sealed class FactTableDocumentBuilderTests
             1, "Направление", "A1", null, 0, "м³",
             10m, 20m, 0.5m, null, 0.4m, null, 0.1m, 1.2m,
             PerformanceInterpretation.Good,
-            OptimisticHours: 8m, BaseHours: 10m, PessimisticHours: 12m);
+            OptimisticHours: 8m, BaseHours: 10m, PessimisticHours: 12m,
+            PhysicalVolume: 10m, AssessmentPhysicalVolume: 14m);
 
         var document = FactTableDocumentBuilder.BuildSummary([row], "Оценка факта: P-01 (v1)");
         var cells = document.Sections[0].Rows[0].Cells;
-        document.Sections[0].Columns[5].Header.Should().Be("План.Труд.Оптим.");
-        document.Sections[0].Columns[6].Header.Should().Be("План.Труд.Баз.");
-        document.Sections[0].Columns[7].Header.Should().Be("План.Труд.Песс.");
-        cells[5].Number.Should().Be(8m);
-        cells[6].Number.Should().Be(10m);
-        cells[7].Number.Should().Be(12m);
+        document.Sections[0].Columns[3].Header.Should().Be("Физобъём");
+        document.Sections[0].Columns[4].Header.Should().Be("Сгруппированный физобъём");
+        document.Sections[0].Columns[6].Header.Should().Be("План.Труд.Оптим.");
+        document.Sections[0].Columns[7].Header.Should().Be("План.Труд.Баз.");
+        document.Sections[0].Columns[8].Header.Should().Be("План.Труд.Песс.");
+        cells[6].Number.Should().Be(8m);
+        cells[6].Tone.Should().Be(ForecastHourTone.Optimistic);
+        cells[7].Number.Should().Be(10m);
+        cells[7].Tone.Should().Be(ForecastHourTone.Base);
+        cells[8].Number.Should().Be(12m);
+        cells[8].Tone.Should().Be(ForecastHourTone.Pessimistic);
+        cells[3].Number.Should().Be(10m);
+        cells[4].Number.Should().Be(14m);
+    }
+
+    [Fact]
+    public void Analysis_uses_own_physical_volume_not_fact_remap()
+    {
+        var direction = new ProjectVersionDirectionDto(
+            1, null, 0, "A1", "Направление", "м³",
+            FactPhysicalVolume: 99m, FactLaborHours: 20m, FactProductivity: 0.5m, FactEstimate: null,
+            NormProductivity: 0.4m, NormEstimate: null, NormStdDev: 0.1m, ZScore: 1.2m,
+            Interpretation: PerformanceInterpretation.Good,
+            PhysicalVolumes: [], EquipmentVolumes: [], DirectionLaborIntensities: [],
+            PessimisticHours: 30m, BaseHours: 25m, OptimisticHours: 20m,
+            PhysicalVolume: null, AssessmentPhysicalVolume: 14m);
+
+        var report = new ProjectVersionAnalysisDto(
+            "Проект", "P-01", "Факт v1",
+            [direction],
+            [],
+            new ProjectVersionAnalysisSummaryDto(
+                20m, 1.2m, "P80", PerformanceInterpretation.Good,
+                [new PhysicalVolumeTotalByUnitDto("м³", 10m)],
+                0m),
+            new Dictionary<int, PlanningZParameters>());
+
+        var cells = FactTableDocumentBuilder.BuildAnalysis(report).Sections[0].Rows[1].Cells;
+        cells[2].Text.Should().Be("—");
+        cells[2].Number.Should().BeNull();
+        cells[3].Number.Should().Be(14m);
     }
 
     [Fact]
@@ -141,13 +181,22 @@ public sealed class FactTableDocumentBuilderTests
         var document = FactTableDocumentBuilder.BuildDetail([row], "Детализация оценки факта: P (v1)");
         var columns = document.Sections[0].Columns;
         columns.Should().HaveCount(26);
+        columns[19].Header.Should().Be("Факт.трудоёмк., ч");
         columns[^6].Header.Should().Be("План.Труд.Оптим.");
         columns[^5].Header.Should().Be("План.Труд.Баз.");
         columns[^4].Header.Should().Be("План.Труд.Песс.");
+        columns[^3].Header.Should().Be("Факт производит.");
+        columns[^2].Header.Should().Be("Оценка Z");
+
+        document.Sections[0].Rows.Should().HaveCount(2);
+        document.Sections[0].Rows[^1].IsTotal.Should().BeTrue();
+        document.Sections[0].Rows[^1].Cells[0].Text.Should().Be("ИТОГО");
 
         var cells = document.Sections[0].Rows[0].Cells;
         cells[20].Number.Should().Be(8m);
+        cells[20].Tone.Should().Be(ForecastHourTone.Optimistic);
         cells[21].Number.Should().Be(10m);
+        cells[21].Tone.Should().Be(ForecastHourTone.Base);
         cells[22].Number.Should().Be(12m);
 
         var pdf = ForecastTableRenderers.ToPdf(

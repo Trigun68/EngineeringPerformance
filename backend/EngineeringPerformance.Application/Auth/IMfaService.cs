@@ -23,4 +23,6 @@ public interface IMfaService
     bool IsMfaEnabled(User user);
 
     Task ResetMfaAsync(User user, CancellationToken cancellationToken = default);
+
+    Task<User?> GetActiveUserByIdAsync(int userId, CancellationToken cancellationToken = default);
 }

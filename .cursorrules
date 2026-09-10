@@ -43,10 +43,10 @@ Api (Controllers, Auth) → Application (DTOs, Interfaces, CQRS handlers) → Do
 |------|------|
 | Hierarchy | Physical volumes, equipment, labor intensities, IIC directions — tree via `parentId`; UI uses AG Grid `treeData`. |
 | Versioning | `ProjectAnalysisVersion` + frozen `AnalysisVersionSnapshot` of norms at version create. Copy must clone data (known gap — implement fully). |
-| IIC / performance | Fact volume from PPV + equipment; hours by `WorkDirectionId`; Z-score from productivity vs norm snapshot; **PlannedHours only** in aggregation (not ActualHours). |
+| IIC / performance | Fact volume from PPV + equipment; hours by `WorkDirectionId`; Z-score from productivity vs norm snapshot; **PlannedHours only** in aggregation (not ActualHours). Characteristics are the object passport (PD%), not a forecast multiplier. Planning scenario groups assessed PPV **and** assessed equipment in the same `V_g`. |
 | Labor import | Match document type → `LaborIntensity` catalog (case-insensitive); preview unmatched types before commit. |
 | Physical volume import | EP code normalization (trim, dash variants, zero-padding); regex patterns for catalog codes. |
-| Excel validation | Extension `.xlsx`, MIME check, PK zip magic bytes, max 50 MB (`ExcelUploadValidator`). |
+| Excel validation | Extension `.xlsx`, MIME check, PK zip magic bytes, max **10 MB** (`ExcelUploadValidator`). |
 | Access matrix | 3 roles (Administrator, Manager, Observer) + per-object levels 0/1/2; enforce on API **and** hide UI controls. |
 | Export filenames | Russian template `{модуль}_{вкладка}_-_{код}_{название}_({версия}).ext`; SoT `ExportFileNameBuilder` + `Content-Disposition`. |
 
@@ -102,7 +102,7 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 | Secrets | `.env` / env vars — `JWT_SECRET`, `SQL_SA_PASSWORD`; never commit |
 | CORS | Restrict in production (`Cors__AllowedOrigins`) |
 | Headers | Nginx: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, CSP |
-| Dictionaries API | Gate `GET /dictionaries/all` by role (known gap) |
+| Dictionaries API | `GET /dictionaries/all` requires `References:Read` |
 
 ---
 
@@ -119,7 +119,7 @@ const columnDefs = useMemo<ColDef<RowType>[]>(() => [...], [deps]);
 ## 7. Docker / deploy
 
 - `docker compose up` — `ep-sqlserver`, `ep-api`, `ep-web`
-- Web proxies `/api/` → `api:8080`; tunnel hostname `eng-perf` → `ep-web` (not `web` DNS collision with HR Portal)
+- Web proxies `/api/` → `backend:8080`; tunnel hostname `eng-perf` → `ep-web` (not `web` DNS collision with HR Portal)
 - Production: `ASPNETCORE_ENVIRONMENT=Production`, empty `DEV_WINDOWS_USER`, SPNEGO on Nginx
 
 ---

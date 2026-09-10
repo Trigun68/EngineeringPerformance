@@ -8,7 +8,7 @@ import { wpColors } from '../../../../theme/wpColors';
 const TOP_COUNT = 5;
 
 interface TopPerformersPanelProps {
-  leaves: PerformanceTreeRow[];
+  rows: PerformanceTreeRow[];
 }
 
 interface RankedRow {
@@ -112,8 +112,8 @@ function RankedList({
 
 /**
  * Компактный ориентир перед подробной диаграммой DirectionBars: явный топ-5 лучших
- * (наименьший Z — опережение нормы) и топ-5 худших (наибольший Z — перерасход) листовых
- * направлений работ (групп физобъёмов IIC), отсортированных по Z-оценке.
+ * (наименьший Z — опережение нормы) и топ-5 худших (наибольший Z — перерасход) групп ИИС
+ * с собственными факт-часами, отсортированных по Z-оценке.
  */
 export function rankBestAndWorst<T>(
   scored: T[],
@@ -125,8 +125,8 @@ export function rankBestAndWorst<T>(
   return { best, worst };
 }
 
-export function TopPerformersPanel({ leaves }: TopPerformersPanelProps) {
-  const scored = leaves.filter((r) => r.zScore !== null);
+export function TopPerformersPanel({ rows }: TopPerformersPanelProps) {
+  const scored = rows.filter((r) => r.zScore !== null);
   const { best, worst } = rankBestAndWorst(scored, (r) => r.zScore!);
 
   return (

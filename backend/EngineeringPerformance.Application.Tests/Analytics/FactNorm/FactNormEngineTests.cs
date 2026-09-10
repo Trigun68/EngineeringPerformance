@@ -194,7 +194,7 @@ public sealed class KimCurveFactNormTests
         ReferenceFormulaCatalog.All.Should().NotContain(f => f.Code == ReferenceFormulaCodes.KimCurve);
         ReferenceFormulaCodes.All.Should().NotContain(ReferenceFormulaCodes.KimCurve);
         ReferenceFormulaCatalog.TryGet(ReferenceFormulaCodes.KimCurve).Should().NotBeNull();
-        ReferenceFormulaCatalog.TryGet(ReferenceFormulaCodes.KimCurve)!.DisplayName.Should().Be("Кривая Кима");
+        ReferenceFormulaCatalog.TryGet(ReferenceFormulaCodes.KimCurve)!.DisplayName.Should().Be("Логнормальное распределение");
     }
 
     [Fact]

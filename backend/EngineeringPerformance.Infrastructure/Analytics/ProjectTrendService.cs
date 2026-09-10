@@ -17,7 +17,7 @@ public sealed class ProjectTrendService(
     IProjectAnalyticsCache cache,
     IZTrendAnalyticsService zTrends) : IProjectTrendService
 {
-    private const string CacheKey = "report-trend:v2";
+    private const string CacheKey = "report-trend:v3";
 
     public async Task<ProjectTrendDto> GetAsync(int projectId, CancellationToken cancellationToken = default)
     {
@@ -92,8 +92,7 @@ public sealed class ProjectTrendService(
         var zFromZero = new List<ZeroBaselineBarDto>();
         if (factId is int factVersionId && batch.Results.TryGetValue(factVersionId, out var factSnap))
         {
-            var samples = factSnap.Performance
-                .Where(r => !r.IsTotal && r.ParentId == null && r.WorkDirectionId >= 0)
+            var samples = PerformanceDisplayVolume.WithOwnFactHours(factSnap.Performance)
                 .Select(r => new ZeroBaselineSample(
                     FormatGroup(r.WorkDirectionId, r.WorkDirectionName),
                     r.ZScore,
@@ -127,16 +126,14 @@ public sealed class ProjectTrendService(
             zHistory.Add(new ProjectTrendZPointDto(version.CreatedAt, direction, version.VersionName, z, hours));
 
             var sample = new TrendPointSample(version.CreatedAt, z, hours);
-            var roots = assessment.Performance
-                .Where(r => !r.IsTotal && r.ParentId == null && r.WorkDirectionId >= 0)
-                .ToList();
+            var hourRows = PerformanceDisplayVolume.WithOwnFactHours(assessment.Performance).ToList();
 
             if (version.Direction == AnalysisDirection.Fact)
             {
                 factPoints.Add(sample);
                 factHoursSamples.Add(new HoursAtDateSample(version.CreatedAt, hours, version.VersionName));
                 var band = engine.ComputeWeightedPercentileBand(
-                    roots.Where(r => r.ZScore is not null).Select(r => (
+                    hourRows.Where(r => r.ZScore is not null).Select(r => (
                         r.ZScore!.Value,
                         r.SubtreeHours ?? r.FactLaborHours ?? 0m)));
                 if (band is not null)
@@ -152,7 +149,7 @@ public sealed class ProjectTrendService(
             if (version.Direction is not (AnalysisDirection.Fact or AnalysisDirection.Plan or AnalysisDirection.Forecast))
                 continue;
 
-            foreach (var row in roots)
+            foreach (var row in hourRows)
             {
                 if (!targetGroups.TryGetValue(row.WorkDirectionId, out var list))
                 {

@@ -37,4 +37,17 @@ public sealed class AnalyticsSqlGateTests
         var act = async () => await gate.WaitAsync(cts.Token);
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public async Task BusyCount_ReflectsAcquiredSlots()
+    {
+        var gate = new AnalyticsSqlGate();
+        gate.BusyCount.Should().Be(0);
+        gate.AvailableCount.Should().Be(2);
+
+        await gate.WaitAsync(CancellationToken.None);
+        gate.BusyCount.Should().Be(1);
+        gate.Release();
+        gate.BusyCount.Should().Be(0);
+    }
 }

@@ -14,7 +14,7 @@ import {
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { PerformanceTreeRow } from '../reportCalc';
-import { fmt, fmtSigned, getInterpretation, INTERPRETATION_SHORT_RU, interpretationColor } from '../reportCalc';
+import { fmt, fmtSigned, formatReportVolume, getInterpretation, INTERPRETATION_SHORT_RU, interpretationColor } from '../reportCalc';
 import { wpColors } from '../../../../theme/wpColors';
 
 interface PerformanceTreeProps {
@@ -42,13 +42,13 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
         <TableHead>
           <TableRow>
             <TableCell sx={{ minWidth: 240 }}>Направление работ</TableCell>
-            <TableCell align="right">Факт. объём</TableCell>
-            <TableCell align="right">Часы</TableCell>
-            <TableCell align="right">Часы поддерева</TableCell>
+            <TableCell align="right">Физобъём</TableCell>
+            <TableCell align="right">Сгруппированный физобъём</TableCell>
+            <TableCell align="right">Фактически часы</TableCell>
             <TableCell align="right">Факт. произв.</TableCell>
             <TableCell align="right">Норма</TableCell>
             <TableCell align="right">σ нормы</TableCell>
-            <TableCell align="right">Z-оценка</TableCell>
+            <TableCell align="right">Оценка Z</TableCell>
             <TableCell>Интерпретация</TableCell>
           </TableRow>
         </TableHead>
@@ -81,19 +81,17 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
-                    {row.factPhysicalVolume === null
-                      ? '—'
-                      : `${fmt(row.factPhysicalVolume, 1)} ${row.normUnitName ?? ''}`.trim()}
+                    {formatReportVolume(row.physicalVolume, row.normUnitName)}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                    {formatReportVolume(row.assessmentPhysicalVolume, row.normUnitName)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
                     {fmt(row.factLaborHours, 1)}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: wpColors.heading }}>
-                    {fmt(row.subtreeHours, 1)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
@@ -126,7 +124,7 @@ export function PerformanceTree({ rows }: PerformanceTreeProps) {
                     />
                   ) : (
                     <Typography variant="caption" color="text.secondary">
-                      Н/Д
+                      —
                     </Typography>
                   )}
                 </TableCell>

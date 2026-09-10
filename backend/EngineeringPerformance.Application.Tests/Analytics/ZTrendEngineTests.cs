@@ -1,11 +1,13 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Application.Services;
 using FluentAssertions;
 
 namespace EngineeringPerformance.Application.Tests.Analytics;
 
 public sealed class ZTrendEngineTests
 {
-    private readonly ZTrendEngine _engine = new();
+    private readonly ZTrendEngine _engine = new(new PerformanceCalculationEngine(new DeviationCalculator(new NormCalculator())));
     private readonly AnalyticsTrendsOptions _options = new()
     {
         GapThresholdDays = 90,

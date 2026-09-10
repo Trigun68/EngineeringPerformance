@@ -155,17 +155,15 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
 
             var snapshotMap = snapshotsByVersion.GetValueOrDefault(version.Id)
                 ?? new Dictionary<int, int>();
+            var parentById = assessment.Performance
+                .Where(r => r.WorkDirectionId > 0)
+                .GroupBy(r => r.WorkDirectionId)
+                .ToDictionary(g => g.Key, g => g.First().ParentId);
 
-            foreach (var row in assessment.Performance)
+            var selected = FactNormPointSelector.Select(assessment.Performance, request.WorkDirectionIds);
+            foreach (var point in selected)
             {
-                if (row.IsTotal || row.WorkDirectionId <= 0)
-                    continue;
-                if (request.WorkDirectionIds is { Length: > 0 }
-                    && !request.WorkDirectionIds.Contains(row.WorkDirectionId))
-                    continue;
-                if (row.FactPhysicalVolume is not > 0 || row.FactProductivity is not { } productivity)
-                    continue;
-
+                var row = point.Row;
                 var key = (row.WorkDirectionId, version.ProjectId);
                 if (!pointKeys.Add(key))
                     continue;
@@ -177,18 +175,20 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
                 }
 
                 list.Add(new FactPoint(
-                    (double)row.FactPhysicalVolume.Value,
-                    (double)productivity,
+                    (double)point.Volume,
+                    (double)point.Productivity,
                     version.ProjectId,
                     version.ProjectCode,
                     version.ProjectName,
                     version.Id,
                     version.VersionName));
 
-                if (!normIdByDirection.ContainsKey(row.WorkDirectionId)
-                    && snapshotMap.TryGetValue(row.WorkDirectionId, out var normId))
+                if (!normIdByDirection.ContainsKey(row.WorkDirectionId))
                 {
-                    normIdByDirection[row.WorkDirectionId] = normId;
+                    var snapshotNormId = FactNormPointSelector.ResolveSnapshotNormId(
+                        row.WorkDirectionId, snapshotMap, parentById);
+                    if (snapshotNormId is int nid)
+                        normIdByDirection[row.WorkDirectionId] = nid;
                 }
             }
         }
@@ -265,7 +265,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
             if (norm.Performance is { } perf)
                 mean = (double)perf;
             else if (norm.Estimate is { } est)
-                mean = Math.Exp((double)est);
+                mean = (double)PerformanceCalculationEngine.EstimateToProductivity(est);
 #pragma warning restore CS0618
             var sigma = ExtractSigma(norm);
 
@@ -587,7 +587,7 @@ public sealed class FactNormAnalysisService : IFactNormAnalysisService
         var groups = request.WorkDirectionIds is { Length: > 0 }
             ? string.Join(',', request.WorkDirectionIds.OrderBy(x => x))
             : "all";
-        return $"fact-norm:{gen}:{request.PeriodStart:yyyyMMdd}:{request.PeriodEnd:yyyyMMdd}:{projects}:{groups}";
+        return $"fact-norm:v2:{gen}:{request.PeriodStart:yyyyMMdd}:{request.PeriodEnd:yyyyMMdd}:{projects}:{groups}";
     }
 
     private static AccuracyDto ToAccuracyDto(AccuracyResult r) =>

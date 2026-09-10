@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { PERMISSION_OBJECTS } from '../accessControlConstants';
 import {
   buildPermissionMatrixRows,
   INDENT_PX_PER_LEVEL,
   isMatrixRowVisible,
+  PERMISSION_MATRIX_NODES,
   PROJECTS_GROUP_ID,
   type PermissionMatrixRowModel,
 } from '../permissionObjectHierarchy';
@@ -125,5 +127,18 @@ describe('isMatrixRowVisible', () => {
 describe('INDENT_PX_PER_LEVEL', () => {
   it('uses 20px per hierarchy level', () => {
     expect(INDENT_PX_PER_LEVEL).toBe(20);
+  });
+});
+
+describe('PERMISSION_OBJECTS', () => {
+  it('includes Administration and every matrix leaf name', () => {
+    const known = new Set<string>(PERMISSION_OBJECTS);
+    expect(known.has('Administration')).toBe(true);
+
+    const unknownLeaves = PERMISSION_MATRIX_NODES
+      .filter((node) => !node.isGroupHeader)
+      .map((node) => node.objectName)
+      .filter((name) => !known.has(name));
+    expect(unknownLeaves).toEqual([]);
   });
 });

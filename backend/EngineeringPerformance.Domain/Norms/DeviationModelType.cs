@@ -6,6 +6,6 @@ public enum DeviationModelType
     Constant = 2,
     ProportionalToNorm = 3,
     ProportionalToSqrtV = 4,
-    /// <summary>LI = e^(μ + z·σ) · V — логнормаль («Кривая Кима»).</summary>
+    /// <summary>LI = e^(μ + z·σ) · V — логнормальное распределение.</summary>
     Lognormal = 5,
 }

@@ -5,9 +5,10 @@ export interface PlanningScenarioSelectorProps {
   value: PlanningScenario;
   onChange: (value: PlanningScenario) => void;
   disabled?: boolean;
+  helperText?: string;
 }
 
-export function PlanningScenarioSelector({ value, onChange, disabled }: PlanningScenarioSelectorProps) {
+export function PlanningScenarioSelector({ value, onChange, disabled, helperText }: PlanningScenarioSelectorProps) {
   return (
     <TextField
       select
@@ -16,6 +17,7 @@ export function PlanningScenarioSelector({ value, onChange, disabled }: Planning
       label="Сценарий планирования"
       value={value}
       disabled={disabled}
+      helperText={helperText}
       onChange={(e) => onChange(Number(e.target.value) as PlanningScenario)}
     >
       {(Object.entries(PLANNING_SCENARIO_LABELS) as Array<[string, string]>).map(([k, label]) => (

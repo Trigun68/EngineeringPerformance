@@ -1,6 +1,6 @@
 # Трёхзвенная архитектура (Docker)
 
-**Обновлено:** 2026-06-29  
+**Обновлено:** 2026-09-01  
 **Связанные документы:** [_doc/migration_map.md](../migration_map.md), [_doc/development_roadmap.md](../development_roadmap.md), [_doc/plans/architecture-comparison-and-improvement-roadmap.md](../plans/architecture-comparison-and-improvement-roadmap.md)
 
 ## 1) Обзор архитектуры (текущее состояние)
@@ -59,10 +59,12 @@ Redis подключен как дополнительная инфрастру�
 - Monitoring API:
   - `GET /api/monitoring/system-metrics`
   - `GET /api/monitoring/health`
+  - `GET /api/monitoring/resource-metrics?windowMinutes=` — CPU/RAM/коннекты; окно до 90 суток, даунсэмпл на сервере (вкладка «Ресурсы»)
   - `GET /api/monitoring/logs`
   - `GET /api/monitoring/audit-config`
   - `GET /api/monitoring/permission-drift`
 - Monitoring UI показывает RED метрики, p95, статус зависимостей и статус permission drift.
+- Вкладка **Ресурсы** — потребление CPU/RAM и коннекты трёх серверных процессов; см. [_doc/features/server-resource-monitoring.md](../features/server-resource-monitoring.md).
 - Health endpoint для инфраструктуры: `GET /api/health` (anonymous).
 
 ## 6) Валидация и контракт API
@@ -75,7 +77,7 @@ Redis подключен как дополнительная инфрастру�
 
 - `api-tests.yml`: поднимает SQL + Redis + db-init, выполняет API/infrastructure tests.
 - `e2e-tests.yml`: запускает client unit tests, client build, затем Playwright E2E в Docker.
-- Локальный единый прогон: `scripts/quality-gates.sh` (backend tests + client test/build + smoke).
+- Локальный единый прогон: `scripts/quality-gates.sh` (backend tests + client typecheck/lint (ESLint)/test/build + smoke).
 
 ## 8) Статус зрелости и отложенные компоненты
 

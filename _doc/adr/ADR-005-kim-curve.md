@@ -1,6 +1,7 @@
-# ADR-005: FormulaType «Кривая Кима» (логнормаль)
+# ADR-005: FormulaType логнормального распределения (`KimCurve`)
 
 **Дата:** 2026-08-31  
+**Обновлено:** 2026-09-01 (пользовательское имя: «Логнормальное распределение», ранее «Кривая Кима»)  
 **Статус:** Accepted
 
 ## Контекст
@@ -10,7 +11,7 @@
 
 Существующие 11 типов `N(V)` и линейная мультипликативная модель `LI = N·(1+σ·z)·V` остаются. Добавление типа **не** пересчитывает уже сохранённые нормы и снимки версий (`RecalculateAllVersions` не вызывается).
 
-Z-оценка уже логнормальна: `Z = (ln(hours/volume) − Estimate) / StandardDeviation`. Если для Кима записать `Estimate = μ` и `StandardDeviation = σ` (лог), ветка в `PerformanceCalculationEngine` не нужна.
+Z-оценка уже логнормальна: `Z = (ln(hours/volume) − Estimate) / StandardDeviation`. Если для логнормального типа записать `Estimate = μ` и `StandardDeviation = σ` (лог), ветка в `PerformanceCalculationEngine` не нужна.
 
 ## Варианты
 
@@ -20,7 +21,7 @@ Z-оценка уже логнормальна: `Z = (ln(hours/volume) − Estim
 
 ### B. Только DeviationModelType без нового FormulaType
 
-Нельзя отличить Ким от Constant в справочнике и FactNorm. Отклонено.
+Нельзя отличить логнормаль от Constant в справочнике и FactNorm. Отклонено.
 
 ### C. σ = ln(линейного СКО)
 
@@ -32,13 +33,13 @@ Z-оценка уже логнормальна: `Z = (ln(hours/volume) − Estim
 
 - Входы: P > 0, σ > 0. μ производная, только чтение.
 - При z = 0 часы совпадают с Constant: `P · V`.
-- FactNorm BIC-каталог (`ReferenceFormulaCatalog.All`) **без** KIMCURVE. Текущую норму Кима анализируют (`TryGet`), σ факта — `std(ln(Y))`.
+- FactNorm BIC-каталог (`ReferenceFormulaCatalog.All`) **без** KIMCURVE. Текущую логнормальную норму анализируют (`TryGet`), σ факта — `std(ln(Y))`.
 - UI: три подписи — Производительность, μ, σ. `meanPerformance` не подписывается как μ.
 
 ## Последствия
 
 - Существующие Linear/Constant не меняют формулы часов и Z.
-- Новая норма Кима на новой группе IIC попадает в as-of снимок только версий с `CreatedAt` в периоде нормы (`AfterNormChangedAsync`).
+- Новая логнормальная норма на новой группе IIC попадает в as-of снимок только версий с `CreatedAt` в периоде нормы (`AfterNormChangedAsync`).
 - Миграция схемы не нужна: значения enum — int без CHECK.
 
 ## Связанные документы

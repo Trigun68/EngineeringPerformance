@@ -89,36 +89,20 @@ public static class ForecastHoursAggregator
     }
 
     /// <summary>
-    /// Часы оборудования по id строки: N(V_eq)×z на позицию, без группировки сценария ФО.
+    /// Часы оборудования по id строки в том же V_g, что и ФО (сценарий планирования).
     /// </summary>
     internal static Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentHours(
+        PlanningScenario scenario,
         IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection,
-        IDeviationCalculator calculator)
-    {
-        var result = new Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)>(lines.Count);
-        foreach (var line in lines)
-        {
-            if (!line.IsAssessment
-                || line.ClassifierId is not int dirId
-                || line.VolumeInIicUnits <= 0
-                || !normsByDirection.TryGetValue(dirId, out var snap))
-            {
-                result[line.Id] = (null, null, null);
-                continue;
-            }
-
-            var z = ForecastCalculation.ResolvePlanningZ(planningZByDirection, dirId);
-            result[line.Id] = ForecastCalculation.ComputeForecastHours(
-                snap.NormFormula,
-                snap.DeviationFormula,
-                line.VolumeInIicUnits,
-                line.VolumeInIicUnits,
-                z,
-                calculator);
-        }
-
-        return result;
-    }
+        IDeviationCalculator calculator) =>
+        LaborIntensityCalculator.Recalculate(
+            scenario,
+            ppvLines,
+            lines,
+            normsByDirection,
+            planningZByDirection,
+            calculator).Equipment;
 }

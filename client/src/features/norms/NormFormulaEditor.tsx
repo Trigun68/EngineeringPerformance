@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Alert, CircularProgress, MenuItem, Stack, TextField, Typography } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { fetchFormulaTemplates, previewNormCurve } from '../../api/normsApi';
+import { queryKeys } from '../../services/queryKeys';
 import type { DeviationFormulaDto, FormulaType, NormFormulaDto } from '../../types/norms';
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../utils/normalizeNormFormulas';
 import { isKimCurveType, kimDeviation, muFromProductivity, withKimDerived } from './kimCurve';
@@ -26,7 +27,11 @@ export function NormFormulaEditor({
     data: templates = [],
     isLoading: templatesLoading,
     isError: templatesError,
-  } = useQuery({ queryKey: ['formula-templates'], queryFn: fetchFormulaTemplates, staleTime: 60_000 });
+  } = useQuery({
+    queryKey: queryKeys.norms.formulaTemplates(),
+    queryFn: fetchFormulaTemplates,
+    staleTime: 60_000,
+  });
 
   const template = templates.find((t) => t.type === value.type);
   const [band, setBand] = useState<Array<{ volume: number; center: number; upper: number; lower: number }>>([]);

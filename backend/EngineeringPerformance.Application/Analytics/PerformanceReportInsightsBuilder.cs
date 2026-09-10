@@ -1,7 +1,7 @@
 namespace EngineeringPerformance.Application.Analytics;
 
 /// <summary>
-/// Выводы и топ дисциплин для вкладки «Отчет».
+/// Выводы и топ дисциплин для вкладки «Отчет» — группы IIC первого уровня.
 /// Ранжирование влияния: |Z| × subtreeHours. Без kind=data / точности / «не отнесено».
 /// </summary>
 public static class PerformanceReportInsightsBuilder
@@ -9,17 +9,17 @@ public static class PerformanceReportInsightsBuilder
     public static PerformanceReportInsightsDto Build(
         IReadOnlyList<PerformanceReportMergedDirectionRowDto> directions)
     {
-        var leaves = directions
-            .Where(d => !directions.Any(c => c.ParentId == d.WorkDirectionId))
+        var firstLevel = directions
+            .Where(d => d.ParentId is null)
             .Where(d => d.FactZScore.HasValue || d.PlanZScore.HasValue)
             .ToList();
 
-        var ranked = leaves
+        var ranked = firstLevel
             .Select(r =>
             {
                 var z = r.FactZScore ?? r.PlanZScore;
                 var hours = r.FactSubtreeHours ?? r.PlanSubtreeHours ?? 0m;
-                var volume = r.PhysicalVolume;
+                var volume = r.SubtreePhysicalVolume ?? r.PhysicalVolume;
                 return new PerformanceReportKeyDisciplineDto(
                     WorkDirectionId: r.WorkDirectionId,
                     Name: r.Name,

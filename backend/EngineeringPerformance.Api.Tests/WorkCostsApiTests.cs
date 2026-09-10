@@ -59,8 +59,9 @@ public sealed class WorkCostsApiTests : IClassFixture<ApiWebApplicationFactory>
         if (directionCount == 0)
             return;
 
-        var day = (Math.Abs(Guid.NewGuid().GetHashCode()) % 27) + 1;
-        var from = $"2097-03-{day:D2}";
+        // Уникальная далёкая дата: повторные прогоны не пересекаются с хвостами 2097-03-*.
+        var n = Math.Abs(BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0));
+        var from = $"{2100 + n % 80:D4}-{(n % 12) + 1:D2}-{(n % 27) + 1:D2}";
 
         var batch = await _client.PostAsJsonAsync("/api/registers/work-costs/batch", new
         {

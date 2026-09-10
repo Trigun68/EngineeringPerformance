@@ -1,7 +1,6 @@
-using System.Security.Cryptography;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Auth;
-using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Import;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects;
@@ -17,9 +16,9 @@ public sealed partial class ProjectExcelDataImportService
     private readonly ICurrentUserService _currentUser;
     private readonly IPermissionService _permissionService;
     private readonly IProjectVisibilityService _visibility;
-    private readonly IDictionaryService _dictionaryService;
     private readonly IProjectAnalyticsCache _analyticsCache;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectExcelDataImportService(
         IDbContextFactory<AppDbContext> contextFactory,
@@ -27,18 +26,24 @@ public sealed partial class ProjectExcelDataImportService
         ICurrentUserService currentUser,
         IPermissionService permissionService,
         IProjectVisibilityService visibility,
-        IDictionaryService dictionaryService,
         IProjectAnalyticsCache analyticsCache,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger,
+        IPhysicalVolumeExcelImportService physicalVolumeExcelImport,
+        IEquipmentImportService equipmentImport,
+        ILaborIntensityImportService laborIntensityImport)
     {
         _contextFactory = contextFactory;
         _logger = logger;
         _currentUser = currentUser;
         _permissionService = permissionService;
         _visibility = visibility;
-        _dictionaryService = dictionaryService;
         _analyticsCache = analyticsCache;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
+        _physicalVolumeExcelImport = physicalVolumeExcelImport;
+        _equipmentImport = equipmentImport;
+        _laborIntensityImport = laborIntensityImport;
     }
 
     public async Task<DataImportResultDto> ImportProjectDataAsync(
@@ -53,15 +58,9 @@ public sealed partial class ProjectExcelDataImportService
         long? contentLength = null,
         CancellationToken cancellationToken = default)
     {
-        // GAP WPF: проверка прав ProjectDataUpload до начала импорта (defense-in-depth к [HasPermission]).
-        var userId = _currentUser.UserId
-            ?? throw new UnauthorizedAccessException("User is not authenticated.");
-        if (!await _permissionService.CanEditAsync(userId, PermissionType.ProjectDataUpload, cancellationToken))
-            throw new UnauthorizedAccessException("User cannot upload project data.");
-        if (!await _visibility.CanAccessProjectAsync(userId, projectId, AccessLevel.Edit, cancellationToken))
-            throw new UnauthorizedAccessException($"User {userId} cannot edit project {projectId}.");
+        await EnsureCanImportAsync(projectId, cancellationToken);
 
-        var tempPath = await SaveTempFileAsync(fileStream, fileName, cancellationToken);
+        var tempPath = await ImportHelpers.SaveTempFileAsync(fileStream, fileName, cancellationToken);
         try
         {
             var size = contentLength ?? new FileInfo(tempPath).Length;
@@ -69,31 +68,29 @@ public sealed partial class ProjectExcelDataImportService
                 return new DataImportResultDto(false, 0, validationError, 0);
             var source = new ImportSourceMetadata(
                 Path.GetFileName(fileName),
-                ComputeFileSha256Hex(tempPath),
-                userId);
+                ImportHelpers.ComputeFileSha256Hex(tempPath),
+                _currentUser.UserId);
 
             var result = await ImportFromFileAsync(
-                projectId,
-                versionId,
-                dataType,
-                tempPath,
-                description ?? fileName,
-                source,
-                addMissingLaborToCatalog);
+                projectId, versionId, dataType, tempPath, description ?? fileName, source, addMissingLaborToCatalog);
 
             if (result.Success)
             {
-                if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
-                    await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
-                else
-                    await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+                await AfterPersistedAsync(
+                    ToImportActionType(dataType),
+                    result.IterationId,
+                    $"{Path.GetFileName(fileName)}; records={result.RecordsImported}",
+                    projectId,
+                    versionId,
+                    dataType is DataImportType.PhysicalVolume or DataImportType.Equipment,
+                    cancellationToken);
             }
 
             return result;
         }
         finally
         {
-            TryDeleteFile(tempPath);
+            ImportHelpers.TryDeleteFile(tempPath);
         }
     }
 
@@ -101,14 +98,14 @@ public sealed partial class ProjectExcelDataImportService
         Stream fileStream,
         CancellationToken cancellationToken = default)
     {
-        var tempPath = await SaveTempFileAsync(fileStream, "preview.xlsx", cancellationToken);
+        var tempPath = await ImportHelpers.SaveTempFileAsync(fileStream, "preview.xlsx", cancellationToken);
         try
         {
-            return await PreviewLaborImportAsync(tempPath);
+            return await _laborIntensityImport.PreviewLaborImportAsync(tempPath);
         }
         finally
         {
-            TryDeleteFile(tempPath);
+            ImportHelpers.TryDeleteFile(tempPath);
         }
     }
 
@@ -129,46 +126,67 @@ public sealed partial class ProjectExcelDataImportService
         var deleted = await DeleteIterationCoreAsync(projectId, versionId, dataType, importedAt, cancellationToken);
         if (deleted > 0)
         {
-            if (dataType is DataImportType.PhysicalVolume or DataImportType.Equipment)
-                await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
-            else
-                await _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+            await _actionLogger.LogAsync(
+                UserActionType.ImportRollback,
+                entityType: "DataImportIteration",
+                entityId: versionId,
+                description: $"{dataType}; importedAt={importedAt:O}; deleted={deleted}",
+                cancellationToken: cancellationToken);
+            await AfterRecalcOrInvalidateAsync(
+                projectId, versionId, dataType is DataImportType.PhysicalVolume or DataImportType.Equipment, cancellationToken);
         }
 
         return deleted;
     }
 
-    private static async Task<string> SaveTempFileAsync(Stream stream, string fileName, CancellationToken cancellationToken)
+    private async Task EnsureCanImportAsync(int projectId, CancellationToken cancellationToken)
     {
-        var ext = Path.GetExtension(fileName);
-        if (string.IsNullOrWhiteSpace(ext))
-            ext = ".xlsx";
-
-        var tempPath = Path.Combine(Path.GetTempPath(), $"ep-import-{Guid.NewGuid():N}{ext}");
-        await using var fs = File.Create(tempPath);
-        if (stream.CanSeek)
-            stream.Position = 0;
-        await stream.CopyToAsync(fs, cancellationToken);
-        return tempPath;
+        var userId = _currentUser.UserId
+            ?? throw new UnauthorizedAccessException("User is not authenticated.");
+        if (!await _permissionService.CanEditAsync(userId, PermissionType.ProjectDataUpload, cancellationToken))
+            throw new UnauthorizedAccessException("User cannot upload project data.");
+        if (!await _visibility.CanAccessProjectAsync(userId, projectId, AccessLevel.Edit, cancellationToken))
+            throw new UnauthorizedAccessException($"User {userId} cannot edit project {projectId}.");
     }
 
-    private static string ComputeFileSha256Hex(string filePath)
+    private async Task AfterPersistedAsync(
+        UserActionType actionType,
+        int? entityId,
+        string description,
+        int projectId,
+        int versionId,
+        bool recalculate,
+        CancellationToken cancellationToken)
     {
-        using var sha = SHA256.Create();
-        using var fs = File.OpenRead(filePath);
-        return Convert.ToHexString(sha.ComputeHash(fs));
+        await LogImportPersistedAsync(actionType, entityId, description, cancellationToken);
+        await AfterRecalcOrInvalidateAsync(projectId, versionId, recalculate, cancellationToken);
     }
 
-    private static void TryDeleteFile(string path)
-    {
-        try
+    private Task AfterRecalcOrInvalidateAsync(
+        int projectId, int versionId, bool recalculate, CancellationToken cancellationToken) =>
+        recalculate
+            ? _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken)
+            : _analyticsCache.InvalidateProjectAsync(projectId, cancellationToken);
+
+    private static UserActionType ToImportActionType(DataImportType dataType) =>
+        dataType switch
         {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch
-        {
-            // Временный файл — не критично при сбое удаления.
-        }
-    }
+            DataImportType.PhysicalVolume => UserActionType.PhysicalVolumeImport,
+            DataImportType.LaborIntensity => UserActionType.LaborIntensityImport,
+            DataImportType.Equipment => UserActionType.EquipmentImport,
+            _ => throw new ArgumentOutOfRangeException(nameof(dataType), dataType, null),
+        };
+
+    /// <summary>Журнал только после успешного persist; предпросмотры не пишем.</summary>
+    private Task LogImportPersistedAsync(
+        UserActionType actionType,
+        int? entityId,
+        string description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            actionType,
+            entityType: "DataImportIteration",
+            entityId: entityId is > 0 ? entityId : null,
+            description: description,
+            cancellationToken: cancellationToken);
 }

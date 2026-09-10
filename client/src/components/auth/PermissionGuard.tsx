@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { Alert, Box } from '@mui/material';
 import { Navigate } from 'react-router-dom';
+import type { PermissionObjectName } from '../../constants/accessControlConstants';
 import { usePermission } from '../../hooks/usePermission';
 import { useFirstAccessiblePath } from '../../hooks/useAccessibleNavigation';
 import { useAuthStore } from '../../store/useAuthStore';
 import { canAccessSettings } from '../../utils/permissionAccess';
 
 interface PermissionGuardProps {
-  objectName: string;
+  objectName: PermissionObjectName;
   children: ReactNode;
 }
 

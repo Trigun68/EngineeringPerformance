@@ -1,5 +1,7 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Services;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -123,11 +125,24 @@ public sealed class ProjectForecastService : IProjectForecastService
 
         var calc = calculation ?? new ForecastCalculationOptionsDto();
 
+        var laborIntensityIds = await context.ProjectLaborIntensities
+            .AsNoTracking()
+            .Where(li => li.ProjectId == projectId && li.ProjectAnalysisVersionId == versionId)
+            .Select(li => li.LaborIntensityId ?? 0)
+            .ToListAsync(cancellationToken);
+        // Claimed-запрос as-of идёт по всем привязкам на дату версии; ids — только overlay карточек.
+        var asOf = await LaborIntensityIicAsOf.LoadAsync(
+            context,
+            version.CreatedAt,
+            laborIntensityIds,
+            cancellationToken);
+
         var plannedTree = BuildIicPlannedVolumeTree(
             workDirections,
             normByDirection,
             volumeByDirection,
-            scenarioHoursNullable);
+            scenarioHoursNullable,
+            asOf.ClaimedWorkDirectionIds);
 
         var scenarioFlatRows = BuildScenarioDisciplineRows(plannedTree, workDirections);
 
@@ -198,11 +213,39 @@ public sealed class ProjectForecastService : IProjectForecastService
         return direct;
     }
 
+    /// <summary>
+    /// Плановый физобъём, свёрнутый на уровень привязки трудоёмкости as-of.
+    /// Exclusive — IicClaimedBuckets; пустой claimed — итог поддерева только на корнях (как движок).
+    /// </summary>
+    internal static Dictionary<int, decimal> GroupPlannedPhysicalVolumes(
+        IReadOnlyDictionary<int, decimal> directVolume,
+        IReadOnlyDictionary<int, decimal> totalVolume,
+        IReadOnlySet<int> claimed,
+        IReadOnlyDictionary<int, int?> parentById)
+    {
+        if (IicClaimedBuckets.IsExclusive(claimed))
+            return IicClaimedBuckets.ApplyExclusiveVolumes(directVolume, claimed, parentById);
+
+        var grouped = new Dictionary<int, decimal>();
+        foreach (var (id, parentId) in parentById)
+        {
+            if (parentId is not null)
+                continue;
+
+            var total = totalVolume.GetValueOrDefault(id);
+            if (total > 0)
+                grouped[id] = total;
+        }
+
+        return grouped;
+    }
+
     private static IReadOnlyList<ForecastIicVolumeRowDto> BuildIicPlannedVolumeTree(
         IReadOnlyList<IicWorkDirection> workDirections,
         IReadOnlyDictionary<int, IicWorkDirectionNorm> normByDirection,
         IReadOnlyDictionary<int, decimal> volumeByDirection,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> scenarioHoursByDirection)
+        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> scenarioHoursByDirection,
+        IReadOnlySet<int> claimedWorkDirectionIds)
     {
         var byId = workDirections.ToDictionary(d => d.Id);
         var childrenByParent = workDirections
@@ -250,6 +293,10 @@ public sealed class ProjectForecastService : IProjectForecastService
         {
             AggregateVolumeUp(root.Id);
         }
+
+        var parentById = workDirections.ToDictionary(d => d.Id, d => d.ParentId);
+        var groupedVolume = GroupPlannedPhysicalVolumes(
+            directVolume, totalVolume, claimedWorkDirectionIds, parentById);
 
         var hasChildren = workDirections.Where(d => d.ParentId.HasValue)
             .Select(d => d.ParentId!.Value)
@@ -308,6 +355,8 @@ public sealed class ProjectForecastService : IProjectForecastService
             var unitName = IicWorkDirectionDisplayUnit.ResolveUnitName(d, byId);
 
             var vol = totalVolume.GetValueOrDefault(d.Id);
+            var own = directVolume.GetValueOrDefault(d.Id);
+            var grouped = groupedVolume.GetValueOrDefault(d.Id);
 
             decimal baseHours;
             decimal opt;
@@ -357,7 +406,9 @@ public sealed class ProjectForecastService : IProjectForecastService
                 BaseHours: baseHours,
                 PessimisticHours: pes,
                 Range: range,
-                HierarchyPath: path));
+                HierarchyPath: path,
+                OwnPlannedVolume: own > 0 ? Math.Round(own, 4) : null,
+                GroupedPhysicalVolume: grouped > 0 ? Math.Round(grouped, 4) : null));
 
             foreach (var child in childrenByParent.GetValueOrDefault(d.Id) ?? [])
             {
@@ -397,20 +448,13 @@ public sealed class ProjectForecastService : IProjectForecastService
         var pessimisticTotal = disciplines.Sum(d => d.PessimisticHours);
 
         ForecastIicVolumeRowDto MapRow(ForecastIicVolumeRowDto d, decimal o, decimal b, decimal p, string range) =>
-            new(
-                d.WorkDirectionId,
-                d.ParentId,
-                d.Name,
-                d.UnitName,
-                d.NormProductivity,
-                d.NormEstimate,
-                d.NormStandardDeviation,
-                d.PlannedVolume,
-                o,
-                b,
-                p,
-                range,
-                d.HierarchyPath);
+            d with
+            {
+                OptimisticHours = o,
+                BaseHours = b,
+                PessimisticHours = p,
+                Range = range,
+            };
 
         return new List<ForecastScenarioDto>
         {

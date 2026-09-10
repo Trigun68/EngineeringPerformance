@@ -190,8 +190,20 @@ public sealed class ProjectVersionsController : ControllerBase
         int versionId,
         CancellationToken cancellationToken)
     {
-        var updated = await _recalcOrchestrator.RecalculateVersionAsync(projectId, versionId, cancellationToken);
+        var updated = await _recalcOrchestrator.RecalculateVersionAsync(
+            projectId, versionId, "button", cancellationToken);
         return Ok(new { updatedRows = updated });
+    }
+
+    [HttpGet("{versionId:int}/calculation-log")]
+    [RequireProjectAccess]
+    [HasPermission(PermissionType.ProjectAnalysisVersions, AccessLevel.Read)]
+    public async Task<ActionResult<IReadOnlyList<VersionCalculationLogDto>>> GetCalculationLog(
+        int projectId,
+        int versionId,
+        CancellationToken cancellationToken)
+    {
+        return Ok(await _recalcOrchestrator.ListLogsAsync(projectId, versionId, cancellationToken));
     }
 
     [HttpGet("{versionId:int}/aggregated-labor-intensities")]

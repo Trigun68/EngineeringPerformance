@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert,
@@ -15,8 +16,11 @@ import {
 import type { ColDef } from 'ag-grid-community';
 import { fetchGroupAnalysis, type GroupAnalysisResult } from '../../api/analyticsApi';
 import { DataTable } from '../../components/DataTable/DataTable';
+import { EMPTY_ROWS } from '../../components/DataTable/emptyRows';
 import { WorkingOverlay } from '../../components/WorkingOverlay/WorkingOverlay';
 import { usePermission } from '../../hooks/usePermission';
+import { getApiErrorMessage } from '../../services/apiError';
+import { queryKeys } from '../../services/queryKeys';
 
 interface GroupAnalysisTabProps {
   projectId: number;
@@ -30,19 +34,17 @@ function groupCriterionLabel(criterion: string, value: string | null): string {
 
 export function GroupAnalysisTab({ projectId }: GroupAnalysisTabProps) {
   const { canRead } = usePermission('GroupAnalysis');
-  const [data, setData] = useState<GroupAnalysisResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const query = useQuery({
+    queryKey: queryKeys.analytics.groupAnalysis(projectId),
+    queryFn: () => fetchGroupAnalysis(projectId),
+    enabled: canRead,
+  });
 
-  useEffect(() => {
-    if (!canRead) return;
-    setLoading(true);
-    setError(null);
-    void fetchGroupAnalysis(projectId)
-      .then(setData)
-      .catch(() => setError('Не удалось загрузить групповой анализ.'))
-      .finally(() => setLoading(false));
-  }, [projectId, canRead]);
+  const data = query.data ?? null;
+  const loading = query.isFetching;
+  const error = query.isError
+    ? getApiErrorMessage(query.error, 'Не удалось загрузить групповой анализ.')
+    : null;
 
   const columnDefs = useMemo<ColDef<GroupAnalysisResult['projects'][number]>[]>(
     () => [
@@ -50,7 +52,7 @@ export function GroupAnalysisTab({ projectId }: GroupAnalysisTabProps) {
       { field: 'projectName', headerName: 'Проект', minWidth: 180 },
       { field: 'versionName', headerName: 'Версия факта', minWidth: 140 },
       { field: 'totalFactLaborHours', headerName: 'Часы факта', width: 120 },
-      { field: 'weightedZScore', headerName: 'Z', width: 90 },
+      { field: 'weightedZScore', headerName: 'Оценка Z', width: 90 },
       { field: 'weightedZInterpretation', headerName: 'Интерпретация', minWidth: 140 },
     ],
     [],
@@ -95,7 +97,7 @@ export function GroupAnalysisTab({ projectId }: GroupAnalysisTabProps) {
       )}
 
       <DataTable
-        rowData={data?.projects ?? []}
+        rowData={data?.projects ?? EMPTY_ROWS}
         columnDefs={columnDefs}
         loading={loading}
         objectName="GroupAnalysis"

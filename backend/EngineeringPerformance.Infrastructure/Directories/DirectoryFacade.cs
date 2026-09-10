@@ -1,8 +1,10 @@
 using EngineeringPerformance.Application.Dictionaries;
 using EngineeringPerformance.Application.Directories;
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Domain.Common;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,9 +12,12 @@ namespace EngineeringPerformance.Infrastructure.Directories;
 
 public sealed class DirectoryFacade : IDirectoryFacade
 {
+    private const string CharacteristicOptionEntityType = "ProjectCharacteristicOption";
+
     private readonly AppDbContext _context;
     private readonly ICacheInvalidator _cacheInvalidator;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     private static readonly HashSet<string> AssessmentCatalogResources = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -24,11 +29,13 @@ public sealed class DirectoryFacade : IDirectoryFacade
     public DirectoryFacade(
         AppDbContext context,
         ICacheInvalidator cacheInvalidator,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _cacheInvalidator = cacheInvalidator;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     public async Task<IReadOnlyList<DirectoryEntryDto>> ListAsync(
@@ -75,6 +82,12 @@ public sealed class DirectoryFacade : IDirectoryFacade
     {
         await ValidateReferencesAsync(resource, request, entityId: null, cancellationToken);
         var created = await DispatchCreate(resource, request, cancellationToken);
+        await LogDirectoryAsync(
+            UserActionType.DirectoryCreate,
+            resource,
+            created.Id,
+            DescribeDirectoryItem(created),
+            cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         // Reload без навигаций — единообразно с UpdateAsync (защита от циклов ToDto).
         var forDto = await DispatchGetById(resource, created.Id, cancellationToken) ?? created;
@@ -93,6 +106,12 @@ public sealed class DirectoryFacade : IDirectoryFacade
         if (updated is null)
             return null;
 
+        await LogDirectoryAsync(
+            UserActionType.DirectoryEdit,
+            resource,
+            id,
+            DescribeDirectoryItem(updated),
+            cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
 
         var recalcCount = 0;
@@ -160,27 +179,39 @@ public sealed class DirectoryFacade : IDirectoryFacade
 
     public async Task<bool> ArchiveAsync(string resource, int id, CancellationToken cancellationToken)
     {
+        var description = DescribeDirectoryItem(await DispatchGetById(resource, id, cancellationToken));
         var result = await DispatchArchive(resource, id, cancellationToken);
-        if (result)
-            await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return result;
+        if (!result)
+            return false;
+
+        await LogDirectoryAsync(UserActionType.DirectoryArchive, resource, id, description, cancellationToken);
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+        return true;
     }
 
     public async Task<bool> UnarchiveAsync(string resource, int id, CancellationToken cancellationToken)
     {
+        var description = DescribeDirectoryItem(await DispatchGetById(resource, id, cancellationToken));
         var result = await DispatchUnarchive(resource, id, cancellationToken);
-        if (result)
-            await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return result;
+        if (!result)
+            return false;
+
+        await LogDirectoryAsync(UserActionType.DirectoryRestore, resource, id, description, cancellationToken);
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+        return true;
     }
 
     public async Task<bool> DeleteAsync(string resource, int id, CancellationToken cancellationToken)
     {
         await EnsureNotInUseAsync(resource, id, cancellationToken);
+        var description = DescribeDirectoryItem(await DispatchGetById(resource, id, cancellationToken));
         var result = await DispatchDelete(resource, id, cancellationToken);
-        if (result)
-            await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return result;
+        if (!result)
+            return false;
+
+        await LogDirectoryAsync(UserActionType.DirectoryDelete, resource, id, description, cancellationToken);
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+        return true;
     }
 
     /// <summary>IMP-01: не удалять справочник, если на него ссылаются проектные/дочерние записи.</summary>
@@ -213,6 +244,8 @@ public sealed class DirectoryFacade : IDirectoryFacade
                 || await _context.PhysicalVolumesBer.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
                 || await _context.Equipments.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken)
                 || await _context.IicWorkDirections.AsNoTracking().AnyAsync(x => x.UnitId == id, cancellationToken),
+            "doc-sets" =>
+                await _context.ProjectLaborIntensities.AsNoTracking().AnyAsync(x => x.DocSetId == id, cancellationToken),
             _ => false,
         };
 
@@ -223,10 +256,14 @@ public sealed class DirectoryFacade : IDirectoryFacade
 
     public async Task<bool> UpdateSortOrderAsync(string resource, int id, SortOrderRequest request, CancellationToken cancellationToken)
     {
+        var description = DescribeDirectoryItem(await DispatchGetById(resource, id, cancellationToken));
         var result = await DispatchSortOrder(resource, id, request, cancellationToken);
-        if (result)
-            await _cacheInvalidator.InvalidateAsync(cancellationToken);
-        return result;
+        if (!result)
+            return false;
+
+        await LogDirectoryAsync(UserActionType.DirectoryEdit, resource, id, description, cancellationToken);
+        await _cacheInvalidator.InvalidateAsync(cancellationToken);
+        return true;
     }
 
     public async Task<IReadOnlyList<CharacteristicOptionDto>> GetCharacteristicOptionsAsync(int characteristicId, CancellationToken cancellationToken)
@@ -252,6 +289,12 @@ public sealed class DirectoryFacade : IDirectoryFacade
         };
         _context.ProjectCharacteristicOptions.Add(option);
         await _context.SaveChangesAsync(cancellationToken);
+        await LogDirectoryAsync(
+            UserActionType.DirectoryCreate,
+            CharacteristicOptionEntityType,
+            option.Id,
+            NullIfEmpty(option.Name),
+            cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         return new CharacteristicOptionDto(option.Id, option.CharacteristicId, option.Name, option.ValuePercent, option.SortOrder);
     }
@@ -267,6 +310,12 @@ public sealed class DirectoryFacade : IDirectoryFacade
         option.ValuePercent = request.ValuePercent;
         option.SortOrder = request.SortOrder;
         await _context.SaveChangesAsync(cancellationToken);
+        await LogDirectoryAsync(
+            UserActionType.DirectoryEdit,
+            CharacteristicOptionEntityType,
+            option.Id,
+            NullIfEmpty(option.Name),
+            cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         return new CharacteristicOptionDto(option.Id, option.CharacteristicId, option.Name, option.ValuePercent, option.SortOrder);
     }
@@ -278,8 +327,15 @@ public sealed class DirectoryFacade : IDirectoryFacade
         if (option is null)
             return false;
 
+        var description = NullIfEmpty(option.Name);
         _context.ProjectCharacteristicOptions.Remove(option);
         await _context.SaveChangesAsync(cancellationToken);
+        await LogDirectoryAsync(
+            UserActionType.DirectoryDelete,
+            CharacteristicOptionEntityType,
+            optionId,
+            description,
+            cancellationToken);
         await _cacheInvalidator.InvalidateAsync(cancellationToken);
         return true;
     }
@@ -291,6 +347,46 @@ public sealed class DirectoryFacade : IDirectoryFacade
         if (!exists)
             throw new KeyNotFoundException($"ProjectCharacteristic {characteristicId} not found.");
     }
+
+    /// <summary>Пишет в журнал только после успешного SaveChanges справочника.</summary>
+    private Task LogDirectoryAsync(
+        UserActionType actionType,
+        string entityType,
+        int entityId,
+        string? description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(
+            actionType,
+            entityType,
+            entityId,
+            description,
+            cancellationToken);
+
+    private static string? DescribeDirectoryItem(DirectoryItem? item)
+    {
+        if (item is null)
+            return null;
+
+        var code = NullIfEmpty(item switch
+        {
+            PhysicalVolumeKfo row => row.Code,
+            PhysicalVolumeBer row => row.Code,
+            LaborIntensity row => row.Code,
+            IicWorkDirection row => row.Code,
+            DocSet row => row.Code,
+            _ => null
+        });
+        var name = NullIfEmpty(item.Name);
+
+        if (code is null)
+            return name;
+        if (name is null)
+            return code;
+        return $"{code} {name}";
+    }
+
+    private static string? NullIfEmpty(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task ValidateReferencesAsync(
         string resource,
@@ -345,6 +441,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             nameof(LaborIntensity) => ctx => (DbSet<T>)(object)ctx.LaborIntensities,
             nameof(IicWorkDirection) => ctx => (DbSet<T>)(object)ctx.IicWorkDirections,
             nameof(UnitOfMeasurement) => ctx => (DbSet<T>)(object)ctx.UnitsOfMeasurement,
+            nameof(DocSet) => ctx => (DbSet<T>)(object)ctx.DocSets,
             nameof(ProjectCharacteristic) => ctx => (DbSet<T>)(object)ctx.ProjectCharacteristics,
             _ => throw new InvalidOperationException($"Unsupported directory entity {typeof(T).Name}")
         };
@@ -358,6 +455,13 @@ public sealed class DirectoryFacade : IDirectoryFacade
     private static T Prepare<T>(T entity, DirectoryWriteRequest request) where T : DirectoryItem, new()
     {
         var merged = DirectoryEntityMapper.Merge(request, entity);
+        if (merged is LaborIntensity labor && string.IsNullOrWhiteSpace(labor.DocumentTypeName))
+        {
+            var name = (labor.Name ?? string.Empty).Trim();
+            if (name.Length > 0)
+                labor.DocumentTypeName = name;
+        }
+
         if (merged is Equipment equipment)
         {
             if (equipment.ProjectId is null
@@ -394,6 +498,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => (await Repo<LaborIntensity>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "doc-sets" => (await Repo<DocSet>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "project-characteristics" => (await Repo<ProjectCharacteristic>().GetAllAsync(includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -418,6 +523,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => (await Repo<LaborIntensity>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "iic-work-directions" => (await Repo<IicWorkDirection>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "units-of-measurement" => (await Repo<UnitOfMeasurement>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
+            "doc-sets" => (await Repo<DocSet>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             "project-characteristics" => (await Repo<ProjectCharacteristic>().GetChildrenAsync(parentId, includeArchived, ct)).Select(DirectoryEntityMapper.ToDto).ToList(),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -434,6 +540,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await Repo<LaborIntensity>().GetByIdAsync(id, ct),
             "iic-work-directions" => await Repo<IicWorkDirection>().GetByIdAsync(id, ct),
             "units-of-measurement" => await Repo<UnitOfMeasurement>().GetByIdAsync(id, ct),
+            "doc-sets" => await Repo<DocSet>().GetByIdAsync(id, ct),
             "project-characteristics" => await Repo<ProjectCharacteristic>().GetByIdAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -450,6 +557,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await Repo<LaborIntensity>().CreateAsync(Prepare(new LaborIntensity(), request), ct),
             "iic-work-directions" => await Repo<IicWorkDirection>().CreateAsync(Prepare(new IicWorkDirection(), request), ct),
             "units-of-measurement" => await Repo<UnitOfMeasurement>().CreateAsync(Prepare(new UnitOfMeasurement(), request), ct),
+            "doc-sets" => await Repo<DocSet>().CreateAsync(Prepare(new DocSet(), request), ct),
             "project-characteristics" => await Repo<ProjectCharacteristic>().CreateAsync(Prepare(new ProjectCharacteristic(), request), ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -466,6 +574,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => await UpdateTyped<LaborIntensity>(id, request, ct),
             "iic-work-directions" => await UpdateTyped<IicWorkDirection>(id, request, ct),
             "units-of-measurement" => await UpdateTyped<UnitOfMeasurement>(id, request, ct),
+            "doc-sets" => await UpdateTyped<DocSet>(id, request, ct),
             "project-characteristics" => await UpdateTyped<ProjectCharacteristic>(id, request, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -492,6 +601,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().ArchiveAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().ArchiveAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().ArchiveAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().ArchiveAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().ArchiveAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -508,6 +618,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().UnarchiveAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().UnarchiveAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().UnarchiveAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().UnarchiveAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().UnarchiveAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -524,6 +635,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().DeleteAsync(id, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().DeleteAsync(id, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().DeleteAsync(id, ct),
+            "doc-sets" => Repo<DocSet>().DeleteAsync(id, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().DeleteAsync(id, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };
@@ -540,6 +652,7 @@ public sealed class DirectoryFacade : IDirectoryFacade
             "labor-intensities" => Repo<LaborIntensity>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "iic-work-directions" => Repo<IicWorkDirection>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "units-of-measurement" => Repo<UnitOfMeasurement>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
+            "doc-sets" => Repo<DocSet>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             "project-characteristics" => Repo<ProjectCharacteristic>().UpdateSortOrderAsync(id, request.ParentId, request.SortOrder, ct),
             _ => throw new KeyNotFoundException($"Unknown directory resource '{resource}'.")
         };

@@ -29,11 +29,13 @@ export const PERMISSION_MATRIX_NODES: readonly PermissionMatrixObjectNode[] = [
   { objectName: 'IicWorkDirections', displayName: 'Группы физ. объёмов (IIC)', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'IicWorkDirections'], isGroupHeader: false },
   { objectName: 'IicWorkDirectionNorms', displayName: 'Нормы групп физ. объёмов (IIC)', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'IicWorkDirectionNorms'], isGroupHeader: false },
   { objectName: 'EngineeringWorkCosts', displayName: 'Стоимость работ', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'EngineeringWorkCosts'], isGroupHeader: false },
+  { objectName: 'DocSets', displayName: 'Комплекты документации', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'DocSets'], isGroupHeader: false },
   { objectName: 'UnitsOfMeasurement', displayName: 'Единицы измерения', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'UnitsOfMeasurement'], isGroupHeader: false },
   { objectName: 'ProjectCharacteristics', displayName: 'Характеристики проекта', parentGroup: 'References', level: 1, hierarchyPath: ['References', 'ProjectCharacteristics'], isGroupHeader: false },
   { objectName: 'SettingsPage', displayName: 'Настройки', parentGroup: null, level: 0, hierarchyPath: ['SettingsPage'], isGroupHeader: true },
   { objectName: 'Users', displayName: 'Пользователи', parentGroup: 'SettingsPage', level: 1, hierarchyPath: ['SettingsPage', 'Users'], isGroupHeader: false },
   { objectName: 'UserActionLog', displayName: 'Журнал действий', parentGroup: null, level: 0, hierarchyPath: ['UserActionLog'], isGroupHeader: false },
+  { objectName: 'Administration', displayName: 'Администрирование', parentGroup: null, level: 0, hierarchyPath: ['Administration'], isGroupHeader: false },
   { objectName: 'HelpPage', displayName: 'Справка', parentGroup: null, level: 0, hierarchyPath: ['HelpPage'], isGroupHeader: false },
 ] as const;
 

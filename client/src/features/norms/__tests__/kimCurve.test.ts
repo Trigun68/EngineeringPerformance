@@ -3,6 +3,7 @@ import { defaultDeviationFormula, defaultNormFormula } from '../../../types/norm
 import { normalizeDeviationFormula, normalizeNormFormula } from '../../../utils/normalizeNormFormulas';
 import {
   applyNormFormulaFields,
+  formulaTypeLabel,
   isKimCurveType,
   kimDeviation,
   KIM_CURVE_TYPE,
@@ -15,6 +16,7 @@ describe('kimCurve helpers', () => {
   it('maps type 12 and derives μ = ln(P)', () => {
     expect(isKimCurveType(KIM_CURVE_TYPE)).toBe(true);
     expect(isKimCurveType(1)).toBe(false);
+    expect(formulaTypeLabel(12)).toBe('Логнормальное распределение');
     expect(muFromProductivity(10)).toBeCloseTo(Math.log(10), 10);
     expect(muFromProductivity(0)).toBe(0);
 

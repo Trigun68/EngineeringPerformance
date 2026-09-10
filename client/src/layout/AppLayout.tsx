@@ -26,6 +26,8 @@ import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { QueryErrorResetBoundary } from '@tanstack/react-query';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { UserMenu } from '../components/auth/UserMenu';
 import { PanelBusyBar } from '../components/WorkingOverlay/PanelBusyBar';
 import { RouteContentFallback } from '../components/WorkingOverlay/RouteContentFallback';
@@ -33,8 +35,8 @@ import { useAccessibleNavigation } from '../hooks/useAccessibleNavigation';
 import { usePersistLastRoute } from '../hooks/usePersistLastRoute';
 import { isSuperAdmin } from '../utils/permissionAccess';
 import { wpColors } from '../theme/wpColors';
+import { useDictionaries } from '../hooks/useDictionaries';
 import { useAuthStore } from '../store/useAuthStore';
-import { useDictionaryStore } from '../store/useDictionaryStore';
 
 const SIDEBAR_WIDTH = 280;
 
@@ -144,8 +146,7 @@ export function AppLayout() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [navOpen, setNavOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
-  const fetchDictionaries = useDictionaryStore((s) => s.fetchDictionaries);
-  const dictionariesLoading = useDictionaryStore((s) => s.isLoading);
+  const { isFetching: dictionariesLoading } = useDictionaries(Boolean(user));
   const location = useLocation();
   const projectMatch = useMatch('/projects/:projectId');
   const { visibleItems } = useAccessibleNavigation();
@@ -189,12 +190,6 @@ export function AppLayout() {
       window.clearInterval(intervalId);
     };
   }, [user, isAdmin]);
-
-  useEffect(() => {
-    if (user) {
-      void fetchDictionaries();
-    }
-  }, [user, fetchDictionaries]);
 
   const navItems = useMemo(
     () =>
@@ -317,9 +312,15 @@ export function AppLayout() {
               overflow: isAnalyticsRoute ? 'visible' : 'hidden',
             }}
           >
-            <Suspense fallback={<RouteContentFallback />}>
-              <Outlet />
-            </Suspense>
+            <QueryErrorResetBoundary>
+              {({ reset }) => (
+                <ErrorBoundary resetKey={location.pathname} onReset={reset}>
+                  <Suspense fallback={<RouteContentFallback />}>
+                    <Outlet />
+                  </Suspense>
+                </ErrorBoundary>
+              )}
+            </QueryErrorResetBoundary>
           </Box>
         </Box>
       </Box>

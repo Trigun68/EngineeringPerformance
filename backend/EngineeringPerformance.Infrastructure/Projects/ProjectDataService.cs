@@ -1,6 +1,10 @@
 using EngineeringPerformance.Application.Analytics;
+using EngineeringPerformance.Application.Audit;
 using EngineeringPerformance.Application.Projects;
 using EngineeringPerformance.Domain.Entities;
+using EngineeringPerformance.Domain.Enums;
+using EngineeringPerformance.Infrastructure.Import;
+using EngineeringPerformance.Infrastructure.LaborIntensityServices;
 using EngineeringPerformance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,15 +15,18 @@ public sealed class ProjectDataService : IProjectDataService
     private readonly AppDbContext _context;
     private readonly IProjectAnalyticsCache _analyticsCache;
     private readonly IAnalysisVersionRecalculationOrchestrator _recalcOrchestrator;
+    private readonly IUserActionLogger _actionLogger;
 
     public ProjectDataService(
         AppDbContext context,
         IProjectAnalyticsCache analyticsCache,
-        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator)
+        IAnalysisVersionRecalculationOrchestrator recalcOrchestrator,
+        IUserActionLogger actionLogger)
     {
         _context = context;
         _analyticsCache = analyticsCache;
         _recalcOrchestrator = recalcOrchestrator;
+        _actionLogger = actionLogger;
     }
 
     /// <summary>
@@ -77,6 +84,26 @@ public sealed class ProjectDataService : IProjectDataService
                 x.DocumentationCode, x.Brand, x.Notes, x.WorkDirectionId))
             .ToListAsync(cancellationToken);
 
+        var createdAt = await _context.ProjectAnalysisVersions.AsNoTracking()
+            .Where(v => v.Id == versionId && v.ProjectId == projectId)
+            .Select(v => (DateTime?)v.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (createdAt is DateTime asOfDate)
+        {
+            var slice = await LaborIntensityIicAsOf.LoadAsync(
+                _context,
+                asOfDate,
+                items.Select(x => x.LaborIntensityId ?? 0),
+                cancellationToken);
+            items = items
+                .Select(x => x with
+                {
+                    WorkDirectionId = LaborIntensityIicAsOf.ResolveDirection(
+                        slice, x.LaborIntensityId, x.WorkDirectionId),
+                })
+                .ToList();
+        }
+
         return new PagedResult<ProjectLaborIntensityDto>(items, total, page, pageSize);
     }
 
@@ -129,9 +156,16 @@ public sealed class ProjectDataService : IProjectDataService
             EstimationBasis = request.EstimationBasis,
         };
         PhysicalVolumeCatalogBinding.AssignCatalogId(entity, request.PhysicalVolumeId, isKfo);
+        await FillPpvCatalogSnapshotAsync(entity, isKfo, request.PhysicalVolumeId, cancellationToken);
 
         _context.ProjectPhysicalVolumes.Add(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeCreate,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName),
+            cancellationToken);
         return MapPpv(entity);
     }
 
@@ -147,6 +181,7 @@ public sealed class ProjectDataService : IProjectDataService
 
         var isKfo = await PhysicalVolumeCatalogBinding.IsKfoVersionAsync(_context, versionId, cancellationToken);
         PhysicalVolumeCatalogBinding.AssignCatalogId(entity, request.PhysicalVolumeId, isKfo);
+        await FillPpvCatalogSnapshotAsync(entity, isKfo, request.PhysicalVolumeId, cancellationToken);
         entity.Quantity = request.Quantity;
         entity.FacilityCode = request.FacilityCode;
         entity.FacilityName = request.FacilityName;
@@ -162,6 +197,12 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeEdit,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName),
+            cancellationToken);
         return MapPpv(entity);
     }
 
@@ -171,8 +212,15 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.CatalogCode ?? entity.FacilityCode, entity.CatalogName ?? entity.WorkName);
         _context.ProjectPhysicalVolumes.Remove(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.PhysicalVolumeDelete,
+            "ProjectPhysicalVolume",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
     }
 
@@ -197,9 +245,16 @@ public sealed class ProjectDataService : IProjectDataService
             Brand = request.Brand,
             Notes = request.Notes,
         };
+        entity.DocSetId = await new DocSetImportBinder(_context).ResolveAsync(entity.DocumentationCode, cancellationToken);
 
         _context.ProjectLaborIntensities.Add(entity);
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityCreate,
+            "ProjectLaborIntensity",
+            entity.Id,
+            Describe(entity.Id, entity.DocumentationCode, entity.Brand),
+            cancellationToken);
         return MapLi(entity);
     }
 
@@ -221,9 +276,16 @@ public sealed class ProjectDataService : IProjectDataService
             entity.DocumentationCode = request.DocumentationCode;
         entity.Brand = request.Brand;
         entity.Notes = request.Notes;
+        entity.DocSetId = await new DocSetImportBinder(_context).ResolveAsync(entity.DocumentationCode, cancellationToken);
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityEdit,
+            "ProjectLaborIntensity",
+            entity.Id,
+            Describe(entity.Id, entity.DocumentationCode, entity.Brand),
+            cancellationToken);
         return MapLi(entity);
     }
 
@@ -233,8 +295,15 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.DocumentationCode, entity.Brand);
         _context.ProjectLaborIntensities.Remove(entity);
         await SaveAndInvalidateAsync(projectId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.LaborIntensityDelete,
+            "ProjectLaborIntensity",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
     }
 
@@ -272,6 +341,12 @@ public sealed class ProjectDataService : IProjectDataService
 
         _context.ProjectEquipments.Add(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentCreate,
+            "ProjectEquipment",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName),
+            cancellationToken);
         return MapEq(entity);
     }
 
@@ -305,6 +380,12 @@ public sealed class ProjectDataService : IProjectDataService
         entity.ModifiedAt = DateTime.UtcNow;
 
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentEdit,
+            "ProjectEquipment",
+            entity.Id,
+            Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName),
+            cancellationToken);
         return MapEq(entity);
     }
 
@@ -314,9 +395,34 @@ public sealed class ProjectDataService : IProjectDataService
         if (entity is null)
             return false;
 
+        var description = Describe(entity.Id, entity.CatalogId ?? entity.PositionNumber, entity.CatalogName ?? entity.ShortName);
         _context.ProjectEquipments.Remove(entity);
         await SaveAndRecalculateAsync(projectId, versionId, cancellationToken);
+        await LogMutationAsync(
+            UserActionType.EquipmentDelete,
+            "ProjectEquipment",
+            entity.Id,
+            description,
+            cancellationToken);
         return true;
+    }
+
+    private async Task FillPpvCatalogSnapshotAsync(
+        ProjectPhysicalVolume entity, bool isKfo, int catalogId, CancellationToken cancellationToken)
+    {
+        if (isKfo)
+        {
+            var row = await _context.PhysicalVolumesKfo.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == catalogId, cancellationToken);
+            if (row is not null)
+                PhysicalVolumeCatalogBinding.FillCatalogSnapshot(entity, row.Coefficient, row.IsAssessment, row.ClassifierId);
+            return;
+        }
+
+        var ber = await _context.PhysicalVolumesBer.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == catalogId, cancellationToken);
+        if (ber is not null)
+            PhysicalVolumeCatalogBinding.FillCatalogSnapshot(entity, ber.Coefficient, ber.IsAssessment, ber.ClassifierId);
     }
 
     private Task<bool> VersionBelongsToProjectAsync(int projectId, int versionId, CancellationToken cancellationToken) =>
@@ -336,6 +442,23 @@ public sealed class ProjectDataService : IProjectDataService
         _context.ProjectEquipments.FirstOrDefaultAsync(
             x => x.Id == id && x.ProjectId == projectId && x.ProjectAnalysisVersionId == versionId,
             cancellationToken);
+
+    /// <summary>
+    /// Журнал только самой мутации после persist; пересчёт версии в журнал не пишем.
+    /// </summary>
+    private Task LogMutationAsync(
+        UserActionType actionType,
+        string entityType,
+        int entityId,
+        string description,
+        CancellationToken cancellationToken) =>
+        _actionLogger.LogAsync(actionType, entityType, entityId, description, cancellationToken);
+
+    private static string Describe(int id, string? code, string? name)
+    {
+        var text = string.Join(' ', new[] { code, name }.Where(static s => !string.IsNullOrWhiteSpace(s)));
+        return text.Length > 0 ? text : id.ToString();
+    }
 
     private static ProjectPhysicalVolumeDto MapPpv(ProjectPhysicalVolume x) =>
         new(x.Id, x.ProjectId, x.ProjectAnalysisVersionId, x.GetCatalogVolumeId() ?? 0,

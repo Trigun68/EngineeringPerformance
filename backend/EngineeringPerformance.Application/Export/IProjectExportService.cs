@@ -54,6 +54,18 @@ public interface IProjectExportService
         int versionId,
         CancellationToken cancellationToken = default);
 
+    Task<byte[]> ExportCompareSummaryExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportCompareFacilityExcelAsync(
+        int projectId,
+        int versionAId,
+        int versionBId,
+        CancellationToken cancellationToken = default);
+
     Task<byte[]> ExportCompareDetailExcelAsync(
         int projectId,
         int versionAId,

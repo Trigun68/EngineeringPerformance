@@ -14,14 +14,6 @@ public interface IPerformanceCalculationEngine
 
     FactAssessmentCalculationResult CalculateFactAssessment(FactAssessmentCalculationInput input);
 
-    /// <summary>Базовые часы прогноза по методу element/regression или LI.</summary>
-    decimal ComputeForecastBaseHours(
-        decimal plannedVolume,
-        decimal? performance,
-        decimal? estimate,
-        decimal laborHours,
-        string method);
-
     /// <summary>Прогнозные часы по параметрической норме и Z-параметрам планирования.</summary>
     (decimal? Base, decimal? Optimistic, decimal? Pessimistic) ComputeForecastHours(
         NormFormula normFormula,
@@ -37,31 +29,11 @@ public interface IPerformanceCalculationEngine
         decimal? stdDev,
         PlanningZParameters z);
 
-    /// <summary>Пересчёт трудоёмкости PPV по сценарию планирования.</summary>
-    IReadOnlyList<LaborIntensityCalculator.RecalcResult> RecalculateLaborIntensities(
+    /// <summary>Совместный пересчёт часов ФО и оборудования: один V_g по сценарию.</summary>
+    LaborIntensityCalculator.PlanHoursResult RecalculatePlanHours(
         PlanningScenario scenario,
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Часы прогноза по id PPV (сценарий планирования).</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputePpvForecastHours(
-        PlanningScenario scenario,
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Агрегация прогнозных часов по направлениям ИИС (+ оборудование).</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> AggregateForecastHoursByDirection(
-        IReadOnlyList<LaborIntensityCalculator.PpvLine> lines,
-        IReadOnlyDictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ppvHoursById,
-        IEnumerable<(int ClassifierId, decimal VolumeInIicUnits)> equipmentVolumes,
-        IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
-        IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
-
-    /// <summary>Часы прогноза по id строки оборудования (без группировки сценария ФО).</summary>
-    Dictionary<int, (decimal? Base, decimal? Optimistic, decimal? Pessimistic)> ComputeEquipmentForecastHours(
-        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> lines,
+        IReadOnlyList<LaborIntensityCalculator.PpvLine> ppvLines,
+        IReadOnlyList<LaborIntensityCalculator.EquipmentLine> equipmentLines,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normsByDirection,
         IReadOnlyDictionary<int, PlanningZParameters> planningZByDirection);
 
@@ -154,6 +126,13 @@ public interface IPerformanceCalculationEngine
     decimal ComputeRawHoursDelta(
         IReadOnlyList<PerformanceRowDto> planRows,
         IReadOnlyList<PerformanceRowDto> factRows);
+
+    /// <summary>
+    /// Перерасход часов относительно нормы: факт − норматив × объём.
+    /// Положительный — перерасход, отрицательный — экономия. Без округления
+    /// (объём выбирает вызывающий: для PDF — <c>PerformanceDisplayVolume.ResolveSubtree</c>).
+    /// </summary>
+    decimal ComputeHoursOverrun(decimal factHours, decimal normProductivity, decimal volume);
 
     /// <summary>
     /// Взвешенные перцентили p10 и p90 по выборке вкладов. Пустая или из одной точки — null.

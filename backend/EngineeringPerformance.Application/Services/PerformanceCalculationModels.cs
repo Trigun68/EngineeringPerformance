@@ -12,7 +12,15 @@ public sealed record PerformanceCalculationInput(
     IReadOnlyList<PhysicalVolumeCalculationLine> PhysicalVolumes,
     IReadOnlyList<EquipmentCalculationLine> Equipment,
     IReadOnlyList<LaborIntensityCalculationLine> LaborIntensities,
-    IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection);
+    IReadOnlyDictionary<int, NormCalculationSnapshot> NormsByDirection,
+    /// <summary>
+    /// Факт PLI без поэлементного ключа: часы поднимаются на IIC первого уровня,
+    /// если <see cref="ClaimedWorkDirectionIds"/> пуст или не задан.
+    /// При непустом множестве заявленных узлов — исключающие корзины, без свёртки на L1.
+    /// План (сохранённые часы по classifier) — false.
+    /// </summary>
+    bool RollHoursToFirstLevel = false,
+    IReadOnlySet<int>? ClaimedWorkDirectionIds = null);
 
 public sealed record WorkDirectionCalculationNode(
     int Id,
@@ -50,7 +58,8 @@ public sealed record FactAssessmentCalculationInput(
     IReadOnlyList<FactEquipmentLine> Equipment,
     IReadOnlyList<FactLaborIntensityLine> LaborIntensities,
     IReadOnlyDictionary<int, PerformanceRowDto> NormByDirection,
-    IReadOnlyDictionary<int, ClassifierDisplayNode> ClassifierMap);
+    IReadOnlyDictionary<int, ClassifierDisplayNode> ClassifierMap,
+    IReadOnlySet<int>? ClaimedWorkDirectionIds = null);
 
 public sealed record FactPhysicalVolumeLine(
     string FacilityCode,
@@ -85,7 +94,12 @@ public sealed record FactLaborIntensityLine(
     int? WorkDirectionId,
     decimal Hours);
 
-public sealed record ClassifierDisplayNode(int Id, string Code, string Name, string? UnitName);
+public sealed record ClassifierDisplayNode(
+    int Id,
+    string Code,
+    string Name,
+    string? UnitName,
+    int? ParentId = null);
 
 public sealed record FactAssessmentDetailRowDto(
     string FacilityCode,

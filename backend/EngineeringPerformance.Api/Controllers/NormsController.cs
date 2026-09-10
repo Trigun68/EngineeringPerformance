@@ -1,4 +1,6 @@
+using EngineeringPerformance.Api.Authorization;
 using EngineeringPerformance.Application.Norms;
+using EngineeringPerformance.Domain.Enums;
 using EngineeringPerformance.Domain.Norms;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +20,7 @@ public sealed class NormsController : ControllerBase
     }
 
     [HttpGet("formula-templates")]
+    [HasPermission(PermissionType.IicWorkDirectionNorms, AccessLevel.Read)]
     public ActionResult<object> GetFormulaTemplates()
     {
         var templates = FormulaTemplates.All.Select(t => new
@@ -40,6 +43,7 @@ public sealed class NormsController : ControllerBase
     }
 
     [HttpPost("norms/preview")]
+    [HasPermission(PermissionType.IicWorkDirectionNorms, AccessLevel.Read)]
     public ActionResult<NormPreviewResult> Preview([FromBody] NormPreviewRequest request) =>
         Ok(_normPreviewService.Preview(request));
 }

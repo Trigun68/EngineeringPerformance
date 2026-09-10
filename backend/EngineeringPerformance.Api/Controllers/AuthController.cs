@@ -26,6 +26,7 @@ public sealed class AuthController : ControllerBase
     private readonly IHostEnvironment _environment;
     private readonly SpnegoOptions _spnegoOptions;
     private readonly DevWindowsAuthOptions _devWindowsAuth;
+    private readonly ITrustedProxyValidator _trustedProxy;
 
     public AuthController(
         IAuthService authService,
@@ -35,7 +36,8 @@ public sealed class AuthController : ControllerBase
         IUserActionLogger actionLogger,
         IHostEnvironment environment,
         IOptions<SpnegoOptions> spnegoOptions,
-        IOptions<DevWindowsAuthOptions> devWindowsAuth)
+        IOptions<DevWindowsAuthOptions> devWindowsAuth,
+        ITrustedProxyValidator trustedProxy)
     {
         _authService = authService;
         _refreshTokenService = refreshTokenService;
@@ -45,6 +47,7 @@ public sealed class AuthController : ControllerBase
         _environment = environment;
         _spnegoOptions = spnegoOptions.Value;
         _devWindowsAuth = devWindowsAuth.Value;
+        _trustedProxy = trustedProxy;
     }
 
     public sealed record LoginRequest(string Username, string Password);
@@ -257,6 +260,7 @@ public sealed class AuthController : ControllerBase
             return Unauthorized();
 
         await _refreshTokenService.RevokeAllAsync(userId, "Logout all devices", cancellationToken);
+        await _actionLogger.LogForUserAsync(userId, UserActionType.Logout, cancellationToken: cancellationToken);
         await _authAuditService.WriteAsync(
             AuthEventType.LogoutAllDevices,
             success: true,
@@ -322,15 +326,8 @@ public sealed class AuthController : ControllerBase
 
     private bool IsTrustedProxyRequest()
     {
-        if (string.IsNullOrWhiteSpace(_spnegoOptions.TrustedProxySecret))
-            return false;
-
-        if (!Request.Headers.TryGetValue(SpnegoOptions.TrustedProxyTokenHeader, out var tokenValues))
-            return false;
-
-        var provided = tokenValues.FirstOrDefault();
-        return !string.IsNullOrEmpty(provided)
-            && string.Equals(provided, _spnegoOptions.TrustedProxySecret, StringComparison.Ordinal);
+        Request.Headers.TryGetValue(SpnegoOptions.TrustedProxyTokenHeader, out var tokenValues);
+        return _trustedProxy.IsTrustedProxyToken(tokenValues.FirstOrDefault());
     }
 
     private string? GetRefreshCookie() =>

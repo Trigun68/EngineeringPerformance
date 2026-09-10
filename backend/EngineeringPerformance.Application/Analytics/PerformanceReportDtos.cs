@@ -52,9 +52,14 @@ public sealed record PerformanceReportDirectionRowDto(
     decimal? NormProductivity,
     decimal? NormStdDev,
     decimal? ZScore,
-    string? Interpretation);
+    string? Interpretation,
+    decimal? SubtreePhysicalVolume = null,
+    /// <summary>Own-объём узла (движок), не exclusive FactPhysicalVolume.</summary>
+    decimal? PhysicalVolume = null,
+    /// <summary>Объём, сгруппированный на уровень трудоёмкости IIC на дату версии.</summary>
+    decimal? AssessmentPhysicalVolume = null);
 
-/// <summary>Merged-строка дерева «Направление»: объём факт←план, dual труд/произв/Z.</summary>
+/// <summary>Merged-строка дерева «Направление»: own физобъём, dual труд/произв/Z.</summary>
 public sealed record PerformanceReportMergedDirectionRowDto(
     int WorkDirectionId,
     int? ParentId,
@@ -74,7 +79,10 @@ public sealed record PerformanceReportMergedDirectionRowDto(
     decimal? PlanZScore,
     decimal? FactZScore,
     string? PlanInterpretation,
-    string? FactInterpretation);
+    string? FactInterpretation,
+    decimal? SubtreePhysicalVolume = null,
+    /// <summary>Сгруппированный физобъём (AssessmentPhysicalVolume движка).</summary>
+    decimal? AssessmentPhysicalVolume = null);
 
 public sealed record PerformanceReportVersionHistoryPointDto(
     int VersionId,

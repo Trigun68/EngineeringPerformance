@@ -1,10 +1,10 @@
 # Физ. объёмы: Excel и JSON-пакет
 
-Дата обновления: 2026-08-24.  
+Дата обновления: 2026-09-08.  
 Excel: `POST /api/projects/{id}/versions/{vid}/import/physical-volumes` (multipart `file`).  
 JSON: `POST /api/projects/{id}/versions/{vid}/ingest/physical-volumes`.  
 Права: `ProjectDataUpload` Edit + ACL проекта Edit.  
-Код Excel: [`ProjectExcelDataImportService.PhysicalVolume.cs`](../../backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.PhysicalVolume.cs).
+Код Excel: [`PhysicalVolumeExcelImportService`](../../backend/EngineeringPerformance.Infrastructure/Import/PhysicalVolumeExcelImportService.cs) (`.Parse.cs` / `.Persist.cs`). JSON-пакет остаётся в [`ProjectExcelDataImportService.JsonIngest.cs`](../../backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.JsonIngest.cs); общая привязка каталога — [`ImportHelpers`](../../backend/EngineeringPerformance.Infrastructure/Import/ImportHelpers.cs).
 
 Итерации: `GET|DELETE …/import/physical-volumes/iterations?importedAt=`.
 

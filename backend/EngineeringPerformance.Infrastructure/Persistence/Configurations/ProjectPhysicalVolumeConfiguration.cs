@@ -12,6 +12,13 @@ public sealed class ProjectPhysicalVolumeConfiguration : IEntityTypeConfiguratio
         builder.HasKey(pv => pv.Id);
 
         builder.Property(pv => pv.Quantity).HasPrecision(18, 4);
+
+        // Снимок каталога на момент привязки (116_PpvCatalogSnapshot.sql): коэффициент,
+        // признак оценки и классификатор IIC фиксируются в строке, чтобы правка каталога
+        // не меняла уже посчитанную версию.
+        builder.Property(pv => pv.CatalogCoefficient).HasPrecision(18, 4);
+        builder.Property(pv => pv.CatalogIsAssessment).HasColumnName("CatalogIsAssessment");
+        builder.Property(pv => pv.CatalogClassifierId).HasColumnName("CatalogClassifierId");
         builder.Property(pv => pv.FacilityCode).HasMaxLength(100);
         builder.Property(pv => pv.FacilityName).HasMaxLength(500);
         builder.Property(pv => pv.DocumentSet).HasMaxLength(100);

@@ -18,6 +18,7 @@ using EngineeringPerformance.Infrastructure.Registers;
 using EngineeringPerformance.Infrastructure.Users;
 using EngineeringPerformance.Application.Export;
 using EngineeringPerformance.Application.Import;
+using EngineeringPerformance.Application.LaborIntensity;
 using EngineeringPerformance.Application.Norms;
 using EngineeringPerformance.Application.Permissions;
 using EngineeringPerformance.Application.Projects.Commands;
@@ -44,6 +45,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Caching.StackExchangeRedis;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Polly;
@@ -91,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenService, RefreshTokenService>();
         services.AddScoped<IAccountLockoutService, AccountLockoutService>();
         services.AddScoped<IMfaService, MfaService>();
+        services.AddScoped<ISpnegoIdentityResolver, SpnegoIdentityResolver>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IAuthAuditService, AuthAuditService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -110,6 +113,18 @@ public static class DependencyInjection
         services.AddScoped<IForecastDetailSummaryTableContext, ForecastDetailSummaryTableContext>();
         services.AddScoped<IProjectsCatalogExportService, ProjectsCatalogExportService>();
         services.AddSingleton<IRequestMetricsStore, RequestMetricsStore>();
+        services.AddSingleton<IActiveUserTracker, ActiveUserTracker>();
+        services.Configure<ResourceMonitoringOptions>(
+            configuration.GetSection(ResourceMonitoringOptions.SectionName));
+        services.AddSingleton<ResourceMetricsStore>();
+        services.AddSingleton<ProcessResourceCollector>();
+        services.AddSingleton(sp => new RedisResourceCollector(
+            sp.GetService<IConnectionMultiplexer>(),
+            sp.GetRequiredService<ILogger<RedisResourceCollector>>()));
+        services.AddSingleton<SqlResourceCollector>();
+        services.AddSingleton<ResourceSnapshotCollector>();
+        services.AddSingleton<IResourceMetricHistoryStore, ResourceMetricHistoryStore>();
+        services.AddSingleton<IResourceMetricsService, ResourceMetricsService>();
         services.AddSingleton<SerilogLogStore>();
         services.AddScoped<ISystemMetricsService, SystemMetricsService>();
         services.AddScoped<IPermissionDriftService, PermissionDriftService>();
@@ -118,11 +133,15 @@ public static class DependencyInjection
         services.AddScoped<IAuditConfigService, AuditConfigService>();
         services.AddScoped<ISqlProfilingPersistence, Diagnostics.SqlProfilingPersistence>();
         services.AddScoped<ISqlProfilingReportService, Diagnostics.SqlProfilingReportService>();
+        services.AddScoped<IPhysicalVolumeExcelImportService, PhysicalVolumeExcelImportService>();
+        services.AddScoped<IEquipmentImportService, EquipmentImportService>();
+        services.AddScoped<ILaborIntensityImportService, LaborIntensityImportService>();
         services.AddScoped<IProjectImportService, ProjectExcelDataImportService>();
         services.AddScoped<IDirectoryFacade, DirectoryFacade>();
         services.AddScoped<IIicNormService, IicWorkDirectionNormService>();
         services.AddScoped<IWorkCostService, IicWorkDirectionWorkCostService>();
         services.AddScoped<ILaborIntensityRecalculationService, LaborIntensityRecalculationService>();
+        services.AddScoped<ILaborIntensityIicBindingService, LaborIntensityIicBindingService>();
         services.AddScoped<IAnalysisVersionRecalculationOrchestrator, AnalysisVersionRecalculationOrchestrator>();
         services.AddScoped<IAggregatedLaborIntensitiesService, AggregatedLaborIntensitiesService>();
         services.AddSingleton<INormCalculator, NormCalculator>();
@@ -214,11 +233,23 @@ public static class DependencyInjection
         var redisConnection = configuration.GetConnectionString("Redis");
         if (!string.IsNullOrEmpty(redisConnection))
         {
+            services.TryAddSingleton<IConnectionMultiplexer>(_ =>
+            {
+                var options = ConfigurationOptions.Parse(redisConnection);
+                // INFO для вкладки «Ресурсы» в SE.Redis считается admin-командой.
+                options.AllowAdmin = true;
+                return ConnectionMultiplexer.Connect(options);
+            });
             services.AddStackExchangeRedisCache(options =>
             {
-                options.Configuration = redisConnection;
                 options.InstanceName = "EP_";
             });
+            services.AddOptions<RedisCacheOptions>()
+                .Configure<IConnectionMultiplexer>((options, mux) =>
+                {
+                    options.ConnectionMultiplexerFactory = () => Task.FromResult(mux);
+                    options.InstanceName = "EP_";
+                });
 
             // Health check для Redis
             services.AddHealthChecks()

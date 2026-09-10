@@ -1,25 +1,27 @@
 # Трудоёмкость: Excel и JSON-пакет
 
-Дата обновления: 2026-08-24.  
+Дата обновления: 2026-09-06.  
 Excel: `POST …/import/labor-intensities?addMissingLaborToCatalog=`.  
 Preview: `POST …/import/labor-intensities/preview` (файл).  
 JSON: `POST …/ingest/labor-intensities`, preview `POST …/ingest/labor-intensities/preview`.  
 Права: import/ingest Edit; preview Read.  
-Код: [`ProjectExcelDataImportService.LaborIntensity.cs`](../../backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.LaborIntensity.cs).
+Код: [`ProjectExcelDataImportService.LaborIntensity.cs`](../../backend/EngineeringPerformance.Infrastructure/Import/ProjectExcelDataImportService.LaborIntensity.cs), [`LaborCatalogLookup.cs`](../../backend/EngineeringPerformance.Infrastructure/Import/LaborCatalogLookup.cs).
 
 Итерации: `GET|DELETE …/import/labor-intensities/iterations`.
 
-## Поведение Excel (не менять)
+## Поведение Excel
 
 - **Replace** всех PLI версии.
-- Связь только через справочник «Трудоёмкость»: Excel «тип документа TF» → `LaborIntensity.DocumentTypeName` (Trim, без учёта регистра). Колонка «направление» — **только** для детекта шапки, не FK.
+- Связь через справочник «Трудоёмкость»: Excel «тип документа TF» → `DocumentTypeName` **или** `Name` (Trim, без учёта регистра). Колонка «направление» — детект шапки; при auto-add может стать родителем новой карточки, если имя папки совпало.
 - Направление строки = `LaborIntensity.IicWorkDirectionId` (может быть null).
-- `addMissingLaborToCatalog=true` создаёт корневые карточки каталога без ИИС/норм.
-- `documentationCode` = тип или `тип|марка`, max 450.
+- UI по умолчанию включает `addMissingLaborToCatalog`: новые карточки с `Name` = `DocumentTypeName` = текст TF, без IIC/норм (папка — если нашлось совпадение).
+- `documentationCode` = тип или `тип|марка`, max 450. Марка = комплект документов объекта (`PPV.DocumentSet`).
 - Незаматченный тип всё равно сохраняется с null FK (счётчики в `details`).
 - `MergeLaborRowsByNaturalKey` в коде **не вызывается**: строка файла = строка БД.
-- Preview: `{ unmatchedDocumentTypes, totalDataRows }`.
+- Preview: `{ unmatchedDocumentTypes, totalDataRows }` — тот же ключ Name/DocumentTypeName.
 - Копия версии **не** переносит LI, кроме Fact→Fact. Plan ждёт отдельный ingest.
+
+Оценка факта после импорта: см. [`hours-and-z-ssot.md`](../architecture/hours-and-z-ssot.md) (L1 IIC + объект/марка).
 
 Старый [`_doc/features/data-import.md`](../features/data-import.md) описывает устаревшую раскладку колонок — ориентироваться на этот файл и код.
 

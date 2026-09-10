@@ -73,13 +73,21 @@ public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalcul
             pv.GetCoefficient(),
             pv.GetIsAssessment() == true)).ToList();
 
-        var results = _calculationEngine.RecalculateLaborIntensities(
+        var equipmentLines = equipment.Select(eq => new LaborIntensityCalculator.EquipmentLine(
+            eq.Id,
+            eq.Equipment?.ClassifierId,
+            eq.QuantityInIicGroupUnits(),
+            eq.Equipment?.IsAssessment == true,
+            eq.FacilityCode)).ToList();
+
+        var planHours = _calculationEngine.RecalculatePlanHours(
             version.PlanningScenario,
             lines,
+            equipmentLines,
             norms,
             zParams);
 
-        var byId = results.ToDictionary(r => r.PpvId);
+        var byId = planHours.Ppv.ToDictionary(r => r.PpvId);
         foreach (var pv in ppvs)
         {
             if (byId.TryGetValue(pv.Id, out var r))
@@ -96,20 +104,9 @@ public sealed class LaborIntensityRecalculationService : ILaborIntensityRecalcul
             }
         }
 
-        var equipmentLines = equipment.Select(eq => new LaborIntensityCalculator.EquipmentLine(
-            eq.Id,
-            eq.Equipment?.ClassifierId,
-            eq.QuantityInIicGroupUnits(),
-            eq.Equipment?.IsAssessment == true)).ToList();
-
-        var equipmentHours = _calculationEngine.ComputeEquipmentForecastHours(
-            equipmentLines,
-            norms,
-            zParams);
-
         foreach (var eq in equipment)
         {
-            if (equipmentHours.TryGetValue(eq.Id, out var hours))
+            if (planHours.Equipment.TryGetValue(eq.Id, out var hours))
             {
                 eq.LaborIntensityBase = hours.Base;
                 eq.LaborIntensityPessimistic = hours.Pessimistic;

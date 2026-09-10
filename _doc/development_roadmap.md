@@ -54,7 +54,7 @@
 
 | ID | Задача | Файлы |
 |----|--------|-------|
-| S3-01 | Nginx SPNEGO prod profile | `nginx.conf.spnego.template`, `_doc/deployment/DEPLOY.md` |
+| S3-01 | Nginx SPNEGO prod profile | SoT: `client/nginx.conf.template` + `client/nginx/spnego.inc.example`; overlay `docker-compose.spnego.yml` (тот же образ frontend, без корневых `nginx.conf*`); `_doc/deployment/DEPLOY.md` |
 | S3-02 | Разбить ProjectExcelDataImportService | `Infrastructure/Import/*` |
 | S3-03 | Унифицировать authorization | Controllers → `[HasPermission]` |
 | S3-04 | TanStack Query (тяжёлые экраны) | `projects`, `dictionaries/all` |
