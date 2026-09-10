@@ -24,8 +24,8 @@ public sealed class PerformanceReportService(
         int? factVersionId = null,
         CancellationToken cancellationToken = default)
     {
-        // v5: Z плана в таблице направлений = zBase параметров планирования; факт = PLI.PlannedHours.
-        var cacheKey = $"report:v6:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
+        // v7: Физобъём = own PhysicalVolume, Сгруппированный = AssessmentPhysicalVolume (не subtree на корнях).
+        var cacheKey = $"report:v7:p{planVersionId?.ToString() ?? "auto"}:f{factVersionId?.ToString() ?? "auto"}";
         var cached = await cache.GetAsync<PerformanceReportDto>(projectId, cacheKey, cancellationToken);
         if (cached is not null)
             return cached;
@@ -329,7 +329,9 @@ public sealed class PerformanceReportService(
                     NormProductivity: r.NormProductivity,
                     NormStdDev: r.NormStdDev,
                     ZScore: zBase,
-                    Interpretation: PerformanceInterpretationHelper.GetInterpretation(zBase)?.ToRussian());
+                    Interpretation: PerformanceInterpretationHelper.GetInterpretation(zBase)?.ToRussian(),
+                    PhysicalVolume: r.PhysicalVolume,
+                    AssessmentPhysicalVolume: r.AssessmentPhysicalVolume);
             })
             .ToList();
 
@@ -352,7 +354,9 @@ public sealed class PerformanceReportService(
                 NormStdDev: r.NormStdDev,
                 ZScore: r.ZScore,
                 Interpretation: r.Interpretation?.ToRussian(),
-                SubtreePhysicalVolume: r.SubtreePhysicalVolume))
+                SubtreePhysicalVolume: r.SubtreePhysicalVolume,
+                PhysicalVolume: r.PhysicalVolume,
+                AssessmentPhysicalVolume: r.AssessmentPhysicalVolume))
             .ToList();
 
     private async Task<Dictionary<int, string?>> LoadSnapshotKeysAsync(
@@ -468,11 +472,12 @@ public sealed class PerformanceReportService(
             planById.TryGetValue(id, out var plan);
             factById.TryGetValue(id, out var fact);
             var meta = fact ?? plan!;
-            var volume = fact?.FactPhysicalVolume ?? plan?.FactPhysicalVolume;
             var norm = fact?.NormProductivity ?? plan?.NormProductivity;
             var sigma = fact?.NormStdDev ?? plan?.NormStdDev;
             var unit = fact?.UnitName ?? plan?.UnitName;
 
+            // Объёмы: если строка факта есть, берём её значения включая null («—» ниже claimed).
+            // Не coalesce на план — иначе сгруппированный с плана всплывает на листьях факта.
             merged.Add(new PerformanceReportMergedDirectionRowDto(
                 WorkDirectionId: id,
                 ParentId: meta.ParentId,
@@ -480,7 +485,7 @@ public sealed class PerformanceReportService(
                 Code: meta.Code,
                 Name: meta.Name,
                 UnitName: unit,
-                PhysicalVolume: volume,
+                PhysicalVolume: fact is not null ? fact.PhysicalVolume : plan?.PhysicalVolume,
                 PlanLaborHours: plan?.FactLaborHours,
                 FactLaborHours: fact?.FactLaborHours,
                 PlanSubtreeHours: plan?.SubtreeHours,
@@ -493,7 +498,8 @@ public sealed class PerformanceReportService(
                 FactZScore: fact?.ZScore,
                 PlanInterpretation: plan?.Interpretation,
                 FactInterpretation: fact?.Interpretation,
-                SubtreePhysicalVolume: fact?.SubtreePhysicalVolume ?? plan?.SubtreePhysicalVolume));
+                SubtreePhysicalVolume: fact is not null ? fact.SubtreePhysicalVolume : plan?.SubtreePhysicalVolume,
+                AssessmentPhysicalVolume: fact is not null ? fact.AssessmentPhysicalVolume : plan?.AssessmentPhysicalVolume));
         }
 
         return merged

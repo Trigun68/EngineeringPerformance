@@ -49,6 +49,7 @@ import { PhysicalVolumesGrid } from './components/PhysicalVolumesGrid';
 import { PhysicalVolumeGroupsTable } from './components/PhysicalVolumeGroupsTable';
 import { VersionTrend } from './components/VersionTrend';
 import { InsightsPanel } from './components/InsightsPanel';
+import { projectsPageSubTabsSx } from '../../../features/projects/shared/projectsPageTabStyles';
 import { wpColors } from '../../../theme/wpColors';
 
 interface ReportsTabProps {
@@ -212,7 +213,10 @@ export function ReportsTab({ projectId, versionId, project, versions }: ReportsT
                 <Tabs
                   value={detailTab}
                   onChange={(_, value) => setDetailTab(value)}
-                  sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+                  variant="scrollable"
+                  scrollButtons="auto"
+                  allowScrollButtonsMobile
+                  sx={{ ...projectsPageSubTabsSx, mb: 2, width: 'auto', flex: '0 1 auto' }}
                 >
                   <Tab value="tree" label="Направления работ" />
                   <Tab value="forecast" label="Прогноз трудоёмкости" />

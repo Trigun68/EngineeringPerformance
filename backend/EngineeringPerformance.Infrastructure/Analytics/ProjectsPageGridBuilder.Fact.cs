@@ -52,6 +52,10 @@ public static partial class ProjectsPageGridBuilder
 
             var foDisplay = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
                 CollectSubtree(row, childrenByParent));
+            var physicalDisplay = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
+                CollectSubtree(row, childrenByParent));
+            var assessmentDisplay = PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(
+                CollectSubtree(row, childrenByParent));
             result.Add(new PerformanceRowDto(
                 WorkDirectionId: row.WorkDirectionId,
                 WorkDirectionName: $"Итого: {row.WorkDirectionName}",
@@ -73,7 +77,9 @@ public static partial class ProjectsPageGridBuilder
                 FactPhysicalVolumeDisplay: foDisplay,
                 PessimisticHours: NullIfNonPositive(acc.Pes),
                 BaseHours: NullIfNonPositive(acc.Base),
-                OptimisticHours: NullIfNonPositive(acc.Opt)));
+                OptimisticHours: NullIfNonPositive(acc.Opt),
+                PhysicalVolumeDisplay: physicalDisplay,
+                AssessmentPhysicalVolumeDisplay: assessmentDisplay));
 
             return acc;
         }
@@ -89,6 +95,8 @@ public static partial class ProjectsPageGridBuilder
             r.WorkDirectionId >= 0
             && (r.FactLaborHours is > 0
                 || r.FactPhysicalVolume is > 0
+                || r.PhysicalVolume is > 0
+                || r.AssessmentPhysicalVolume is > 0
                 || r.PessimisticHours is > 0
                 || r.BaseHours is > 0
                 || r.OptimisticHours is > 0));
@@ -115,6 +123,10 @@ public static partial class ProjectsPageGridBuilder
 
             var grandFo = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
                 source.Where(r => r.WorkDirectionId >= 0));
+            var grandPhysical = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
+                source.Where(r => r.WorkDirectionId >= 0));
+            var grandAssessment = PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(
+                source.Where(r => r.WorkDirectionId >= 0));
             result.Add(new PerformanceRowDto(
                 WorkDirectionId: int.MinValue,
                 WorkDirectionName: "ИТОГО",
@@ -136,7 +148,9 @@ public static partial class ProjectsPageGridBuilder
                 FactPhysicalVolumeDisplay: grandFo,
                 PessimisticHours: NullIfNonPositive(grand.Pes),
                 BaseHours: NullIfNonPositive(grand.Base),
-                OptimisticHours: NullIfNonPositive(grand.Opt)));
+                OptimisticHours: NullIfNonPositive(grand.Opt),
+                PhysicalVolumeDisplay: grandPhysical,
+                AssessmentPhysicalVolumeDisplay: grandAssessment));
         }
 
         return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();

@@ -34,7 +34,8 @@ internal static class FactTableDocumentBuilder
             new("Код", 1.1f),
             new("Направление", 2.4f),
             new("Ед. изм.", 0.9f),
-            new("ФО", 1.4f, Numeric: true),
+            new("Физобъём", 1.4f, Numeric: true),
+            new("Сгруппированный физобъём", 1.5f, Numeric: true),
             new("Факт трудоёмк.", 1.3f, Numeric: true),
             new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
             new("План.Труд.Баз.", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
@@ -116,7 +117,8 @@ internal static class FactTableDocumentBuilder
     [
         new("Шифр", 1.0f),
         new("Направление", 2.6f),
-        new("Факт ФО", 1.2f, Numeric: true),
+        new("Физобъём", 1.2f, Numeric: true),
+        new("Сгруппированный физобъём", 1.4f, Numeric: true),
         new("Факт ч", 1.1f, Numeric: true),
         new("План.Труд.Оптим.", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
         new("План.Труд.Баз.", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
@@ -146,7 +148,8 @@ internal static class FactTableDocumentBuilder
         [
             Text(d.Code),
             new ForecastTableCell(indent + d.Name),
-            Number(d.FactPhysicalVolume, 2),
+            Number(d.PhysicalVolume, 2),
+            Number(d.AssessmentPhysicalVolume, 2),
             Hour(d.FactLaborHours, ForecastHourTone.None, 1),
             Hour(d.OptimisticHours, ForecastHourTone.Optimistic, 1),
             Hour(d.BaseHours, ForecastHourTone.Base, 1),
@@ -173,6 +176,7 @@ internal static class FactTableDocumentBuilder
             new ForecastTableCell("По проекту", Bold: true),
             new ForecastTableCell(string.Empty, Bold: true),
             new ForecastTableCell(fo, Bold: true),
+            new ForecastTableCell("—", Bold: true),
             Hour(report.Summary.TotalFactLaborHours, ForecastHourTone.None, 1),
             Hour(all.Sum(d => d.OptimisticHours ?? 0m), ForecastHourTone.Optimistic, 1),
             Hour(all.Sum(d => d.BaseHours ?? 0m), ForecastHourTone.Base, 1),
@@ -187,15 +191,19 @@ internal static class FactTableDocumentBuilder
     private static ForecastTableRow MapSummaryRow(PerformanceRowDto row)
     {
         var indent = row.Level > 0 ? new string(' ', row.Level * 2) : string.Empty;
-        var fo = !string.IsNullOrWhiteSpace(row.FactPhysicalVolumeDisplay)
-            ? row.FactPhysicalVolumeDisplay
-            : FormatNumber(row.FactPhysicalVolume, 2);
+        var physical = !string.IsNullOrWhiteSpace(row.PhysicalVolumeDisplay)
+            ? row.PhysicalVolumeDisplay
+            : FormatNumber(row.PhysicalVolume, 2);
+        var assessment = !string.IsNullOrWhiteSpace(row.AssessmentPhysicalVolumeDisplay)
+            ? row.AssessmentPhysicalVolumeDisplay
+            : FormatNumber(row.AssessmentPhysicalVolume, 2);
         return new ForecastTableRow(
         [
             Text(row.WorkDirectionCode),
             new ForecastTableCell(indent + row.WorkDirectionName, Bold: row.IsTotal),
             new ForecastTableCell(row.NormUnitName ?? string.Empty, Bold: row.IsTotal),
-            new ForecastTableCell(fo ?? "—", row.FactPhysicalVolume, Bold: row.IsTotal),
+            new ForecastTableCell(physical ?? "—", row.PhysicalVolume, Bold: row.IsTotal),
+            new ForecastTableCell(assessment ?? "—", row.AssessmentPhysicalVolume, Bold: row.IsTotal),
             Hour(row.FactLaborHours, ForecastHourTone.None, 1),
             Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 1),
             Hour(row.BaseHours, ForecastHourTone.Base, 1),

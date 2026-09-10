@@ -21,6 +21,10 @@ export interface PerformanceRow {
   subtreePhysicalVolume?: number | null;
   isTotal?: boolean;
   factPhysicalVolumeDisplay?: string | null;
+  physicalVolume?: number | null;
+  physicalVolumeDisplay?: string | null;
+  assessmentPhysicalVolume?: number | null;
+  assessmentPhysicalVolumeDisplay?: string | null;
   pessimisticHours?: number | null;
   baseHours?: number | null;
   optimisticHours?: number | null;
@@ -52,6 +56,8 @@ export interface ProjectVersionDirection {
   name: string;
   unitName: string | null;
   factPhysicalVolume: number | null;
+  physicalVolume?: number | null;
+  assessmentPhysicalVolume?: number | null;
   factLaborHours: number | null;
   pessimisticHours?: number | null;
   baseHours?: number | null;
@@ -155,6 +161,8 @@ export interface ForecastIicVolumeRow {
   pessimisticHours: number;
   range: string;
   hierarchyPath: string;
+  ownPlannedVolume?: number | null;
+  groupedPhysicalVolume?: number | null;
 }
 
 export interface ForecastScenario {
@@ -314,6 +322,14 @@ export interface VersionCompareRow {
   factPhysicalVolumeB?: number | null;
   factPhysicalVolumeDisplayA?: string | null;
   factPhysicalVolumeDisplayB?: string | null;
+  physicalVolumeA?: number | null;
+  physicalVolumeB?: number | null;
+  physicalVolumeDisplayA?: string | null;
+  physicalVolumeDisplayB?: string | null;
+  assessmentPhysicalVolumeA?: number | null;
+  assessmentPhysicalVolumeB?: number | null;
+  assessmentPhysicalVolumeDisplayA?: string | null;
+  assessmentPhysicalVolumeDisplayB?: string | null;
   plannedLaborHoursA?: number | null;
   plannedLaborHoursB?: number | null;
   plannedLaborHoursOptimisticA?: number | null;

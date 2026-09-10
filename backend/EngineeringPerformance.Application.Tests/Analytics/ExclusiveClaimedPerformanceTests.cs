@@ -45,8 +45,17 @@ public sealed class ExclusiveClaimedPerformanceTests
 
         parent.FactLaborHours.Should().Be(100m);
         parent.FactPhysicalVolume.Should().Be(6m);
+        parent.PhysicalVolume.Should().BeNull();
+        parent.AssessmentPhysicalVolume.Should().Be(6m);
         child.FactLaborHours.Should().Be(40m);
         child.FactPhysicalVolume.Should().Be(4m);
+        child.PhysicalVolume.Should().Be(4m);
+        child.AssessmentPhysicalVolume.Should().Be(4m);
+
+        var unclaimedLeaf = rows.Single(r => r.WorkDirectionId == 12);
+        unclaimedLeaf.PhysicalVolume.Should().Be(6m);
+        unclaimedLeaf.FactPhysicalVolume.Should().BeNull();
+        unclaimedLeaf.AssessmentPhysicalVolume.Should().BeNull();
     }
 
     [Fact]
@@ -75,8 +84,14 @@ public sealed class ExclusiveClaimedPerformanceTests
             ClaimedWorkDirectionIds: new HashSet<int>());
 
         var rows = Engine.CalculatePerformance(input);
-        rows.Single(r => r.WorkDirectionId == 1).FactLaborHours.Should().Be(100m);
-        rows.Single(r => r.WorkDirectionId == 12).FactLaborHours.Should().BeNull();
+        var l1 = rows.Single(r => r.WorkDirectionId == 1);
+        var leaf = rows.Single(r => r.WorkDirectionId == 12);
+        l1.FactLaborHours.Should().Be(100m);
+        l1.PhysicalVolume.Should().BeNull();
+        l1.AssessmentPhysicalVolume.Should().Be(6m);
+        leaf.FactLaborHours.Should().BeNull();
+        leaf.PhysicalVolume.Should().Be(6m);
+        leaf.AssessmentPhysicalVolume.Should().BeNull();
     }
 
     [Fact]

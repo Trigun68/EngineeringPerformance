@@ -27,6 +27,7 @@ public sealed partial class PerformanceCalculationEngine
             .ToDictionary(g => g.Key, g => g.Sum(pv => pv.Quantity * pv.Coefficient));
 
         MergeEquipmentVolumes(volumeByDirection, input.Equipment);
+        var loadedVolumeByDirection = new Dictionary<int, decimal>(volumeByDirection);
 
         var hoursByDirection = input.LaborIntensities
             .Where(li => li.WorkDirectionId.HasValue)
@@ -58,6 +59,7 @@ public sealed partial class PerformanceCalculationEngine
                 0,
                 parentIdLookup,
                 volumeByDirection,
+                loadedVolumeByDirection,
                 hoursByDirection,
                 input.NormsByDirection,
                 result,
@@ -122,7 +124,8 @@ public sealed partial class PerformanceCalculationEngine
             NormStdDev: null,
             ZScore: null,
             Interpretation: null,
-            SubtreeHours: null);
+            SubtreeHours: null,
+            PhysicalVolume: unallocatedVolume > 0 ? unallocatedVolume : null);
 
     private static void MergeEquipmentVolumes(
         Dictionary<int, decimal> volumeByDirection,
@@ -150,6 +153,7 @@ public sealed partial class PerformanceCalculationEngine
         int level,
         ILookup<int, WorkDirectionCalculationNode> parentIdLookup,
         IReadOnlyDictionary<int, decimal> volumeByDirection,
+        IReadOnlyDictionary<int, decimal> loadedVolumeByDirection,
         IReadOnlyDictionary<int, decimal> hoursByDirection,
         IReadOnlyDictionary<int, NormCalculationSnapshot> normByDirection,
         List<PerformanceRowDto> result,
@@ -160,6 +164,7 @@ public sealed partial class PerformanceCalculationEngine
             return (0m, 0m, 0m);
 
         var ownVolume = volumeByDirection.GetValueOrDefault(direction.Id);
+        var loadedOwn = loadedVolumeByDirection.GetValueOrDefault(direction.Id);
         var factHours = hoursByDirection.GetValueOrDefault(direction.Id);
 
         var rowIndex = result.Count;
@@ -176,6 +181,7 @@ public sealed partial class PerformanceCalculationEngine
                 level + 1,
                 parentIdLookup,
                 volumeByDirection,
+                loadedVolumeByDirection,
                 hoursByDirection,
                 normByDirection,
                 result,
@@ -194,6 +200,9 @@ public sealed partial class PerformanceCalculationEngine
             : (factHours > 0 ? subtreeVolume : ownVolume);
         decimal? factProductivity = volumeForProductivity > 0 && factHours > 0
             ? Math.Round(factHours / volumeForProductivity, 4)
+            : null;
+        decimal? assessmentVolume = factHours > 0 && volumeForProductivity > 0
+            ? volumeForProductivity
             : null;
 
         decimal? ownFactEstimate = null;
@@ -242,7 +251,9 @@ public sealed partial class PerformanceCalculationEngine
             SubtreeHours: subtreeEstimateHours > 0 ? subtreeEstimateHours : null,
             SubtreePhysicalVolume: exclusiveVolumes
                 ? (ownVolume > 0 ? ownVolume : null)
-                : (subtreeVolume > 0 ? subtreeVolume : null));
+                : (subtreeVolume > 0 ? subtreeVolume : null),
+            PhysicalVolume: loadedOwn > 0 ? loadedOwn : null,
+            AssessmentPhysicalVolume: assessmentVolume);
 
         return (subtreeEstimateHours, subtreeWeightedEstimate, subtreeVolume);
     }

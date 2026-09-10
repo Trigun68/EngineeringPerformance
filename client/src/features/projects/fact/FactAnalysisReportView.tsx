@@ -59,8 +59,8 @@ const PLAN_HOUR_BG = {
 const OPT_COLOR = '#27AE60';
 const PES_COLOR = '#E74C3C';
 
-const GRID_COLUMNS = '90px minmax(220px, 1.4fr) 110px 100px 130px 120px 130px 110px 110px 80px minmax(140px, 1fr)';
-const GRID_MIN_WIDTH = 1280;
+const GRID_COLUMNS = '90px minmax(220px, 1.4fr) 110px 150px 100px 130px 120px 130px 110px 110px 80px minmax(140px, 1fr)';
+const GRID_MIN_WIDTH = 1420;
 
 function VolumeTable({ title, rows }: { title: string; rows: ProjectVersionPhysicalVolumeItem[] }) {
   if (rows.length === 0) return null;
@@ -214,7 +214,8 @@ function ReportHeaderRow() {
     >
       <ReportHeaderCell>Шифр</ReportHeaderCell>
       <ReportHeaderCell>Направление</ReportHeaderCell>
-      <ReportHeaderCell align="right">Факт ФО</ReportHeaderCell>
+      <ReportHeaderCell align="right">Физобъём</ReportHeaderCell>
+      <ReportHeaderCell align="right">Сгруппированный физобъём</ReportHeaderCell>
       <ReportHeaderCell align="right">Факт ч</ReportHeaderCell>
       <ReportHeaderCell align="right" sx={{ color: OPT_COLOR }}>
         План.Труд.Оптим.
@@ -235,6 +236,7 @@ function ReportDataRow({
   code,
   name,
   factFo,
+  assessmentFo,
   factHours,
   optH,
   baseH,
@@ -248,6 +250,7 @@ function ReportDataRow({
   code: string;
   name: string;
   factFo: unknown;
+  assessmentFo: unknown;
   factHours: unknown;
   optH: unknown;
   baseH: unknown;
@@ -283,6 +286,13 @@ function ReportDataRow({
       <Box sx={{ fontWeight: dark ? 600 : 500 }}>{name}</Box>
       <Box sx={{ textAlign: 'right' }}>
         {typeof factFo === 'string' ? factFo : dark ? (factFo != null && factFo !== '' ? String(factFo) : '—') : num2(factFo)}
+      </Box>
+      <Box sx={{ textAlign: 'right' }}>
+        {typeof assessmentFo === 'string'
+          ? assessmentFo
+          : dark
+            ? (assessmentFo != null && assessmentFo !== '' ? String(assessmentFo) : '—')
+            : num2(assessmentFo)}
       </Box>
       <Box sx={{ textAlign: 'right' }}>{num1(factHours)}</Box>
       <Box
@@ -468,6 +478,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
             code=""
             name="По проекту"
             factFo={projectTotal.fo}
+            assessmentFo={null}
             factHours={projectTotal.hours}
             optH={projectTotal.opt}
             baseH={projectTotal.base}
@@ -502,6 +513,7 @@ export function FactAnalysisReportView({ projectId, versionId }: FactAnalysisRep
                 code={d.code || '—'}
                 name={directionTitle(d)}
                 factFo={factFo}
+                assessmentFo={d.assessmentPhysicalVolume}
                 factHours={d.factLaborHours}
                 optH={d.optimisticHours}
                 baseH={d.baseHours}

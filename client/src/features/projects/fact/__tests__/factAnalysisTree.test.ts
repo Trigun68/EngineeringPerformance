@@ -97,4 +97,11 @@ describe('factAnalysisTree', () => {
     ]);
     expect(ownLabor(parent)).toEqual([]);
   });
+
+  it('uses own physicalVolume and does not fall back to remapped factPhysicalVolume', () => {
+    const remappedOnly = dir({ id: 10, factPhysicalVolume: 99, physicalVolume: null });
+    expect(factFoForCard(remappedOnly, [])).toBeNull();
+    const own = dir({ id: 11, physicalVolume: 5, factPhysicalVolume: 99 });
+    expect(factFoForCard(own, [])).toBe(5);
+  });
 });

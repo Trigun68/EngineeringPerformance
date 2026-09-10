@@ -18,7 +18,8 @@ internal static class CompareTableDocumentBuilder
         {
             new("Направление", 2.6f),
         };
-        columns.AddRange(SharedMetricColumns());
+        columns.AddRange(SummaryVolumeColumns());
+        columns.AddRange(SharedMetricColumns(includeFo: false));
         columns.AddRange(PlanZColumns());
 
         return new ForecastTableDocument(
@@ -82,26 +83,43 @@ internal static class CompareTableDocumentBuilder
             [new ForecastTableSection(null, columns, rows.Select(MapDetailRow).ToList())]);
     }
 
-    private static ForecastTableColumn[] SharedMetricColumns() =>
+    private static ForecastTableColumn[] SummaryVolumeColumns() =>
     [
-        new("ФО (v. А)", 1.1f, Numeric: true),
-        new("ФО (v. Б)", 1.1f, Numeric: true),
-        new("План.Труд. (Опт. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-        new("План.Труд. (Баз. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Base),
-        new("План.Труд. (Песс. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
-        new("План.Труд. (Опт. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
-        new("План.Труд. (Баз. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Base),
-        new("План.Труд. (Песс. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
-        new("Ф.труд. (v. А)", 1.2f, Numeric: true),
-        new("Ф.труд. (v. Б)", 1.2f, Numeric: true),
-        new("Пл.произв. (v. А)", 1.2f, Numeric: true),
-        new("Пл.произв. (v. Б)", 1.2f, Numeric: true),
-        new("Ф.произв. (v. А)", 1.2f, Numeric: true),
-        new("Ф.произв. (v. Б)", 1.2f, Numeric: true),
-        new("Оценка Z (v. А)", 1.1f, Numeric: true),
-        new("Оценка Z (v. Б)", 1.1f, Numeric: true),
-        new("Δ оценка Z", 1.0f, Numeric: true),
+        new("Физобъём (v. А)", 1.2f, Numeric: true),
+        new("Физобъём (v. Б)", 1.2f, Numeric: true),
+        new("Сгруппированный физобъём (v. А)", 1.4f, Numeric: true),
+        new("Сгруппированный физобъём (v. Б)", 1.4f, Numeric: true),
     ];
+
+    private static ForecastTableColumn[] SharedMetricColumns(bool includeFo = true)
+    {
+        var columns = new List<ForecastTableColumn>();
+        if (includeFo)
+        {
+            columns.Add(new("ФО (v. А)", 1.1f, Numeric: true));
+            columns.Add(new("ФО (v. Б)", 1.1f, Numeric: true));
+        }
+
+        columns.AddRange(
+        [
+            new("План.Труд. (Опт. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
+            new("План.Труд. (Баз. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Base),
+            new("План.Труд. (Песс. v. А)", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
+            new("План.Труд. (Опт. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
+            new("План.Труд. (Баз. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Base),
+            new("План.Труд. (Песс. v. Б)", 1.3f, Numeric: true, Tone: ForecastHourTone.Pessimistic),
+            new("Ф.труд. (v. А)", 1.2f, Numeric: true),
+            new("Ф.труд. (v. Б)", 1.2f, Numeric: true),
+            new("Пл.произв. (v. А)", 1.2f, Numeric: true),
+            new("Пл.произв. (v. Б)", 1.2f, Numeric: true),
+            new("Ф.произв. (v. А)", 1.2f, Numeric: true),
+            new("Ф.произв. (v. Б)", 1.2f, Numeric: true),
+            new("Оценка Z (v. А)", 1.1f, Numeric: true),
+            new("Оценка Z (v. Б)", 1.1f, Numeric: true),
+            new("Δ оценка Z", 1.0f, Numeric: true),
+        ]);
+        return [.. columns];
+    }
 
     private static ForecastTableColumn[] PlanZColumns() =>
     [
@@ -117,10 +135,20 @@ internal static class CompareTableDocumentBuilder
         {
             new(indent + row.Name, Bold: row.IsTotal),
         };
+        cells.AddRange(VolumeCells(
+            row.PhysicalVolumeDisplayA ?? FormatNumber(row.PhysicalVolumeA, 2),
+            row.PhysicalVolumeA,
+            row.PhysicalVolumeDisplayB ?? FormatNumber(row.PhysicalVolumeB, 2),
+            row.PhysicalVolumeB,
+            row.AssessmentPhysicalVolumeDisplayA ?? FormatNumber(row.AssessmentPhysicalVolumeA, 2),
+            row.AssessmentPhysicalVolumeA,
+            row.AssessmentPhysicalVolumeDisplayB ?? FormatNumber(row.AssessmentPhysicalVolumeB, 2),
+            row.AssessmentPhysicalVolumeB));
         cells.AddRange(SharedMetricCells(
-            row.FactPhysicalVolumeDisplayA ?? FormatNumber(row.FactPhysicalVolumeA, 2),
+            includeFo: false,
+            FormatNumber(row.FactPhysicalVolumeA, 2),
             row.FactPhysicalVolumeA,
-            row.FactPhysicalVolumeDisplayB ?? FormatNumber(row.FactPhysicalVolumeB, 2),
+            FormatNumber(row.FactPhysicalVolumeB, 2),
             row.FactPhysicalVolumeB,
             row.PlannedLaborHoursOptimisticA,
             row.PlannedLaborHoursA,
@@ -151,6 +179,7 @@ internal static class CompareTableDocumentBuilder
             Text(row.FacilityName),
         };
         cells.AddRange(SharedMetricCells(
+            includeFo: true,
             FormatNumber(row.FactPhysicalVolumeA, 2),
             row.FactPhysicalVolumeA,
             FormatNumber(row.FactPhysicalVolumeB, 2),
@@ -199,6 +228,7 @@ internal static class CompareTableDocumentBuilder
             Text(row.IsEquipment ? "Да" : "Нет"),
         };
         cells.AddRange(SharedMetricCells(
+            includeFo: true,
             FormatNumber(row.QuantityA, 4),
             row.QuantityA,
             FormatNumber(row.QuantityB, 4),
@@ -222,7 +252,24 @@ internal static class CompareTableDocumentBuilder
         return new ForecastTableRow(cells);
     }
 
+    private static IReadOnlyList<ForecastTableCell> VolumeCells(
+        string? physicalAText,
+        decimal? physicalA,
+        string? physicalBText,
+        decimal? physicalB,
+        string? assessmentAText,
+        decimal? assessmentA,
+        string? assessmentBText,
+        decimal? assessmentB) =>
+    [
+        new ForecastTableCell(physicalAText ?? "—", physicalA),
+        new ForecastTableCell(physicalBText ?? "—", physicalB),
+        new ForecastTableCell(assessmentAText ?? "—", assessmentA),
+        new ForecastTableCell(assessmentBText ?? "—", assessmentB),
+    ];
+
     private static IReadOnlyList<ForecastTableCell> SharedMetricCells(
+        bool includeFo,
         string? foAText,
         decimal? foA,
         string? foBText,
@@ -241,26 +288,32 @@ internal static class CompareTableDocumentBuilder
         decimal? factProdB,
         decimal? zA,
         decimal? zB,
-        decimal? zDelta) =>
-    [
-        new ForecastTableCell(foAText ?? "—", foA),
-        new ForecastTableCell(foBText ?? "—", foB),
-        Hour(optA, ForecastHourTone.Optimistic, 1),
-        Hour(baseA, ForecastHourTone.Base, 1),
-        Hour(pesA, ForecastHourTone.Pessimistic, 1),
-        Hour(optB, ForecastHourTone.Optimistic, 1),
-        Hour(baseB, ForecastHourTone.Base, 1),
-        Hour(pesB, ForecastHourTone.Pessimistic, 1),
-        Hour(factA, ForecastHourTone.None, 1),
-        Hour(factB, ForecastHourTone.None, 1),
-        Number(planProdA, 4),
-        Number(planProdB, 4),
-        Number(factProdA, 4),
-        Number(factProdB, 4),
-        Number(zA, 4),
-        Number(zB, 4),
-        Number(zDelta, 4),
-    ];
+        decimal? zDelta)
+    {
+        var cells = new List<ForecastTableCell>();
+        if (includeFo)
+        {
+            cells.Add(new ForecastTableCell(foAText ?? "—", foA));
+            cells.Add(new ForecastTableCell(foBText ?? "—", foB));
+        }
+
+        cells.Add(Hour(optA, ForecastHourTone.Optimistic, 1));
+        cells.Add(Hour(baseA, ForecastHourTone.Base, 1));
+        cells.Add(Hour(pesA, ForecastHourTone.Pessimistic, 1));
+        cells.Add(Hour(optB, ForecastHourTone.Optimistic, 1));
+        cells.Add(Hour(baseB, ForecastHourTone.Base, 1));
+        cells.Add(Hour(pesB, ForecastHourTone.Pessimistic, 1));
+        cells.Add(Hour(factA, ForecastHourTone.None, 1));
+        cells.Add(Hour(factB, ForecastHourTone.None, 1));
+        cells.Add(Number(planProdA, 4));
+        cells.Add(Number(planProdB, 4));
+        cells.Add(Number(factProdA, 4));
+        cells.Add(Number(factProdB, 4));
+        cells.Add(Number(zA, 4));
+        cells.Add(Number(zB, 4));
+        cells.Add(Number(zDelta, 4));
+        return cells;
+    }
 
     private static ForecastTableCell Text(string? value) =>
         new(value ?? string.Empty);

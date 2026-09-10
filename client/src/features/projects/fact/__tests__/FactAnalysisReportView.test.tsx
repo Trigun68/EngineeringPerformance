@@ -29,6 +29,8 @@ vi.mock('../../../../api/analyticsApi', () => ({
         name: 'Родитель',
         unitName: 'м³',
         factPhysicalVolume: null,
+        physicalVolume: null,
+        assessmentPhysicalVolume: null,
         factLaborHours: null,
         pessimisticHours: 0,
         baseHours: 0,
@@ -52,6 +54,8 @@ vi.mock('../../../../api/analyticsApi', () => ({
         name: 'Лист',
         unitName: 'м³',
         factPhysicalVolume: 8,
+        physicalVolume: 8,
+        assessmentPhysicalVolume: 15,
         factLaborHours: 12,
         pessimisticHours: 60,
         baseHours: 50,
@@ -103,7 +107,7 @@ describe('FactAnalysisReportView', () => {
     });
     const header = screen.getByText('Шифр').parentElement;
     expect(header?.textContent).toMatch(
-      /ШифрНаправлениеФакт ФОФакт чПлан\.Труд\.Оптим\.План\.Труд\.Баз\.План\.Труд\.Песс\./,
+      /ШифрНаправлениеФизобъёмСгруппированный физобъёмФакт чПлан\.Труд\.Оптим\.План\.Труд\.Баз\.План\.Труд\.Песс\./,
     );
     expect(screen.getByText('По проекту')).toBeInTheDocument();
   });
@@ -142,5 +146,7 @@ describe('FactAnalysisReportView', () => {
     expect(within(childCard).getByText('Факт, ч')).toBeInTheDocument();
     expect(within(childCard).getByText('План, ч')).toBeInTheDocument();
     expect(within(childCard).getAllByText('8,00').length).toBeGreaterThanOrEqual(2);
+    expect(within(childCard).getByText('15,00')).toBeInTheDocument();
+    expect(within(parentCard).queryByText('15,00')).not.toBeInTheDocument();
   });
 });

@@ -9,7 +9,6 @@ import {
   INTERPRETATION_COLOR,
   INTERPRETATION_SHORT_RU,
   MUTED_COLOR,
-  resolveSubtreePhysicalVolume,
   type Interpretation,
 } from '../reportCalc';
 
@@ -38,6 +37,21 @@ function numberFormatter(digits: number) {
   };
 }
 
+/** Плоская строка групп ИИС: сгруппированный физобъём — AssessmentPhysicalVolume, не сумма детей. */
+export function mapPhysicalVolumeGroupsRow(row: PerformanceTreeRow): PhysicalVolumeGroupsRow {
+  const grouped = row.assessmentPhysicalVolume;
+  return {
+    id: row.workDirectionId,
+    name: row.workDirectionName,
+    physicalVolume: grouped != null && grouped > 0 ? grouped : null,
+    laborHours: row.factLaborHours ?? row.subtreeHours,
+    productivity: row.factProductivity,
+    normProductivity: row.normProductivity,
+    zScore: row.zScore,
+    interpretation: getInterpretation(row.zScore),
+  };
+}
+
 /**
  * Плоская таблица групп ИИС с собственными факт-часами — дополняет
  * иерархическое дерево PerformanceTree, но допускает сортировку и фильтрацию по любому
@@ -48,17 +62,7 @@ export function PhysicalVolumeGroupsTable({ rows }: PhysicalVolumeGroupsTablePro
   const [activeFilter, setActiveFilter] = useState<Interpretation | null>(null);
 
   const tableRows = useMemo<PhysicalVolumeGroupsRow[]>(
-    () =>
-      rows.map((row) => ({
-        id: row.workDirectionId,
-        name: row.workDirectionName,
-        physicalVolume: resolveSubtreePhysicalVolume(row),
-        laborHours: row.factLaborHours ?? row.subtreeHours,
-        productivity: row.factProductivity,
-        normProductivity: row.normProductivity,
-        zScore: row.zScore,
-        interpretation: getInterpretation(row.zScore),
-      })),
+    () => rows.map(mapPhysicalVolumeGroupsRow),
     [rows],
   );
 
@@ -76,7 +80,7 @@ export function PhysicalVolumeGroupsTable({ rows }: PhysicalVolumeGroupsTablePro
       { field: 'name', headerName: 'Направление IIC', flex: 1, minWidth: 280 },
       {
         field: 'physicalVolume',
-        headerName: 'Факт. объём',
+        headerName: 'Сгруппированный физобъём',
         width: 130,
         valueFormatter: numberFormatter(1),
         type: 'rightAligned',

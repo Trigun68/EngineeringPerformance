@@ -33,7 +33,10 @@ public sealed record ProjectsPageForecastSummaryRowDto(
     string Code = "",
     IReadOnlyList<string>? Hierarchy = null,
     /// <summary>ФО на строках итогов по единицам измерения: «число (ЕИ); …».</summary>
-    string? FactPhysicalVolumeDisplay = null);
+    string? FactPhysicalVolumeDisplay = null,
+    /// <summary>Поэлементный физобъём (own до remap оценки).</summary>
+    decimal? PhysicalVolume = null,
+    string? PhysicalVolumeDisplay = null);
 
 public sealed record ProjectsPageFactGridsDto(
     IReadOnlyList<PerformanceRowDto> Performance,

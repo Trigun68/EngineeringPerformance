@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed (2026-09-10, два физобъёма на «Итого» и в отчётах)
+- На дереве «Итого» (грид, модалки, Excel/PDF) разведены два объёма: **Физобъём** (own по `ClassifierId`, без суммы детей и без exclusive remap) и **Сгруппированный физобъём** (тот же объём на уровне привязки ИИС as-of даты версии; ниже уровня — «—»).
+- Прогноз «Итого» и модалка «Прогноз» — одна колонка **Физобъём**. Факт «Итого», модалка «Анализ версии», сравнение «Итого» — обе колонки. Плановая производительность сравнения делится на own-объём.
+- Сводный вер 1: дерево направлений — Физобъём + сгруппированный, одни факт-часы, интерпретация «—»; таблица прогноза — дерево IIC без подписи ±0.5σ; «Все группы» — сгруппированный объём.
+- Сводный вер 2: «Объём» → **Физобъём** (own, не subtree на корнях) + **Сгруппированный физобъём**. Точность, тренд, FactNorm и `PlannedVolume` планирования не менялись.
+
 ### Changed (2026-09-09, хвост коррекции архитектуры)
 - Тесты Application вызывают публичные методы `IPerformanceCalculationEngine` (`RecalculatePlanHours`, `ComputeForecastHours`, `ComputeWeightedZ*`), а не `LaborIntensityCalculator` / `ForecastHoursAggregator` / `WeightedZAggregator`.
 - С публичного движка сняты мёртвые фасады `ComputeForecastBaseHours`, `RecalculateLaborIntensities`, `ComputePpvForecastHours`, `AggregateForecastHoursByDirection`, `ComputeEquipmentForecastHours`. Persist — `RecalculatePlanHours` / `ComputeForecastHours`. Контроллер `ProjectVersionsController.RecalculateLaborIntensities` без изменений.

@@ -113,7 +113,8 @@ export function ForecastPanel({
           .map((r) => ({
             workDirectionId: r.workDirectionId,
             name: r.displayName,
-            factPhysicalVolume: r.factPhysicalVolume,
+            // Own физобъём; exclusive remap factPhysicalVolume в предупреждения не подставляем.
+            factPhysicalVolume: r.physicalVolume,
             normProductivity: r.normProductivity,
             baseHours: r.baseHours,
           })),

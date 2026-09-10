@@ -123,5 +123,6 @@ export function factFoForCard(
   volumeRows: readonly ProjectVersionPhysicalVolumeItem[],
 ): number | string | null {
   if (volumeRows.length > 0) return sumVolumeTotals(volumeRows);
-  return node.factPhysicalVolume;
+  // Exclusive remap (factPhysicalVolume) не является own физобъёмом карточки.
+  return node.physicalVolume ?? null;
 }

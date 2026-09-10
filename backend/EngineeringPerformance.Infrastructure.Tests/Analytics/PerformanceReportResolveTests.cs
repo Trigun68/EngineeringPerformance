@@ -69,20 +69,41 @@ public sealed class PerformanceReportResolveTests
     {
         var plan = new List<PerformanceReportDirectionRowDto>
         {
-            Row(1, null, labor: 100, z: -0.5m, volume: 10),
+            Row(1, null, labor: 100, z: -0.5m, volume: 10, ownVolume: 8m, assessmentVolume: 9m),
         };
         var fact = new List<PerformanceReportDirectionRowDto>
         {
-            Row(1, null, labor: 40, z: 0.2m, volume: 12),
+            Row(1, null, labor: 40, z: 0.2m, volume: 12, ownVolume: 3m, assessmentVolume: 7m),
         };
 
         var merged = PerformanceReportService.MergeDirections(plan, fact);
         merged.Should().ContainSingle();
         merged[0].PlanLaborHours.Should().Be(100);
         merged[0].FactLaborHours.Should().Be(40);
-        merged[0].PhysicalVolume.Should().Be(12);
+        merged[0].PhysicalVolume.Should().Be(3m);
+        merged[0].PhysicalVolume.Should().NotBe(12m);
+        merged[0].AssessmentPhysicalVolume.Should().Be(7m);
         merged[0].PlanZScore.Should().Be(-0.5m);
         merged[0].FactZScore.Should().Be(0.2m);
+    }
+
+    [Fact]
+    public void MergeDirections_KeepsFactNullVolumes_DoesNotFillFromPlan()
+    {
+        var plan = new List<PerformanceReportDirectionRowDto>
+        {
+            Row(1, null, labor: 100, z: -0.5m, volume: 10, ownVolume: 8m, assessmentVolume: 9m),
+        };
+        var fact = new List<PerformanceReportDirectionRowDto>
+        {
+            Row(1, null, labor: 40, z: 0.2m, volume: 12, ownVolume: null, assessmentVolume: null),
+        };
+
+        var merged = PerformanceReportService.MergeDirections(plan, fact);
+        merged.Should().ContainSingle();
+        merged[0].PhysicalVolume.Should().BeNull();
+        merged[0].AssessmentPhysicalVolume.Should().BeNull();
+        merged[0].FactLaborHours.Should().Be(40);
     }
 
     [Fact]
@@ -214,13 +235,18 @@ public sealed class PerformanceReportResolveTests
                 NormEstimate: null,
                 NormStdDev: 1m,
                 ZScore: 1.23m,
-                Interpretation: null),
+                Interpretation: null,
+                PhysicalVolume: 4m,
+                AssessmentPhysicalVolume: 6m),
         };
 
         var mapped = PerformanceReportService.MapPlanDirectionRows(engine, bundle, liveRows);
         mapped.Should().ContainSingle();
         mapped[0].ZScore.Should().Be(-0.86m);
         mapped[0].ZScore.Should().NotBe(1.23m);
+        mapped[0].PhysicalVolume.Should().Be(4m);
+        mapped[0].AssessmentPhysicalVolume.Should().Be(6m);
+        mapped[0].FactPhysicalVolume.Should().Be(10m);
     }
 
     [Fact]
@@ -260,7 +286,9 @@ public sealed class PerformanceReportResolveTests
         int? parentId,
         decimal labor,
         decimal z,
-        decimal volume) =>
+        decimal volume,
+        decimal? ownVolume = null,
+        decimal? assessmentVolume = null) =>
         new(
             WorkDirectionId: id,
             ParentId: parentId,
@@ -275,5 +303,7 @@ public sealed class PerformanceReportResolveTests
             NormProductivity: 1m,
             NormStdDev: 0.1m,
             ZScore: z,
-            Interpretation: null);
+            Interpretation: null,
+            PhysicalVolume: ownVolume,
+            AssessmentPhysicalVolume: assessmentVolume);
 }

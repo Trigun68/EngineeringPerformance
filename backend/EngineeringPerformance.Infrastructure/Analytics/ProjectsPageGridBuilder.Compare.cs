@@ -154,6 +154,18 @@ public static partial class ProjectsPageGridBuilder
             var foB = perfB is null
                 ? null
                 : PhysicalVolumeByUnitAggregator.FormatFromPerformance(CollectSubtree(perfB, childrenPerfB));
+            var physicalA = perfA is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(CollectSubtree(perfA, childrenPerfA));
+            var physicalB = perfB is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(CollectSubtree(perfB, childrenPerfB));
+            var assessmentA = perfA is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(CollectSubtree(perfA, childrenPerfA));
+            var assessmentB = perfB is null
+                ? null
+                : PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(CollectSubtree(perfB, childrenPerfB));
 
             result.Add(new VersionCompareRowDto(
                 row.WorkDirectionId,
@@ -161,6 +173,10 @@ public static partial class ProjectsPageGridBuilder
                 $"Итого: {row.Name}",
                 FactPhysicalVolumeDisplayA: foA,
                 FactPhysicalVolumeDisplayB: foB,
+                PhysicalVolumeDisplayA: physicalA,
+                PhysicalVolumeDisplayB: physicalB,
+                AssessmentPhysicalVolumeDisplayA: assessmentA,
+                AssessmentPhysicalVolumeDisplayB: assessmentB,
                 PlannedLaborHoursA: NullIfNonPositive(acc.BaseA),
                 PlannedLaborHoursB: NullIfNonPositive(acc.BaseB),
                 PlannedLaborHoursOptimisticA: NullIfNonPositive(acc.OptA),
@@ -182,12 +198,21 @@ public static partial class ProjectsPageGridBuilder
 
         var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
         var hasFo = performanceA.Values.Concat(performanceB.Values)
-            .Any(r => !r.IsTotal && r.WorkDirectionId >= 0 && r.FactPhysicalVolume is > 0);
+            .Any(r => !r.IsTotal && r.WorkDirectionId >= 0
+                && (r.FactPhysicalVolume is > 0 || r.PhysicalVolume is > 0 || r.AssessmentPhysicalVolume is > 0));
         if (rootTotals.Count > 0 || hasFo || source.Count > 0)
         {
             var grandFoA = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
                 performanceA.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
             var grandFoB = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+                performanceB.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            var grandPhysicalA = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
+                performanceA.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            var grandPhysicalB = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
+                performanceB.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            var grandAssessmentA = PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(
+                performanceA.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
+            var grandAssessmentB = PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(
                 performanceB.Values.Where(r => !r.IsTotal && r.WorkDirectionId >= 0));
             var allocated = source.Where(r => r.WorkDirectionId >= 0).ToList();
             var grandFactA = allocated.Sum(r => r.FactLaborHoursA ?? 0m);
@@ -200,6 +225,10 @@ public static partial class ProjectsPageGridBuilder
                 "ИТОГО",
                 FactPhysicalVolumeDisplayA: grandFoA,
                 FactPhysicalVolumeDisplayB: grandFoB,
+                PhysicalVolumeDisplayA: grandPhysicalA,
+                PhysicalVolumeDisplayB: grandPhysicalB,
+                AssessmentPhysicalVolumeDisplayA: grandAssessmentA,
+                AssessmentPhysicalVolumeDisplayB: grandAssessmentB,
                 PlannedLaborHoursA: NullIfNonPositive(grandPlanA.Base),
                 PlannedLaborHoursB: NullIfNonPositive(grandPlanB.Base),
                 PlannedLaborHoursOptimisticA: NullIfNonPositive(grandPlanA.Opt),
@@ -292,18 +321,22 @@ public static partial class ProjectsPageGridBuilder
             InterpretationB: b?.Interpretation.ToRussian() is { Length: > 0 } ib ? ib : "-",
             FactPhysicalVolumeA: a?.FactPhysicalVolume,
             FactPhysicalVolumeB: b?.FactPhysicalVolume,
+            PhysicalVolumeA: a?.PhysicalVolume,
+            PhysicalVolumeB: b?.PhysicalVolume,
+            AssessmentPhysicalVolumeA: a?.AssessmentPhysicalVolume,
+            AssessmentPhysicalVolumeB: b?.AssessmentPhysicalVolume,
             PlannedLaborHoursA: hoursA.Base,
             PlannedLaborHoursB: hoursB.Base,
             PlannedLaborHoursOptimisticA: hoursA.Optimistic,
             PlannedLaborHoursOptimisticB: hoursB.Optimistic,
             PlannedLaborHoursPessimisticA: hoursA.Pessimistic,
             PlannedLaborHoursPessimisticB: hoursB.Pessimistic,
-            PlannedProductivityA: PlannedProductivity(hoursA.Base, a?.FactPhysicalVolume),
-            PlannedProductivityB: PlannedProductivity(hoursB.Base, b?.FactPhysicalVolume),
-            PlannedProductivityOptimisticA: PlannedProductivity(hoursA.Optimistic, a?.FactPhysicalVolume),
-            PlannedProductivityOptimisticB: PlannedProductivity(hoursB.Optimistic, b?.FactPhysicalVolume),
-            PlannedProductivityPessimisticA: PlannedProductivity(hoursA.Pessimistic, a?.FactPhysicalVolume),
-            PlannedProductivityPessimisticB: PlannedProductivity(hoursB.Pessimistic, b?.FactPhysicalVolume),
+            PlannedProductivityA: PlannedProductivity(hoursA.Base, a?.PhysicalVolume),
+            PlannedProductivityB: PlannedProductivity(hoursB.Base, b?.PhysicalVolume),
+            PlannedProductivityOptimisticA: PlannedProductivity(hoursA.Optimistic, a?.PhysicalVolume),
+            PlannedProductivityOptimisticB: PlannedProductivity(hoursB.Optimistic, b?.PhysicalVolume),
+            PlannedProductivityPessimisticA: PlannedProductivity(hoursA.Pessimistic, a?.PhysicalVolume),
+            PlannedProductivityPessimisticB: PlannedProductivity(hoursB.Pessimistic, b?.PhysicalVolume),
             FactLaborHoursA: a?.FactLaborHours,
             FactLaborHoursB: b?.FactLaborHours,
             FactProductivityA: a?.FactProductivity,

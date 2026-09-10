@@ -19,7 +19,7 @@ internal static class ForecastTableDocumentBuilder
         {
             new("Шифр", 1.1f),
             new("Направление", 3.2f),
-            new("Факт ФО", 1.3f, Numeric: true),
+            new("Физобъём", 1.3f, Numeric: true),
             new("Норма производительности", 1.4f, Numeric: true),
             new("Оптимистический, ч", 1.3f, Numeric: true, Tone: ForecastHourTone.Optimistic),
             new("Базовый, ч", 1.2f, Numeric: true, Tone: ForecastHourTone.Base),
@@ -110,14 +110,15 @@ internal static class ForecastTableDocumentBuilder
     private static ForecastTableRow MapSummaryRow(ProjectsPageForecastSummaryRowDto row)
     {
         var indent = row.Level > 0 ? new string(' ', row.Level * 2) : string.Empty;
-        var factText = !string.IsNullOrWhiteSpace(row.FactPhysicalVolumeDisplay)
-            ? row.FactPhysicalVolumeDisplay
-            : FormatNumber(row.FactPhysicalVolume, 2);
+        // Own физобъём; exclusive remap FactPhysicalVolume в прогнозе не показываем.
+        var factText = !string.IsNullOrWhiteSpace(row.PhysicalVolumeDisplay)
+            ? row.PhysicalVolumeDisplay
+            : FormatNumber(row.PhysicalVolume, 2);
         return new ForecastTableRow(
             [
                 Text(row.Code),
                 new ForecastTableCell(indent + row.DisplayName, Bold: row.IsTotal),
-                new ForecastTableCell(factText, row.FactPhysicalVolume),
+                new ForecastTableCell(factText, row.PhysicalVolume),
                 Number(row.NormProductivity, 4),
                 Hour(row.OptimisticHours, ForecastHourTone.Optimistic, 1),
                 Hour(row.BaseHours, ForecastHourTone.Base, 1),

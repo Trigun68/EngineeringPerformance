@@ -88,7 +88,7 @@ public sealed class VisualReportService : IVisualReportService
                 r.Level,
                 [
                     r.DisplayName,
-                    PdfNumberFormat.Volume(r.FactPhysicalVolume),
+                    PdfNumberFormat.Volume(r.PhysicalVolume),
                     PdfNumberFormat.Hours(r.OptimisticHours),
                     PdfNumberFormat.Hours(r.BaseHours),
                     PdfNumberFormat.Hours(r.PessimisticHours),
@@ -203,7 +203,8 @@ public sealed class VisualReportService : IVisualReportService
                     r.Level,
                     [
                         r.WorkDirectionName,
-                        PdfNumberFormat.Volume(r.FactPhysicalVolume),
+                        PdfNumberFormat.Volume(r.PhysicalVolume),
+                        PdfNumberFormat.Volume(r.AssessmentPhysicalVolume),
                         PdfNumberFormat.Hours(r.FactLaborHours),
                         ..FactPlanHourCells(r.OptimisticHours, r.BaseHours, r.PessimisticHours),
                         PdfNumberFormat.Z(r.ZScore),
@@ -231,7 +232,7 @@ public sealed class VisualReportService : IVisualReportService
                 c, "Производительность по IIC",
                 FactSummaryColumns,
                 hierRows,
-                interpretationColumnIndex: 8));
+                interpretationColumnIndex: 9));
         },
         PdfReportKind.Fact,
         "Оценка факта — Итого",
@@ -539,7 +540,9 @@ public sealed class VisualReportService : IVisualReportService
             chart.VersionBName);
 
         var tableRows = summary
-            .Where(r => r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
+            .Where(r => r.PhysicalVolumeA.HasValue || r.PhysicalVolumeB.HasValue
+                || r.AssessmentPhysicalVolumeA.HasValue || r.AssessmentPhysicalVolumeB.HasValue
+                || r.FactPhysicalVolumeA.HasValue || r.FactPhysicalVolumeB.HasValue
                 || r.PlannedLaborHoursA.HasValue || r.PlannedLaborHoursB.HasValue
                 || r.PlannedLaborHoursOptimisticA.HasValue || r.PlannedLaborHoursOptimisticB.HasValue
                 || r.PlannedLaborHoursPessimisticA.HasValue || r.PlannedLaborHoursPessimisticB.HasValue
@@ -549,8 +552,10 @@ public sealed class VisualReportService : IVisualReportService
             .Select(r => (string[])
             [
                 r.Name,
-                PdfNumberFormat.Volume(r.FactPhysicalVolumeA),
-                PdfNumberFormat.Volume(r.FactPhysicalVolumeB),
+                PdfNumberFormat.Volume(r.PhysicalVolumeA),
+                PdfNumberFormat.Volume(r.PhysicalVolumeB),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolumeA),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolumeB),
                 ..ComparePlanHourCells(r.PlannedLaborHoursOptimisticA, r.PlannedLaborHoursA, r.PlannedLaborHoursPessimisticA,
                     r.PlannedLaborHoursOptimisticB, r.PlannedLaborHoursB, r.PlannedLaborHoursPessimisticB),
                 PdfNumberFormat.Hours(r.FactLaborHoursA),
@@ -746,23 +751,20 @@ public sealed class VisualReportService : IVisualReportService
 
         var treeRows = report.Directions
             .Take(40)
-            .Select(d =>
-            {
-                var volume = PerformanceDisplayVolume.ForMergedRow(d);
-                return (string[])
-                [
-                    d.Name,
-                    volume is null ? "—" : $"{PdfNumberFormat.Volume(volume)} {d.UnitName ?? ""}".Trim(),
-                    PdfNumberFormat.Hours(d.PlanLaborHours),
-                    PdfNumberFormat.Hours(d.FactLaborHours),
-                    PdfNumberFormat.Productivity(d.PlanProductivity),
-                    PdfNumberFormat.Productivity(d.FactProductivity),
-                    PdfNumberFormat.Productivity(d.NormProductivity),
-                    PdfNumberFormat.Productivity(d.NormStdDev),
-                    FmtZ(d.PlanZScore),
-                    FmtZ(d.FactZScore),
-                ];
-            })
+            .Select(d => (string[])
+            [
+                d.Name,
+                PdfNumberFormat.Volume(d.PhysicalVolume),
+                PdfNumberFormat.Volume(d.AssessmentPhysicalVolume),
+                PdfNumberFormat.Hours(d.PlanLaborHours),
+                PdfNumberFormat.Hours(d.FactLaborHours),
+                PdfNumberFormat.Productivity(d.PlanProductivity),
+                PdfNumberFormat.Productivity(d.FactProductivity),
+                PdfNumberFormat.Productivity(d.NormProductivity),
+                PdfNumberFormat.Productivity(d.NormStdDev),
+                FmtZ(d.PlanZScore),
+                FmtZ(d.FactZScore),
+            ])
             .ToList();
 
         var insightLines = report.Insights.Items
@@ -846,7 +848,7 @@ public sealed class VisualReportService : IVisualReportService
             0,
             [
                 r.WorkDirectionName,
-                PdfNumberFormat.Volume(PerformanceDisplayVolume.ForReportRow(r)),
+                PdfNumberFormat.Volume(r.AssessmentPhysicalVolume),
                 PdfNumberFormat.Hours(r.FactLaborHours ?? r.SubtreeHours),
                 PdfNumberFormat.Productivity(r.FactProductivity),
                 PdfNumberFormat.Productivity(r.NormProductivity),
@@ -950,7 +952,8 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] ForecastSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.4f),
-        PdfTableColumn.Number("План. объём"),
+        // Own физобъём; exclusive remap FactPhysicalVolume не показываем.
+        PdfTableColumn.Number("Физобъём"),
         PdfTableColumn.Optimistic(),
         PdfTableColumn.BaseHours(),
         PdfTableColumn.Pessimistic(),
@@ -965,10 +968,12 @@ public sealed class VisualReportService : IVisualReportService
         PdfTableColumn.Pessimistic(),
     ];
 
+    /// <summary>Итого факта: own физобъём и сгруппированный (AssessmentPhysicalVolume), без exclusive remap в первой колонке.</summary>
     private static readonly PdfTableColumn[] FactSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.4f),
-        PdfTableColumn.Number("ФО"),
+        PdfTableColumn.Number("Физобъём"),
+        PdfTableColumn.Number("Сгруппированный физобъём", width: 1.6f),
         PdfTableColumn.Number("Часы"),
         PdfTableColumn.Optimistic(),
         PdfTableColumn.BaseHours(),
@@ -1009,7 +1014,7 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] VolumeGroupColumns =
     [
         PdfTableColumn.Text("Направление IIC", 2.6f),
-        PdfTableColumn.Number("Факт. объём"),
+        PdfTableColumn.Number("Сгруппированный физобъём"),
         PdfTableColumn.Number("Часы"),
         PdfTableColumn.Number("Произв. (факт)"),
         PdfTableColumn.Number("Норма IIC"),
@@ -1017,10 +1022,12 @@ public sealed class VisualReportService : IVisualReportService
         PdfTableColumn.Text("Оценка"),
     ];
 
+    /// <summary>Сводный v2: own физобъём и сгруппированный (AssessmentPhysicalVolume), без subtree на корнях.</summary>
     private static readonly PdfTableColumn[] PerformanceDirectionsColumns =
     [
         PdfTableColumn.Text("Направление", 2.2f),
-        PdfTableColumn.Number("Объём"),
+        PdfTableColumn.Number("Физобъём"),
+        PdfTableColumn.Number("Сгруппированный физобъём", width: 1.6f),
         PdfTableColumn.Number("Труд. план"),
         PdfTableColumn.Number("Труд. факт"),
         PdfTableColumn.Number("Произв. план"),
@@ -1044,8 +1051,10 @@ public sealed class VisualReportService : IVisualReportService
     private static readonly PdfTableColumn[] CompareSummaryColumns =
     [
         PdfTableColumn.Text("Направление", 2.2f),
-        PdfTableColumn.Number("ФО A"),
-        PdfTableColumn.Number("ФО B"),
+        PdfTableColumn.Number("Физобъём A"),
+        PdfTableColumn.Number("Физобъём B"),
+        PdfTableColumn.Number("Сгруппированный физобъём A", width: 1.6f),
+        PdfTableColumn.Number("Сгруппированный физобъём B", width: 1.6f),
         ..ComparePlanHourColumns,
         PdfTableColumn.Number("Факт. труд A"),
         PdfTableColumn.Number("Факт. труд B"),

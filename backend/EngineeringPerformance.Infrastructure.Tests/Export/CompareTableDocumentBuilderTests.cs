@@ -20,6 +20,11 @@ public sealed class CompareTableDocumentBuilderTests
             FactPhysicalVolumeA: 10m,
             FactPhysicalVolumeB: 12m,
             FactPhysicalVolumeDisplayA: "10,00 м³",
+            PhysicalVolumeA: 10m,
+            PhysicalVolumeB: 12m,
+            PhysicalVolumeDisplayA: "10,00 м³",
+            AssessmentPhysicalVolumeA: 10m,
+            AssessmentPhysicalVolumeB: 12m,
             PlannedLaborHoursA: 100m,
             PlannedLaborHoursB: 110m,
             PlannedLaborHoursOptimisticA: 80m,
@@ -38,25 +43,27 @@ public sealed class CompareTableDocumentBuilderTests
 
         var document = CompareTableDocumentBuilder.BuildSummary([row], "Сравнение версий: P (A / B)");
         var columns = document.Sections[0].Columns;
-        columns.Should().HaveCount(21);
+        columns.Should().HaveCount(23);
         columns[0].Header.Should().Be("Направление");
-        columns[3].Header.Should().Be("План.Труд. (Опт. v. А)");
-        columns[4].Header.Should().Be("План.Труд. (Баз. v. А)");
-        columns[5].Header.Should().Be("План.Труд. (Песс. v. А)");
+        columns[1].Header.Should().Be("Физобъём (v. А)");
+        columns[3].Header.Should().Be("Сгруппированный физобъём (v. А)");
+        columns[4].Header.Should().Be("Сгруппированный физобъём (v. Б)");
+        columns[5].Header.Should().Be("План.Труд. (Опт. v. А)");
+        columns[6].Header.Should().Be("План.Труд. (Баз. v. А)");
+        columns[7].Header.Should().Be("План.Труд. (Песс. v. А)");
         columns[^3].Header.Should().Be("Оценка Z плана (v. А)");
 
         var cells = document.Sections[0].Rows[0].Cells;
-        cells.Should().HaveCount(21);
+        cells.Should().HaveCount(23);
         cells[0].Text.Should().Be("IIC-1 — Бетон (м³)");
-        cells[1].Text.Should().Be("10,00 м³");
-        cells[3].Number.Should().Be(80m);
-        cells[3].Tone.Should().Be(ForecastHourTone.Optimistic);
-        cells[4].Number.Should().Be(100m);
-        cells[4].Tone.Should().Be(ForecastHourTone.Base);
-        cells[5].Number.Should().Be(120m);
-        cells[5].Tone.Should().Be(ForecastHourTone.Pessimistic);
-        cells[6].Number.Should().Be(90m);
-        cells[8].Number.Should().Be(130m);
+        cells[5].Number.Should().Be(80m);
+        cells[5].Tone.Should().Be(ForecastHourTone.Optimistic);
+        cells[6].Number.Should().Be(100m);
+        cells[6].Tone.Should().Be(ForecastHourTone.Base);
+        cells[7].Number.Should().Be(120m);
+        cells[7].Tone.Should().Be(ForecastHourTone.Pessimistic);
+        cells[8].Number.Should().Be(90m);
+        cells[10].Number.Should().Be(130m);
         cells[^1].Number.Should().Be(0.1m);
     }
 

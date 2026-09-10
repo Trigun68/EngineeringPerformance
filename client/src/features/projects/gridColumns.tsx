@@ -83,11 +83,14 @@ export function createForecastSummaryColumns(): ColDef<ProjectsPageForecastSumma
       width: 90,
     },
     {
-      colId: 'factPhysicalVolume',
-      headerName: 'Факт ФО',
+      colId: 'physicalVolume',
+      headerName: 'Физобъём',
       width: 160,
       ...rightAlign,
-      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueGetter: physicalVolumeValueGetter(
+        'physicalVolumeDisplay',
+        'physicalVolume',
+      ),
       valueFormatter: (p) =>
         typeof p.value === 'string' ? p.value : num0(p.value),
     },
@@ -333,11 +336,26 @@ export function createFactPerformanceColumns(): ColDef<PerformanceRow>[] {
     { field: 'workDirectionCode', headerName: 'Код', width: 100 },
     { field: 'normUnitName', headerName: 'Ед. изм.', width: 90 },
     {
-      colId: 'factPhysicalVolume',
-      headerName: 'ФО',
-      width: 160,
+      colId: 'physicalVolume',
+      headerName: 'Физобъём',
+      width: 150,
       ...rightAlign,
-      valueGetter: physicalVolumeValueGetter('factPhysicalVolumeDisplay', 'factPhysicalVolume'),
+      valueGetter: physicalVolumeValueGetter(
+        'physicalVolumeDisplay',
+        'physicalVolume',
+      ),
+      valueFormatter: (p) =>
+        typeof p.value === 'string' ? p.value : num0(p.value),
+    },
+    {
+      colId: 'assessmentPhysicalVolume',
+      headerName: 'Сгруппированный физобъём',
+      width: 170,
+      ...rightAlign,
+      valueGetter: physicalVolumeValueGetter(
+        'assessmentPhysicalVolumeDisplay',
+        'assessmentPhysicalVolume',
+      ),
       valueFormatter: (p) =>
         typeof p.value === 'string' ? p.value : num0(p.value),
     },

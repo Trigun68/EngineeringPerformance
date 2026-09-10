@@ -55,7 +55,9 @@ public sealed class CompareSummaryColumnsTests
                 NormEstimate: null,
                 NormStdDev: 0.1m,
                 ZScore: 1.5m,
-                Interpretation: PerformanceInterpretation.Good),
+                Interpretation: PerformanceInterpretation.Good,
+                PhysicalVolume: 10m,
+                AssessmentPhysicalVolume: 10m),
         };
         var perfB = new List<PerformanceRowDto>
         {
@@ -74,7 +76,9 @@ public sealed class CompareSummaryColumnsTests
                 NormEstimate: null,
                 NormStdDev: 0.1m,
                 ZScore: 0.5m,
-                Interpretation: PerformanceInterpretation.Satisfactory),
+                Interpretation: PerformanceInterpretation.Satisfactory,
+                PhysicalVolume: 10m,
+                AssessmentPhysicalVolume: 10m),
         };
 
         var rows = ProjectsPageGridBuilder.BuildCompareSummary(perfA, perfB, bundleA, bundleB, _engine);
@@ -82,6 +86,10 @@ public sealed class CompareSummaryColumnsTests
 
         row.FactPhysicalVolumeA.Should().Be(10m);
         row.FactPhysicalVolumeB.Should().Be(10m);
+        row.PhysicalVolumeA.Should().Be(10m);
+        row.PhysicalVolumeB.Should().Be(10m);
+        row.AssessmentPhysicalVolumeA.Should().Be(10m);
+        row.AssessmentPhysicalVolumeB.Should().Be(10m);
         row.FactLaborHoursA.Should().Be(20m);
         row.FactLaborHoursB.Should().Be(30m);
         row.FactProductivityA.Should().Be(2m);
@@ -164,7 +172,7 @@ public sealed class CompareSummaryColumnsTests
                 null,
                 0,
                 "м",
-                FactPhysicalVolume: 10m,
+                FactPhysicalVolume: 999m,
                 FactLaborHours: 5m,
                 FactProductivity: 0.5m,
                 FactEstimate: null,
@@ -172,7 +180,9 @@ public sealed class CompareSummaryColumnsTests
                 NormEstimate: null,
                 NormStdDev: 0.2m,
                 ZScore: 0m,
-                Interpretation: PerformanceInterpretation.Satisfactory),
+                Interpretation: PerformanceInterpretation.Satisfactory,
+                PhysicalVolume: 10m,
+                AssessmentPhysicalVolume: 999m),
         };
 
         var rows = ProjectsPageGridBuilder.BuildCompareSummary(perf, perf, bundle, bundle, _engine);
@@ -182,7 +192,8 @@ public sealed class CompareSummaryColumnsTests
         row.PlannedLaborHoursOptimisticA.Should().NotBeNull();
         row.PlannedLaborHoursPessimisticA.Should().NotBeNull();
         row.PlannedLaborHoursOptimisticA.Should().NotBe(row.PlannedLaborHoursPessimisticA);
-        row.PlannedProductivityA.Should().NotBeNull();
+        row.PlannedProductivityA.Should().Be(row.PlannedLaborHoursA / 10m);
+        row.PlannedProductivityA.Should().NotBe(row.PlannedLaborHoursA / 999m);
         row.PlannedProductivityOptimisticA.Should().NotBeNull();
         row.PlannedProductivityPessimisticA.Should().NotBeNull();
     }

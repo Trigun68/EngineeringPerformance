@@ -98,7 +98,7 @@ function ReportHeaderRow() {
     >
       <ReportHeaderCell>Шифр</ReportHeaderCell>
       <ReportHeaderCell>Направление</ReportHeaderCell>
-      <ReportHeaderCell align="right">Факт ФО</ReportHeaderCell>
+      <ReportHeaderCell align="right">Физобъём</ReportHeaderCell>
       <ReportHeaderCell align="right">Норм. произв.</ReportHeaderCell>
       <ReportHeaderCell align="right" sx={{ color: '#27AE60' }}>
         Оптимист., ч
@@ -290,7 +290,7 @@ export function ForecastReportView({
             <ReportDataRow
               code=""
               name="По проекту"
-              factFo={totalRow.factPhysicalVolumeDisplay ?? totalRow.factPhysicalVolume}
+              factFo={totalRow.physicalVolumeDisplay ?? totalRow.physicalVolume}
               normProd={null}
               baseH={totalRow.baseHours}
               optH={totalRow.optimisticHours}
@@ -304,10 +304,11 @@ export function ForecastReportView({
             const pv = volumesForDirection(pvByDirection, row.workDirectionId);
             const eq = volumesForDirection(eqByDirection, row.workDirectionId);
             const volumeRowCount = pv.length + eq.length;
+            // Own ФО/оборудование направления; иначе physicalVolume. Exclusive remap (factPhysicalVolume) не подставляем.
             const factFo =
               volumeRowCount > 0
                 ? sumVolumeTotals(pv) + sumVolumeTotals(eq)
-                : row.factPhysicalVolume;
+                : row.physicalVolume;
             return (
               <Paper
                 key={`${row.workDirectionId}-${name}`}

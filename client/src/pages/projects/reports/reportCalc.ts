@@ -84,6 +84,17 @@ export function fmtSigned(value: number | null | undefined, digits = 2): string 
   return (value > 0 ? '+' : '') + fmt(value, digits);
 }
 
+/** Пустой физобъём в отчёте — тире, не «0» и не «Н/Д». */
+export function formatReportVolume(
+  value: number | null | undefined,
+  unitName?: string | null,
+): string {
+  if (value === null || value === undefined || Number.isNaN(value) || value === 0) return '—';
+  const n = fmt(value, 1);
+  const unit = unitName?.trim();
+  return unit ? `${n} ${unit}` : n;
+}
+
 /** Дерево направлений, собранное из плоского PerformanceRow[] (агрегаты уже рассчитаны backend'ом). */
 export interface PerformanceTreeRow extends PerformanceRow {
   children: PerformanceTreeRow[];

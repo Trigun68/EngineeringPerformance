@@ -32,6 +32,8 @@ const rows: ProjectsPageForecastSummaryRow[] = [
     displayName: 'ИТОГО',
     normUnitName: '',
     factPhysicalVolume: 1,
+    physicalVolume: 1,
+    physicalVolumeDisplay: '1,00 (ч)',
     normProductivity: null,
     baseHours: 100,
     optimisticHours: 80,
@@ -45,6 +47,7 @@ const rows: ProjectsPageForecastSummaryRow[] = [
     displayName: 'Направление',
     normUnitName: 'ч',
     factPhysicalVolume: 4,
+    physicalVolume: 4,
     normProductivity: 1.5,
     baseHours: 50,
     optimisticHours: 40,
@@ -88,6 +91,7 @@ const parentChildRows: ProjectsPageForecastSummaryRow[] = [
     displayName: 'Лист',
     normUnitName: 'м3',
     factPhysicalVolume: 8,
+    physicalVolume: 8,
     normProductivity: 1.2,
     baseHours: 50,
     optimisticHours: 40,
@@ -118,7 +122,7 @@ describe('ForecastReportView', () => {
     });
     const header = screen.getByText('Шифр').parentElement;
     expect(header?.textContent).toMatch(
-      /ШифрНаправлениеФакт ФОНорм\. произв\.Оптимист\., чБазовый, чПессимист\., ч/,
+      /ШифрНаправлениеФизобъёмНорм\. произв\.Оптимист\., чБазовый, чПессимист\., ч/,
     );
     expect(screen.queryByText(/P-1 — Проект \(v1\)/)).not.toBeInTheDocument();
   });
@@ -174,6 +178,55 @@ describe('ForecastReportView', () => {
     expect(within(leafCard).getByText('Позиция')).toBeInTheDocument();
     expect(within(leafCard).getByText('K1')).toBeInTheDocument();
     expect(within(leafCard).getAllByText('8,00').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('does not fall back to remapped factPhysicalVolume when own volume is empty', async () => {
+    mockedVolumes.mockResolvedValue({
+      physicalVolumesByDirection: {},
+      equipmentVolumesByDirection: {},
+    });
+    render(
+      <ForecastReportView
+        projectId={1}
+        versionId={2}
+        summaryRows={[
+          {
+            workDirectionId: 1,
+            displayName: 'ИТОГО',
+            normUnitName: '',
+            factPhysicalVolume: 99,
+            factPhysicalVolumeDisplay: '99,00 (м3)',
+            physicalVolume: null,
+            physicalVolumeDisplay: null,
+            normProductivity: null,
+            baseHours: 10,
+            optimisticHours: 8,
+            pessimisticHours: 12,
+            isTotal: true,
+            level: -1,
+            code: '',
+          },
+          {
+            workDirectionId: 20,
+            displayName: 'Только remap',
+            normUnitName: 'м3',
+            factPhysicalVolume: 99,
+            physicalVolume: null,
+            normProductivity: 1,
+            baseHours: 10,
+            optimisticHours: 8,
+            pessimisticHours: 12,
+            isTotal: false,
+            level: 0,
+            code: 'R',
+          },
+        ]}
+      />,
+    );
+
+    const card = await screen.findByTestId('forecast-report-card-20');
+    expect(card).not.toHaveTextContent('99');
+    expect(screen.getByText('По проекту').parentElement).not.toHaveTextContent('99');
   });
 
   it('shows the parent own FO table when volumes are assigned to the parent node', async () => {

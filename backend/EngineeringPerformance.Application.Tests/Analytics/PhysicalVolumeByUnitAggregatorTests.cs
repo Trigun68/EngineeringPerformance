@@ -84,4 +84,25 @@ public sealed class PhysicalVolumeByUnitAggregatorTests
         PhysicalVolumeByUnitAggregator.FormatFromPerformance(rows)
             .Should().Be($"{N0(15)} (м²); {N0(3)} (шт.)");
     }
+
+    [Fact]
+    public void FormatPhysicalVolume_UsesElementVolumeNotFact()
+    {
+        var rows = new List<PerformanceRowDto>
+        {
+            new(1, "A", "A", null, 0, "м²", FactPhysicalVolume: 100m, FactLaborHours: null,
+                FactProductivity: null, FactEstimate: null, NormProductivity: null,
+                NormEstimate: null, NormStdDev: null, ZScore: null, Interpretation: null,
+                PhysicalVolume: 10m, AssessmentPhysicalVolume: 100m),
+            new(2, "B", "B", 1, 1, "шт.", FactPhysicalVolume: null, FactLaborHours: null,
+                FactProductivity: null, FactEstimate: null, NormProductivity: null,
+                NormEstimate: null, NormStdDev: null, ZScore: null, Interpretation: null,
+                PhysicalVolume: 3m),
+        };
+
+        PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(rows)
+            .Should().Be($"{N0(10)} (м²); {N0(3)} (шт.)");
+        PhysicalVolumeByUnitAggregator.FormatAssessmentPhysicalVolume(rows)
+            .Should().Be($"{N0(100)} (м²)");
+    }
 }

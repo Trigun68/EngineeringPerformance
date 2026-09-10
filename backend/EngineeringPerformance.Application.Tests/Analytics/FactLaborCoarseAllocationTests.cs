@@ -88,11 +88,15 @@ public sealed class FactLaborCoarseAllocationTests
 
         l1.SubtreePhysicalVolume.Should().Be(10m);
         l1.FactPhysicalVolume.Should().BeNull();
+        l1.PhysicalVolume.Should().BeNull();
+        l1.AssessmentPhysicalVolume.Should().Be(10m);
 
         var l2 = rows.Should().ContainSingle(r => r.WorkDirectionId == L2).Subject;
         l2.FactLaborHours.Should().BeNull();
         l2.FactPhysicalVolume.Should().Be(10m);
         l2.SubtreePhysicalVolume.Should().Be(10m);
+        l2.PhysicalVolume.Should().Be(10m);
+        l2.AssessmentPhysicalVolume.Should().BeNull();
     }
 
     [Fact]

@@ -48,7 +48,7 @@ public static partial class ProjectsPageGridBuilder
                 row.WorkDirectionId,
                 displayName,
                 string.Empty,
-                row.FactPhysicalVolume,
+                row.PhysicalVolume,
                 row.NormProductivity,
                 ownBase,
                 ownOpt,
@@ -57,7 +57,8 @@ public static partial class ProjectsPageGridBuilder
                 level,
                 row.ParentId,
                 row.WorkDirectionCode,
-                hierarchy));
+                hierarchy,
+                PhysicalVolume: row.PhysicalVolume));
 
             if (!hasChildren)
                 return (ownBase ?? 0m, ownOpt ?? 0m, ownPes ?? 0m);
@@ -76,7 +77,7 @@ public static partial class ProjectsPageGridBuilder
             var aggPes = (ownPes ?? 0m) + totalPes;
 
             var totalLabel = $"Итого: {row.WorkDirectionName}";
-            var foDisplay = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+            var foDisplay = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
                 CollectSubtree(row, childrenByParent));
             result.Add(new ProjectsPageForecastSummaryRowDto(
                 row.WorkDirectionId,
@@ -92,7 +93,8 @@ public static partial class ProjectsPageGridBuilder
                 row.ParentId,
                 row.WorkDirectionCode,
                 new[] { totalLabel },
-                FactPhysicalVolumeDisplay: foDisplay));
+                FactPhysicalVolumeDisplay: foDisplay,
+                PhysicalVolumeDisplay: foDisplay));
 
             return (aggBase, aggOpt, aggPes);
         }
@@ -108,7 +110,7 @@ public static partial class ProjectsPageGridBuilder
                 unallocated.WorkDirectionId,
                 unallocated.WorkDirectionName,
                 string.Empty,
-                unallocated.FactPhysicalVolume,
+                unallocated.PhysicalVolume,
                 null,
                 ub,
                 uo,
@@ -117,14 +119,15 @@ public static partial class ProjectsPageGridBuilder
                 0,
                 null,
                 string.Empty,
-                new[] { unallocated.WorkDirectionName }));
+                new[] { unallocated.WorkDirectionName },
+                PhysicalVolume: unallocated.PhysicalVolume));
         }
 
         var rootTotals = result.Where(r => r.IsTotal && r.Level == 0).ToList();
         var grand = SumAllForecastScenarioHours(bundle);
         if (grand.Base > 0 || grand.Opt > 0 || grand.Pes > 0 || rootTotals.Count > 0)
         {
-            var grandFo = PhysicalVolumeByUnitAggregator.FormatFromPerformance(
+            var grandFo = PhysicalVolumeByUnitAggregator.FormatPhysicalVolume(
                 perfRows.Where(r => r.WorkDirectionId >= 0));
             result.Add(new ProjectsPageForecastSummaryRowDto(
                 int.MinValue,
@@ -140,7 +143,8 @@ public static partial class ProjectsPageGridBuilder
                 null,
                 string.Empty,
                 new[] { "ИТОГО" },
-                FactPhysicalVolumeDisplay: grandFo));
+                FactPhysicalVolumeDisplay: grandFo,
+                PhysicalVolumeDisplay: grandFo));
         }
 
         return result.Where(r => !r.IsTotal || r.Level <= 0).ToList();

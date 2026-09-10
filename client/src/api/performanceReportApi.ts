@@ -85,6 +85,7 @@ export interface PerformanceReportMergedDirectionRow {
   planInterpretation: string | null;
   factInterpretation: string | null;
   subtreePhysicalVolume?: number | null;
+  assessmentPhysicalVolume?: number | null;
 }
 
 export interface PerformanceReportHistoryPoint {

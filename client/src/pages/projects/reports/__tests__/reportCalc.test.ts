@@ -13,6 +13,7 @@ import {
   formatTrendScenarioTooltipLines,
   fmt,
   fmtSigned,
+  formatReportVolume,
   historyToTrendPoints,
   hoursDeltaPct,
   INTERPRETATION_BG,
@@ -117,6 +118,12 @@ describe('fmt / fmtSigned (ru-RU, 1 vs 2 decimals)', () => {
     const hours = fmt(12345.67, 1).replace(/\u00A0|\u202F/g, ' ');
     expect(hours).toBe('12 345,7');
     expect(fmt(null, 1)).toBe('—');
+  });
+
+  it('formatReportVolume dashes empty and zero volumes', () => {
+    expect(formatReportVolume(null)).toBe('—');
+    expect(formatReportVolume(0, 'ед.')).toBe('—');
+    expect(formatReportVolume(10, 'ед.')).toBe(`${fmt(10, 1)} ед.`);
   });
 
   it('formats productivity and Z with two decimals', () => {

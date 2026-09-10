@@ -13,7 +13,8 @@ public sealed class ForecastTableDocumentBuilderTests
         var document = ForecastTableDocumentBuilder.BuildSummary(
             [
                 new ProjectsPageForecastSummaryRowDto(
-                    1, "Направление", "ч", 10m, 2m, 100m, 80m, 120m, false, 0, Code: "A1"),
+                    1, "Направление", "ч", 10m, 2m, 100m, 80m, 120m, false, 0, Code: "A1",
+                    PhysicalVolume: 10m),
             ],
             "Прогноз трудозатрат: P (v1)");
 
@@ -22,7 +23,7 @@ public sealed class ForecastTableDocumentBuilderTests
         document.Sections[0].Columns.Select(c => c.Header).Should().Equal(
             "Шифр",
             "Направление",
-            "Факт ФО",
+            "Физобъём",
             "Норма производительности",
             "Оптимистический, ч",
             "Базовый, ч",
@@ -30,12 +31,43 @@ public sealed class ForecastTableDocumentBuilderTests
 
         var cells = document.Sections[0].Rows[0].Cells;
         cells[0].Text.Should().Be("A1");
+        cells[2].Number.Should().Be(10m);
         cells[4].Number.Should().Be(80m);
         cells[4].Tone.Should().Be(ForecastHourTone.Optimistic);
         cells[5].Number.Should().Be(100m);
         cells[5].Tone.Should().Be(ForecastHourTone.Base);
         cells[6].Number.Should().Be(120m);
         cells[6].Tone.Should().Be(ForecastHourTone.Pessimistic);
+    }
+
+    [Fact]
+    public void Summary_uses_own_physical_volume_not_fact_remap()
+    {
+        var document = ForecastTableDocumentBuilder.BuildSummary(
+            [
+                new ProjectsPageForecastSummaryRowDto(
+                    1, "Направление", "ч", FactPhysicalVolume: 99m, NormProductivity: 2m,
+                    BaseHours: 100m, OptimisticHours: 80m, PessimisticHours: 120m,
+                    IsTotal: false, Level: 0, Code: "A1",
+                    FactPhysicalVolumeDisplay: "99,00 (ч)",
+                    PhysicalVolume: 10m,
+                    PhysicalVolumeDisplay: "10,00 (ч)"),
+                new ProjectsPageForecastSummaryRowDto(
+                    2, "Только remap", "ч", FactPhysicalVolume: 99m, NormProductivity: 2m,
+                    BaseHours: 100m, OptimisticHours: 80m, PessimisticHours: 120m,
+                    IsTotal: false, Level: 0, Code: "B1",
+                    FactPhysicalVolumeDisplay: "99,00 (ч)"),
+            ],
+            "Прогноз трудозатрат: P (v1)");
+
+        var own = document.Sections[0].Rows[0].Cells;
+        own[2].Text.Should().Be("10,00 (ч)");
+        own[2].Number.Should().Be(10m);
+        own[2].Text.Should().NotContain("99");
+
+        var remappedOnly = document.Sections[0].Rows[1].Cells;
+        remappedOnly[2].Text.Should().Be("—");
+        remappedOnly[2].Number.Should().BeNull();
     }
 
     [Fact]
